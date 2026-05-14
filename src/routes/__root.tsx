@@ -72,14 +72,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Wedding Dance Floor Builder" },
+      { name: "description", content: "Wedding DJ Assistant helps DJs upload client song lists and generate categorized dance floor playlists." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Wedding Dance Floor Builder" },
+      { property: "og:description", content: "Wedding DJ Assistant helps DJs upload client song lists and generate categorized dance floor playlists." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Wedding Dance Floor Builder" },
+      { name: "twitter:description", content: "Wedding DJ Assistant helps DJs upload client song lists and generate categorized dance floor playlists." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9671841f-6175-4e93-8717-898da27b8a45/id-preview-ae06d1c8--7afbfd53-f801-46a5-b9fd-99f89f38b576.lovable.app-1778784263460.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9671841f-6175-4e93-8717-898da27b8a45/id-preview-ae06d1c8--7afbfd53-f801-46a5-b9fd-99f89f38b576.lovable.app-1778784263460.png" },
     ],
     links: [
       {
