@@ -204,27 +204,42 @@ function Index() {
 
         {/* Step 2 */}
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <CardHeader className="flex flex-row items-start justify-between gap-2 flex-wrap">
             <div>
               <CardTitle>Step 2 · Review imported songs</CardTitle>
               <CardDescription>
                 {songs.length} song{songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSongs([...songs, { artist: "", song: "" }])}
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              Add row
-            </Button>
+            <div className="flex items-center gap-2">
+              {duplicateKeys.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={removeDuplicates}
+                >
+                  <AlertTriangle className="mr-1 h-4 w-4" />
+                  Remove {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSongs([...songs, { artist: "", song: "" }])}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add row
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {duplicateKeys.size > 0 && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                <AlertTriangle className="h-4 w-4" />
-                {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""} detected
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span className="flex-1">
+                  {duplicateKeys.size} unique duplicate{duplicateKeys.size > 1 ? "s" : ""} detected.
+                  Rows marked with a warning icon share the same artist and song (ignoring case and punctuation).
+                </span>
               </div>
             )}
             {songs.length === 0 ? (
