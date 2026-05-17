@@ -325,6 +325,21 @@ function Index() {
             <CardDescription>Set the vibe and length of the open dance floor.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div>
+              <Label htmlFor="eventName">Couple / Event name (optional)</Label>
+              <Input
+                id="eventName"
+                placeholder="e.g. Smith Johnson Wedding"
+                value={eventName}
+                onChange={(e) => setEventName(e.target.value)}
+                className="mt-1.5"
+              />
+              {eventName && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Files will be named: <code className="rounded bg-muted px-1 py-0.5 text-xs">{toKebabCase(eventName)}-warm-up.csv</code>
+                </p>
+              )}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label htmlFor="hours">Dance floor length (hours)</Label>
