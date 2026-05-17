@@ -1,0 +1,7 @@
+# Wedding Dance Floor List Builder
+
+> A free, no-login tool that helps wedding DJs turn client song requests into ready-to-use Warm Up, Transition, and Peak CSV playlists. All processing happens in the browser — nothing is uploaded or stored.
+
+## Pages
+
+- [Home](/): Upload client song lists and export categorized dance floor CSVs.
