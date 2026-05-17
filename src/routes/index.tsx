@@ -82,7 +82,6 @@ function Index() {
         toast.error(`Could not parse ${f.name}`);
       }
     }
-    next = dedupeSongs(next);
     setSongs(next);
     toast.success(`Imported ${added} songs from ${valid.length} file${valid.length > 1 ? "s" : ""}`);
   }
