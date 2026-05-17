@@ -262,7 +262,9 @@ function Index() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               {isDup && (
-                                <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" title="Duplicate song" />
+                                <span title="Duplicate song" className="shrink-0">
+                                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                                </span>
                               )}
                               <Input
                                 value={s.artist}
