@@ -59,6 +59,7 @@ function Index() {
   const [notes, setNotes] = useState("");
   const [expand, setExpand] = useState(false);
   const [includeCombined, setIncludeCombined] = useState(false);
+  const [eventName, setEventName] = useState("");
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
