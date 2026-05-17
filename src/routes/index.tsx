@@ -42,6 +42,14 @@ export const Route = createFileRoute("/")({
 
 const DECADES = ["1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
 
+function toKebabCase(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
 function Index() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [hours, setHours] = useState<string>("3");
