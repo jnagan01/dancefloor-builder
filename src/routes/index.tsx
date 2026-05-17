@@ -98,8 +98,9 @@ function Index() {
       toast.error("Enter a valid dance floor length");
       return;
     }
+    const uniqueSongs = dedupeSongs(songs);
     const r = generateLists({
-      uploaded: songs,
+      uploaded: uniqueSongs,
       hours: hoursNum,
       expand,
       prefs: {
@@ -114,6 +115,14 @@ function Index() {
     setTimeout(() => {
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
+  }
+
+  function removeDuplicates() {
+    const before = songs.length;
+    const next = dedupeSongs(songs);
+    const removed = before - next.length;
+    setSongs(next);
+    toast.success(`Removed ${removed} duplicate song${removed === 1 ? "" : "s"}`);
   }
 
   function exportSection(name: string, list: Song[]) {
