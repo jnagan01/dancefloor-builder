@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dancefloor-builder.lovable.app/sitemap.xml
