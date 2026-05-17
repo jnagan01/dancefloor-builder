@@ -258,16 +258,22 @@ function Index() {
                     {songs.map((s, i) => {
                       const isDup = duplicateKeys.has(dedupeKey(s.artist, s.song));
                       return (
-                        <TableRow key={i} className={isDup ? "bg-destructive/5" : ""}>
+                        <TableRow key={i} className={isDup ? "bg-destructive/10 border-destructive/30" : ""}>
                           <TableCell>
-                            <Input
-                              value={s.artist}
-                              onChange={(e) => {
-                                const next = [...songs];
-                                next[i] = { ...next[i], artist: e.target.value };
-                                setSongs(next);
-                              }}
-                            />
+                            <div className="flex items-center gap-2">
+                              {isDup && (
+                                <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" title="Duplicate song" />
+                              )}
+                              <Input
+                                value={s.artist}
+                                onChange={(e) => {
+                                  const next = [...songs];
+                                  next[i] = { ...next[i], artist: e.target.value };
+                                  setSongs(next);
+                                }}
+                                className={isDup ? "border-destructive/50" : ""}
+                              />
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Input
@@ -277,6 +283,7 @@ function Index() {
                                 next[i] = { ...next[i], song: e.target.value };
                                 setSongs(next);
                               }}
+                              className={isDup ? "border-destructive/50" : ""}
                             />
                           </TableCell>
                           <TableCell>
