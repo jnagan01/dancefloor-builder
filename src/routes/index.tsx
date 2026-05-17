@@ -139,18 +139,20 @@ function Index() {
       toast.error("No songs in this section");
       return;
     }
-    downloadBlob(new Blob([songsToCsv(list)], { type: "text/csv" }), `${name}.csv`);
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    downloadBlob(new Blob([songsToCsv(list)], { type: "text/csv" }), `${prefix}${name}.csv`);
   }
 
   async function exportZip() {
     if (!result) return;
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const zip = new JSZip();
-    zip.file("warm-up.csv", songsToCsv(result.warmUp));
-    zip.file("transition.csv", songsToCsv(result.transition));
-    zip.file("peak.csv", songsToCsv(result.peak));
-    if (includeCombined) zip.file("combined-dance-floor-lists.csv", combinedCsv(result));
+    zip.file(`${prefix}warm-up.csv`, songsToCsv(result.warmUp));
+    zip.file(`${prefix}transition.csv`, songsToCsv(result.transition));
+    zip.file(`${prefix}peak.csv`, songsToCsv(result.peak));
+    if (includeCombined) zip.file(`${prefix}combined-dance-floor-lists.csv`, combinedCsv(result));
     const blob = await zip.generateAsync({ type: "blob" });
-    downloadBlob(blob, "dance-floor-lists.zip");
+    downloadBlob(blob, `${prefix}dance-floor-lists.zip`);
   }
 
   return (
