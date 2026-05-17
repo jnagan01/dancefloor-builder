@@ -82,7 +82,6 @@ function Index() {
         toast.error(`Could not parse ${f.name}`);
       }
     }
-    next = dedupeSongs(next);
     setSongs(next);
     toast.success(`Imported ${added} songs from ${valid.length} file${valid.length > 1 ? "s" : ""}`);
   }
@@ -99,8 +98,9 @@ function Index() {
       toast.error("Enter a valid dance floor length");
       return;
     }
+    const uniqueSongs = dedupeSongs(songs);
     const r = generateLists({
-      uploaded: songs,
+      uploaded: uniqueSongs,
       hours: hoursNum,
       expand,
       prefs: {
@@ -115,6 +115,14 @@ function Index() {
     setTimeout(() => {
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
+  }
+
+  function removeDuplicates() {
+    const before = songs.length;
+    const next = dedupeSongs(songs);
+    const removed = before - next.length;
+    setSongs(next);
+    toast.success(`Removed ${removed} duplicate song${removed === 1 ? "" : "s"}`);
   }
 
   function exportSection(name: string, list: Song[]) {
@@ -196,27 +204,42 @@ function Index() {
 
         {/* Step 2 */}
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-2">
+          <CardHeader className="flex flex-row items-start justify-between gap-2 flex-wrap">
             <div>
               <CardTitle>Step 2 · Review imported songs</CardTitle>
               <CardDescription>
                 {songs.length} song{songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSongs([...songs, { artist: "", song: "" }])}
-            >
-              <Plus className="mr-1 h-4 w-4" />
-              Add row
-            </Button>
+            <div className="flex items-center gap-2">
+              {duplicateKeys.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={removeDuplicates}
+                >
+                  <AlertTriangle className="mr-1 h-4 w-4" />
+                  Remove {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSongs([...songs, { artist: "", song: "" }])}
+              >
+                <Plus className="mr-1 h-4 w-4" />
+                Add row
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {duplicateKeys.size > 0 && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                <AlertTriangle className="h-4 w-4" />
-                {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""} detected
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span className="flex-1">
+                  {duplicateKeys.size} unique duplicate{duplicateKeys.size > 1 ? "s" : ""} detected.
+                  Rows marked with a warning icon share the same artist and song (ignoring case and punctuation).
+                </span>
               </div>
             )}
             {songs.length === 0 ? (
@@ -235,16 +258,24 @@ function Index() {
                     {songs.map((s, i) => {
                       const isDup = duplicateKeys.has(dedupeKey(s.artist, s.song));
                       return (
-                        <TableRow key={i} className={isDup ? "bg-destructive/5" : ""}>
+                        <TableRow key={i} className={isDup ? "bg-destructive/10 border-destructive/30" : ""}>
                           <TableCell>
-                            <Input
-                              value={s.artist}
-                              onChange={(e) => {
-                                const next = [...songs];
-                                next[i] = { ...next[i], artist: e.target.value };
-                                setSongs(next);
-                              }}
-                            />
+                            <div className="flex items-center gap-2">
+                              {isDup && (
+                                <span title="Duplicate song" className="shrink-0">
+                                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                                </span>
+                              )}
+                              <Input
+                                value={s.artist}
+                                onChange={(e) => {
+                                  const next = [...songs];
+                                  next[i] = { ...next[i], artist: e.target.value };
+                                  setSongs(next);
+                                }}
+                                className={isDup ? "border-destructive/50" : ""}
+                              />
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Input
@@ -254,6 +285,7 @@ function Index() {
                                 next[i] = { ...next[i], song: e.target.value };
                                 setSongs(next);
                               }}
+                              className={isDup ? "border-destructive/50" : ""}
                             />
                           </TableCell>
                           <TableCell>
