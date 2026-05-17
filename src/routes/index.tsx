@@ -42,6 +42,14 @@ export const Route = createFileRoute("/")({
 
 const DECADES = ["1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
 
+function toKebabCase(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+}
+
 function Index() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [hours, setHours] = useState<string>("3");
@@ -51,6 +59,7 @@ function Index() {
   const [notes, setNotes] = useState("");
   const [expand, setExpand] = useState(false);
   const [includeCombined, setIncludeCombined] = useState(false);
+  const [eventName, setEventName] = useState("");
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -130,18 +139,20 @@ function Index() {
       toast.error("No songs in this section");
       return;
     }
-    downloadBlob(new Blob([songsToCsv(list)], { type: "text/csv" }), `${name}.csv`);
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    downloadBlob(new Blob([songsToCsv(list)], { type: "text/csv" }), `${prefix}${name}.csv`);
   }
 
   async function exportZip() {
     if (!result) return;
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const zip = new JSZip();
-    zip.file("warm-up.csv", songsToCsv(result.warmUp));
-    zip.file("transition.csv", songsToCsv(result.transition));
-    zip.file("peak.csv", songsToCsv(result.peak));
-    if (includeCombined) zip.file("combined-dance-floor-lists.csv", combinedCsv(result));
+    zip.file(`${prefix}warm-up.csv`, songsToCsv(result.warmUp));
+    zip.file(`${prefix}transition.csv`, songsToCsv(result.transition));
+    zip.file(`${prefix}peak.csv`, songsToCsv(result.peak));
+    if (includeCombined) zip.file(`${prefix}combined-dance-floor-lists.csv`, combinedCsv(result));
     const blob = await zip.generateAsync({ type: "blob" });
-    downloadBlob(blob, "dance-floor-lists.zip");
+    downloadBlob(blob, `${prefix}dance-floor-lists.zip`);
   }
 
   return (
@@ -314,6 +325,21 @@ function Index() {
             <CardDescription>Set the vibe and length of the open dance floor.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            <div>
+              <Label htmlFor="eventName">Couple / Event name (optional)</Label>
+              <Input
+                id="eventName"
+                placeholder="e.g. Smith Johnson Wedding"
+                value={eventName}
+                onChange={(e) => setEventName(e.target.value)}
+                className="mt-1.5"
+              />
+              {eventName && (
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Files will be named: <code className="rounded bg-muted px-1 py-0.5 text-xs">{toKebabCase(eventName)}-warm-up.csv</code>
+                </p>
+              )}
+            </div>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label htmlFor="hours">Dance floor length (hours)</Label>
