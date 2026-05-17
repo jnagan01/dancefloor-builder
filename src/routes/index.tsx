@@ -303,6 +303,7 @@ function Index() {
                             <Button
                               size="icon"
                               variant="ghost"
+                              aria-label="Remove song"
                               onClick={() => setSongs(songs.filter((_, j) => j !== i))}
                             >
                               <Trash2 className="h-4 w-4" />
