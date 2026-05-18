@@ -72,6 +72,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "google-site-verification", content: "Deul6k7yz-bckjo2dMBnPqDljkzzKIbSAJQ0VejUWrM" },
       { title: "Wedding Dance Floor Builder" },
       { name: "description", content: "Wedding DJ Assistant helps DJs upload client song lists and generate categorized dance floor playlists." },
       { name: "author", content: "Lovable" },
