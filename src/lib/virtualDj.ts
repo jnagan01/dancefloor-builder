@@ -344,9 +344,8 @@ export async function pickXmlFiles(): Promise<File[]> {
 }
 
 export async function pickDirectoryFiles(): Promise<File[]> {
-  const input = document.createElement("input");
+  const input = document.createElement("input") as HTMLInputElement & { webkitdirectory: boolean };
   input.type = "file";
-  // @ts-expect-error non-standard but widely supported
   input.webkitdirectory = true;
   input.multiple = true;
   return new Promise((resolve) => {
