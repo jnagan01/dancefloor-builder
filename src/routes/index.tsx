@@ -13,6 +13,25 @@ import {
   type Song,
   type GenerationResult,
 } from "@/lib/danceFloor";
+import {
+  parseVdjDatabaseXml,
+  buildLibrary,
+  mergeLibraries,
+  matchSong,
+  searchLibrary,
+  buildVirtualDjXml,
+  buildM3u,
+  pickXmlFiles,
+  pickDirectoryFiles,
+  pickDirectoryHandle,
+  writeFileToDir,
+  supportsDirectoryWrite,
+  type VdjLibrary,
+  type VdjTrack,
+  type SongMatch,
+  type MatchStatus,
+  type ExportSongRef,
+} from "@/lib/virtualDj";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +41,9 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Trash2, Upload, Plus, Download, Music, AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 
@@ -50,6 +71,17 @@ function toKebabCase(str: string): string {
     .replace(/\s+/g, "-");
 }
 
+type SectionKey = "warmUp" | "transition" | "peak";
+const SECTION_FILES: Record<SectionKey, string> = {
+  warmUp: "warm-up",
+  transition: "transition",
+  peak: "peak",
+};
+
+interface DirHandleLike {
+  getFileHandle(name: string, options?: { create?: boolean }): Promise<unknown>;
+}
+
 function Index() {
   const [songs, setSongs] = useState<Song[]>([]);
   const [hours, setHours] = useState<string>("3");
@@ -63,6 +95,19 @@ function Index() {
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // VirtualDJ state
+  const [libraries, setLibraries] = useState<VdjLibrary[]>([]);
+  const [librarySources, setLibrarySources] = useState<string[]>([]);
+  const [matches, setMatches] = useState<Record<string, SongMatch>>({});
+  const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
+  const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const mergedLibrary = useMemo<VdjLibrary | null>(() => {
+    if (!libraries.length) return null;
+    return mergeLibraries(libraries);
+  }, [libraries]);
 
   const duplicateKeys = useMemo(() => {
     const counts = new Map<string, number>();
@@ -87,7 +132,7 @@ function Index() {
         const parsed = await parseFile(f);
         added += parsed.length;
         next = [...next, ...parsed];
-      } catch (e) {
+      } catch {
         toast.error(`Could not parse ${f.name}`);
       }
     }
@@ -97,6 +142,13 @@ function Index() {
 
   const hoursNum = parseFloat(hours) || 0;
   const sectionMinutes = formatMinutes(hoursNum);
+
+  function songKey(section: SectionKey, idx: number, s: Song): string {
+    return `${section}:${idx}:${dedupeKey(s.artist, s.song)}`;
+  }
+
+
+
 
   function generate() {
     if (!songs.length) {
@@ -120,6 +172,17 @@ function Index() {
       },
     });
     setResult(r);
+    setMatches({});
+    if (mergedLibrary) {
+      // fresh matching
+      const m: Record<string, SongMatch> = {};
+      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
+        r[section].forEach((s, i) => {
+          m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
+        });
+      });
+      setMatches(m);
+    }
     toast.success("Lists generated");
     setTimeout(() => {
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
@@ -134,26 +197,265 @@ function Index() {
     toast.success(`Removed ${removed} duplicate song${removed === 1 ? "" : "s"}`);
   }
 
-  function exportSection(name: string, list: Song[]) {
+  // --- VirtualDJ library loading ---
+
+  async function loadXmlFiles(files: File[], sourceLabel: string) {
+    if (!files.length) return;
+    const xmlFiles = files.filter((f) => /database\.xml$|\.xml$/i.test(f.name));
+    if (!xmlFiles.length) {
+      toast.error("No database.xml files found in selection");
+      return;
+    }
+    let totalTracks = 0;
+    const newLibs: VdjLibrary[] = [];
+    const newSources: string[] = [];
+    for (const f of xmlFiles) {
+      try {
+        const text = await f.text();
+        const tracks = parseVdjDatabaseXml(text);
+        if (tracks.length) {
+          newLibs.push(buildLibrary(tracks));
+          newSources.push(`${sourceLabel}: ${f.webkitRelativePath || f.name} (${tracks.length} tracks)`);
+          totalTracks += tracks.length;
+        }
+      } catch {
+        toast.error(`Could not parse ${f.name}`);
+      }
+    }
+    if (!newLibs.length) {
+      toast.error("No tracks parsed from VirtualDJ database");
+      return;
+    }
+    const updated = [...libraries, ...newLibs];
+    setLibraries(updated);
+    setLibrarySources([...librarySources, ...newSources]);
+    toast.success(`Indexed ${totalTracks} VirtualDJ tracks`);
+    // Re-match if results exist
+    if (result) {
+      const merged = mergeLibraries(updated);
+      const m: Record<string, SongMatch> = {};
+      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
+        result[section].forEach((s, i) => {
+          m[songKey(section, i, s)] = matchSong(s, merged);
+        });
+      });
+      setMatches(m);
+    }
+  }
+
+  async function selectDatabaseXml() {
+    const files = await pickXmlFiles();
+    await loadXmlFiles(files, "database.xml");
+  }
+
+  async function selectFolder(label: string) {
+    const files = await pickDirectoryFiles();
+    const xmls = files.filter((f) => /database\.xml$/i.test(f.name));
+    if (!xmls.length) {
+      toast.error(`No database.xml found in ${label}`);
+      return;
+    }
+    await loadXmlFiles(xmls, label);
+  }
+
+  function clearLibraries() {
+    setLibraries([]);
+    setLibrarySources([]);
+    setMatches({});
+    toast.success("VirtualDJ library cleared");
+  }
+
+  async function chooseMyListsFolder() {
+    if (!supportsDirectoryWrite()) {
+      toast.error("Direct folder writing not supported in this browser");
+      return;
+    }
+    const handle = await pickDirectoryHandle();
+    if (handle) {
+      setVdjDirHandle(handle);
+      toast.success("VirtualDJ My Lists folder linked");
+    }
+  }
+
+  // --- Match controls ---
+
+  function updateMatch(key: string, patch: Partial<SongMatch>) {
+    setMatches((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+  }
+
+  function confirmMatch(key: string) {
+    const m = matches[key];
+    if (!m || m.trackIndex == null) return;
+    updateMatch(key, { status: "Matched", confidence: 1 });
+  }
+
+  function chooseAlternative(key: string, trackIndex: number) {
+    const m = matches[key];
+    if (!m) return;
+    const others = [m.trackIndex, ...m.alternatives].filter((i): i is number => i != null && i !== trackIndex);
+    updateMatch(key, { status: "Manually Matched", confidence: 1, trackIndex, alternatives: others });
+  }
+
+  function markUnresolved(key: string) {
+    updateMatch(key, { status: "Missing From Library", confidence: 0, trackIndex: undefined, alternatives: [] });
+  }
+
+  function toggleExclude(key: string) {
+    const m = matches[key];
+    updateMatch(key, { excludedFromVdj: !m?.excludedFromVdj });
+  }
+
+  function openSearch(section: SectionKey, idx: number, s: Song) {
+    const key = songKey(section, idx, s);
+    setSearchOpen({ section, idx, key });
+    setSearchQuery(`${s.artist} ${s.song}`);
+  }
+
+  function applySearchPick(trackIndex: number) {
+    if (!searchOpen) return;
+    updateMatch(searchOpen.key, {
+      status: "Manually Matched",
+      confidence: 1,
+      trackIndex,
+      alternatives: [],
+    });
+    setSearchOpen(null);
+    setSearchQuery("");
+  }
+
+  // --- Export helpers ---
+
+  function getSectionRefs(section: SectionKey): ExportSongRef[] {
+    if (!result) return [];
+    return result[section].map((s, i) => ({
+      song: s,
+      match: matches[songKey(section, i, s)],
+    }));
+  }
+
+  function exportSectionCsv(section: SectionKey) {
+    if (!result) return;
+    const list = result[section];
     if (!list.length) {
       toast.error("No songs in this section");
       return;
     }
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    downloadBlob(new Blob([songsToCsv(list)], { type: "text/csv" }), `${prefix}${name}.csv`);
+    downloadBlob(
+      new Blob([songsToCsv(list)], { type: "text/csv" }),
+      `${prefix}${SECTION_FILES[section]}.csv`,
+    );
   }
 
-  async function exportZip() {
+  function unmatchedCount(section: SectionKey): number {
+    return getSectionRefs(section).filter(
+      (r) => !r.match || r.match.trackIndex == null || r.match.excludedFromVdj,
+    ).length;
+  }
+
+  async function exportSectionXml(section: SectionKey) {
+    if (!mergedLibrary) {
+      toast.error("Load a VirtualDJ database first");
+      return;
+    }
+    const unmatched = unmatchedCount(section);
+    if (unmatched > 0) {
+      const ok = window.confirm(
+        `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ XML playlist unless matched. Continue?`,
+      );
+      if (!ok) return;
+    }
+    const refs = getSectionRefs(section);
+    const xml = buildVirtualDjXml(refs, mergedLibrary);
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    const fname = `${prefix}${SECTION_FILES[section]}.xml`;
+    if (vdjDirHandle) {
+      try {
+        await writeFileToDir(vdjDirHandle, fname, xml);
+        toast.success(`Saved ${fname} to VirtualDJ My Lists`);
+        return;
+      } catch {
+        toast.error("Could not write to My Lists folder, downloading instead");
+      }
+    }
+    downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
+  }
+
+  function exportSectionM3u(section: SectionKey) {
+    if (!mergedLibrary) {
+      toast.error("Load a VirtualDJ database first");
+      return;
+    }
+    const refs = getSectionRefs(section);
+    const m3u = buildM3u(refs, mergedLibrary);
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    downloadBlob(
+      new Blob([m3u], { type: "audio/x-mpegurl" }),
+      `${prefix}${SECTION_FILES[section]}.m3u`,
+    );
+  }
+
+  async function exportAllZip() {
     if (!result) return;
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const zip = new JSZip();
-    zip.file(`${prefix}warm-up.csv`, songsToCsv(result.warmUp));
-    zip.file(`${prefix}transition.csv`, songsToCsv(result.transition));
-    zip.file(`${prefix}peak.csv`, songsToCsv(result.peak));
+    (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
+      zip.file(`${prefix}${SECTION_FILES[section]}.csv`, songsToCsv(result[section]));
+      if (mergedLibrary) {
+        const refs = getSectionRefs(section);
+        zip.file(`${prefix}${SECTION_FILES[section]}.xml`, buildVirtualDjXml(refs, mergedLibrary));
+        zip.file(`${prefix}${SECTION_FILES[section]}.m3u`, buildM3u(refs, mergedLibrary));
+      }
+    });
     if (includeCombined) zip.file(`${prefix}combined-dance-floor-lists.csv`, combinedCsv(result));
     const blob = await zip.generateAsync({ type: "blob" });
     downloadBlob(blob, `${prefix}dance-floor-lists.zip`);
   }
+
+  // --- Summary ---
+
+  const summary = useMemo(() => {
+    if (!result) return null;
+    const sections: SectionKey[] = ["warmUp", "transition", "peak"];
+    let total = 0,
+      matched = 0,
+      possible = 0,
+      multiple = 0,
+      missing = 0,
+      excluded = 0;
+    sections.forEach((sec) => {
+      result[sec].forEach((s, i) => {
+        total += 1;
+        const m = matches[songKey(sec, i, s)];
+        if (!m) {
+          missing += 1;
+          return;
+        }
+        if (m.excludedFromVdj) excluded += 1;
+        switch (m.status) {
+          case "Matched":
+          case "Manually Matched":
+            matched += 1;
+            break;
+          case "Possible Match":
+            possible += 1;
+            break;
+          case "Multiple Matches":
+            multiple += 1;
+            break;
+          case "Missing From Library":
+            missing += 1;
+            break;
+        }
+      });
+    });
+    return { total, matched, possible, multiple, missing, excluded, csvIncluded: total };
+  }, [result, matches]);
+
+  const searchResults = useMemo(() => {
+    if (!searchOpen || !mergedLibrary || !searchQuery.trim()) return [];
+    return searchLibrary(searchQuery, mergedLibrary, 30);
+  }, [searchOpen, searchQuery, mergedLibrary]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -224,20 +526,12 @@ function Index() {
             </div>
             <div className="flex items-center gap-2">
               {duplicateKeys.size > 0 && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={removeDuplicates}
-                >
+                <Button variant="destructive" size="sm" onClick={removeDuplicates}>
                   <AlertTriangle className="mr-1 h-4 w-4" />
                   Remove {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""}
                 </Button>
               )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSongs([...songs, { artist: "", song: "" }])}
-              >
+              <Button variant="outline" size="sm" onClick={() => setSongs([...songs, { artist: "", song: "" }])}>
                 <Plus className="mr-1 h-4 w-4" />
                 Add row
               </Button>
@@ -249,7 +543,6 @@ function Index() {
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span className="flex-1">
                   {duplicateKeys.size} unique duplicate{duplicateKeys.size > 1 ? "s" : ""} detected.
-                  Rows marked with a warning icon share the same artist and song (ignoring case and punctuation).
                 </span>
               </div>
             )}
@@ -378,34 +671,15 @@ function Index() {
             </div>
             <div>
               <Label htmlFor="artists">Favorite artists (comma separated)</Label>
-              <Input
-                id="artists"
-                placeholder="Pitbull, Flo Rida, Rihanna, Lady Gaga, David Guetta"
-                value={artistsInput}
-                onChange={(e) => setArtistsInput(e.target.value)}
-                className="mt-1.5"
-              />
+              <Input id="artists" value={artistsInput} onChange={(e) => setArtistsInput(e.target.value)} className="mt-1.5" />
             </div>
             <div>
               <Label htmlFor="genres">Favorite genres (comma separated)</Label>
-              <Input
-                id="genres"
-                placeholder="Pop, EDM, Pop Punk, Alternative Rock, Rock"
-                value={genresInput}
-                onChange={(e) => setGenresInput(e.target.value)}
-                className="mt-1.5"
-              />
+              <Input id="genres" value={genresInput} onChange={(e) => setGenresInput(e.target.value)} className="mt-1.5" />
             </div>
             <div>
               <Label htmlFor="notes">Additional notes</Label>
-              <Textarea
-                id="notes"
-                placeholder="Focus mostly on songs from 2000 and newer. Keep the first hour all-ages friendly."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="mt-1.5"
-                rows={3}
-              />
+              <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1.5" rows={3} />
             </div>
           </CardContent>
         </Card>
@@ -428,14 +702,64 @@ function Index() {
           </CardContent>
         </Card>
 
-        {/* Step 5 */}
+        {/* Step 5 - VirtualDJ Library */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Step 5 · VirtualDJ Library Matching (optional)</CardTitle>
+            <CardDescription>
+              Select your VirtualDJ database.xml or VirtualDJ folder. Files are read and indexed only in your browser — nothing is uploaded.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={selectDatabaseXml}>
+                <FolderOpen className="mr-1 h-4 w-4" /> Select VirtualDJ database.xml
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => selectFolder("VirtualDJ Folder")}>
+                <FolderOpen className="mr-1 h-4 w-4" /> Select VirtualDJ Folder
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => selectFolder("External Drive VirtualDJ")}>
+                <FolderOpen className="mr-1 h-4 w-4" /> Select External Drive VirtualDJ Folder
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => selectFolder("Music Folder")}>
+                <FolderOpen className="mr-1 h-4 w-4" /> Select Music Folder
+              </Button>
+              {libraries.length > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearLibraries}>
+                  <X className="mr-1 h-4 w-4" /> Clear library
+                </Button>
+              )}
+            </div>
+            {mergedLibrary && (
+              <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                <p className="font-medium">
+                  Indexed {mergedLibrary.tracks.length} tracks from {libraries.length} source{libraries.length > 1 ? "s" : ""}
+                </p>
+                <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
+                  {librarySources.map((s, i) => <li key={i}>{s}</li>)}
+                </ul>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-3 border-t pt-3">
+              <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!supportsDirectoryWrite()}>
+                <FolderOpen className="mr-1 h-4 w-4" />
+                {vdjDirHandle ? "VirtualDJ My Lists linked" : "Save directly to VirtualDJ My Lists folder"}
+              </Button>
+              {!supportsDirectoryWrite() && (
+                <span className="text-xs text-muted-foreground">
+                  Direct saving unsupported in this browser — files will download instead.
+                </span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Generate */}
         <div className="flex justify-center">
-          <Button size="lg" onClick={generate}>
-            Generate Dance Floor Lists
-          </Button>
+          <Button size="lg" onClick={generate}>Generate Dance Floor Lists</Button>
         </div>
 
-        {/* Step 6 */}
+        {/* Results */}
         {result && (
           <Card id="results">
             <CardHeader>
@@ -444,44 +768,59 @@ function Index() {
                 Each CSV exports with exactly two columns: Artist, Song.
               </CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="mb-4 flex flex-wrap items-center gap-3">
-                <Button onClick={exportZip}>
-                  <Download className="mr-1 h-4 w-4" />
-                  Download all as ZIP
+            <CardContent className="space-y-4">
+              {summary && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <h3 className="mb-2 font-medium">Match summary</h3>
+                  <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:grid-cols-6">
+                    <Stat label="Total" value={summary.total} />
+                    <Stat label="Matched" value={summary.matched} tone="success" />
+                    <Stat label="Possible" value={summary.possible} tone="warning" />
+                    <Stat label="Multiple" value={summary.multiple} tone="warning" />
+                    <Stat label="Missing" value={summary.missing} tone="destructive" />
+                    <Stat label="Excluded from VDJ" value={summary.excluded} />
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {summary.csvIncluded} songs included in CSV reference exports.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onClick={exportAllZip}>
+                  <Download className="mr-1 h-4 w-4" /> Export All Files as ZIP
                 </Button>
                 <label className="flex items-center gap-2 text-sm">
-                  <Checkbox
-                    checked={includeCombined}
-                    onCheckedChange={(v) => setIncludeCombined(!!v)}
-                  />
+                  <Checkbox checked={includeCombined} onCheckedChange={(v) => setIncludeCombined(!!v)} />
                   Include combined reference CSV
                 </label>
               </div>
-              <Tabs defaultValue="warm">
+
+              <Tabs defaultValue="warmUp">
                 <TabsList>
-                  <TabsTrigger value="warm">Warm Up ({result.warmUp.length})</TabsTrigger>
-                  <TabsTrigger value="trans">Transition ({result.transition.length})</TabsTrigger>
+                  <TabsTrigger value="warmUp">Warm Up ({result.warmUp.length})</TabsTrigger>
+                  <TabsTrigger value="transition">Transition ({result.transition.length})</TabsTrigger>
                   <TabsTrigger value="peak">Peak ({result.peak.length})</TabsTrigger>
                 </TabsList>
-                <TabsContent value="warm">
-                  <SectionView
-                    songs={result.warmUp}
-                    onExport={() => exportSection("warm-up", result.warmUp)}
-                  />
-                </TabsContent>
-                <TabsContent value="trans">
-                  <SectionView
-                    songs={result.transition}
-                    onExport={() => exportSection("transition", result.transition)}
-                  />
-                </TabsContent>
-                <TabsContent value="peak">
-                  <SectionView
-                    songs={result.peak}
-                    onExport={() => exportSection("peak", result.peak)}
-                  />
-                </TabsContent>
+                {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => (
+                  <TabsContent key={sec} value={sec}>
+                    <SectionView
+                      section={sec}
+                      songs={result[sec]}
+                      matches={matches}
+                      library={mergedLibrary}
+                      songKey={songKey}
+                      onExportCsv={() => exportSectionCsv(sec)}
+                      onExportXml={() => exportSectionXml(sec)}
+                      onExportM3u={() => exportSectionM3u(sec)}
+                      onConfirm={confirmMatch}
+                      onChoose={chooseAlternative}
+                      onMarkUnresolved={markUnresolved}
+                      onToggleExclude={toggleExclude}
+                      onOpenSearch={openSearch}
+                    />
+                  </TabsContent>
+                ))}
               </Tabs>
             </CardContent>
           </Card>
@@ -491,42 +830,197 @@ function Index() {
           Files are processed in your browser. Nothing is uploaded or stored.
         </footer>
       </main>
+
+      <Dialog open={!!searchOpen} onOpenChange={(o) => { if (!o) { setSearchOpen(null); setSearchQuery(""); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Search VirtualDJ library</DialogTitle>
+            <DialogDescription>Pick a track to manually match.</DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            placeholder="Search by artist or title…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <div className="max-h-80 overflow-auto rounded-md border">
+            {!mergedLibrary ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">No library loaded</p>
+            ) : searchResults.length === 0 ? (
+              <p className="p-4 text-center text-sm text-muted-foreground">No matches</p>
+            ) : (
+              <Table>
+                <TableBody>
+                  {searchResults.map((i) => {
+                    const t = mergedLibrary.tracks[i];
+                    return (
+                      <TableRow key={i}>
+                        <TableCell>
+                          <p className="font-medium">{t.artist} — {t.title}</p>
+                          <p className="truncate text-xs text-muted-foreground">{t.filePath}</p>
+                        </TableCell>
+                        <TableCell className="w-20">
+                          <Button size="sm" variant="outline" onClick={() => applySearchPick(i)}>
+                            <Check className="mr-1 h-4 w-4" /> Pick
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-function SectionView({ songs, onExport }: { songs: Song[]; onExport: () => void }) {
+function Stat({ label, value, tone }: { label: string; value: number; tone?: "success" | "warning" | "destructive" }) {
+  const toneCls =
+    tone === "success" ? "text-emerald-600" :
+    tone === "warning" ? "text-amber-600" :
+    tone === "destructive" ? "text-destructive" : "text-foreground";
+  return (
+    <div className="rounded-md border bg-background p-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-lg font-semibold ${toneCls}`}>{value}</p>
+    </div>
+  );
+}
+
+function statusBadge(status: MatchStatus) {
+  const map: Record<MatchStatus, string> = {
+    "Matched": "bg-emerald-100 text-emerald-800 border-emerald-200",
+    "Manually Matched": "bg-emerald-100 text-emerald-800 border-emerald-200",
+    "Possible Match": "bg-amber-100 text-amber-900 border-amber-200",
+    "Multiple Matches": "bg-amber-100 text-amber-900 border-amber-200",
+    "Missing From Library": "bg-red-100 text-red-800 border-red-200",
+  };
+  return <Badge variant="outline" className={map[status]}>{status}</Badge>;
+}
+
+interface SectionViewProps {
+  section: SectionKey;
+  songs: Song[];
+  matches: Record<string, SongMatch>;
+  library: VdjLibrary | null;
+  songKey: (section: SectionKey, idx: number, s: Song) => string;
+  onExportCsv: () => void;
+  onExportXml: () => void;
+  onExportM3u: () => void;
+  onConfirm: (key: string) => void;
+  onChoose: (key: string, trackIndex: number) => void;
+  onMarkUnresolved: (key: string) => void;
+  onToggleExclude: (key: string) => void;
+  onOpenSearch: (section: SectionKey, idx: number, s: Song) => void;
+}
+
+function SectionView(props: SectionViewProps) {
+  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onOpenSearch } = props;
+  const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   return (
     <div className="space-y-3">
-      <div className="flex justify-end">
-        <Button size="sm" variant="outline" onClick={onExport}>
-          <Download className="mr-1 h-4 w-4" />
-          Export CSV
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={onExportCsv}>
+          <Download className="mr-1 h-4 w-4" /> Export {sectionLabel} CSV
+        </Button>
+        <Button size="sm" variant="outline" onClick={onExportXml} disabled={!library}>
+          <Download className="mr-1 h-4 w-4" /> Export VirtualDJ {sectionLabel} XML
+        </Button>
+        <Button size="sm" variant="outline" onClick={onExportM3u} disabled={!library}>
+          <Download className="mr-1 h-4 w-4" /> Export M3U {sectionLabel} Playlist
         </Button>
       </div>
-      <div className="max-h-96 overflow-auto rounded-md border">
+      <div className="max-h-[32rem] overflow-auto rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Artist</TableHead>
               <TableHead>Song</TableHead>
+              {library && (
+                <>
+                  <TableHead>Match</TableHead>
+                  <TableHead>Conf.</TableHead>
+                  <TableHead>VDJ BPM</TableHead>
+                  <TableHead>VDJ Key</TableHead>
+                  <TableHead>File Path / Alternatives</TableHead>
+                  <TableHead className="w-44">Actions</TableHead>
+                </>
+              )}
             </TableRow>
           </TableHeader>
           <TableBody>
             {songs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={2} className="text-center text-sm text-muted-foreground">
+                <TableCell colSpan={library ? 8 : 2} className="text-center text-sm text-muted-foreground">
                   No songs in this section
                 </TableCell>
               </TableRow>
-            ) : (
-              songs.map((s, i) => (
-                <TableRow key={i}>
+            ) : songs.map((s, i) => {
+              const key = songKey(section, i, s);
+              const m = matches[key];
+              const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
+              return (
+                <TableRow key={i} className={m?.excludedFromVdj ? "opacity-60" : ""}>
                   <TableCell>{s.artist}</TableCell>
                   <TableCell>{s.song}</TableCell>
+                  {library && (
+                    <>
+                      <TableCell>{m ? statusBadge(m.status) : statusBadge("Missing From Library")}</TableCell>
+                      <TableCell className="text-xs">{m ? `${Math.round(m.confidence * 100)}%` : "—"}</TableCell>
+                      <TableCell className="text-xs">{track?.bpm || "—"}</TableCell>
+                      <TableCell className="text-xs">{track?.key || "—"}</TableCell>
+                      <TableCell className="max-w-xs">
+                        {track ? (
+                          <div className="space-y-1">
+                            <p className="truncate text-xs" title={track.filePath}>{track.filePath}</p>
+                            {m && m.alternatives.length > 0 && (
+                              <select
+                                className="w-full rounded border bg-background px-2 py-1 text-xs"
+                                value={m.trackIndex ?? ""}
+                                onChange={(e) => onChoose(key, Number(e.target.value))}
+                              >
+                                {[m.trackIndex!, ...m.alternatives].map((ti) => {
+                                  const t = library.tracks[ti];
+                                  return <option key={ti} value={ti}>{t.artist} — {t.title}</option>;
+                                })}
+                              </select>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">No file</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {m?.status === "Possible Match" && (
+                            <Button size="sm" variant="outline" onClick={() => onConfirm(key)}>
+                              <Check className="h-3 w-3" />
+                            </Button>
+                          )}
+                          <Button size="sm" variant="outline" onClick={() => onOpenSearch(section, i, s)} title="Search library">
+                            <Search className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => onMarkUnresolved(key)} title="Mark unresolved">
+                            <X className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={m?.excludedFromVdj ? "default" : "ghost"}
+                            onClick={() => onToggleExclude(key)}
+                            title="Exclude from VirtualDJ export"
+                          >
+                            VDJ
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </>
+                  )}
                 </TableRow>
-              ))
-            )}
+              );
+            })}
           </TableBody>
         </Table>
       </div>
