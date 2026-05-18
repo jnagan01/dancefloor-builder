@@ -147,17 +147,8 @@ function Index() {
     return `${section}:${idx}:${dedupeKey(s.artist, s.song)}`;
   }
 
-  async function runMatching(r: GenerationResult, lib: VdjLibrary | null) {
-    if (!lib) return;
-    const next: Record<string, SongMatch> = { ...matches };
-    (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-      r[section].forEach((s, i) => {
-        const k = songKey(section, i, s);
-        if (!next[k]) next[k] = matchSong(s, lib);
-      });
-    });
-    setMatches(next);
-  }
+
+
 
   function generate() {
     if (!songs.length) {
