@@ -171,6 +171,7 @@ function Index() {
         genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean),
         decades,
         notes,
+        doNotPlay: parseDoNotPlay(doNotPlayInput),
       },
     });
     setResult(r);
