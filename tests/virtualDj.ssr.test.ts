@@ -28,7 +28,7 @@ const lib = mod.buildLibrary([
     filePath: "/music/Artist - Song.mp3",
     artist: "Artist",
     title: "Song",
-    fileSize: 1234,
+    fileSize: "1234",
   },
 ]);
 assert(lib.tracks.length === 1, "buildLibrary returns indexed track");
