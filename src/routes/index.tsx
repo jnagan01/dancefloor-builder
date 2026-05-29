@@ -90,6 +90,7 @@ function Index() {
   const [genresInput, setGenresInput] = useState("");
   const [decades, setDecades] = useState<string[]>(["2000s", "2010s", "2020s"]);
   const [notes, setNotes] = useState("");
+  const [doNotPlayInput, setDoNotPlayInput] = useState("");
   const [expand, setExpand] = useState(false);
   const [includeCombined, setIncludeCombined] = useState(false);
   const [eventName, setEventName] = useState("");
