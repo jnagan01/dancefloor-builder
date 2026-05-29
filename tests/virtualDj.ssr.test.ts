@@ -9,8 +9,8 @@
  * Run: bun tests/virtualDj.ssr.test.ts
  */
 
-// Hard guarantee: no DOM globals are leaking from the runtime.
-for (const name of ["window", "document", "navigator", "localStorage"] as const) {
+// Hard guarantee: the DOM globals the module must guard are NOT defined.
+for (const name of ["window", "document", "localStorage"] as const) {
   if (typeof (globalThis as Record<string, unknown>)[name] !== "undefined") {
     throw new Error(`Test precondition failed: ${name} is defined in this runtime`);
   }
