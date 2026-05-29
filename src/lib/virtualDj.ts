@@ -365,6 +365,7 @@ export interface DirHandle {
 }
 
 export function supportsDirectoryWrite(): boolean {
+  if (typeof window === "undefined") return false;
   return typeof (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function";
 }
 
