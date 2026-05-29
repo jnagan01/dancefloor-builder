@@ -253,6 +253,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
 
     const candidates = SONG_LIBRARY
       .filter((l) => !seen.has(dedupeKey(l.artist, l.song)))
+      .filter((l) => !isBlocked(l.artist, l.song, prefs.doNotPlay))
       .map((l) => ({ lib: l, score: matchScore(l) }))
       .sort((a, b) => b.score - a.score);
 
