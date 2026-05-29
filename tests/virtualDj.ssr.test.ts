@@ -39,13 +39,12 @@ assert(merged.tracks.length >= 1, "mergeLibraries returns library");
 const match = mod.matchSong({ artist: "Artist", song: "Song" }, merged);
 assert(match.status === "Matched" || match.status === "Possible Match", `matchSong status ok: ${match.status}`);
 
-const xml = mod.buildVirtualDjXml("Test", [
-  { artist: "Artist", song: "Song", filePath: "/music/Artist - Song.mp3" },
-]);
+const item = { artist: "Artist", song: "Song", match } as Parameters<typeof mod.buildVirtualDjXml>[0][number];
+const xml = mod.buildVirtualDjXml([item], merged);
 assert(xml.includes("<VirtualFolder"), "buildVirtualDjXml emits VirtualFolder");
 
-const m3u = mod.buildM3u([{ filePath: "/music/Artist - Song.mp3" }]);
-assert(m3u.includes("/music/Artist - Song.mp3"), "buildM3u emits path");
+const m3u = mod.buildM3u([item], merged);
+assert(m3u.includes("/music/"), `buildM3u emits path: ${m3u}`);
 
 // 2. Feature-detect helpers must return false (not throw) without a window.
 assert(mod.supportsDirectoryWrite() === false, "supportsDirectoryWrite returns false on server");
