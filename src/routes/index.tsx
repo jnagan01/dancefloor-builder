@@ -684,6 +684,25 @@ function Index() {
               <Label htmlFor="notes">Additional notes</Label>
               <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1.5" rows={3} />
             </div>
+            <div>
+              <Label htmlFor="donotplay">Do Not Play list</Label>
+              <Textarea
+                id="donotplay"
+                value={doNotPlayInput}
+                onChange={(e) => setDoNotPlayInput(e.target.value)}
+                className="mt-1.5 font-mono text-sm"
+                rows={4}
+                placeholder={"One per line\nArtist - Song  (blocks that track)\nArtist          (blocks all songs by that artist)"}
+              />
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                Used only when expanding from the built-in library. Songs from your uploaded files are never filtered.
+                {parseDoNotPlay(doNotPlayInput).length > 0 && (
+                  <span className="ml-1 font-medium text-foreground">
+                    {parseDoNotPlay(doNotPlayInput).length} blocked
+                  </span>
+                )}
+              </p>
+            </div>
           </CardContent>
         </Card>
 
