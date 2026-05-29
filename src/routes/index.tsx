@@ -765,11 +765,11 @@ function Index() {
               </div>
             )}
             <div className="flex flex-wrap items-center gap-3 border-t pt-3">
-              <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!supportsDirectoryWrite()}>
+              <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
                 <FolderOpen className="mr-1 h-4 w-4" />
                 {vdjDirHandle ? "VirtualDJ My Lists linked" : "Save directly to VirtualDJ My Lists folder"}
               </Button>
-              {!supportsDirectoryWrite() && (
+              {!canDirWrite && (
                 <span className="text-xs text-muted-foreground">
                   Direct saving unsupported in this browser — files will download instead.
                 </span>
