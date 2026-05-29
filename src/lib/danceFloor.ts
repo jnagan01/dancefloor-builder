@@ -111,6 +111,46 @@ export interface Preferences {
   genres: string[];
   decades: string[];
   notes: string;
+  doNotPlay?: DoNotPlayEntry[];
+}
+
+export interface DoNotPlayEntry {
+  artist: string;
+  song?: string;
+}
+
+export function parseDoNotPlay(text: string): DoNotPlayEntry[] {
+  const seps = [" - ", " – ", " — ", " : ", "\t", "|"];
+  const out: DoNotPlayEntry[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    let entry: DoNotPlayEntry | null = null;
+    for (const sep of seps) {
+      const i = line.indexOf(sep);
+      if (i > 0) {
+        const a = line.slice(0, i).trim();
+        const s = line.slice(i + sep.length).trim();
+        if (a) entry = { artist: a, song: s || undefined };
+        break;
+      }
+    }
+    if (!entry) entry = { artist: line };
+    out.push(entry);
+  }
+  return out;
+}
+
+export function isBlocked(artist: string, song: string, blocklist?: DoNotPlayEntry[]): boolean {
+  if (!blocklist || !blocklist.length) return false;
+  const a = normalizeKey(artist);
+  const s = normalizeKey(song);
+  return blocklist.some((b) => {
+    const ba = normalizeKey(b.artist);
+    if (!ba || ba !== a) return false;
+    if (!b.song) return true;
+    return normalizeKey(b.song) === s;
+  });
 }
 
 function detectDecadeFromTitle(_artist: string, _song: string): string | undefined {
