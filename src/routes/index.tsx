@@ -105,6 +105,8 @@ function Index() {
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [canDirWrite, setCanDirWrite] = useState(false);
+  useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
 
   const mergedLibrary = useMemo<VdjLibrary | null>(() => {
     if (!libraries.length) return null;
