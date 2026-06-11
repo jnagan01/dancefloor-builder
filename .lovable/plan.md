@@ -1,45 +1,36 @@
 ## Goal
 
-Build each section (Warm Up, Transition, Peak) to **1.5× the songs needed** by default, and warn the user when their uploads can't cover that target so they know to flip on "Add additional songs from the library."
+Let the user upload a CSV/TXT file as the Do Not Play list instead of (or in addition to) typing entries by hand. Parsed entries merge with whatever is already in the textarea.
 
-## Behavior changes
+## Changes
 
-### 1. New buffered target math (`src/lib/danceFloor.ts`)
+### `src/routes/index.tsx` — Do Not Play section
 
-- Introduce a constant `SECTION_BUFFER = 1.5`.
-- Keep `totalSongsNeeded = ceil(hours * 15)` as the *baseline* count.
-- Add `perSectionTargetBuffered = ceil((totalSongsNeeded / 3) * 1.5)`.
-- `generateLists` now aims for `perSectionTargetBuffered` per section in both modes:
-  - **Expand ON**: pad each section up to the buffered target using library songs (current `addTo` already supports this — just pass the new number).
-  - **Expand OFF**: distribute uploads across sections as today; do not pad. Return the buffered target as the *goal*, even if uploads fall short, so the UI can compare.
-- Extend `GenerationResult` with:
-  - `perSectionTarget` (the buffered per-section goal — replaces today's value)
-  - `perSectionBase` (the un-buffered baseline, for reference/labels)
-  - `shortfall: { warmUp: number; transition: number; peak: number; total: number }` — how many songs short of the buffered target each section is *with current uploads only*. Computed from the distribution of uploads before expansion.
+- Add an **Upload file** button next to the "Do Not Play list" label, plus drag-and-drop on the textarea container.
+- Accept `.csv` and `.txt` (same as the song uploader).
+- Parser logic:
+  - For `.txt`: one entry per line; reuse the existing `parseDoNotPlay` text format (`Artist - Song` or just `Artist`).
+  - For `.csv`: use Papa Parse with header detection (reuse the helpers in `danceFloor.ts`). Detect Artist + Song columns (`artist`/`song`/`track`/`title`); if both present, format each row as `Artist - Song`. If only an Artist column, format as `Artist` (blocks all). Fall back to two-column headerless CSV (same heuristic as `parseCsv`).
+- Append the parsed entries as newline-separated lines to the current `doNotPlayInput` state (de-duplicate identical lines, preserve user-typed entries on top).
+- Toast: "Imported N do-not-play entries from {filename}". Error toast on empty/unparseable files.
 
-### 2. Live targets + shortfall in the UI (`src/routes/index.tsx`)
+### `src/lib/danceFloor.ts` — small helper
 
-- Update the existing `liveTargets` computation (debounced) to also return the buffered per-section number and a `shortfall` estimate based on a quick energy-bucket pass over current uploads (reuse `estimateEnergy` via a lightweight helper exported from `danceFloor.ts`, or call `generateLists({ expand: false })` against current state — whichever is cheaper). Use the same `useTransition` + `useDebounce` flow already in place.
-- Replace the displayed "per-section needed" number everywhere (Step 3 hours helper, Step 3 decades helper, Step 4 expansion helper, results summary) with the buffered target. Label it clearly, e.g. *"15 songs per section (1.5× buffer)"*.
-- **Warning banner** in the Song-source summary panel and inline in Step 4:
-  - Shown when `expand` is OFF **and** any section's shortfall > 0.
-  - Copy: *"Your uploads cover X of Y songs needed for the Warm Up / Transition / Peak buffer. Turn on 'Add additional songs from the library' to fill the gap."*
-  - Style: `bg-amber-500/10 text-amber-700 border border-amber-500/30`, lucide `AlertTriangle` icon, dismissible? No — it should track state live.
-  - When `expand` is ON, the warning is hidden (library fills the gap).
-- The existing "recalculating…" badge stays and applies to the new shortfall too.
+- Export a new `parseDoNotPlayFile(file: File): Promise<DoNotPlayEntry[]>` that:
+  - Reads the file text.
+  - For `.txt`, calls existing `parseDoNotPlay`.
+  - For `.csv`, parses with Papa, picks artist/song columns using the existing `ARTIST_KEYS` / `SONG_KEYS` constants, and returns `DoNotPlayEntry[]`.
+- Add a `doNotPlayEntriesToText(entries): string` helper so the UI can append normalized lines to the textarea.
 
-### 3. Tests (`tests/danceFloor.expansion.test.ts` + new cases)
+### Tests — `tests/doNotPlayUpload.test.ts` (new)
 
-- Update existing expansion tests to assert each section reaches the **buffered** target (not the baseline) when `expand: true` and the library has enough candidates.
-- Add a new test: with `expand: false` and uploads below the buffered target, `result.shortfall` reports a positive number per section.
-- Add a new test: with `expand: true` and ample library, `result.shortfall` for the post-expansion result is 0.
+- CSV with `Artist,Song` headers → returns one entry per row with both fields.
+- CSV with only `Artist` header → returns artist-only entries (blocks all songs).
+- TXT with mixed `Artist - Song` and bare `Artist` lines → matches existing `parseDoNotPlay` behavior.
+- Empty file → returns `[]`.
 
 ## Out of scope
 
-- Changing `SONGS_PER_HOUR` (still 15) or the section split (still even thirds).
-- Reordering or restyling unrelated parts of the summary panel.
-- Persisting a user-overridable buffer multiplier (1.5 is a constant for now).
-
-## Open question
-
-The 1.5× buffer applies *per section*, so the total songs surfaced is 1.5× the dance-floor length (e.g. a 2-hour floor → 45 songs across the three sections instead of 30). Confirm that's what you want, vs. 1.5× only when expansion fills gaps. I'll proceed with **always 1.5× per section** unless you say otherwise.
+- Persisting do-not-play lists across sessions.
+- A separate managed list UI (chips / table). The textarea remains the source of truth; upload just fills it.
+- Changing how do-not-play interacts with expansion (already covered).
