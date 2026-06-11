@@ -669,7 +669,7 @@ function Index() {
                 />
                 {hoursNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min
+                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target {liveTargets.total} songs ({liveTargets.perSection} per section)
                   </p>
                 )}
               </div>
@@ -688,6 +688,11 @@ function Index() {
                     </label>
                   ))}
                 </div>
+                {hoursNum > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Target {liveTargets.total} songs · {liveTargets.perSection} per section
+                  </p>
+                )}
               </div>
             </div>
             <div>
