@@ -209,9 +209,13 @@ export interface GenerationResult {
   peak: Array<Song & { fromUpload?: boolean }>;
   targetTotal: number;
   perSectionTarget: number;
+  perSectionBase: number;
+  shortfall: { warmUp: number; transition: number; peak: number; total: number };
 }
 
 const SONGS_PER_HOUR = 15; // ~4 min/song
+export const SECTION_BUFFER = 1.5;
+
 
 export function generateLists(input: GenerationInput): GenerationResult {
   const { uploaded, prefs, hours, expand } = input;
