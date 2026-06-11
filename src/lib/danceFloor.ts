@@ -352,25 +352,55 @@ export function generateLists(input: GenerationInput): GenerationResult {
   const duplicatesRemoved = validUploaded.length - dedupedUploaded.length;
   const blockedCount = dedupedUploaded.length - cleanUploaded.length;
 
-  // Score uploaded songs
-  const scored: Array<ScoredSong & { section: Section; energy: number }> = cleanUploaded.map((s) => {
+  // Score uploaded songs (energy, danceability, audience fit)
+  type Scored = ScoredSong & { section: Section; energy: number; danceability: number; audienceFit: AudienceFit; scores: SectionScores };
+  const scored: Scored[] = cleanUploaded.map((s) => {
     const est = estimateEnergy(s.artist, s.song, prefs);
-    return { ...s, fromUpload: true, energy: est.energy, genre: est.genre, decade: est.decade, section: est.section };
+    const scores = sectionScores(est.energy, est.danceability, est.audienceFit);
+    return {
+      ...s,
+      fromUpload: true,
+      energy: est.energy,
+      danceability: est.danceability,
+      genre: est.genre,
+      decade: est.decade,
+      audienceFit: est.audienceFit,
+      section: bestSection(scores),
+      scores,
+    };
   });
 
-  // Distribute uploaded songs evenly across the three sections by energy ranking.
-  // Sort by energy ascending, split into thirds.
-  const sortedByEnergy = [...scored].sort((a, b) => a.energy - b.energy);
-  const total = sortedByEnergy.length;
-  const third = Math.ceil(total / 3);
-  const warmUp: Array<ScoredSong & { section: Section }> = [];
-  const transition: Array<ScoredSong & { section: Section }> = [];
-  const peak: Array<ScoredSong & { section: Section }> = [];
-  sortedByEnergy.forEach((s, i) => {
-    if (i < third) warmUp.push({ ...s, section: "Warm Up" });
-    else if (i < third * 2) transition.push({ ...s, section: "Transition" });
-    else peak.push({ ...s, section: "Peak" });
-  });
+  // Assign each upload to its highest-scoring section, then rebalance so each
+  // bucket is close to total/3.
+  const warmUp: Scored[] = [];
+  const transition: Scored[] = [];
+  const peak: Scored[] = [];
+  const bucketOf = (sec: Section) => (sec === "Warm Up" ? warmUp : sec === "Transition" ? transition : peak);
+  scored.forEach((s) => bucketOf(s.section).push(s));
+
+  const total = scored.length;
+  const target = Math.floor(total / 3);
+  const ceilTarget = Math.ceil(total / 3);
+  // Move lowest-margin songs from over-full buckets to under-full ones.
+  const sectionList: Section[] = ["Warm Up", "Transition", "Peak"];
+  for (let pass = 0; pass < 6; pass++) {
+    const buckets = sectionList.map((sec) => ({ sec, bucket: bucketOf(sec) }));
+    const over = buckets.find((b) => b.bucket.length > ceilTarget);
+    const under = buckets.find((b) => b.bucket.length < target);
+    if (!over || !under) break;
+    // Pick song from `over` whose preference for over.sec vs under.sec is smallest.
+    let bestIdx = -1;
+    let bestMargin = Infinity;
+    over.bucket.forEach((s, i) => {
+      const margin = s.scores[over.sec] - s.scores[under.sec];
+      if (margin < bestMargin) { bestMargin = margin; bestIdx = i; }
+    });
+    if (bestIdx < 0) break;
+    const [moved] = over.bucket.splice(bestIdx, 1);
+    moved.section = under.sec;
+    under.bucket.push(moved);
+  }
+
 
   const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
   const perSectionBase = Math.ceil(totalSongsNeeded / 3);
