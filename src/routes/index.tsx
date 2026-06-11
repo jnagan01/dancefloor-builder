@@ -781,17 +781,53 @@ function Index() {
               <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1.5" rows={3} />
             </div>
             <div>
-              <Label htmlFor="donotplay">Do Not Play list</Label>
-              <Textarea
-                id="donotplay"
-                value={doNotPlayInput}
-                onChange={(e) => setDoNotPlayInput(e.target.value)}
-                className="mt-1.5 font-mono text-sm"
-                rows={4}
-                placeholder={"One per line\nArtist - Song  (blocks that track)\nArtist          (blocks all songs by that artist)"}
-              />
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="donotplay">Do Not Play list</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    ref={dnpFileRef}
+                    type="file"
+                    accept=".csv,.txt"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files) void handleDnpFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={() => dnpFileRef.current?.click()}>
+                    <Upload className="mr-1 h-4 w-4" />
+                    Upload list
+                  </Button>
+                  {doNotPlayInput && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => setDoNotPlayInput("")}>
+                      <Trash2 className="mr-1 h-4 w-4" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDnpDragOver(true); }}
+                onDragLeave={() => setDnpDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDnpDragOver(false);
+                  if (e.dataTransfer.files?.length) void handleDnpFiles(e.dataTransfer.files);
+                }}
+                className={`mt-1.5 rounded-md ${dnpDragOver ? "ring-2 ring-primary" : ""}`}
+              >
+                <Textarea
+                  id="donotplay"
+                  value={doNotPlayInput}
+                  onChange={(e) => setDoNotPlayInput(e.target.value)}
+                  className="font-mono text-sm"
+                  rows={4}
+                  placeholder={"One per line\nArtist - Song  (blocks that track)\nArtist          (blocks all songs by that artist)\n\nOr drop a .csv/.txt file here"}
+                />
+              </div>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Used only when expanding from the built-in library. Songs from your uploaded files are never filtered.
+                Upload a .csv (Artist, Song columns) or .txt file, or type entries. Used only when expanding from the built-in library — songs from your uploaded files are never filtered.
                 {parseDoNotPlay(doNotPlayInput).length > 0 && (
                   <span className="ml-1 font-medium text-foreground">
                     {parseDoNotPlay(doNotPlayInput).length} blocked
@@ -799,6 +835,7 @@ function Index() {
                 )}
               </p>
             </div>
+
           </CardContent>
         </Card>
 
