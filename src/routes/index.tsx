@@ -469,6 +469,15 @@ function Index() {
     return searchLibrary(searchQuery, mergedLibrary, 30);
   }, [searchOpen, searchQuery, mergedLibrary]);
 
+  const liveTargets = useMemo(() => {
+    const deduped = dedupeSongs(songs);
+    if (expand && hoursNum > 0) {
+      const total = Math.ceil(hoursNum * 15);
+      return { total, perSection: Math.ceil(total / 3) };
+    }
+    return { total: deduped.length, perSection: Math.ceil(deduped.length / 3) };
+  }, [songs, hoursNum, expand]);
+
   return (
     <div className="min-h-screen bg-background">
       <Toaster richColors position="top-right" />
