@@ -469,6 +469,15 @@ function Index() {
     return searchLibrary(searchQuery, mergedLibrary, 30);
   }, [searchOpen, searchQuery, mergedLibrary]);
 
+  const liveTargets = useMemo(() => {
+    const deduped = dedupeSongs(songs);
+    if (expand && hoursNum > 0) {
+      const total = Math.ceil(hoursNum * 15);
+      return { total, perSection: Math.ceil(total / 3) };
+    }
+    return { total: deduped.length, perSection: Math.ceil(deduped.length / 3) };
+  }, [songs, hoursNum, expand]);
+
   return (
     <div className="min-h-screen bg-background">
       <Toaster richColors position="top-right" />
@@ -660,7 +669,7 @@ function Index() {
                 />
                 {hoursNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min
+                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target {liveTargets.total} songs ({liveTargets.perSection} per section)
                   </p>
                 )}
               </div>
@@ -679,6 +688,11 @@ function Index() {
                     </label>
                   ))}
                 </div>
+                {hoursNum > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Target {liveTargets.total} songs · {liveTargets.perSection} per section
+                  </p>
+                )}
               </div>
             </div>
             <div>
@@ -727,6 +741,11 @@ function Index() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   When turned off, the app will only use songs from the uploaded files.
                 </p>
+                {hoursNum > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Target {liveTargets.total} songs · {liveTargets.perSection} per section
+                  </p>
+                )}
               </div>
               <Switch checked={expand} onCheckedChange={setExpand} />
             </div>
@@ -819,7 +838,7 @@ function Index() {
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <h3 className="mb-2 font-medium">Song source summary</h3>
                     <p className="mb-3 text-xs text-muted-foreground">
-                      Target total {result.targetTotal} songs · target per section {result.perSectionTarget}
+                      Target total {liveTargets.total} songs · target per section {liveTargets.perSection}
                     </p>
                     <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                       {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
@@ -842,7 +861,7 @@ function Index() {
                             </div>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-muted-foreground">Target</span>
-                              <span className="font-semibold">{result.perSectionTarget}</span>
+                              <span className="font-semibold">{liveTargets.perSection}</span>
                             </div>
                           </div>
                         );
