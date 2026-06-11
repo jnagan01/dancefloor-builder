@@ -833,6 +833,12 @@ function Index() {
                     <Upload className="mr-1 h-4 w-4" />
                     Upload list
                   </Button>
+                  {dnpDuplicateKeys.size > 0 && (
+                    <Button type="button" variant="outline" size="sm" onClick={removeDnpDuplicates}>
+                      <Check className="mr-1 h-4 w-4" />
+                      Remove duplicates
+                    </Button>
+                  )}
                   {doNotPlayInput && (
                     <Button type="button" variant="ghost" size="sm" onClick={() => setDoNotPlayInput("")}>
                       <Trash2 className="mr-1 h-4 w-4" />
@@ -879,25 +885,33 @@ function Index() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {doNotPlayEntries.map((entry, i) => (
-                        <TableRow key={`${entry.artist}-${entry.song || ""}-${i}`}>
-                          <TableCell className="py-2">{entry.artist}</TableCell>
-                          <TableCell className="py-2 text-muted-foreground">
-                            {entry.song || <span className="italic">All songs</span>}
-                          </TableCell>
-                          <TableCell className="py-2">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                              onClick={() => removeDoNotPlayEntry(i)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {doNotPlayEntries.map((entry, i) => {
+                        const dupKey = `${normalizeKey(entry.artist)}|${normalizeKey(entry.song || "")}`;
+                        const isDup = dnpDuplicateKeys.has(dupKey);
+                        return (
+                          <TableRow key={`${entry.artist}-${entry.song || ""}-${i}`} className={isDup ? "bg-amber-50/70 dark:bg-amber-950/20" : undefined}>
+                            <TableCell className="py-2">
+                              <span className={isDup ? "font-medium text-amber-700 dark:text-amber-300" : undefined}>
+                                {entry.artist}
+                              </span>
+                            </TableCell>
+                            <TableCell className="py-2 text-muted-foreground">
+                              {entry.song || <span className="italic">All songs</span>}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => removeDoNotPlayEntry(i)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </div>
