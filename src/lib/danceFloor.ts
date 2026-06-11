@@ -287,9 +287,9 @@ export function generateLists(input: GenerationInput): GenerationResult {
   }
 
   return {
-    warmUp: warmUp.map((s) => ({ artist: s.artist, song: s.song })),
-    transition: transition.map((s) => ({ artist: s.artist, song: s.song })),
-    peak: peak.map((s) => ({ artist: s.artist, song: s.song })),
+    warmUp: warmUp.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
+    transition: transition.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
+    peak: peak.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
   };
 }
 
