@@ -204,9 +204,9 @@ export interface GenerationInput {
 }
 
 export interface GenerationResult {
-  warmUp: Song[];
-  transition: Song[];
-  peak: Song[];
+  warmUp: Array<Song & { fromUpload?: boolean }>;
+  transition: Array<Song & { fromUpload?: boolean }>;
+  peak: Array<Song & { fromUpload?: boolean }>;
 }
 
 const SONGS_PER_HOUR = 15; // ~4 min/song
@@ -287,9 +287,9 @@ export function generateLists(input: GenerationInput): GenerationResult {
   }
 
   return {
-    warmUp: warmUp.map((s) => ({ artist: s.artist, song: s.song })),
-    transition: transition.map((s) => ({ artist: s.artist, song: s.song })),
-    peak: peak.map((s) => ({ artist: s.artist, song: s.song })),
+    warmUp: warmUp.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
+    transition: transition.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
+    peak: peak.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
   };
 }
 
