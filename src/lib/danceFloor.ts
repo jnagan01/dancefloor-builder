@@ -237,10 +237,10 @@ export function generateLists(input: GenerationInput): GenerationResult {
     else peak.push({ ...s, section: "Peak" });
   });
 
-  if (expand) {
-    const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
-    const perSectionNeeded = Math.ceil(totalSongsNeeded / 3);
+  const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
+  const perSectionNeeded = Math.ceil(totalSongsNeeded / 3);
 
+  if (expand) {
     const seen = new Set(cleanUploaded.map((s) => dedupeKey(s.artist, s.song)));
 
     const matchScore = (lib: LibrarySong): number => {
@@ -292,7 +292,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
     warmUp: warmUp.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
     transition: transition.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
     peak: peak.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
-    targetTotal: expand ? Math.ceil(hours * SONGS_PER_HOUR) : cleanUploaded.length,
+    targetTotal: expand ? totalSongsNeeded : cleanUploaded.length,
     perSectionTarget: expand ? perSectionNeeded : Math.ceil(cleanUploaded.length / 3),
   };
 }
