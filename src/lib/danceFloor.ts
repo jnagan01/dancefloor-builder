@@ -224,24 +224,49 @@ function lookupLibrary(artist: string, song: string): LibrarySong | undefined {
   );
 }
 
-function estimateEnergy(artist: string, song: string, prefs: Preferences): { energy: number; section: Section; genre?: string; decade?: string } {
+interface EnergyEstimate {
+  energy: number;
+  danceability: number;
+  section: Section;
+  genre?: string;
+  decade?: string;
+  audienceFit: AudienceFit;
+}
+
+function estimateEnergy(artist: string, song: string, prefs: Preferences): EnergyEstimate {
   const lib = lookupLibrary(artist, song);
-  if (lib) return { energy: lib.energy, section: lib.section, genre: lib.genre, decade: lib.decade };
+  if (lib) {
+    return {
+      energy: lib.energy,
+      danceability: lib.danceability,
+      section: lib.section,
+      genre: lib.genre,
+      decade: lib.decade,
+      audienceFit: inferAudienceFit(lib.decade, lib.genre),
+    };
+  }
 
   const artistLower = artist.toLowerCase();
   const songLower = song.toLowerCase();
 
   // Heuristics
   let energy = 7;
+  let danceability = 6;
   // High-energy artist hints
   const highArtists = ["pitbull", "flo rida", "lmfao", "calvin harris", "david guetta", "avicii", "kesha", "lady gaga", "the weeknd"];
   const lowArtists = ["frank sinatra", "michael bublé", "ed sheeran", "norah jones", "adele", "john legend"];
-  if (highArtists.some((a) => artistLower.includes(a))) energy = 9;
-  else if (lowArtists.some((a) => artistLower.includes(a))) energy = 5;
+  if (highArtists.some((a) => artistLower.includes(a))) { energy = 9; danceability = 9; }
+  else if (lowArtists.some((a) => artistLower.includes(a))) { energy = 5; danceability = 5; }
 
   // Title hints
-  if (/\b(party|dance|club|tonight|fire|hot|wild|bang|jump|move)\b/.test(songLower)) energy = Math.max(energy, 8);
-  if (/\b(slow|love|forever|always|home|lullaby)\b/.test(songLower)) energy = Math.min(energy, 6);
+  if (/\b(party|dance|club|tonight|fire|hot|wild|bang|jump|move)\b/.test(songLower)) {
+    energy = Math.max(energy, 8);
+    danceability = Math.max(danceability, 8);
+  }
+  if (/\b(slow|love|forever|always|home|lullaby)\b/.test(songLower)) {
+    energy = Math.min(energy, 6);
+    danceability = Math.min(danceability, 6);
+  }
 
   // Preferred artists boost
   if (prefs.artists.some((a) => a && artistLower.includes(a.toLowerCase()))) energy = Math.max(energy, 8);
@@ -252,7 +277,46 @@ function estimateEnergy(artist: string, song: string, prefs: Preferences): { ene
   else if (energy <= 8) section = "Transition";
   else section = "Peak";
 
-  return { energy, section, decade };
+  return { energy, danceability, section, decade, audienceFit: "all" };
+}
+
+interface SectionScores {
+  "Warm Up": number;
+  Transition: number;
+  Peak: number;
+}
+
+export function sectionScores(
+  energy: number,
+  danceability: number,
+  audienceFit: AudienceFit,
+): SectionScores {
+  return {
+    "Warm Up":
+      (10 - energy) +
+      danceability * 0.5 +
+      (audienceFit === "older" ? 3 : 0) +
+      (audienceFit === "younger" ? 3 : 0) -
+      (audienceFit === "adult" ? 2 : 0),
+    Transition:
+      (10 - Math.abs(energy - 7)) +
+      danceability * 0.5 +
+      (audienceFit === "all" ? 2 : 0),
+    Peak:
+      energy +
+      danceability * 0.5 +
+      (audienceFit === "adult" ? 3 : 0) -
+      (audienceFit === "older" ? 2 : 0) -
+      (audienceFit === "younger" ? 2 : 0),
+  };
+}
+
+function bestSection(scores: SectionScores): Section {
+  let best: Section = "Warm Up";
+  let bestVal = scores["Warm Up"];
+  if (scores.Transition > bestVal) { best = "Transition"; bestVal = scores.Transition; }
+  if (scores.Peak > bestVal) { best = "Peak"; }
+  return best;
 }
 
 export interface GenerationInput {
