@@ -838,7 +838,7 @@ function Index() {
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <h3 className="mb-2 font-medium">Song source summary</h3>
                     <p className="mb-3 text-xs text-muted-foreground">
-                      Target total {result.targetTotal} songs · target per section {result.perSectionTarget}
+                      Target total {liveTargets.total} songs · target per section {liveTargets.perSection}
                     </p>
                     <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                       {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
@@ -861,7 +861,7 @@ function Index() {
                             </div>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-muted-foreground">Target</span>
-                              <span className="font-semibold">{result.perSectionTarget}</span>
+                              <span className="font-semibold">{liveTargets.perSection}</span>
                             </div>
                           </div>
                         );
