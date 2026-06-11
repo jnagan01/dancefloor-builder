@@ -889,8 +889,23 @@ function Index() {
                       )}
                     </div>
                     <p className="mb-3 text-xs text-muted-foreground transition-opacity duration-150">
-                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span>
+                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> (1.5× buffer over <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSectionBase}</span> needed)
                     </p>
+                    {!expand && liveTargets.shortfall.total > 0 && (
+                      <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                        <div>
+                          <p className="font-medium">Uploads fall short of the 1.5× buffer.</p>
+                          <p className="mt-1">
+                            Short by <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.warmUp}</span> in Warm Up,
+                            {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.transition}</span> in Transition,
+                            {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.peak}</span> in Peak.
+                            Enable “Add additional songs” in Step 4 to fill the gap.
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                       {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
                         const label = sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak";
