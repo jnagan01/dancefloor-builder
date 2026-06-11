@@ -295,18 +295,18 @@ export function sectionScores(
     "Warm Up":
       (10 - energy) +
       danceability * 0.5 +
-      (audienceFit === "older" ? 3 : 0) +
-      (audienceFit === "younger" ? 3 : 0) -
-      (audienceFit === "adult" ? 2 : 0),
+      (audienceFit === "older" ? 5 : 0) +
+      (audienceFit === "younger" ? 4 : 0) -
+      (audienceFit === "adult" ? 3 : 0),
     Transition:
-      (10 - Math.abs(energy - 7)) +
+      (8 - Math.abs(energy - 7)) +
       danceability * 0.5 +
       (audienceFit === "all" ? 2 : 0),
     Peak:
       energy +
       danceability * 0.5 +
-      (audienceFit === "adult" ? 3 : 0) -
-      (audienceFit === "older" ? 2 : 0) -
+      (audienceFit === "adult" ? 4 : 0) -
+      (audienceFit === "older" ? 3 : 0) -
       (audienceFit === "younger" ? 2 : 0),
   };
 }
