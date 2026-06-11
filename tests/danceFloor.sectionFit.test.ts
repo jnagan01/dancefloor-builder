@@ -40,6 +40,80 @@ describe("audience-fit inference", () => {
   });
 });
 
+describe("age-fit boundary cutoffs (50+ and under-18)", () => {
+  // The 50+ boundary is the 1980s/1990s decade flip — guests who were
+  // ~20 in the 1980s are 50+ today, so 1980s and earlier pop counts as
+  // older-friendly; 1990s pop does not.
+  it("treats 1980s pop as older-friendly (50+ cutoff)", () => {
+    expect(inferAudienceFit("1980s", "Pop")).toBe("older");
+    expect(inferAudienceFit("1980s", "Rock")).toBe("older");
+  });
+
+  it("does NOT treat 1990s pop as older-friendly (just past the 50+ cutoff)", () => {
+    expect(inferAudienceFit("1990s", "Pop")).not.toBe("older");
+    expect(inferAudienceFit("1990s", "Rock")).not.toBe("older");
+  });
+
+  // The under-18 boundary is the 2010s/2020s decade flip plus a genre
+  // gate — current clean pop is younger-friendly; anything older or
+  // adult-coded is not.
+  it("treats 2010s/2020s clean pop as younger-friendly (under-18 cutoff)", () => {
+    expect(inferAudienceFit("2010s", "Pop")).toBe("younger");
+    expect(inferAudienceFit("2020s", "Pop")).toBe("younger");
+  });
+
+  it("does NOT treat 2000s pop as younger-friendly (just past the under-18 cutoff)", () => {
+    expect(inferAudienceFit("2000s", "Pop")).not.toBe("younger");
+  });
+
+  it("does NOT treat current EDM/Hip Hop as younger-friendly even in 2020s", () => {
+    expect(inferAudienceFit("2020s", "EDM")).toBe("adult");
+    expect(inferAudienceFit("2020s", "Hip Hop")).toBe("adult");
+  });
+
+  // Section assignment at the boundary: pick library songs that sit
+  // exactly on each cutoff and verify they land in the right bucket.
+  it("places a 1980s-era song (50+ guests on the floor) into Warm Up", () => {
+    const r = generateLists({
+      uploaded: [{ artist: "Whitney Houston", song: "I Wanna Dance with Somebody" }],
+      prefs: basePrefs,
+      hours: 1,
+      expand: false,
+    });
+    expect(findSection(r, "Whitney Houston", "I Wanna Dance with Somebody")).toBe("Warm Up");
+  });
+
+  it("places a 1990s-era song (past the 50+ cutoff) outside Warm Up", () => {
+    const r = generateLists({
+      uploaded: [{ artist: "Backstreet Boys", song: "Everybody (Backstreet's Back)" }],
+      prefs: basePrefs,
+      hours: 1,
+      expand: false,
+    });
+    expect(findSection(r, "Backstreet Boys", "Everybody (Backstreet's Back)")).not.toBe("Warm Up");
+  });
+
+  it("places a 2020s clean-pop song (under-18 friendly) into Warm Up or Transition, not Peak", () => {
+    const r = generateLists({
+      uploaded: [{ artist: "Harry Styles", song: "As It Was" }],
+      prefs: basePrefs,
+      hours: 1,
+      expand: false,
+    });
+    expect(findSection(r, "Harry Styles", "As It Was")).not.toBe("Peak");
+  });
+
+  it("places a current adult/EDM track (past the under-18 cutoff) into Peak", () => {
+    const r = generateLists({
+      uploaded: [{ artist: "The Weeknd", song: "Blinding Lights" }],
+      prefs: basePrefs,
+      hours: 1,
+      expand: false,
+    });
+    expect(findSection(r, "The Weeknd", "Blinding Lights")).toBe("Peak");
+  });
+});
+
 describe("sectionScores", () => {
   it("favors Warm Up for low-energy older-friendly songs", () => {
     const s = sectionScores(5, 6, "older");
