@@ -252,7 +252,10 @@ export interface GenerationResult {
   perSectionTarget: number;
   perSectionBase: number;
   shortfall: { warmUp: number; transition: number; peak: number; total: number };
+  duplicatesRemoved: number;
+  blockedCount: number;
 }
+
 
 const SONGS_PER_HOUR = 15; // ~4 min/song
 export const SECTION_BUFFER = 1.5;
@@ -260,8 +263,12 @@ export const SECTION_BUFFER = 1.5;
 
 export function generateLists(input: GenerationInput): GenerationResult {
   const { uploaded, prefs, hours, expand } = input;
-  const cleanUploaded = dedupeSongs(uploaded.filter((s) => s.artist && s.song))
-    .filter((s) => !isBlocked(s.artist, s.song, prefs.doNotPlay));
+  const validUploaded = uploaded.filter((s) => s.artist && s.song);
+  const dedupedUploaded = dedupeSongs(validUploaded);
+  const cleanUploaded = dedupedUploaded.filter((s) => !isBlocked(s.artist, s.song, prefs.doNotPlay));
+
+  const duplicatesRemoved = validUploaded.length - dedupedUploaded.length;
+  const blockedCount = dedupedUploaded.length - cleanUploaded.length;
 
   // Score uploaded songs
   const scored: Array<ScoredSong & { section: Section; energy: number }> = cleanUploaded.map((s) => {
@@ -349,9 +356,11 @@ export function generateLists(input: GenerationInput): GenerationResult {
     perSectionTarget,
     perSectionBase,
     shortfall,
-
+    duplicatesRemoved,
+    blockedCount,
   };
 }
+
 
 export function songsToCsv(songs: Song[]): string {
   return Papa.unparse(
