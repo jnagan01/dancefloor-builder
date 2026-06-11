@@ -428,9 +428,16 @@ function Index() {
       multiple = 0,
       missing = 0,
       excluded = 0;
+    const sourceCounts: Record<SectionKey, { uploads: number; library: number }> = {
+      warmUp: { uploads: 0, library: 0 },
+      transition: { uploads: 0, library: 0 },
+      peak: { uploads: 0, library: 0 },
+    };
     sections.forEach((sec) => {
       result[sec].forEach((s, i) => {
         total += 1;
+        if (s.fromUpload) sourceCounts[sec].uploads += 1;
+        else sourceCounts[sec].library += 1;
         const m = matches[songKey(sec, i, s)];
         if (!m) {
           missing += 1;
@@ -454,7 +461,7 @@ function Index() {
         }
       });
     });
-    return { total, matched, possible, multiple, missing, excluded, csvIncluded: total };
+    return { total, matched, possible, multiple, missing, excluded, csvIncluded: total, sourceCounts };
   }, [result, matches]);
 
   const searchResults = useMemo(() => {
