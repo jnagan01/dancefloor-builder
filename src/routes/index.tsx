@@ -470,14 +470,24 @@ function Index() {
     return searchLibrary(searchQuery, mergedLibrary, 30);
   }, [searchOpen, searchQuery, mergedLibrary]);
 
-  const liveTargets = useMemo(() => {
-    const deduped = dedupeSongs(songs);
-    if (expand && hoursNum > 0) {
-      const total = Math.ceil(hoursNum * 15);
-      return { total, perSection: Math.ceil(total / 3) };
-    }
-    return { total: deduped.length, perSection: Math.ceil(deduped.length / 3) };
-  }, [songs, hoursNum, expand]);
+  const debouncedHours = useDebounce(hoursNum, 120);
+  const debouncedExpand = useDebounce(expand, 120);
+  const debouncedSongs = useDebounce(songs, 120);
+
+  const [isPendingLive, startLiveTransition] = useTransition();
+  const [liveTargets, setLiveTargets] = useState({ total: 0, perSection: 0 });
+
+  useEffect(() => {
+    startLiveTransition(() => {
+      const deduped = dedupeSongs(debouncedSongs);
+      if (debouncedExpand && debouncedHours > 0) {
+        const total = Math.ceil(debouncedHours * 15);
+        setLiveTargets({ total, perSection: Math.ceil(total / 3) });
+      } else {
+        setLiveTargets({ total: deduped.length, perSection: Math.ceil(deduped.length / 3) });
+      }
+    });
+  }, [debouncedSongs, debouncedHours, debouncedExpand]);
 
   return (
     <div className="min-h-screen bg-background">
