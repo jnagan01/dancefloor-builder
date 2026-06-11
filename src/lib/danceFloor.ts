@@ -242,7 +242,18 @@ export function generateLists(input: GenerationInput): GenerationResult {
   });
 
   const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
-  const perSectionNeeded = Math.ceil(totalSongsNeeded / 3);
+  const perSectionBase = Math.ceil(totalSongsNeeded / 3);
+  const perSectionTarget = Math.ceil(perSectionBase * SECTION_BUFFER);
+
+  // Shortfall is computed from uploads only (before expansion fills the gap),
+  // so the UI can warn when expansion is OFF.
+  const shortfall = {
+    warmUp: Math.max(0, perSectionTarget - warmUp.length),
+    transition: Math.max(0, perSectionTarget - transition.length),
+    peak: Math.max(0, perSectionTarget - peak.length),
+    total: 0,
+  };
+  shortfall.total = shortfall.warmUp + shortfall.transition + shortfall.peak;
 
   if (expand) {
     const seen = new Set(cleanUploaded.map((s) => dedupeKey(s.artist, s.song)));
@@ -263,13 +274,10 @@ export function generateLists(input: GenerationInput): GenerationResult {
       .map((l) => ({ lib: l, score: matchScore(l) }))
       .sort((a, b) => b.score - a.score);
 
-    const addTo = (bucket: typeof warmUp, section: Section, need: number) => {
-      // Expansion always tops the section up by `need` library suggestions
-      // (capped by available candidates) — independent of how many uploads
-      // were already bucketed into this section.
-      let added = 0;
+    const padTo = (bucket: typeof warmUp, section: Section, target: number) => {
+      // Pad the section with library songs until it reaches `target`.
       for (const { lib } of candidates) {
-        if (added >= need) break;
+        if (bucket.length >= target) break;
         if (lib.section !== section) continue;
         const k = dedupeKey(lib.artist, lib.song);
         if (seen.has(k)) continue;
@@ -283,21 +291,23 @@ export function generateLists(input: GenerationInput): GenerationResult {
           decade: lib.decade,
           section,
         });
-        added++;
       }
     };
 
-    addTo(warmUp, "Warm Up", perSectionNeeded);
-    addTo(transition, "Transition", perSectionNeeded);
-    addTo(peak, "Peak", perSectionNeeded);
+    padTo(warmUp, "Warm Up", perSectionTarget);
+    padTo(transition, "Transition", perSectionTarget);
+    padTo(peak, "Peak", perSectionTarget);
   }
 
   return {
     warmUp: warmUp.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
     transition: transition.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
     peak: peak.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
-    targetTotal: expand ? totalSongsNeeded : cleanUploaded.length,
-    perSectionTarget: expand ? perSectionNeeded : Math.ceil(cleanUploaded.length / 3),
+    targetTotal: perSectionTarget * 3,
+    perSectionTarget,
+    perSectionBase,
+    shortfall,
+
   };
 }
 
