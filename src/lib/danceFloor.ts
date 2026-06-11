@@ -443,14 +443,19 @@ export function generateLists(input: GenerationInput): GenerationResult {
         const k = dedupeKey(lib.artist, lib.song);
         if (seen.has(k)) continue;
         seen.add(k);
+        const audienceFit = inferAudienceFit(lib.decade, lib.genre);
+        const libScores = sectionScores(lib.energy, lib.danceability, audienceFit);
         bucket.push({
           artist: lib.artist,
           song: lib.song,
           fromUpload: false,
           energy: lib.energy,
+          danceability: lib.danceability,
           genre: lib.genre,
           decade: lib.decade,
+          audienceFit,
           section,
+          scores: libScores,
         });
       }
     };
