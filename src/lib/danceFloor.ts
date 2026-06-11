@@ -292,6 +292,8 @@ export function generateLists(input: GenerationInput): GenerationResult {
     warmUp: warmUp.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
     transition: transition.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
     peak: peak.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
+    targetTotal: expand ? Math.ceil(hours * SONGS_PER_HOUR) : cleanUploaded.length,
+    perSectionTarget: expand ? perSectionNeeded : Math.ceil(cleanUploaded.length / 3),
   };
 }
 
