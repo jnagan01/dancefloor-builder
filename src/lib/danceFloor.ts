@@ -252,7 +252,10 @@ export interface GenerationResult {
   perSectionTarget: number;
   perSectionBase: number;
   shortfall: { warmUp: number; transition: number; peak: number; total: number };
+  duplicatesRemoved: number;
+  blockedCount: number;
 }
+
 
 const SONGS_PER_HOUR = 15; // ~4 min/song
 export const SECTION_BUFFER = 1.5;
