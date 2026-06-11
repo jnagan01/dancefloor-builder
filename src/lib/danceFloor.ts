@@ -207,6 +207,8 @@ export interface GenerationResult {
   warmUp: Array<Song & { fromUpload?: boolean }>;
   transition: Array<Song & { fromUpload?: boolean }>;
   peak: Array<Song & { fromUpload?: boolean }>;
+  targetTotal: number;
+  perSectionTarget: number;
 }
 
 const SONGS_PER_HOUR = 15; // ~4 min/song
