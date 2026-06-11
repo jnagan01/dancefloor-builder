@@ -1042,6 +1042,22 @@ function Index() {
                     <p className="mt-2 text-xs text-muted-foreground">
                       {summary.csvIncluded} songs included in CSV reference exports.
                     </p>
+                    {(result.duplicatesRemoved > 0 || result.blockedCount > 0) && (
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                        {result.duplicatesRemoved > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-amber-900 dark:text-amber-200">
+                            <AlertTriangle className="h-3 w-3 text-amber-600" />
+                            {result.duplicatesRemoved} duplicate{result.duplicatesRemoved === 1 ? "" : "s"} removed from uploads
+                          </span>
+                        )}
+                        {result.blockedCount > 0 && (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 text-red-900 dark:text-red-200">
+                            <X className="h-3 w-3 text-red-600" />
+                            {result.blockedCount} blocked by Do Not Play list
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <div className="mb-2 flex items-center gap-2">
