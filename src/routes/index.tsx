@@ -801,20 +801,48 @@ function Index() {
             </CardHeader>
             <CardContent className="space-y-4">
               {summary && (
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <h3 className="mb-2 font-medium">Match summary</h3>
-                  <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:grid-cols-6">
-                    <Stat label="Total" value={summary.total} />
-                    <Stat label="Matched" value={summary.matched} tone="success" />
-                    <Stat label="Possible" value={summary.possible} tone="warning" />
-                    <Stat label="Multiple" value={summary.multiple} tone="warning" />
-                    <Stat label="Missing" value={summary.missing} tone="destructive" />
-                    <Stat label="Excluded from VDJ" value={summary.excluded} />
+                <>
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <h3 className="mb-2 font-medium">Match summary</h3>
+                    <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:grid-cols-6">
+                      <Stat label="Total" value={summary.total} />
+                      <Stat label="Matched" value={summary.matched} tone="success" />
+                      <Stat label="Possible" value={summary.possible} tone="warning" />
+                      <Stat label="Multiple" value={summary.multiple} tone="warning" />
+                      <Stat label="Missing" value={summary.missing} tone="destructive" />
+                      <Stat label="Excluded from VDJ" value={summary.excluded} />
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {summary.csvIncluded} songs included in CSV reference exports.
+                    </p>
                   </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {summary.csvIncluded} songs included in CSV reference exports.
-                  </p>
-                </div>
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    <h3 className="mb-2 font-medium">Song source summary</h3>
+                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+                      {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
+                        const label = sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak";
+                        const c = summary.sourceCounts[sec];
+                        return (
+                          <div key={sec} className="rounded-md border bg-background p-3">
+                            <p className="mb-1 font-medium">{label}</p>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">From uploads</span>
+                              <span className="font-semibold">{c.uploads}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">Added from library</span>
+                              <span className="font-semibold">{c.library}</span>
+                            </div>
+                            <div className="mt-1 border-t pt-1 flex items-center justify-between text-xs">
+                              <span className="text-muted-foreground">Total</span>
+                              <span className="font-semibold">{c.uploads + c.library}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
               )}
 
               <div className="flex flex-wrap items-center gap-3">
