@@ -14,6 +14,7 @@ import {
   parseDoNotPlay,
   parseDoNotPlayFile,
   doNotPlayEntriesToText,
+  normalizeKey,
   type Song,
   type GenerationResult,
 } from "@/lib/danceFloor";
@@ -195,10 +196,35 @@ function Index() {
 
   const doNotPlayEntries = useMemo(() => parseDoNotPlay(doNotPlayInput), [doNotPlayInput]);
 
+  const dnpDuplicateKeys = useMemo(() => {
+    const counts = new Map<string, number>();
+    doNotPlayEntries.forEach((e) => {
+      const k = `${normalizeKey(e.artist)}|${normalizeKey(e.song || "")}`;
+      counts.set(k, (counts.get(k) || 0) + 1);
+    });
+    return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
+  }, [doNotPlayEntries]);
+
   function removeDoNotPlayEntry(index: number) {
     const next = [...doNotPlayEntries];
     next.splice(index, 1);
     setDoNotPlayInput(doNotPlayEntriesToText(next));
+  }
+
+  function removeDnpDuplicates() {
+    const before = doNotPlayEntries.length;
+    const seen = new Set<string>();
+    const next = doNotPlayEntries.filter((e) => {
+      const k = `${normalizeKey(e.artist)}|${normalizeKey(e.song || "")}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    const removed = before - next.length;
+    if (removed > 0) {
+      setDoNotPlayInput(doNotPlayEntriesToText(next));
+      toast.success(`Removed ${removed} duplicate do-not-play entr${removed === 1 ? "y" : "ies"}`);
+    }
   }
 
   function songKey(section: SectionKey, idx: number, s: Song): string {
