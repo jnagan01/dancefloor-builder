@@ -356,9 +356,11 @@ export function generateLists(input: GenerationInput): GenerationResult {
     perSectionTarget,
     perSectionBase,
     shortfall,
-
+    duplicatesRemoved,
+    blockedCount,
   };
 }
+
 
 export function songsToCsv(songs: Song[]): string {
   return Papa.unparse(
