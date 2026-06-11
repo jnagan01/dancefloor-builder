@@ -101,6 +101,48 @@ function Index() {
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const dnpFileRef = useRef<HTMLInputElement>(null);
+  const [dnpDragOver, setDnpDragOver] = useState(false);
+
+  async function handleDnpFiles(files: FileList | File[]) {
+    const arr = Array.from(files);
+    const valid = arr.filter((f) => /\.(csv|txt)$/i.test(f.name));
+    if (!valid.length) {
+      toast.error("Please upload .csv or .txt files");
+      return;
+    }
+    let total = 0;
+    const newLines: string[] = [];
+    for (const f of valid) {
+      try {
+        const entries = await parseDoNotPlayFile(f);
+        if (entries.length) {
+          newLines.push(doNotPlayEntriesToText(entries));
+          total += entries.length;
+        }
+      } catch {
+        toast.error(`Could not parse ${f.name}`);
+      }
+    }
+    if (!total) {
+      toast.error("No do-not-play entries found");
+      return;
+    }
+    setDoNotPlayInput((prev) => {
+      const existing = prev.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const incoming = newLines.join("\n").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const seen = new Set<string>();
+      const merged: string[] = [];
+      for (const l of [...existing, ...incoming]) {
+        const k = l.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        merged.push(l);
+      }
+      return merged.join("\n");
+    });
+    toast.success(`Imported ${total} do-not-play entr${total === 1 ? "y" : "ies"}`);
+  }
 
   // VirtualDJ state
   const [libraries, setLibraries] = useState<VdjLibrary[]>([]);
