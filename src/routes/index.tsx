@@ -855,8 +855,8 @@ function Index() {
                   </div>
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <h3 className="mb-2 font-medium">Song source summary</h3>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      Target total {liveTargets.total} songs · target per section {liveTargets.perSection}
+                    <p className="mb-3 text-xs text-muted-foreground transition-opacity duration-150">
+                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span>
                     </p>
                     <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                       {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
