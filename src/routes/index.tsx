@@ -707,8 +707,8 @@ function Index() {
                   ))}
                 </div>
                 {hoursNum > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Target {liveTargets.total} songs · {liveTargets.perSection} per section
+                  <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section
                   </p>
                 )}
               </div>
