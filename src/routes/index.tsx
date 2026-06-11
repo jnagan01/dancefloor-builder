@@ -741,6 +741,11 @@ function Index() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   When turned off, the app will only use songs from the uploaded files.
                 </p>
+                {hoursNum > 0 && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Target {liveTargets.total} songs · {liveTargets.perSection} per section
+                  </p>
+                )}
               </div>
               <Switch checked={expand} onCheckedChange={setExpand} />
             </div>
