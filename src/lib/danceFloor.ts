@@ -260,7 +260,8 @@ export const SECTION_BUFFER = 1.5;
 
 export function generateLists(input: GenerationInput): GenerationResult {
   const { uploaded, prefs, hours, expand } = input;
-  const cleanUploaded = dedupeSongs(uploaded.filter((s) => s.artist && s.song));
+  const cleanUploaded = dedupeSongs(uploaded.filter((s) => s.artist && s.song))
+    .filter((s) => !isBlocked(s.artist, s.song, prefs.doNotPlay));
 
   // Score uploaded songs
   const scored: Array<ScoredSong & { section: Section; energy: number }> = cleanUploaded.map((s) => {
