@@ -854,7 +854,14 @@ function Index() {
                     </p>
                   </div>
                   <div className="rounded-lg border bg-muted/30 p-4">
-                    <h3 className="mb-2 font-medium">Song source summary</h3>
+                    <div className="mb-2 flex items-center gap-2">
+                      <h3 className="font-medium">Song source summary</h3>
+                      {isPendingLive && (
+                        <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary animate-pulse">
+                          recalculating…
+                        </span>
+                      )}
+                    </div>
                     <p className="mb-3 text-xs text-muted-foreground transition-opacity duration-150">
                       Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span>
                     </p>
