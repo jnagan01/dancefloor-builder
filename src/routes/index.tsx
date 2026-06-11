@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useDebounce } from "@/hooks/useDebounce";
 import JSZip from "jszip";
 import {
   parseFile,
@@ -469,14 +470,31 @@ function Index() {
     return searchLibrary(searchQuery, mergedLibrary, 30);
   }, [searchOpen, searchQuery, mergedLibrary]);
 
-  const liveTargets = useMemo(() => {
+  const debouncedHours = useDebounce(hoursNum, 120);
+  const debouncedExpand = useDebounce(expand, 120);
+  const debouncedSongs = useDebounce(songs, 120);
+
+  const [isPendingLive, startLiveTransition] = useTransition();
+  const [liveTargets, setLiveTargets] = useState(() => {
     const deduped = dedupeSongs(songs);
     if (expand && hoursNum > 0) {
       const total = Math.ceil(hoursNum * 15);
       return { total, perSection: Math.ceil(total / 3) };
     }
     return { total: deduped.length, perSection: Math.ceil(deduped.length / 3) };
-  }, [songs, hoursNum, expand]);
+  });
+
+  useEffect(() => {
+    startLiveTransition(() => {
+      const deduped = dedupeSongs(debouncedSongs);
+      if (debouncedExpand && debouncedHours > 0) {
+        const total = Math.ceil(debouncedHours * 15);
+        setLiveTargets({ total, perSection: Math.ceil(total / 3) });
+      } else {
+        setLiveTargets({ total: deduped.length, perSection: Math.ceil(deduped.length / 3) });
+      }
+    });
+  }, [debouncedSongs, debouncedHours, debouncedExpand]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -668,8 +686,8 @@ function Index() {
                   className="mt-1.5"
                 />
                 {hoursNum > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target {liveTargets.total} songs ({liveTargets.perSection} per section)
+                  <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
+                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs (<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section)
                   </p>
                 )}
               </div>
@@ -689,8 +707,8 @@ function Index() {
                   ))}
                 </div>
                 {hoursNum > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Target {liveTargets.total} songs · {liveTargets.perSection} per section
+                  <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section
                   </p>
                 )}
               </div>
@@ -742,8 +760,8 @@ function Index() {
                   When turned off, the app will only use songs from the uploaded files.
                 </p>
                 {hoursNum > 0 && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Target {liveTargets.total} songs · {liveTargets.perSection} per section
+                  <p className="mt-1 text-xs text-muted-foreground transition-opacity duration-150">
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section
                   </p>
                 )}
               </div>
@@ -837,8 +855,8 @@ function Index() {
                   </div>
                   <div className="rounded-lg border bg-muted/30 p-4">
                     <h3 className="mb-2 font-medium">Song source summary</h3>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      Target total {liveTargets.total} songs · target per section {liveTargets.perSection}
+                    <p className="mb-3 text-xs text-muted-foreground transition-opacity duration-150">
+                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span>
                     </p>
                     <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
                       {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
