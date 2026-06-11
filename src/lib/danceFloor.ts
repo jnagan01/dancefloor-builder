@@ -119,7 +119,48 @@ export interface DoNotPlayEntry {
   song?: string;
 }
 
+export function doNotPlayEntriesToText(entries: DoNotPlayEntry[]): string {
+  return entries
+    .map((e) => (e.song ? `${e.artist} - ${e.song}` : e.artist))
+    .join("\n");
+}
+
+export async function parseDoNotPlayFile(file: File): Promise<DoNotPlayEntry[]> {
+  const text = await file.text();
+  const ext = file.name.split(".").pop()?.toLowerCase();
+  if (ext === "txt") return parseDoNotPlay(text);
+  // CSV path
+  const parsed = Papa.parse<Record<string, string>>(text, {
+    header: true,
+    skipEmptyLines: true,
+  });
+  const headers = parsed.meta.fields ?? [];
+  const aKey = pickKey(headers, ARTIST_KEYS);
+  const sKey = pickKey(headers, SONG_KEYS);
+  if (aKey) {
+    const out: DoNotPlayEntry[] = [];
+    for (const row of parsed.data) {
+      const artist = (row[aKey] || "").trim();
+      if (!artist) continue;
+      const song = sKey ? (row[sKey] || "").trim() : "";
+      out.push(song ? { artist, song } : { artist });
+    }
+    if (out.length) return out;
+  }
+  // Fallback: treat as plain text (one entry per line, possibly Artist,Song two-column)
+  const rows = Papa.parse<string[]>(text, { skipEmptyLines: true }).data;
+  const out: DoNotPlayEntry[] = [];
+  for (const r of rows) {
+    const a = (r[0] || "").trim();
+    if (!a) continue;
+    const s = (r[1] || "").trim();
+    out.push(s ? { artist: a, song: s } : { artist: a });
+  }
+  return out;
+}
+
 export function parseDoNotPlay(text: string): DoNotPlayEntry[] {
+
   const seps = [" - ", " – ", " — ", " : ", "\t", "|"];
   const out: DoNotPlayEntry[] = [];
   for (const raw of text.split(/\r?\n/)) {
