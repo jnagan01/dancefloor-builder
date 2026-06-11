@@ -8,14 +8,32 @@ export interface Song {
   song: string;
 }
 
+export type AudienceFit = "older" | "younger" | "adult" | "all";
+
 export interface ScoredSong extends Song {
   energy?: number;
+  danceability?: number;
   genre?: string;
   decade?: string;
+  audienceFit?: AudienceFit;
   fromUpload: boolean;
 }
 
 export const SECTIONS: Section[] = ["Warm Up", "Transition", "Peak"];
+
+const OLDER_GENRES = new Set(["disco", "soul", "funk", "oldies", "country", "motown"]);
+const ADULT_GENRES = new Set(["edm", "hip hop", "rap", "house", "trap"]);
+const OLDER_DECADES = new Set(["1950s", "1960s", "1970s", "1980s"]);
+const YOUNGER_DECADES = new Set(["2010s", "2020s"]);
+
+export function inferAudienceFit(decade?: string, genre?: string): AudienceFit {
+  const g = (genre || "").toLowerCase();
+  const d = (decade || "").toLowerCase();
+  if (ADULT_GENRES.has(g)) return "adult";
+  if (OLDER_GENRES.has(g) || OLDER_DECADES.has(d)) return "older";
+  if (YOUNGER_DECADES.has(d) && (g === "pop" || g === "alternative rock")) return "younger";
+  return "all";
+}
 
 const ARTIST_KEYS = ["artist", "artists", "performer", "performers"];
 const SONG_KEYS = ["song", "track", "track name", "title", "name", "song name", "song title"];
