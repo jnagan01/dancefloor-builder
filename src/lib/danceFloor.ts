@@ -8,14 +8,32 @@ export interface Song {
   song: string;
 }
 
+export type AudienceFit = "older" | "younger" | "adult" | "all";
+
 export interface ScoredSong extends Song {
   energy?: number;
+  danceability?: number;
   genre?: string;
   decade?: string;
+  audienceFit?: AudienceFit;
   fromUpload: boolean;
 }
 
 export const SECTIONS: Section[] = ["Warm Up", "Transition", "Peak"];
+
+const OLDER_GENRES = new Set(["disco", "soul", "funk", "oldies", "country", "motown"]);
+const ADULT_GENRES = new Set(["edm", "hip hop", "rap", "house", "trap"]);
+const OLDER_DECADES = new Set(["1950s", "1960s", "1970s", "1980s"]);
+const YOUNGER_DECADES = new Set(["2010s", "2020s"]);
+
+export function inferAudienceFit(decade?: string, genre?: string): AudienceFit {
+  const g = (genre || "").toLowerCase();
+  const d = (decade || "").toLowerCase();
+  if (ADULT_GENRES.has(g)) return "adult";
+  if (OLDER_GENRES.has(g) || OLDER_DECADES.has(d)) return "older";
+  if (YOUNGER_DECADES.has(d) && (g === "pop" || g === "alternative rock")) return "younger";
+  return "all";
+}
 
 const ARTIST_KEYS = ["artist", "artists", "performer", "performers"];
 const SONG_KEYS = ["song", "track", "track name", "title", "name", "song name", "song title"];
@@ -206,24 +224,49 @@ function lookupLibrary(artist: string, song: string): LibrarySong | undefined {
   );
 }
 
-function estimateEnergy(artist: string, song: string, prefs: Preferences): { energy: number; section: Section; genre?: string; decade?: string } {
+interface EnergyEstimate {
+  energy: number;
+  danceability: number;
+  section: Section;
+  genre?: string;
+  decade?: string;
+  audienceFit: AudienceFit;
+}
+
+function estimateEnergy(artist: string, song: string, prefs: Preferences): EnergyEstimate {
   const lib = lookupLibrary(artist, song);
-  if (lib) return { energy: lib.energy, section: lib.section, genre: lib.genre, decade: lib.decade };
+  if (lib) {
+    return {
+      energy: lib.energy,
+      danceability: lib.danceability,
+      section: lib.section,
+      genre: lib.genre,
+      decade: lib.decade,
+      audienceFit: inferAudienceFit(lib.decade, lib.genre),
+    };
+  }
 
   const artistLower = artist.toLowerCase();
   const songLower = song.toLowerCase();
 
   // Heuristics
   let energy = 7;
+  let danceability = 6;
   // High-energy artist hints
   const highArtists = ["pitbull", "flo rida", "lmfao", "calvin harris", "david guetta", "avicii", "kesha", "lady gaga", "the weeknd"];
   const lowArtists = ["frank sinatra", "michael bublé", "ed sheeran", "norah jones", "adele", "john legend"];
-  if (highArtists.some((a) => artistLower.includes(a))) energy = 9;
-  else if (lowArtists.some((a) => artistLower.includes(a))) energy = 5;
+  if (highArtists.some((a) => artistLower.includes(a))) { energy = 9; danceability = 9; }
+  else if (lowArtists.some((a) => artistLower.includes(a))) { energy = 5; danceability = 5; }
 
   // Title hints
-  if (/\b(party|dance|club|tonight|fire|hot|wild|bang|jump|move)\b/.test(songLower)) energy = Math.max(energy, 8);
-  if (/\b(slow|love|forever|always|home|lullaby)\b/.test(songLower)) energy = Math.min(energy, 6);
+  if (/\b(party|dance|club|tonight|fire|hot|wild|bang|jump|move)\b/.test(songLower)) {
+    energy = Math.max(energy, 8);
+    danceability = Math.max(danceability, 8);
+  }
+  if (/\b(slow|love|forever|always|home|lullaby)\b/.test(songLower)) {
+    energy = Math.min(energy, 6);
+    danceability = Math.min(danceability, 6);
+  }
 
   // Preferred artists boost
   if (prefs.artists.some((a) => a && artistLower.includes(a.toLowerCase()))) energy = Math.max(energy, 8);
@@ -234,7 +277,46 @@ function estimateEnergy(artist: string, song: string, prefs: Preferences): { ene
   else if (energy <= 8) section = "Transition";
   else section = "Peak";
 
-  return { energy, section, decade };
+  return { energy, danceability, section, decade, audienceFit: "all" };
+}
+
+interface SectionScores {
+  "Warm Up": number;
+  Transition: number;
+  Peak: number;
+}
+
+export function sectionScores(
+  energy: number,
+  danceability: number,
+  audienceFit: AudienceFit,
+): SectionScores {
+  return {
+    "Warm Up":
+      (10 - energy) +
+      danceability * 0.5 +
+      (audienceFit === "older" ? 5 : 0) +
+      (audienceFit === "younger" ? 4 : 0) -
+      (audienceFit === "adult" ? 3 : 0),
+    Transition:
+      (8 - Math.abs(energy - 7)) +
+      danceability * 0.5 +
+      (audienceFit === "all" ? 2 : 0),
+    Peak:
+      energy +
+      danceability * 0.5 +
+      (audienceFit === "adult" ? 4 : 0) -
+      (audienceFit === "older" ? 3 : 0) -
+      (audienceFit === "younger" ? 2 : 0),
+  };
+}
+
+function bestSection(scores: SectionScores): Section {
+  let best: Section = "Warm Up";
+  let bestVal = scores["Warm Up"];
+  if (scores.Transition > bestVal) { best = "Transition"; bestVal = scores.Transition; }
+  if (scores.Peak > bestVal) { best = "Peak"; }
+  return best;
 }
 
 export interface GenerationInput {
@@ -270,25 +352,59 @@ export function generateLists(input: GenerationInput): GenerationResult {
   const duplicatesRemoved = validUploaded.length - dedupedUploaded.length;
   const blockedCount = dedupedUploaded.length - cleanUploaded.length;
 
-  // Score uploaded songs
-  const scored: Array<ScoredSong & { section: Section; energy: number }> = cleanUploaded.map((s) => {
+  // Score uploaded songs (energy, danceability, audience fit).
+  // Prefer the library's hand-curated section for known songs; otherwise pick
+  // the section with the highest score.
+  type Scored = ScoredSong & { section: Section; energy: number; danceability: number; audienceFit: AudienceFit; scores: SectionScores };
+  const scored: Scored[] = cleanUploaded.map((s) => {
     const est = estimateEnergy(s.artist, s.song, prefs);
-    return { ...s, fromUpload: true, energy: est.energy, genre: est.genre, decade: est.decade, section: est.section };
+    const scores = sectionScores(est.energy, est.danceability, est.audienceFit);
+    const lib = lookupLibrary(s.artist, s.song);
+    return {
+      ...s,
+      fromUpload: true,
+      energy: est.energy,
+      danceability: est.danceability,
+      genre: est.genre,
+      decade: est.decade,
+      audienceFit: est.audienceFit,
+      section: lib ? lib.section : bestSection(scores),
+      scores,
+    };
   });
 
-  // Distribute uploaded songs evenly across the three sections by energy ranking.
-  // Sort by energy ascending, split into thirds.
-  const sortedByEnergy = [...scored].sort((a, b) => a.energy - b.energy);
-  const total = sortedByEnergy.length;
-  const third = Math.ceil(total / 3);
-  const warmUp: Array<ScoredSong & { section: Section }> = [];
-  const transition: Array<ScoredSong & { section: Section }> = [];
-  const peak: Array<ScoredSong & { section: Section }> = [];
-  sortedByEnergy.forEach((s, i) => {
-    if (i < third) warmUp.push({ ...s, section: "Warm Up" });
-    else if (i < third * 2) transition.push({ ...s, section: "Transition" });
-    else peak.push({ ...s, section: "Peak" });
-  });
+  const warmUp: Scored[] = [];
+  const transition: Scored[] = [];
+  const peak: Scored[] = [];
+  const bucketOf = (sec: Section) => (sec === "Warm Up" ? warmUp : sec === "Transition" ? transition : peak);
+  scored.forEach((s) => bucketOf(s.section).push(s));
+
+  // Soft rebalance: only move songs whose preference margin between the
+  // over-full and under-full sections is small (≤ 2). Songs that strongly
+  // belong somewhere stay put — e.g. all-disco uploads remain in Warm Up.
+  const sectionList: Section[] = ["Warm Up", "Transition", "Peak"];
+  const totalScored = scored.length;
+  const ceilTarget = Math.ceil(totalScored / 3);
+  const floorTarget = Math.floor(totalScored / 3);
+  const MARGIN_LIMIT = 2;
+  for (let pass = 0; pass < 8; pass++) {
+    const buckets = sectionList.map((sec) => ({ sec, bucket: bucketOf(sec) }));
+    const over = buckets.find((b) => b.bucket.length > ceilTarget + 1);
+    const under = buckets.find((b) => b.bucket.length < floorTarget - 1);
+    if (!over || !under) break;
+    let bestIdx = -1;
+    let bestMargin = Infinity;
+    over.bucket.forEach((s, i) => {
+      const margin = s.scores[over.sec] - s.scores[under.sec];
+      if (margin < bestMargin) { bestMargin = margin; bestIdx = i; }
+    });
+    if (bestIdx < 0 || bestMargin > MARGIN_LIMIT) break;
+    const [moved] = over.bucket.splice(bestIdx, 1);
+    moved.section = under.sec;
+    under.bucket.push(moved);
+  }
+
+
 
   const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
   const perSectionBase = Math.ceil(totalSongsNeeded / 3);
@@ -331,14 +447,19 @@ export function generateLists(input: GenerationInput): GenerationResult {
         const k = dedupeKey(lib.artist, lib.song);
         if (seen.has(k)) continue;
         seen.add(k);
+        const audienceFit = inferAudienceFit(lib.decade, lib.genre);
+        const libScores = sectionScores(lib.energy, lib.danceability, audienceFit);
         bucket.push({
           artist: lib.artist,
           song: lib.song,
           fromUpload: false,
           energy: lib.energy,
+          danceability: lib.danceability,
           genre: lib.genre,
           decade: lib.decade,
+          audienceFit,
           section,
+          scores: libScores,
         });
       }
     };
