@@ -258,8 +258,12 @@ export function generateLists(input: GenerationInput): GenerationResult {
       .sort((a, b) => b.score - a.score);
 
     const addTo = (bucket: typeof warmUp, section: Section, need: number) => {
+      // Expansion always tops the section up by `need` library suggestions
+      // (capped by available candidates) — independent of how many uploads
+      // were already bucketed into this section.
+      let added = 0;
       for (const { lib } of candidates) {
-        if (bucket.length >= need) break;
+        if (added >= need) break;
         if (lib.section !== section) continue;
         const k = dedupeKey(lib.artist, lib.song);
         if (seen.has(k)) continue;
@@ -273,6 +277,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
           decade: lib.decade,
           section,
         });
+        added++;
       }
     };
 
