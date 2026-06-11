@@ -475,26 +475,35 @@ function Index() {
   const debouncedSongs = useDebounce(songs, 120);
 
   const [isPendingLive, startLiveTransition] = useTransition();
-  const [liveTargets, setLiveTargets] = useState(() => {
-    const deduped = dedupeSongs(songs);
-    if (expand && hoursNum > 0) {
-      const total = Math.ceil(hoursNum * 15);
-      return { total, perSection: Math.ceil(total / 3) };
-    }
-    return { total: deduped.length, perSection: Math.ceil(deduped.length / 3) };
-  });
+
+  function computeLiveTargets(songsArg: Song[], hoursArg: number) {
+    const safeHours = hoursArg > 0 ? hoursArg : 0;
+    const r = generateLists({
+      uploaded: songsArg,
+      hours: safeHours,
+      expand: false,
+      prefs: { artists: [], genres: [], decades: [], notes: "" },
+    });
+    return {
+      total: r.perSectionTarget * 3,
+      perSection: r.perSectionTarget,
+      perSectionBase: r.perSectionBase,
+      shortfall: r.shortfall,
+    };
+  }
+
+  const [liveTargets, setLiveTargets] = useState(() =>
+    computeLiveTargets(songs, hoursNum),
+  );
 
   useEffect(() => {
     startLiveTransition(() => {
-      const deduped = dedupeSongs(debouncedSongs);
-      if (debouncedExpand && debouncedHours > 0) {
-        const total = Math.ceil(debouncedHours * 15);
-        setLiveTargets({ total, perSection: Math.ceil(total / 3) });
-      } else {
-        setLiveTargets({ total: deduped.length, perSection: Math.ceil(deduped.length / 3) });
-      }
+      setLiveTargets(computeLiveTargets(debouncedSongs, debouncedHours));
     });
+    // debouncedExpand is intentionally part of deps for visual pending state only
+    void debouncedExpand;
   }, [debouncedSongs, debouncedHours, debouncedExpand]);
+
 
   return (
     <div className="min-h-screen bg-background">
