@@ -867,7 +867,7 @@ function Index() {
                 />
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground">
-                Upload a .csv (Artist, Song columns) or .txt file, or type entries. Used only when expanding from the built-in library — songs from your uploaded files are never filtered.
+                Upload a .csv (Artist, Song columns) or .txt file, or type entries. Blocked songs are removed from your uploads and excluded from library expansion, with duplicates filtered out of the final CSV exports.
                 {doNotPlayEntries.length > 0 && (
                   <span className="ml-1 font-medium text-foreground">
                     {doNotPlayEntries.length} blocked
