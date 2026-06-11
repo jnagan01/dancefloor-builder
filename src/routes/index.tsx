@@ -475,7 +475,14 @@ function Index() {
   const debouncedSongs = useDebounce(songs, 120);
 
   const [isPendingLive, startLiveTransition] = useTransition();
-  const [liveTargets, setLiveTargets] = useState({ total: 0, perSection: 0 });
+  const [liveTargets, setLiveTargets] = useState(() => {
+    const deduped = dedupeSongs(songs);
+    if (expand && hoursNum > 0) {
+      const total = Math.ceil(hoursNum * 15);
+      return { total, perSection: Math.ceil(total / 3) };
+    }
+    return { total: deduped.length, perSection: Math.ceil(deduped.length / 3) };
+  });
 
   useEffect(() => {
     startLiveTransition(() => {
