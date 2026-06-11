@@ -1,36 +1,62 @@
-## Goal
+# Smarter section filtering with danceability + age signals
 
-Let the user upload a CSV/TXT file as the Do Not Play list instead of (or in addition to) typing entries by hand. Parsed entries merge with whatever is already in the textarea.
+Today, `generateLists` only ranks songs by an `energy` score and splits uploads into thirds. We'll add two more signals — **danceability** and an inferred **audience age fit** — and verify the behavior with tests.
 
-## Changes
+## 1. Extend the song model
 
-### `src/routes/index.tsx` — Do Not Play section
+In `src/lib/songLibrary.ts`:
 
-- Add an **Upload file** button next to the "Do Not Play list" label, plus drag-and-drop on the textarea container.
-- Accept `.csv` and `.txt` (same as the song uploader).
-- Parser logic:
-  - For `.txt`: one entry per line; reuse the existing `parseDoNotPlay` text format (`Artist - Song` or just `Artist`).
-  - For `.csv`: use Papa Parse with header detection (reuse the helpers in `danceFloor.ts`). Detect Artist + Song columns (`artist`/`song`/`track`/`title`); if both present, format each row as `Artist - Song`. If only an Artist column, format as `Artist` (blocks all). Fall back to two-column headerless CSV (same heuristic as `parseCsv`).
-- Append the parsed entries as newline-separated lines to the current `doNotPlayInput` state (de-duplicate identical lines, preserve user-typed entries on top).
-- Toast: "Imported N do-not-play entries from {filename}". Error toast on empty/unparseable files.
+- Add `danceability: number` (1–10) to `LibrarySong`. Hand-fill for the existing ~50 entries (disco/EDM high, ballads low).
+- No new field for age — it's derived (see below).
 
-### `src/lib/danceFloor.ts` — small helper
+In `src/lib/danceFloor.ts`:
 
-- Export a new `parseDoNotPlayFile(file: File): Promise<DoNotPlayEntry[]>` that:
-  - Reads the file text.
-  - For `.txt`, calls existing `parseDoNotPlay`.
-  - For `.csv`, parses with Papa, picks artist/song columns using the existing `ARTIST_KEYS` / `SONG_KEYS` constants, and returns `DoNotPlayEntry[]`.
-- Add a `doNotPlayEntriesToText(entries): string` helper so the UI can append normalized lines to the textarea.
+- Extend `ScoredSong` with `danceability?: number` and an internal `audienceFit: "older" | "younger" | "adult" | "all"`.
 
-### Tests — `tests/doNotPlayUpload.test.ts` (new)
+## 2. Infer audience-age fit from decade + genre
 
-- CSV with `Artist,Song` headers → returns one entry per row with both fields.
-- CSV with only `Artist` header → returns artist-only entries (blocks all songs).
-- TXT with mixed `Artist - Song` and bare `Artist` lines → matches existing `parseDoNotPlay` behavior.
-- Empty file → returns `[]`.
+New helper `inferAudienceFit(decade, genre)` in `danceFloor.ts`:
 
-## Out of scope
+```text
+1950s–1980s, or genre in {Disco, Soul, Funk, Oldies, Country}      → "older"
+2010s–2020s clean Pop (Taylor Swift, Bruno Mars, Dua Lipa, etc.)   → "younger"
+Hip Hop / EDM / club anthems (LMFAO, Pitbull, Usher, Cardi B)      → "adult"
+Everything else                                                    → "all"
+```
 
-- Persisting do-not-play lists across sessions.
-- A separate managed list UI (chips / table). The textarea remains the source of truth; upload just fills it.
-- Changing how do-not-play interacts with expansion (already covered).
+For uploaded songs that aren't in the library, fall back to `"all"` (heuristics on title/artist already exist for energy; we won't overfit).
+
+## 3. Section scoring (replaces the "sort by energy, slice into thirds" step)
+
+Compute a per-section score for every song:
+
+```text
+warmUpScore   = (10 - energy) + danceability*0.5 + (older ? 3 : 0) + (younger ? 3 : 0)
+transitionScore = (10 - |energy - 7|) + danceability + (all ? 2 : 0)
+peakScore     = energy + danceability + (adult ? 3 : 0) - (older ? 2 : 0) - (younger ? 2 : 0)
+```
+
+Assign each song to its highest-scoring section, then rebalance so each bucket gets roughly `total/3` songs (move the lowest-margin songs from oversized buckets to undersized ones). Library expansion already targets a specific section, so it keeps working as-is — but the candidate ranking inside `padTo` will also use the new score so older/younger songs preferentially fill Warm Up and adult tracks fill Peak.
+
+Energy stays the primary signal; danceability and age are tie-breakers and rebalancers, so existing behavior is mostly preserved.
+
+## 4. Tests
+
+New file `tests/danceFloor.sectionFit.test.ts` (vitest), covering:
+
+1. **Older/younger guests fill Warm Up** — given an upload mix of disco/oldies + current clean pop + club EDM, all disco/oldies and clean pop end up in Warm Up; no EDM does.
+2. **Adult-skewing tracks go to Peak** — Pitbull / LMFAO / Usher land in Peak, not Warm Up.
+3. **Energy still dominates** — a high-energy disco track (e.g. "September") stays in Warm Up or Transition (not Peak) because its `audienceFit` is "older".
+4. **Danceability breaks ties** — two songs with equal energy: higher danceability goes to the more dance-heavy section.
+5. **Balanced buckets** — for 30 mixed uploads, no section ends up with fewer than `floor(total/3) - 1` or more than `ceil(total/3) + 1` songs.
+6. **Expansion respects age fit** — with empty uploads and `expand: true`, Warm Up is dominated by older/younger-fit library songs and Peak by adult-fit ones.
+
+All tests use the existing `generateLists` API; no UI changes.
+
+## Files
+
+- `src/lib/songLibrary.ts` — add `danceability` to each row.
+- `src/lib/danceFloor.ts` — add `inferAudienceFit`, new scoring/rebalancing logic, extend `ScoredSong`.
+- `tests/danceFloor.sectionFit.test.ts` — new test file.
+
+No UI changes in this step. Run `bunx vitest run` to confirm.
