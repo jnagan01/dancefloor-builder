@@ -193,6 +193,14 @@ function Index() {
   const hoursNum = parseFloat(hours) || 0;
   const sectionMinutes = formatMinutes(hoursNum);
 
+  const doNotPlayEntries = useMemo(() => parseDoNotPlay(doNotPlayInput), [doNotPlayInput]);
+
+  function removeDoNotPlayEntry(index: number) {
+    const next = [...doNotPlayEntries];
+    next.splice(index, 1);
+    setDoNotPlayInput(doNotPlayEntriesToText(next));
+  }
+
   function songKey(section: SectionKey, idx: number, s: Song): string {
     return `${section}:${idx}:${dedupeKey(s.artist, s.song)}`;
   }
