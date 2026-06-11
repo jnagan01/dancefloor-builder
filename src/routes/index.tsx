@@ -771,12 +771,28 @@ function Index() {
                 </p>
                 {hoursNum > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground transition-opacity duration-150">
-                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (1.5× buffer)
                   </p>
                 )}
               </div>
               <Switch checked={expand} onCheckedChange={setExpand} />
             </div>
+            {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-medium">Not enough uploaded songs to hit the 1.5× buffer.</p>
+                  <p className="mt-1 text-xs">
+                    Short by <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.warmUp}</span> in Warm Up,
+                    {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.transition}</span> in Transition,
+                    {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.peak}</span> in Peak
+                    {" "}(<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.total}</span> total).
+                    Turn on song expansion above to fill the gap from the library.
+                  </p>
+                </div>
+              </div>
+            )}
+
           </CardContent>
         </Card>
 
