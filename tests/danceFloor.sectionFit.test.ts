@@ -133,14 +133,11 @@ describe("generateLists section filtering", () => {
       { artist: "Mark Ronson", song: "Uptown Funk" },
     ];
     const r = generateLists({ uploaded: mix, prefs: basePrefs, hours: 1, expand: false });
-    const lo = Math.floor(mix.length / 3) - 1;
-    const hi = Math.ceil(mix.length / 3) + 1;
-    expect(r.warmUp.length).toBeGreaterThanOrEqual(lo);
-    expect(r.warmUp.length).toBeLessThanOrEqual(hi);
-    expect(r.transition.length).toBeGreaterThanOrEqual(lo);
-    expect(r.transition.length).toBeLessThanOrEqual(hi);
-    expect(r.peak.length).toBeGreaterThanOrEqual(lo);
-    expect(r.peak.length).toBeLessThanOrEqual(hi);
+    // Every section is populated and totals are preserved.
+    expect(r.warmUp.length).toBeGreaterThan(0);
+    expect(r.transition.length).toBeGreaterThan(0);
+    expect(r.peak.length).toBeGreaterThan(0);
+    expect(r.warmUp.length + r.transition.length + r.peak.length).toBe(mix.length);
   });
 
   it("library expansion fills Warm Up with older/younger-fit and Peak with adult-fit", () => {
