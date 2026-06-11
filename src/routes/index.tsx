@@ -52,6 +52,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
+import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -590,18 +591,80 @@ function Index() {
 
       <header className="border-b bg-card">
         <div className="mx-auto max-w-6xl px-6 py-10">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Music className="h-5 w-5" />
+          <div className="flex items-start gap-3 justify-between flex-wrap">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Music className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+                  Wedding Dance Floor List Builder
+                </h1>
+                <p className="text-sm text-muted-foreground md:text-base">
+                  Upload client playlists, choose the vibe, and export DJ-ready CSV files.
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                Wedding Dance Floor List Builder
-              </h1>
-              <p className="text-sm text-muted-foreground md:text-base">
-                Upload client playlists, choose the vibe, and export DJ-ready CSV files.
-              </p>
-            </div>
+            <DjAccountBar
+              hasGeneratedLists={!!result}
+              getSnapshot={(): WorkflowSnapshot => ({
+                inputs: {
+                  songs,
+                  hours,
+                  artistsInput,
+                  genresInput,
+                  decades,
+                  notes,
+                  doNotPlayInput,
+                  expand,
+                  eventName,
+                },
+                lists: result ? { warmUp: result.warmUp, transition: result.transition, peak: result.peak } : { warmUp: [], transition: [], peak: [] },
+              })}
+              applySnapshot={(s) => {
+                setSongs(s.inputs.songs ?? []);
+                setHours(s.inputs.hours ?? "3");
+                setArtistsInput(s.inputs.artistsInput ?? "");
+                setGenresInput(s.inputs.genresInput ?? "");
+                setDecades(s.inputs.decades ?? []);
+                setNotes(s.inputs.notes ?? "");
+                setDoNotPlayInput(s.inputs.doNotPlayInput ?? "");
+                setExpand(!!s.inputs.expand);
+                setEventName(s.inputs.eventName ?? "");
+                if (s.lists && (s.lists.warmUp.length || s.lists.transition.length || s.lists.peak.length)) {
+                  const per = Math.max(s.lists.warmUp.length, s.lists.transition.length, s.lists.peak.length);
+                  setResult({
+                    warmUp: s.lists.warmUp,
+                    transition: s.lists.transition,
+                    peak: s.lists.peak,
+                    targetTotal: per * 3,
+                    perSectionTarget: per,
+                    perSectionBase: per,
+                    shortfall: { warmUp: 0, transition: 0, peak: 0, total: 0 },
+                    duplicatesRemoved: 0,
+                    blockedCount: 0,
+                  });
+                } else {
+                  setResult(null);
+                }
+              }}
+              resetWorkflow={() => {
+                setSongs([]);
+                setHours("3");
+                setArtistsInput("");
+                setGenresInput("");
+                setDecades(["2000s", "2010s", "2020s"]);
+                setNotes("");
+                setDoNotPlayInput("");
+                setExpand(false);
+                setIncludeCombined(false);
+                setEventName("");
+                setResult(null);
+                setMatches({});
+                setSearchOpen(null);
+                setSearchQuery("");
+              }}
+            />
           </div>
         </div>
       </header>
