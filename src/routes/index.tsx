@@ -1357,7 +1357,8 @@ function SectionView(props: SectionViewProps) {
               const m = matches[key];
               const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
               return (
-                <TableRow key={i} className={m?.excludedFromVdj ? "opacity-60" : ""}>
+                <Fragment key={i}>
+                <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
                   <TableCell>{s.artist}</TableCell>
                   <TableCell>{s.song}</TableCell>
                   {library && (
@@ -1368,21 +1369,7 @@ function SectionView(props: SectionViewProps) {
                       <TableCell className="text-xs">{track?.key || "—"}</TableCell>
                       <TableCell className="max-w-xs">
                         {track ? (
-                          <div className="space-y-1">
-                            <p className="truncate text-xs" title={track.filePath}>{track.filePath}</p>
-                            {m && m.alternatives.length > 0 && (
-                              <select
-                                className="w-full rounded border bg-background px-2 py-1 text-xs"
-                                value={m.trackIndex ?? ""}
-                                onChange={(e) => onChoose(key, Number(e.target.value))}
-                              >
-                                {[m.trackIndex!, ...m.alternatives].map((ti) => {
-                                  const t = library.tracks[ti];
-                                  return <option key={ti} value={ti}>{t.artist} — {t.title}</option>;
-                                })}
-                              </select>
-                            )}
-                          </div>
+                          <p className="truncate text-xs" title={track.filePath}>{track.filePath}</p>
                         ) : (
                           <span className="text-xs text-muted-foreground">No file</span>
                         )}
@@ -1394,9 +1381,6 @@ function SectionView(props: SectionViewProps) {
                               <Check className="h-3 w-3" />
                             </Button>
                           )}
-                          <Button size="sm" variant="outline" onClick={() => onOpenSearch(section, i, s)} title="Search library">
-                            <Search className="h-3 w-3" />
-                          </Button>
                           <Button size="sm" variant="ghost" onClick={() => onMarkUnresolved(key)} title="Mark unresolved">
                             <X className="h-3 w-3" />
                           </Button>
@@ -1413,11 +1397,91 @@ function SectionView(props: SectionViewProps) {
                     </>
                   )}
                 </TableRow>
+                {library && (
+                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                    <TableCell colSpan={8} className="py-2">
+                      <InlineMatchSearch
+                        song={s}
+                        library={library}
+                        currentTrackIndex={m?.trackIndex}
+                        onPick={(ti) => onChoose(key, ti)}
+                      />
+                    </TableCell>
+                  </TableRow>
+                )}
+                </Fragment>
               );
             })}
           </TableBody>
         </Table>
       </div>
+    </div>
+  );
+}
+
+function InlineMatchSearch({
+  song,
+  library,
+  currentTrackIndex,
+  onPick,
+}: {
+  song: Song;
+  library: VdjLibrary;
+  currentTrackIndex?: number;
+  onPick: (trackIndex: number) => void;
+}) {
+  const defaultQuery = `${song.artist} ${song.song}`.trim();
+  const [query, setQuery] = useState(defaultQuery);
+  const debounced = useDebounce(query, 150);
+  const results = useMemo(() => {
+    const q = debounced.trim();
+    if (!q) return [];
+    return searchLibrary(q, library, 10);
+  }, [debounced, library]);
+
+  return (
+    <div className="space-y-2 pl-2">
+      <div className="flex items-center gap-2">
+        <Search className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search library by artist or title…"
+          className="h-7 text-xs"
+        />
+        {query !== defaultQuery && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setQuery(defaultQuery)}>
+            Reset
+          </Button>
+        )}
+      </div>
+      {results.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No matches in library</p>
+      ) : (
+        <ul className="space-y-0.5">
+          {results.map((ti) => {
+            const t = library.tracks[ti];
+            const isCurrent = ti === currentTrackIndex;
+            return (
+              <li key={ti} className="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
+                <Button
+                  size="sm"
+                  variant={isCurrent ? "default" : "outline"}
+                  className="h-6 shrink-0 px-2 text-xs"
+                  onClick={() => onPick(ti)}
+                  disabled={isCurrent}
+                >
+                  {isCurrent ? <Check className="h-3 w-3" /> : "Pick"}
+                </Button>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{t.artist} — {t.title}</p>
+                  <p className="truncate text-[11px] text-muted-foreground" title={t.filePath}>{t.filePath}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
