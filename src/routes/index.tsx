@@ -1421,7 +1421,9 @@ function SectionView(props: SectionViewProps) {
                         song={s}
                         library={library}
                         currentTrackIndex={m?.trackIndex}
+                        extraTrackIndices={m?.extraTrackIndices ?? []}
                         onPick={(ti) => onChoose(key, ti)}
+                        onToggleExtra={(ti) => onToggleExtra(key, ti)}
                       />
                     </TableCell>
                   </TableRow>
