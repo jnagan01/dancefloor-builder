@@ -379,11 +379,23 @@ function Index() {
     const m = matches[key];
     if (!m) return;
     const others = [m.trackIndex, ...m.alternatives].filter((i): i is number => i != null && i !== trackIndex);
-    updateMatch(key, { status: "Manually Matched", confidence: 1, trackIndex, alternatives: others });
+    const extras = (m.extraTrackIndices ?? []).filter((i) => i !== trackIndex);
+    updateMatch(key, { status: "Manually Matched", confidence: 1, trackIndex, alternatives: others, extraTrackIndices: extras });
   }
 
   function markUnresolved(key: string) {
-    updateMatch(key, { status: "Missing From Library", confidence: 0, trackIndex: undefined, alternatives: [] });
+    updateMatch(key, { status: "Missing From Library", confidence: 0, trackIndex: undefined, alternatives: [], extraTrackIndices: [] });
+  }
+
+  function toggleExtraPick(key: string, trackIndex: number) {
+    const m = matches[key];
+    if (!m) return;
+    if (m.trackIndex === trackIndex) return; // it's the primary, ignore
+    const extras = m.extraTrackIndices ?? [];
+    const next = extras.includes(trackIndex)
+      ? extras.filter((i) => i !== trackIndex)
+      : [...extras, trackIndex];
+    updateMatch(key, { extraTrackIndices: next });
   }
 
   function toggleExclude(key: string) {
@@ -399,11 +411,14 @@ function Index() {
 
   function applySearchPick(trackIndex: number) {
     if (!searchOpen) return;
+    const m = matches[searchOpen.key];
+    const extras = (m?.extraTrackIndices ?? []).filter((i) => i !== trackIndex);
     updateMatch(searchOpen.key, {
       status: "Manually Matched",
       confidence: 1,
       trackIndex,
       alternatives: [],
+      extraTrackIndices: extras,
     });
     setSearchOpen(null);
     setSearchQuery("");
