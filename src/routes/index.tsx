@@ -1226,6 +1226,7 @@ function Index() {
                       onChoose={chooseAlternative}
                       onMarkUnresolved={markUnresolved}
                       onToggleExclude={toggleExclude}
+                      onToggleExtra={toggleExtraPick}
                       onOpenSearch={openSearch}
                     />
                   </TabsContent>
