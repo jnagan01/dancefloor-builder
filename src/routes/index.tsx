@@ -1308,11 +1308,11 @@ interface SectionViewProps {
   onChoose: (key: string, trackIndex: number) => void;
   onMarkUnresolved: (key: string) => void;
   onToggleExclude: (key: string) => void;
-  onOpenSearch: (section: SectionKey, idx: number, s: Song) => void;
+  onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onOpenSearch } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   return (
     <div className="space-y-3">
