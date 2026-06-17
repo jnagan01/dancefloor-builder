@@ -301,16 +301,19 @@ export function buildVirtualDjXml(items: ExportSongRef[], lib?: VdjLibrary): str
   for (const item of items) {
     if (item.match?.excludedFromVdj) continue;
     if (item.match?.trackIndex == null || !lib) continue;
-    const t = lib.tracks[item.match.trackIndex];
-    if (!t) continue;
-    const attrs = [
-      `path="${xmlEscape(t.filePath)}"`,
-      `size="${xmlEscape(t.fileSize || "")}"`,
-      `artist="${xmlEscape(t.artist)}"`,
-      `title="${xmlEscape(t.title)}"`,
-      `idx="${idx++}"`,
-    ];
-    lines.push(`  <song ${attrs.join(" ")} />`);
+    const indices = [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])];
+    for (const ti of indices) {
+      const t = lib.tracks[ti];
+      if (!t) continue;
+      const attrs = [
+        `path="${xmlEscape(t.filePath)}"`,
+        `size="${xmlEscape(t.fileSize || "")}"`,
+        `artist="${xmlEscape(t.artist)}"`,
+        `title="${xmlEscape(t.title)}"`,
+        `idx="${idx++}"`,
+      ];
+      lines.push(`  <song ${attrs.join(" ")} />`);
+    }
   }
   lines.push("</VirtualFolder>");
   return lines.join("\n");
@@ -321,10 +324,13 @@ export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary): string {
   for (const item of items) {
     if (item.match?.excludedFromVdj) continue;
     if (item.match?.trackIndex == null || !lib) continue;
-    const t = lib.tracks[item.match.trackIndex];
-    if (!t) continue;
-    lines.push(`#EXTINF:-1,${t.artist} - ${t.title}`);
-    lines.push(t.filePath);
+    const indices = [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])];
+    for (const ti of indices) {
+      const t = lib.tracks[ti];
+      if (!t) continue;
+      lines.push(`#EXTINF:-1,${t.artist} - ${t.title}`);
+      lines.push(t.filePath);
+    }
   }
   return lines.join("\n");
 }
