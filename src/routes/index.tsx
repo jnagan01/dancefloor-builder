@@ -1442,12 +1442,16 @@ function InlineMatchSearch({
   song,
   library,
   currentTrackIndex,
+  extraTrackIndices,
   onPick,
+  onToggleExtra,
 }: {
   song: Song;
   library: VdjLibrary;
   currentTrackIndex?: number;
+  extraTrackIndices: number[];
   onPick: (trackIndex: number) => void;
+  onToggleExtra: (trackIndex: number) => void;
 }) {
   const defaultQuery = `${song.artist} ${song.song}`.trim();
   const [query, setQuery] = useState(defaultQuery);
@@ -1461,6 +1465,8 @@ function InlineMatchSearch({
   }, [debounced, library, limit]);
   const results = allResults;
   const hasMore = !showAll && results.length >= 10;
+  const extraSet = new Set(extraTrackIndices);
+  const totalSelected = (currentTrackIndex != null ? 1 : 0) + extraTrackIndices.length;
 
   return (
     <div className="space-y-2 pl-2">
@@ -1477,6 +1483,11 @@ function InlineMatchSearch({
             Reset
           </Button>
         )}
+        {totalSelected > 1 && (
+          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+            {totalSelected} selected
+          </span>
+        )}
       </div>
       {results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
@@ -1488,6 +1499,7 @@ function InlineMatchSearch({
             {results.map((ti) => {
               const t = library.tracks[ti];
               const isCurrent = ti === currentTrackIndex;
+              const isExtra = extraSet.has(ti);
               return (
                 <li key={ti} className="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
                   <Button
@@ -1496,8 +1508,19 @@ function InlineMatchSearch({
                     className="h-6 shrink-0 px-2 text-xs"
                     onClick={() => onPick(ti)}
                     disabled={isCurrent}
+                    title="Set as primary match"
                   >
                     {isCurrent ? <Check className="h-3 w-3" /> : "Pick"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={isExtra ? "secondary" : "ghost"}
+                    className="h-6 shrink-0 px-2 text-xs"
+                    onClick={() => onToggleExtra(ti)}
+                    disabled={isCurrent}
+                    title={isExtra ? "Remove additional pick" : "Also include this track in the export"}
+                  >
+                    {isExtra ? "✓ Also" : "+ Also"}
                   </Button>
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{t.artist} — {t.title}</p>
