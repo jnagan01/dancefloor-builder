@@ -1432,12 +1432,16 @@ function InlineMatchSearch({
 }) {
   const defaultQuery = `${song.artist} ${song.song}`.trim();
   const [query, setQuery] = useState(defaultQuery);
+  const [showAll, setShowAll] = useState(false);
   const debounced = useDebounce(query, 150);
-  const results = useMemo(() => {
+  const limit = showAll ? 200 : 10;
+  const allResults = useMemo(() => {
     const q = debounced.trim();
     if (!q) return [];
-    return searchLibrary(q, library, 10);
-  }, [debounced, library]);
+    return searchLibrary(q, library, limit);
+  }, [debounced, library, limit]);
+  const results = allResults;
+  const hasMore = !showAll && results.length >= 10;
 
   return (
     <div className="space-y-2 pl-2">
@@ -1456,31 +1460,51 @@ function InlineMatchSearch({
         )}
       </div>
       {results.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No matches in library</p>
+        <p className="text-xs text-muted-foreground">
+          No matches in library. Try editing the search above (artist, title, or part of the file name).
+        </p>
       ) : (
-        <ul className="space-y-0.5">
-          {results.map((ti) => {
-            const t = library.tracks[ti];
-            const isCurrent = ti === currentTrackIndex;
-            return (
-              <li key={ti} className="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
-                <Button
-                  size="sm"
-                  variant={isCurrent ? "default" : "outline"}
-                  className="h-6 shrink-0 px-2 text-xs"
-                  onClick={() => onPick(ti)}
-                  disabled={isCurrent}
-                >
-                  {isCurrent ? <Check className="h-3 w-3" /> : "Pick"}
-                </Button>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{t.artist} — {t.title}</p>
-                  <p className="truncate text-[11px] text-muted-foreground" title={t.filePath}>{t.filePath}</p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <ul className={`space-y-0.5 ${showAll ? "max-h-72 overflow-auto rounded border" : ""}`}>
+            {results.map((ti) => {
+              const t = library.tracks[ti];
+              const isCurrent = ti === currentTrackIndex;
+              return (
+                <li key={ti} className="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
+                  <Button
+                    size="sm"
+                    variant={isCurrent ? "default" : "outline"}
+                    className="h-6 shrink-0 px-2 text-xs"
+                    onClick={() => onPick(ti)}
+                    disabled={isCurrent}
+                  >
+                    {isCurrent ? <Check className="h-3 w-3" /> : "Pick"}
+                  </Button>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{t.artist} — {t.title}</p>
+                    <p className="truncate text-[11px] text-muted-foreground" title={t.filePath}>{t.filePath}</p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>
+              Showing {results.length}
+              {showAll ? ` of up to ${limit}` : ""} result{results.length === 1 ? "" : "s"}
+            </span>
+            {(hasMore || showAll) && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-6 px-2 text-xs"
+                onClick={() => setShowAll((v) => !v)}
+              >
+                {showAll ? "Show top 10" : "Search full library"}
+              </Button>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
