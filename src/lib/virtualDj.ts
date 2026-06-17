@@ -27,6 +27,7 @@ export interface SongMatch {
   confidence: number; // 0..1
   trackIndex?: number; // index into library array
   alternatives: number[]; // alternative indices
+  extraTrackIndices?: number[]; // additional manually-picked tracks exported alongside trackIndex
   excludedFromVdj?: boolean;
 }
 
