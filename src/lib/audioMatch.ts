@@ -12,6 +12,7 @@
 
 export interface AudioIndex {
   files: File[];
+  variantCount: number;
   // Several lookups, tried in order of strictness.
   byBasename: Map<string, File>;             // exact basename (lowercased, with ext)
   byBasenameNoExt: Map<string, File>;        // basename without extension, raw lower
