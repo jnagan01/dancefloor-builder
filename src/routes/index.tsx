@@ -158,43 +158,88 @@ function Index() {
   const [librarySources, setLibrarySources] = useState<string[]>([]);
   const [matches, setMatches] = useState<Record<string, SongMatch>>({});
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
+  const [vdjDirName, setVdjDirName] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
-  const [audioIndex, setAudioIndex] = useState<AudioIndex>(() => buildAudioIndex([]));
-  const [rawAudioFiles, setRawAudioFiles] = useState<File[]>([]);
-  const [audioFolderName, setAudioFolderName] = useState<string | null>(null);
+
+  type AudioSource =
+    | { id: string; kind: "folder"; name: string; files: File[] }
+    | { id: string; kind: "vdj"; name: string; libraryIndex: number };
+  const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
   const [canDirWrite, setCanDirWrite] = useState(false);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
 
-  async function connectAudioFolder() {
+  const audioIndex = useMemo<AudioIndex>(() => {
+    const allFiles: File[] = [];
+    for (const s of audioSources) {
+      if (s.kind === "folder") allFiles.push(...s.files);
+    }
+    // Build a basename → File map from all folder files so VDJ-source tracks
+    // can be matched to actual files for metadata enrichment.
+    const byBase = new Map<string, File>();
+    for (const f of allFiles) byBase.set(f.name.toLowerCase(), f);
+    const extras: { file: File; artist?: string; title?: string }[] = [];
+    for (const s of audioSources) {
+      if (s.kind !== "vdj") continue;
+      const lib = libraries[s.libraryIndex];
+      if (!lib) continue;
+      for (const t of lib.tracks) {
+        const base = (t.filePath.split(/[\\/]/).pop() || "").toLowerCase();
+        const file = base ? byBase.get(base) : undefined;
+        if (file) extras.push({ file, artist: t.artist, title: t.title });
+      }
+    }
+    return buildAudioIndex(allFiles, extras);
+  }, [audioSources, libraries]);
+
+  async function addAudioFolder() {
     const files = await pickDirectoryFiles();
-    const idx = buildAudioIndex(files);
-    if (!idx.files.length) {
+    const audio = files.filter((f) => /\.(mp3|m4a|wav|flac|ogg|aac|aif{1,2}|wma|opus|alac)$/i.test(f.name));
+    if (!audio.length) {
       toast.error("No audio files found in selected folder");
       return;
     }
-    setRawAudioFiles(files);
-    setAudioIndex(idx);
-    const rel = (idx.files[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "";
-    setAudioFolderName(rel.split("/")[0] || "Music folder");
-    toast.success(`Connected ${idx.files.length} audio file${idx.files.length === 1 ? "" : "s"} · ${idx.variantCount.toLocaleString()} indexed variants`);
+    const rel = (audio[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "";
+    const name = rel.split("/")[0] || `Folder ${audioSources.length + 1}`;
+    setAudioSources((prev) => [
+      ...prev,
+      { id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, kind: "folder", name, files },
+    ]);
+    toast.success(`Added folder "${name}" · ${audio.length} audio file${audio.length === 1 ? "" : "s"}`);
   }
 
-  async function rebuildAudioIndex() {
-    if (!rawAudioFiles.length) {
-      toast.error("No folder connected. Connect a music folder first.");
+  function addVdjSource(libIndex: number) {
+    const lib = libraries[libIndex];
+    if (!lib) return;
+    const name = librarySources[libIndex] || `VirtualDJ library ${libIndex + 1}`;
+    if (audioSources.some((s) => s.kind === "vdj" && s.libraryIndex === libIndex)) {
+      toast.error("That VirtualDJ library is already a source");
       return;
     }
-    const idx = buildAudioIndex(rawAudioFiles);
-    setAudioIndex(idx);
-    toast.success(`Rebuilt index: ${idx.files.length} audio file${idx.files.length === 1 ? "" : "s"} · ${idx.variantCount.toLocaleString()} indexed variants`);
+    setAudioSources((prev) => [
+      ...prev,
+      { id: `vdj-${libIndex}-${Date.now()}`, kind: "vdj", name, libraryIndex: libIndex },
+    ]);
+    toast.success(`Added VirtualDJ library as source`);
+  }
+
+  function removeAudioSource(id: string) {
+    setAudioSources((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  function rebuildAudioIndex() {
+    // useMemo recomputes when audioSources changes; bump a no-op state to
+    // force recompute when underlying File contents may have changed.
+    setAudioSources((prev) => prev.map((s) => ({ ...s })));
+    toast.success(`Rebuilt index: ${audioIndex.files.length.toLocaleString()} files · ${audioIndex.variantCount.toLocaleString()} indexed variants`);
   }
 
   const resolveLocalFile = useMemo(
     () => (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioFile(audioIndex, q),
     [audioIndex]
   );
+
 
   const mergedLibrary = useMemo<VdjLibrary | null>(() => {
     if (!libraries.length) return null;
