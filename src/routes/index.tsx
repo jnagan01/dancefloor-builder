@@ -1171,7 +1171,9 @@ function Index() {
 
         {/* Generate */}
         <div className="flex justify-center">
-          <Button size="lg" onClick={generate}>Generate Dance Floor Lists</Button>
+          <Button size="lg" onClick={generate} disabled={isGenerating}>
+            {isGenerating ? "Generating with AI…" : "Generate Dance Floor Lists"}
+          </Button>
         </div>
 
         {/* Results */}
