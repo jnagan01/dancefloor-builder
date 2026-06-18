@@ -1,37 +1,61 @@
-## Goal
+## Goals
 
-Today, when a section is short, expansion only pulls from the ~50-song hardcoded list in `src/lib/songLibrary.ts`. We'll replace that fallback with **Lovable AI–generated recommendations** based on your preferences, so suggestions aren't capped by the built-in catalog. Each suggested song will appear in the list with the existing inline library search underneath, so you can pick the matching file from your own DJ library.
+1. Let the user connect **multiple music sources** for matching/preview — any number of local folders, plus tracks already loaded from VirtualDJ `database.xml` libraries (when those file paths are reachable as local files).
+2. Make the **VirtualDJ "My Lists" export folder** explicitly changeable: show the linked folder, a "Change folder" button, and a "Clear" button.
 
-## What changes
+## 1. Multiple music sources
 
-1. **New server function** `recommendSongsForSection` (`src/lib/recommend.functions.ts`)
-   - Uses Lovable AI Gateway (`google/gemini-3-flash-preview`) via the AI SDK.
-   - Inputs: section (`Warm Up` / `Transition` / `Peak`), count needed, user preferences (artists, genres, decades, notes), do-not-play list, and the artist+title of songs already in the list (to avoid duplicates).
-   - Returns structured JSON: `[{ artist, song, genre, decade, energy (1-10), danceability (1-10), reason }]`.
-   - Uses `Output.object` with a small Zod schema (keeps fields short to avoid Gemini schema limits).
+### Data model (src/routes/index.tsx)
 
-2. **Update `generateLists` in `src/lib/danceFloor.ts`**
-   - Change the `expand` branch to be `async` and call the new server function per section that's short.
-   - Map AI results into the existing `Song` shape with `fromUpload: false`, inferred `audienceFit`, and computed `sectionScores`.
-   - Fall back to the existing built-in library padding only if the AI call fails or returns too few items (graceful degradation).
+Replace single-folder state with a list:
 
-3. **UI in `src/routes/index.tsx`**
-   - The generate flow becomes async-aware (loading state already exists for generation; extend it to cover the AI call).
-   - AI-suggested rows render exactly like library-padded rows today (artist/song/section/scores) and already get the inline top-10 library search beneath them — no separate UI needed. Add a small "AI suggestion" badge so you can tell them apart.
+```ts
+type AudioSource =
+  | { id: string; kind: "folder"; name: string; files: File[] }
+  | { id: string; kind: "vdj"; name: string; libraryIndex: number };
 
-4. **Errors surfaced to UI**
-   - 429 → "AI is busy, try again in a moment."
-   - 402 → "Out of AI credits — add credits in Workspace settings."
-   - Any other failure → silent fallback to built-in library padding, with a toast noting AI was unavailable.
+const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
+```
+
+`audioIndex` becomes derived: rebuild from the union of all `folder` source files plus any `vdj` source whose tracks have a matching `File` (vdj source is opportunistic — included only when the VirtualDJ library entries can be resolved to actual `File` objects from a connected folder; otherwise it stays as metadata-only and contributes nothing to playback). Memoize the rebuild on `audioSources` changes.
+
+### `src/lib/audioMatch.ts`
+
+- Add optional `extraEntries?: { path: string; basename: string; file: File }[]` parameter to `buildAudioIndex` so VirtualDJ-derived entries (when a `File` is available) can be folded into the same indexes (`byBasename`, `byNormBasename`, `byArtistTitle`, `byTitleOnly`).
+- No change to `resolveAudioFile` lookup semantics.
+
+### UI changes
+
+Replace the single "Connected …" row with a **Music sources** card:
+
+- Header: "Music sources" + buttons `Add folder`, `Add from VirtualDJ library` (only enabled when a parsed VirtualDJ library exists and is resolvable), `Rebuild index`.
+- List of connected sources, each row showing: name, file count, `Remove` button.
+- Footer: combined stats — `N files · M indexed variants across K sources`.
+
+Behavior:
+- `Add folder` → existing `pickDirectoryFiles()`, append new `folder` source (dedupe by folder name + size signature).
+- `Remove` → drop source, rebuild index, clear stale `resolveCache` entry.
+- `Rebuild index` → keep the button; rebuilds the combined index from all current sources.
+
+`resolveLocalFile` continues to consume the combined `audioIndex`; the `PreviewPlayer` requires no changes.
+
+## 2. Changeable VirtualDJ export folder
+
+In the existing "Save to VirtualDJ My Lists" row (around line 1200):
+
+- When unlinked: button `Choose VirtualDJ My Lists folder`.
+- When linked: show the folder name (from the `DirectoryHandle.name` — store it alongside the handle in a new `vdjDirName` state) plus two ghost buttons: `Change folder` (re-runs `pickDirectoryHandle`) and `Clear` (resets handle + name).
+- Disabled state + helper text preserved when `!canDirWrite`.
+
+Small helper update in `src/lib/virtualDj.ts`: `pickDirectoryHandle()` already returns the handle; the route code reads `handle.name` directly (the `DirHandleLike` type in `index.tsx` gains an optional `name?: string`).
+
+## Files touched
+
+- `src/routes/index.tsx` — new `audioSources` state, derived `audioIndex`, sources UI, export-folder UI with Change/Clear.
+- `src/lib/audioMatch.ts` — accept extra pre-resolved entries in `buildAudioIndex`.
+- `src/lib/virtualDj.ts` — minor: ensure `pickDirectoryHandle` return type exposes `name` (no behavior change).
 
 ## Out of scope
 
-- No new tables; suggestions are not persisted separately (saved history already captures the final lists).
-- No auto-matching to your uploaded library — you still click "Pick" in the inline search to attach a file.
-- No change to the scoring/section-fit algorithm for uploaded songs.
-
-## Technical notes
-
-- Server function lives in `src/lib/recommend.functions.ts` (client-safe path), reads `LOVABLE_API_KEY` from `process.env` inside `.handler()`.
-- Provider helper: new `src/lib/ai-gateway.server.ts` using `createLovableAiGatewayProvider` from the gateway pattern.
-- `generateLists` becomes `async`; callers in `src/routes/index.tsx` already `await` it (verify and adjust). Tests in `tests/danceFloor.*` will be updated to either mock the recommender or assert behavior with `expand: false` / AI disabled.
+- Persisting sources across reloads (browser security forbids re-using `File`/`FileSystemDirectoryHandle` without re-pick).
+- Per-section export folders, remembered named export profiles, or switching between sources instead of combining them — explicitly deferred based on the answers.
