@@ -1499,6 +1499,15 @@ function SectionView(props: SectionViewProps) {
                 <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
                   <TableCell>
                     <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => onPreview?.(s)}
+                        title="Preview song"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                      </Button>
                       <span>{s.artist}</span>
                       <SourceBadge song={s as Song & { fromUpload?: boolean; aiSuggestion?: boolean }} />
                     </div>
