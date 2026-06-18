@@ -1381,6 +1381,28 @@ function Index() {
     </div>
   );
 }
+function SourceBadge({ song }: { song: Song }) {
+  const isAi = (song as Song & { aiSuggestion?: boolean }).aiSuggestion;
+  if (isAi) {
+    return (
+      <Badge variant="secondary" className="gap-1 text-[10px] bg-violet-100 text-violet-800 border-violet-200 hover:bg-violet-100">
+        <Sparkles className="h-3 w-3" /> AI
+      </Badge>
+    );
+  }
+  if (song.fromUpload) {
+    return (
+      <Badge variant="secondary" className="gap-1 text-[10px] bg-sky-100 text-sky-800 border-sky-200 hover:bg-sky-100">
+        <Upload className="h-3 w-3" /> Upload
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="secondary" className="gap-1 text-[10px] bg-neutral-100 text-neutral-700 border-neutral-200 hover:bg-neutral-100">
+      <Database className="h-3 w-3" /> Library
+    </Badge>
+  );
+}
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "success" | "warning" | "destructive" }) {
   const toneCls =
