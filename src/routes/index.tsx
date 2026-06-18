@@ -160,8 +160,36 @@ function Index() {
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
+  const [audioFiles, setAudioFiles] = useState<Map<string, File>>(new Map());
+  const [audioFolderName, setAudioFolderName] = useState<string | null>(null);
   const [canDirWrite, setCanDirWrite] = useState(false);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
+
+  const AUDIO_EXT = /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus)$/i;
+
+  async function connectAudioFolder() {
+    const files = await pickDirectoryFiles();
+    const audio = files.filter((f) => AUDIO_EXT.test(f.name));
+    if (!audio.length) {
+      toast.error("No audio files found in selected folder");
+      return;
+    }
+    const map = new Map<string, File>();
+    for (const f of audio) {
+      map.set(f.name.toLowerCase(), f);
+    }
+    setAudioFiles(map);
+    const rel = (audio[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "";
+    setAudioFolderName(rel.split("/")[0] || "Music folder");
+    toast.success(`Connected ${audio.length} audio file${audio.length === 1 ? "" : "s"}`);
+  }
+
+  function resolveLocalFile(filePath: string): File | undefined {
+    if (!audioFiles.size) return undefined;
+    const base = filePath.split(/[\\/]/).pop()?.toLowerCase();
+    if (!base) return undefined;
+    return audioFiles.get(base);
+  }
 
   const mergedLibrary = useMemo<VdjLibrary | null>(() => {
     if (!libraries.length) return null;
