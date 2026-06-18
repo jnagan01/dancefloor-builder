@@ -1381,9 +1381,8 @@ function Index() {
     </div>
   );
 }
-function SourceBadge({ song }: { song: Song }) {
-  const isAi = (song as Song & { aiSuggestion?: boolean }).aiSuggestion;
-  if (isAi) {
+function SourceBadge({ song }: { song: Song & { fromUpload?: boolean; aiSuggestion?: boolean } }) {
+  if (song.aiSuggestion) {
     return (
       <Badge variant="secondary" className="gap-1 text-[10px] bg-violet-100 text-violet-800 border-violet-200 hover:bg-violet-100">
         <Sparkles className="h-3 w-3" /> AI
