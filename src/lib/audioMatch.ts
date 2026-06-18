@@ -84,6 +84,7 @@ export function buildAudioIndex(rawFiles: File[]): AudioIndex {
   const files = rawFiles.filter((f) => AUDIO_EXT_RE.test(f.name));
   const idx: AudioIndex = {
     files,
+    variantCount: 0,
     byBasename: new Map(),
     byBasenameNoExt: new Map(),
     byNormBasename: new Map(),
@@ -120,6 +121,12 @@ export function buildAudioIndex(rawFiles: File[]): AudioIndex {
       pushMulti(idx.byTitleOnly, norm, f);
     }
   }
+  idx.variantCount =
+    idx.byBasename.size +
+    idx.byBasenameNoExt.size +
+    [...idx.byNormBasename.values()].reduce((s, arr) => s + arr.length, 0) +
+    [...idx.byArtistTitle.values()].reduce((s, arr) => s + arr.length, 0) +
+    [...idx.byTitleOnly.values()].reduce((s, arr) => s + arr.length, 0);
   return idx;
 }
 
