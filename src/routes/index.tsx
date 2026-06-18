@@ -634,19 +634,24 @@ function Index() {
       if (!ok) return;
     }
     const refs = getSectionRefs(section);
-    const xml = buildVirtualDjXml(refs, mergedLibrary);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    const fname = `${prefix}${SECTION_FILES[section]}.xml`;
     if (vdjDirHandle) {
+      const m3u = buildM3u(refs, mergedLibrary);
+      const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
       try {
-        await writeFileToDir(vdjDirHandle, fname, xml);
-        toast.success(`Saved ${fname} to VirtualDJ My Lists`);
+        await writeFileToDir(vdjDirHandle, fname, m3u);
+        toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
         return;
       } catch {
-        toast.error("Could not write to My Lists folder, downloading instead");
+        toast.error("Could not write to VirtualDJ folder, downloading instead");
       }
+      downloadBlob(new Blob([m3u], { type: "audio/x-mpegurl" }), fname);
+      return;
     }
+    const xml = buildVirtualDjXml(refs, mergedLibrary);
+    const fname = `${prefix}${SECTION_FILES[section]}.xml`;
     downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
+
   }
 
   function exportSectionM3u(section: SectionKey) {
