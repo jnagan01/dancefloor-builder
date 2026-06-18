@@ -1216,7 +1216,9 @@ function Index() {
               </Button>
               {audioIndex.files.length > 0 && (
                 <>
-                  <span className="text-xs text-muted-foreground">{audioFolderName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {audioFolderName} · {audioIndex.files.length.toLocaleString()} files · {audioIndex.variantCount.toLocaleString()} indexed variants
+                  </span>
                   <Button
                     variant="ghost"
                     size="sm"
