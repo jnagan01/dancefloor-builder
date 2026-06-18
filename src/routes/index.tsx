@@ -1327,6 +1327,7 @@ function Index() {
                       onToggleExclude={toggleExclude}
                       onToggleExtra={toggleExtraPick}
                       onOpenSearch={openSearch}
+                      onPreview={(s) => setPreviewTarget({ artist: s.artist, song: s.song })}
                     />
                   </TabsContent>
                 ))}
