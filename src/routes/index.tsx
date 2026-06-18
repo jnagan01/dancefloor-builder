@@ -1369,10 +1369,20 @@ function Index() {
                           <p className="font-medium">{t.artist} — {t.title}</p>
                           <p className="truncate text-xs text-muted-foreground">{t.filePath}</p>
                         </TableCell>
-                        <TableCell className="w-20">
-                          <Button size="sm" variant="outline" onClick={() => applySearchPick(i)}>
-                            <Check className="mr-1 h-4 w-4" /> Pick
-                          </Button>
+                        <TableCell className="w-32">
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setPreviewTarget({ artist: t.artist, song: t.title })}
+                              title="Preview"
+                            >
+                              <Play className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => applySearchPick(i)}>
+                              <Check className="mr-1 h-4 w-4" /> Pick
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -1383,6 +1393,7 @@ function Index() {
           </div>
         </DialogContent>
       </Dialog>
+      <PreviewPlayer target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} />
     </div>
   );
 }
