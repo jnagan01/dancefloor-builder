@@ -518,9 +518,17 @@ function Index() {
     const handle = await pickDirectoryHandle();
     if (handle) {
       setVdjDirHandle(handle);
-      toast.success("VirtualDJ My Lists folder linked");
+      setVdjDirName((handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder");
+      toast.success("VirtualDJ folder linked");
     }
   }
+
+  function clearMyListsFolder() {
+    setVdjDirHandle(null);
+    setVdjDirName(null);
+    toast.success("VirtualDJ folder unlinked");
+  }
+
 
   // --- Match controls ---
 
