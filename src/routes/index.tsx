@@ -104,6 +104,8 @@ function Index() {
   const [includeCombined, setIncludeCombined] = useState(false);
   const [eventName, setEventName] = useState("");
   const [result, setResult] = useState<GenerationResult | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const recommendFn = useServerFn(recommendSongsForSection);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dnpFileRef = useRef<HTMLInputElement>(null);
