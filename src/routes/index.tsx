@@ -610,9 +610,10 @@ function Index() {
     sections.forEach((sec) => {
       result[sec].forEach((s, i) => {
         total += 1;
-        if ((s as Song & { aiSuggestion?: boolean }).aiSuggestion) {
+        const sExt = s as Song & { fromUpload?: boolean; aiSuggestion?: boolean };
+        if (sExt.aiSuggestion) {
           sourceCounts[sec].ai += 1;
-        } else if (s.fromUpload) {
+        } else if (sExt.fromUpload) {
           sourceCounts[sec].uploads += 1;
         } else {
           sourceCounts[sec].library += 1;
