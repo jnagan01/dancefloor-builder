@@ -26,8 +26,8 @@ export function PreviewPlayer({
 }: {
   target: PreviewTarget | null;
   onOpenChange: (open: boolean) => void;
-  /** Returns a File for a given VirtualDJ filePath when the user has connected their music folder. */
-  resolveLocalFile?: (filePath: string) => File | undefined;
+  /** Returns a File for a given query when the user has connected their music folder. */
+  resolveLocalFile?: (query: { artist?: string; title?: string; filePath?: string }) => File | undefined;
 }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ITunesResult[]>([]);
@@ -36,7 +36,10 @@ export function PreviewPlayer({
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const localFile = useMemo(
-    () => (target?.filePath && resolveLocalFile ? resolveLocalFile(target.filePath) : undefined),
+    () =>
+      target && resolveLocalFile
+        ? resolveLocalFile({ artist: target.artist, title: target.song, filePath: target.filePath })
+        : undefined,
     [target, resolveLocalFile]
   );
 
