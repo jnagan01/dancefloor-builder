@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { ExternalLink, Loader2, Music } from "lucide-react";
@@ -6,6 +6,8 @@ import { ExternalLink, Loader2, Music } from "lucide-react";
 export interface PreviewTarget {
   artist: string;
   song: string;
+  /** Optional VirtualDJ library filePath to play the actual local file when connected. */
+  filePath?: string;
 }
 
 interface ITunesResult {
@@ -20,9 +22,12 @@ interface ITunesResult {
 export function PreviewPlayer({
   target,
   onOpenChange,
+  resolveLocalFile,
 }: {
   target: PreviewTarget | null;
   onOpenChange: (open: boolean) => void;
+  /** Returns a File for a given VirtualDJ filePath when the user has connected their music folder. */
+  resolveLocalFile?: (filePath: string) => File | undefined;
 }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ITunesResult[]>([]);
@@ -30,8 +35,21 @@ export function PreviewPlayer({
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  const localFile = useMemo(
+    () => (target?.filePath && resolveLocalFile ? resolveLocalFile(target.filePath) : undefined),
+    [target, resolveLocalFile]
+  );
+
+  const localUrl = useMemo(() => (localFile ? URL.createObjectURL(localFile) : null), [localFile]);
   useEffect(() => {
-    if (!target) return;
+    return () => {
+      if (localUrl) URL.revokeObjectURL(localUrl);
+    };
+  }, [localUrl]);
+
+  // Only hit iTunes when we don't have a local file
+  useEffect(() => {
+    if (!target || localFile) return;
     setLoading(true);
     setError(null);
     setResults([]);
@@ -42,26 +60,27 @@ export function PreviewPlayer({
       .then((r) => r.json())
       .then((data: { results: ITunesResult[] }) => {
         const withPreview = (data.results || []).filter((r) => r.previewUrl);
-        if (withPreview.length === 0) {
-          setError("No preview available for this track.");
-        }
+        if (withPreview.length === 0) setError("No preview available for this track.");
         setResults(withPreview);
       })
       .catch(() => setError("Couldn't reach preview service."))
       .finally(() => setLoading(false));
-  }, [target]);
+  }, [target, localFile]);
 
   useEffect(() => {
     if (audioRef.current) {
       audioRef.current.load();
       audioRef.current.play().catch(() => {});
     }
-  }, [selected, results]);
+  }, [selected, results, localUrl]);
 
   const current = results[selected];
   const ytUrl = target
     ? `https://www.youtube.com/results?search_query=${encodeURIComponent(`${target.artist} ${target.song}`)}`
     : "#";
+
+  // Tail filename for display
+  const fileName = target?.filePath ? target.filePath.split(/[\\/]/).pop() : undefined;
 
   return (
     <Dialog open={!!target} onOpenChange={onOpenChange}>
@@ -70,16 +89,35 @@ export function PreviewPlayer({
           <DialogTitle className="truncate">
             {target ? `${target.artist} — ${target.song}` : "Preview"}
           </DialogTitle>
-          <DialogDescription>30-second preview from Apple Music</DialogDescription>
+          <DialogDescription>
+            {localFile
+              ? "Playing local file from your connected music folder"
+              : target?.filePath
+              ? "Local file not found in connected folder — falling back to Apple Music preview"
+              : "30-second preview from Apple Music"}
+          </DialogDescription>
         </DialogHeader>
 
-        {loading ? (
+        {localFile && localUrl ? (
+          <div className="space-y-3">
+            <div className="rounded-md border bg-muted/30 p-3 text-sm">
+              <p className="truncate font-medium">{fileName}</p>
+              <p className="truncate text-xs text-muted-foreground">{target?.filePath}</p>
+            </div>
+            <audio ref={audioRef} controls autoPlay src={localUrl} className="w-full" />
+          </div>
+        ) : loading ? (
           <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" /> Loading preview…
           </div>
         ) : error ? (
           <div className="space-y-3 py-4 text-center">
             <p className="text-sm text-muted-foreground">{error}</p>
+            {target?.filePath && (
+              <p className="text-xs text-muted-foreground">
+                Connect your music folder to play <span className="font-mono">{fileName}</span> directly.
+              </p>
+            )}
             <Button asChild variant="outline" size="sm">
               <a href={ytUrl} target="_blank" rel="noreferrer">
                 <ExternalLink className="mr-1 h-4 w-4" /> Search on YouTube
@@ -108,13 +146,7 @@ export function PreviewPlayer({
                 )}
               </div>
             </div>
-            <audio
-              ref={audioRef}
-              controls
-              autoPlay
-              src={current.previewUrl}
-              className="w-full"
-            />
+            <audio ref={audioRef} controls autoPlay src={current.previewUrl} className="w-full" />
             {results.length > 1 && (
               <div className="flex flex-wrap gap-1">
                 {results.map((r, i) => (
