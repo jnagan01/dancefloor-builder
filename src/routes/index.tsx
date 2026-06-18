@@ -1446,7 +1446,7 @@ function Index() {
           </div>
         </DialogContent>
       </Dialog>
-      <PreviewPlayer target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} />
+      <PreviewPlayer target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} resolveLocalFile={resolveLocalFile} />
     </div>
   );
 }
