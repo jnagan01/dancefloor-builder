@@ -240,7 +240,7 @@ function Index() {
 
 
 
-  function generate() {
+  async function generate() {
     if (!songs.length) {
       toast.error("Upload at least one song first");
       return;
@@ -250,18 +250,92 @@ function Index() {
       return;
     }
     const uniqueSongs = dedupeSongs(songs);
+    const prefs = {
+      artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean),
+      genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean),
+      decades,
+      notes,
+      doNotPlay: parseDoNotPlay(doNotPlayInput),
+    };
+    // Always build the base from uploads only; AI fills the gap when expand=true,
+    // with the built-in library as a fallback if AI is unavailable.
     const r = generateLists({
       uploaded: uniqueSongs,
       hours: hoursNum,
-      expand,
-      prefs: {
-        artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean),
-        genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean),
-        decades,
-        notes,
-        doNotPlay: parseDoNotPlay(doNotPlayInput),
-      },
+      expand: false,
+      prefs,
     });
+
+    if (expand) {
+      setIsGenerating(true);
+      try {
+        const sectionMap: Array<{ key: SectionKey; label: "Warm Up" | "Transition" | "Peak" }> = [
+          { key: "warmUp", label: "Warm Up" },
+          { key: "transition", label: "Transition" },
+          { key: "peak", label: "Peak" },
+        ];
+        const existing: { artist: string; song: string }[] = [
+          ...r.warmUp,
+          ...r.transition,
+          ...r.peak,
+        ].map((s) => ({ artist: s.artist, song: s.song }));
+
+        const failed: SectionKey[] = [];
+        await Promise.all(
+          sectionMap.map(async ({ key, label }) => {
+            const need = r.perSectionTarget - r[key].length;
+            if (need <= 0) return;
+            try {
+              const res = await recommendFn({
+                data: { section: label, count: need, prefs, existing },
+              });
+              const seen = new Set(
+                [...r[key], ...existing].map((s) => dedupeKey(s.artist, s.song)),
+              );
+              for (const sug of res.suggestions) {
+                if (r[key].length >= r.perSectionTarget) break;
+                const k = dedupeKey(sug.artist, sug.song);
+                if (seen.has(k)) continue;
+                seen.add(k);
+                r[key].push({
+                  artist: sug.artist,
+                  song: sug.song,
+                  fromUpload: false,
+                  aiSuggestion: true,
+                } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean });
+              }
+            } catch (err) {
+              console.error("AI recommend failed", err);
+              failed.push(key);
+            }
+          }),
+        );
+
+        if (failed.length) {
+          // Fallback to built-in library padding for sections where AI failed.
+          const fallback = generateLists({
+            uploaded: uniqueSongs,
+            hours: hoursNum,
+            expand: true,
+            prefs,
+          });
+          for (const key of failed) {
+            const have = new Set(r[key].map((s) => dedupeKey(s.artist, s.song)));
+            for (const s of fallback[key]) {
+              if (r[key].length >= r.perSectionTarget) break;
+              const k = dedupeKey(s.artist, s.song);
+              if (have.has(k)) continue;
+              have.add(k);
+              r[key].push(s);
+            }
+          }
+          toast.error("AI suggestions unavailable for some sections — used built-in library.");
+        }
+      } finally {
+        setIsGenerating(false);
+      }
+    }
+
     setResult(r);
     setMatches({});
     if (mergedLibrary) {
