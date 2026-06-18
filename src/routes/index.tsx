@@ -178,7 +178,7 @@ function Index() {
     setAudioIndex(idx);
     const rel = (idx.files[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "";
     setAudioFolderName(rel.split("/")[0] || "Music folder");
-    toast.success(`Connected ${idx.files.length} audio file${idx.files.length === 1 ? "" : "s"}`);
+    toast.success(`Connected ${idx.files.length} audio file${idx.files.length === 1 ? "" : "s"} · ${idx.variantCount.toLocaleString()} indexed variants`);
   }
 
   async function rebuildAudioIndex() {
@@ -188,7 +188,7 @@ function Index() {
     }
     const idx = buildAudioIndex(rawAudioFiles);
     setAudioIndex(idx);
-    toast.success(`Rebuilt index: ${idx.files.length} audio file${idx.files.length === 1 ? "" : "s"} indexed`);
+    toast.success(`Rebuilt index: ${idx.files.length} audio file${idx.files.length === 1 ? "" : "s"} · ${idx.variantCount.toLocaleString()} indexed variants`);
   }
 
   const resolveLocalFile = useMemo(
