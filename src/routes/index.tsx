@@ -56,6 +56,7 @@ import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
+import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -160,36 +161,28 @@ function Index() {
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
-  const [audioFiles, setAudioFiles] = useState<Map<string, File>>(new Map());
+  const [audioIndex, setAudioIndex] = useState<AudioIndex>(() => buildAudioIndex([]));
   const [audioFolderName, setAudioFolderName] = useState<string | null>(null);
   const [canDirWrite, setCanDirWrite] = useState(false);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
 
-  const AUDIO_EXT = /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus)$/i;
-
   async function connectAudioFolder() {
     const files = await pickDirectoryFiles();
-    const audio = files.filter((f) => AUDIO_EXT.test(f.name));
-    if (!audio.length) {
+    const idx = buildAudioIndex(files);
+    if (!idx.files.length) {
       toast.error("No audio files found in selected folder");
       return;
     }
-    const map = new Map<string, File>();
-    for (const f of audio) {
-      map.set(f.name.toLowerCase(), f);
-    }
-    setAudioFiles(map);
-    const rel = (audio[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "";
+    setAudioIndex(idx);
+    const rel = (idx.files[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "";
     setAudioFolderName(rel.split("/")[0] || "Music folder");
-    toast.success(`Connected ${audio.length} audio file${audio.length === 1 ? "" : "s"}`);
+    toast.success(`Connected ${idx.files.length} audio file${idx.files.length === 1 ? "" : "s"}`);
   }
 
-  function resolveLocalFile(filePath: string): File | undefined {
-    if (!audioFiles.size) return undefined;
-    const base = filePath.split(/[\\/]/).pop()?.toLowerCase();
-    if (!base) return undefined;
-    return audioFiles.get(base);
-  }
+  const resolveLocalFile = useMemo(
+    () => (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioFile(audioIndex, q),
+    [audioIndex]
+  );
 
   const mergedLibrary = useMemo<VdjLibrary | null>(() => {
     if (!libraries.length) return null;
@@ -1205,23 +1198,23 @@ function Index() {
             <div className="flex flex-wrap items-center gap-3 border-t pt-3">
               <Button variant="outline" size="sm" onClick={connectAudioFolder}>
                 <Music className="mr-1 h-4 w-4" />
-                {audioFiles.size > 0
-                  ? `Music folder connected (${audioFiles.size} files)`
+                {audioIndex.files.length > 0
+                  ? `Music folder connected (${audioIndex.files.length} files)`
                   : "Connect music folder for in-app playback"}
               </Button>
-              {audioFiles.size > 0 && (
+              {audioIndex.files.length > 0 && (
                 <>
                   <span className="text-xs text-muted-foreground">{audioFolderName}</span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setAudioFiles(new Map()); setAudioFolderName(null); toast.success("Music folder disconnected"); }}
+                    onClick={() => { setAudioIndex(buildAudioIndex([])); setAudioFolderName(null); toast.success("Music folder disconnected"); }}
                   >
                     <X className="mr-1 h-4 w-4" /> Disconnect
                   </Button>
                 </>
               )}
-              {audioFiles.size === 0 && (
+              {audioIndex.files.length === 0 && (
                 <span className="text-xs text-muted-foreground">
                   Pick the folder that contains your audio files. Without this, ▶ falls back to a 30-second Apple Music preview.
                 </span>
