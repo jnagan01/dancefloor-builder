@@ -1446,10 +1446,11 @@ interface SectionViewProps {
   onToggleExclude: (key: string) => void;
   onToggleExtra: (key: string, trackIndex: number) => void;
   onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
+  onPreview?: (song: Song) => void;
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   return (
     <div className="space-y-3">
