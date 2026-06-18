@@ -53,6 +53,9 @@ import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Searc
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
+import { useServerFn } from "@tanstack/react-start";
+import { recommendSongsForSection } from "@/lib/recommend.functions";
+import { Sparkles } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Index,
