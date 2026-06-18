@@ -1427,7 +1427,7 @@ function Index() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => setPreviewTarget({ artist: t.artist, song: t.title })}
+                              onClick={() => setPreviewTarget({ artist: t.artist, song: t.title, filePath: t.filePath })}
                               title="Preview"
                             >
                               <Play className="h-4 w-4" />
