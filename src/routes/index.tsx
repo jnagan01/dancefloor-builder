@@ -157,6 +157,7 @@ function Index() {
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
   const [canDirWrite, setCanDirWrite] = useState(false);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
 
