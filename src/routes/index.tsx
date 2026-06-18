@@ -1471,15 +1471,15 @@ function SectionView(props: SectionViewProps) {
               return (
                 <Fragment key={i}>
                 <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
-                  <TableCell>{s.artist}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span>{s.artist}</span>
+                      <SourceBadge song={s} />
+                    </div>
+                  </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span>{s.song}</span>
-                      {(s as Song & { aiSuggestion?: boolean }).aiSuggestion && (
-                        <Badge variant="secondary" className="gap-1 text-[10px]">
-                          <Sparkles className="h-3 w-3" /> AI
-                        </Badge>
-                      )}
                     </div>
                   </TableCell>
                   {library && (
