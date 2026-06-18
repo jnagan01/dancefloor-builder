@@ -55,6 +55,8 @@ import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
+import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
+import { Play } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -157,6 +159,7 @@ function Index() {
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
   const [canDirWrite, setCanDirWrite] = useState(false);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
 
@@ -1324,6 +1327,7 @@ function Index() {
                       onToggleExclude={toggleExclude}
                       onToggleExtra={toggleExtraPick}
                       onOpenSearch={openSearch}
+                      onPreview={(s) => setPreviewTarget({ artist: s.artist, song: s.song })}
                     />
                   </TabsContent>
                 ))}
@@ -1365,10 +1369,20 @@ function Index() {
                           <p className="font-medium">{t.artist} — {t.title}</p>
                           <p className="truncate text-xs text-muted-foreground">{t.filePath}</p>
                         </TableCell>
-                        <TableCell className="w-20">
-                          <Button size="sm" variant="outline" onClick={() => applySearchPick(i)}>
-                            <Check className="mr-1 h-4 w-4" /> Pick
-                          </Button>
+                        <TableCell className="w-32">
+                          <div className="flex gap-1">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setPreviewTarget({ artist: t.artist, song: t.title })}
+                              title="Preview"
+                            >
+                              <Play className="h-4 w-4" />
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => applySearchPick(i)}>
+                              <Check className="mr-1 h-4 w-4" /> Pick
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -1379,6 +1393,7 @@ function Index() {
           </div>
         </DialogContent>
       </Dialog>
+      <PreviewPlayer target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} />
     </div>
   );
 }
@@ -1443,10 +1458,11 @@ interface SectionViewProps {
   onToggleExclude: (key: string) => void;
   onToggleExtra: (key: string, trackIndex: number) => void;
   onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
+  onPreview?: (song: Song) => void;
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   return (
     <div className="space-y-3">
@@ -1495,6 +1511,15 @@ function SectionView(props: SectionViewProps) {
                 <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
                   <TableCell>
                     <div className="flex items-center gap-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => onPreview?.(s)}
+                        title="Preview song"
+                      >
+                        <Play className="h-3.5 w-3.5" />
+                      </Button>
                       <span>{s.artist}</span>
                       <SourceBadge song={s as Song & { fromUpload?: boolean; aiSuggestion?: boolean }} />
                     </div>
