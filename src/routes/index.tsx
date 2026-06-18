@@ -1495,7 +1495,7 @@ function SectionView(props: SectionViewProps) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span>{s.artist}</span>
-                      <SourceBadge song={s} />
+                      <SourceBadge song={s as Song & { fromUpload?: boolean; aiSuggestion?: boolean }} />
                     </div>
                   </TableCell>
                   <TableCell>
