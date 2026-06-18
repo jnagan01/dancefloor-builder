@@ -1568,7 +1568,7 @@ function SectionView(props: SectionViewProps) {
                         size="icon"
                         variant="ghost"
                         className="h-6 w-6 shrink-0"
-                        onClick={() => onPreview?.(s)}
+                        onClick={() => onPreview?.({ artist: s.artist, song: s.song, filePath: track?.filePath })}
                         title="Preview song"
                       >
                         <Play className="h-3.5 w-3.5" />
