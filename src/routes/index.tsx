@@ -49,13 +49,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check } from "lucide-react";
-import { Toaster } from "@/components/ui/sonner";
-import { toast } from "sonner";
-import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
-import { useServerFn } from "@tanstack/react-start";
-import { recommendSongsForSection } from "@/lib/recommend.functions";
-import { Sparkles } from "lucide-react";
+import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, Sparkles, Database, HardDrive } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -603,16 +597,21 @@ function Index() {
       multiple = 0,
       missing = 0,
       excluded = 0;
-    const sourceCounts: Record<SectionKey, { uploads: number; library: number }> = {
-      warmUp: { uploads: 0, library: 0 },
-      transition: { uploads: 0, library: 0 },
-      peak: { uploads: 0, library: 0 },
+    const sourceCounts: Record<SectionKey, { uploads: number; ai: number; library: number }> = {
+      warmUp: { uploads: 0, ai: 0, library: 0 },
+      transition: { uploads: 0, ai: 0, library: 0 },
+      peak: { uploads: 0, ai: 0, library: 0 },
     };
     sections.forEach((sec) => {
       result[sec].forEach((s, i) => {
         total += 1;
-        if (s.fromUpload) sourceCounts[sec].uploads += 1;
-        else sourceCounts[sec].library += 1;
+        if ((s as Song & { aiSuggestion?: boolean }).aiSuggestion) {
+          sourceCounts[sec].ai += 1;
+        } else if (s.fromUpload) {
+          sourceCounts[sec].uploads += 1;
+        } else {
+          sourceCounts[sec].library += 1;
+        }
         const m = matches[songKey(sec, i, s)];
         if (!m) {
           missing += 1;
@@ -1253,16 +1252,26 @@ function Index() {
                           <div key={sec} className="rounded-md border bg-background p-3">
                             <p className="mb-1 font-medium">{label}</p>
                             <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">From uploads</span>
+                              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                <Upload className="h-3 w-3" /> From uploads
+                              </span>
                               <span className="font-semibold">{c.uploads}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">Added from library</span>
+                              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                <Sparkles className="h-3 w-3" /> AI suggestion
+                              </span>
+                              <span className="font-semibold">{c.ai}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                                <Database className="h-3 w-3" /> Built-in library
+                              </span>
                               <span className="font-semibold">{c.library}</span>
                             </div>
                             <div className="mt-1 border-t pt-1 flex items-center justify-between text-xs">
                               <span className="text-muted-foreground">Total</span>
-                              <span className="font-semibold">{c.uploads + c.library}</span>
+                              <span className="font-semibold">{c.uploads + c.ai + c.library}</span>
                             </div>
                             <div className="flex items-center justify-between text-xs">
                               <span className="text-muted-foreground">Target</span>
