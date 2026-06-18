@@ -1511,7 +1511,7 @@ interface SectionViewProps {
   onToggleExclude: (key: string) => void;
   onToggleExtra: (key: string, trackIndex: number) => void;
   onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
-  onPreview?: (song: Song) => void;
+  onPreview?: (target: { artist: string; song: string; filePath?: string }) => void;
 }
 
 function SectionView(props: SectionViewProps) {
