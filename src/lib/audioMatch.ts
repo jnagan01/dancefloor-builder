@@ -80,7 +80,13 @@ function splitFileName(noExt: string): { a: string; b: string } | null {
   return null;
 }
 
-export function buildAudioIndex(rawFiles: File[]): AudioIndex {
+export interface ExtraEntry {
+  file: File;
+  artist?: string;
+  title?: string;
+}
+
+export function buildAudioIndex(rawFiles: File[], extraEntries: ExtraEntry[] = []): AudioIndex {
   const files = rawFiles.filter((f) => AUDIO_EXT_RE.test(f.name));
   const idx: AudioIndex = {
     files,
@@ -121,6 +127,20 @@ export function buildAudioIndex(rawFiles: File[]): AudioIndex {
       pushMulti(idx.byTitleOnly, norm, f);
     }
   }
+  // Extra metadata entries (e.g. from a VirtualDJ library) enrich the
+  // artist/title indexes for files we already have, so matching can rely on
+  // cleaner tag-based names rather than only the filename.
+  for (const e of extraEntries) {
+    if (!AUDIO_EXT_RE.test(e.file.name)) continue;
+    const na = normalizeForMatch(e.artist || "");
+    const nt = normalizeForMatch(e.title || "");
+    if (na && nt) {
+      pushMulti(idx.byArtistTitle, `${na} ${nt}`, e.file);
+      pushMulti(idx.byArtistTitle, `${nt} ${na}`, e.file);
+    }
+    if (nt) pushMulti(idx.byTitleOnly, nt, e.file);
+    if (na) pushMulti(idx.byTitleOnly, na, e.file);
+  }
   idx.variantCount =
     idx.byBasename.size +
     idx.byBasenameNoExt.size +
@@ -129,6 +149,7 @@ export function buildAudioIndex(rawFiles: File[]): AudioIndex {
     [...idx.byTitleOnly.values()].reduce((s, arr) => s + arr.length, 0);
   return idx;
 }
+
 
 export interface ResolveQuery {
   artist?: string;
