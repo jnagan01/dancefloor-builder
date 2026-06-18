@@ -1,70 +1,37 @@
+## Goal
 
-# Workflow History + New Workflow
+Today, when a section is short, expansion only pulls from the ~50-song hardcoded list in `src/lib/songLibrary.ts`. We'll replace that fallback with **Lovable AI–generated recommendations** based on your preferences, so suggestions aren't capped by the built-in catalog. Each suggested song will appear in the list with the existing inline library search underneath, so you can pick the matching file from your own DJ library.
 
-Add two DJ-only features to the index page:
-1. **History** of previously created lists, saved to the signed-in DJ's account.
-2. **Start new workflow** button that resets the current page without a refresh (with a confirm).
+## What changes
 
-## Who can use it
+1. **New server function** `recommendSongsForSection` (`src/lib/recommend.functions.ts`)
+   - Uses Lovable AI Gateway (`google/gemini-3-flash-preview`) via the AI SDK.
+   - Inputs: section (`Warm Up` / `Transition` / `Peak`), count needed, user preferences (artists, genres, decades, notes), do-not-play list, and the artist+title of songs already in the list (to avoid duplicates).
+   - Returns structured JSON: `[{ artist, song, genre, decade, energy (1-10), danceability (1-10), reason }]`.
+   - Uses `Output.object` with a small Zod schema (keeps fields short to avoid Gemini schema limits).
 
-- Only signed-in, approved DJs (matches the planned Spotify export gating).
-- Signed-out / pending users still get the public generator but no save/history UI.
+2. **Update `generateLists` in `src/lib/danceFloor.ts`**
+   - Change the `expand` branch to be `async` and call the new server function per section that's short.
+   - Map AI results into the existing `Song` shape with `fromUpload: false`, inferred `audienceFit`, and computed `sectionScores`.
+   - Fall back to the existing built-in library padding only if the AI call fails or returns too few items (graceful degradation).
 
-## What gets saved per entry
+3. **UI in `src/routes/index.tsx`**
+   - The generate flow becomes async-aware (loading state already exists for generation; extend it to cover the AI call).
+   - AI-suggested rows render exactly like library-padded rows today (artist/song/section/scores) and already get the inline top-10 library search beneath them — no separate UI needed. Add a small "AI suggestion" badge so you can tell them apart.
 
-- A **name/label** the DJ types when saving (default suggestion: "Workflow — <date>").
-- The three generated lists (Warm Up, Transition, Peak).
-- The inputs that produced them: uploaded songs, preferences (artists, genres, decades, notes, do-not-play), hours, and the expand toggle.
-- `created_at` timestamp.
-
-## Database (one migration)
-
-New table `public.workflow_history`:
-
-- `id uuid pk`
-- `user_id uuid` → `auth.users` (cascade)
-- `name text not null`
-- `inputs jsonb not null` — uploaded songs + preferences + hours + expand
-- `lists jsonb not null` — `{ warmUp, transition, peak }`
-- `created_at`, `updated_at`
-
-RLS: owner-only SELECT/INSERT/UPDATE/DELETE scoped to `auth.uid() = user_id`; admins SELECT all. Standard GRANTs to `authenticated` + `service_role`. `updated_at` trigger using existing `update_updated_at_column()`.
-
-## UI changes (index page only)
-
-Header area (when signed in as approved DJ):
-
-- **"Save to history"** button — appears once lists are generated. Opens a small dialog: name field (prefilled), Save / Cancel.
-- **"History"** button — opens a side sheet listing past entries (name, date, song counts). Each row has:
-  - **Load** — restores inputs + lists into the page state (replaces current).
-  - **Rename** / **Delete**.
-- **"Start new workflow"** button — always visible. Opens a confirm dialog with:
-  - "Save current workflow first?" (only if there's unsaved work) → Save + Reset, Reset without saving, Cancel.
-
-Signed-out users see a small "Sign in to save history" hint instead of the buttons. No redirect; the existing public flow is untouched.
-
-## Server functions (`src/lib/history.functions.ts`)
-
-All use `requireSupabaseAuth` + gate on `is_dj_approved(userId)`:
-
-- `listWorkflows()` → `{ id, name, created_at, counts }[]`
-- `getWorkflow(id)` → full entry (inputs + lists)
-- `saveWorkflow({ name, inputs, lists })` → new id
-- `renameWorkflow({ id, name })`
-- `deleteWorkflow(id)`
-
-## State reset ("Start new workflow")
-
-A single `resetWorkflow()` function in `Index` clears: uploaded songs, generated result, preferences, do-not-play, hours, expand toggle, and any transient UI state (dialogs, search). No page reload, no route change. Triggered from the confirm dialog above.
+4. **Errors surfaced to UI**
+   - 429 → "AI is busy, try again in a moment."
+   - 402 → "Out of AI credits — add credits in Workspace settings."
+   - Any other failure → silent fallback to built-in library padding, with a toast noting AI was unavailable.
 
 ## Out of scope
 
-- No changes to generation logic, Virtual DJ matching, or the planned Spotify export.
-- No public/anonymous history (per the choice "Per signed-in DJ (cloud)").
+- No new tables; suggestions are not persisted separately (saved history already captures the final lists).
+- No auto-matching to your uploaded library — you still click "Pick" in the inline search to attach a file.
+- No change to the scoring/section-fit algorithm for uploaded songs.
 
 ## Technical notes
 
-- `inputs`/`lists` stored as `jsonb` to keep the schema flexible as the generator evolves.
-- `saveWorkflow` validates payload with Zod (artist/song string caps, max song counts) to keep row size bounded.
-- History sheet uses existing `Sheet` + `Table` shadcn components; no new dependencies.
-- Loading an entry routes through the same state setters the generator already uses, so the UI re-renders identically to a fresh generation.
+- Server function lives in `src/lib/recommend.functions.ts` (client-safe path), reads `LOVABLE_API_KEY` from `process.env` inside `.handler()`.
+- Provider helper: new `src/lib/ai-gateway.server.ts` using `createLovableAiGatewayProvider` from the gateway pattern.
+- `generateLists` becomes `async`; callers in `src/routes/index.tsx` already `await` it (verify and adjust). Tests in `tests/danceFloor.*` will be updated to either mock the recommender or assert behavior with `expand: false` / AI disabled.
