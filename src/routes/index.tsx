@@ -55,6 +55,8 @@ import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
+import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
+import { Play } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Index,
