@@ -50,6 +50,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, Sparkles, Database, HardDrive } from "lucide-react";
+import { Toaster } from "@/components/ui/sonner";
+import { toast } from "sonner";
+import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
+import { useServerFn } from "@tanstack/react-start";
+import { recommendSongsForSection } from "@/lib/recommend.functions";
 
 export const Route = createFileRoute("/")({
   component: Index,
