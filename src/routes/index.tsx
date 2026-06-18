@@ -1220,7 +1220,14 @@ function Index() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setAudioIndex(buildAudioIndex([])); setAudioFolderName(null); toast.success("Music folder disconnected"); }}
+                    onClick={rebuildAudioIndex}
+                  >
+                    <RefreshCw className="mr-1 h-4 w-4" /> Rebuild index
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setAudioIndex(buildAudioIndex([])); setRawAudioFiles([]); setAudioFolderName(null); toast.success("Music folder disconnected"); }}
                   >
                     <X className="mr-1 h-4 w-4" /> Disconnect
                   </Button>
