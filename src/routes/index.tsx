@@ -1458,7 +1458,16 @@ function SectionView(props: SectionViewProps) {
                 <Fragment key={i}>
                 <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
                   <TableCell>{s.artist}</TableCell>
-                  <TableCell>{s.song}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span>{s.song}</span>
+                      {(s as Song & { aiSuggestion?: boolean }).aiSuggestion && (
+                        <Badge variant="secondary" className="gap-1 text-[10px]">
+                          <Sparkles className="h-3 w-3" /> AI
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   {library && (
                     <>
                       <TableCell>{m ? statusBadge(m.status) : statusBadge("Missing From Library")}</TableCell>
