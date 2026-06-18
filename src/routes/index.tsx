@@ -1198,23 +1198,23 @@ function Index() {
             <div className="flex flex-wrap items-center gap-3 border-t pt-3">
               <Button variant="outline" size="sm" onClick={connectAudioFolder}>
                 <Music className="mr-1 h-4 w-4" />
-                {audioFiles.size > 0
-                  ? `Music folder connected (${audioFiles.size} files)`
+                {audioIndex.files.length > 0
+                  ? `Music folder connected (${audioIndex.files.length} files)`
                   : "Connect music folder for in-app playback"}
               </Button>
-              {audioFiles.size > 0 && (
+              {audioIndex.files.length > 0 && (
                 <>
                   <span className="text-xs text-muted-foreground">{audioFolderName}</span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { setAudioFiles(new Map()); setAudioFolderName(null); toast.success("Music folder disconnected"); }}
+                    onClick={() => { setAudioIndex(buildAudioIndex([])); setAudioFolderName(null); toast.success("Music folder disconnected"); }}
                   >
                     <X className="mr-1 h-4 w-4" /> Disconnect
                   </Button>
                 </>
               )}
-              {audioFiles.size === 0 && (
+              {audioIndex.files.length === 0 && (
                 <span className="text-xs text-muted-foreground">
                   Pick the folder that contains your audio files. Without this, ▶ falls back to a 30-second Apple Music preview.
                 </span>
