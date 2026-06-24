@@ -1628,33 +1628,35 @@ type BadgeSong = Song & {
   valence?: number;
 };
 
-function MetricsChip({ song }: { song: BadgeSong }) {
+function MetricsDetail({ song }: { song: BadgeSong }) {
   const hasAny =
     typeof song.energy === "number" ||
     typeof song.danceability === "number" ||
     typeof song.popularity === "number" ||
     typeof song.valence === "number";
-  if (!hasAny) return null;
+  if (!hasAny) return <span className="text-xs text-muted-foreground">No metrics available</span>;
   const fmt = (n?: number) => (typeof n === "number" ? n.toFixed(1).replace(/\.0$/, "") : "—");
   const intensity =
     typeof song.energy === "number" && typeof song.danceability === "number"
       ? ((song.energy + song.danceability) / 2).toFixed(1)
       : null;
-  const lines = [
-    `Energy: ${fmt(song.energy)}/10`,
-    `Danceability: ${fmt(song.danceability)}/10`,
-    `Popularity: ${fmt(song.popularity)}/10`,
-    `Valence: ${fmt(song.valence)}/10`,
-    intensity ? `Intensity (avg): ${intensity}/10` : null,
-    song.aiReason ? `AI: ${song.aiReason}` : null,
-  ].filter(Boolean) as string[];
+  const items = [
+    { label: "Energy", value: fmt(song.energy) },
+    { label: "Danceability", value: fmt(song.danceability) },
+    { label: "Popularity", value: fmt(song.popularity) },
+    { label: "Valence", value: fmt(song.valence) },
+    intensity ? { label: "Intensity (avg)", value: intensity } : null,
+    song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
+  ].filter(Boolean) as { label: string; value: string }[];
   return (
-    <span
-      className="cursor-help rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700"
-      title={lines.join("\n")}
-    >
-      E{fmt(song.energy)} · D{fmt(song.danceability)}
-    </span>
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-center gap-1 text-xs">
+          <span className="text-muted-foreground">{item.label}:</span>
+          <span className="font-medium tabular-nums">{item.value}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
