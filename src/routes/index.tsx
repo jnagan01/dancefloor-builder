@@ -60,7 +60,7 @@ import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
-import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite } from "@/lib/dirHandleStore";
+import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
@@ -164,6 +164,7 @@ function Index() {
   const [matches, setMatches] = useState<Record<string, SongMatch>>({});
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [vdjDirName, setVdjDirName] = useState<string | null>(null);
+  const [vdjDirSavedAt, setVdjDirSavedAt] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
@@ -594,7 +595,9 @@ function Index() {
     let cancelled = false;
     (async () => {
       const handle = await loadDirHandle(VDJ_DIR_KEY);
+      const meta = await loadDirHandleMeta(VDJ_DIR_KEY);
       if (cancelled || !handle) return;
+      if (meta) setVdjDirSavedAt(meta.savedAt);
       const ok = await verifyReadWrite(handle);
       if (cancelled) return;
       if (ok) {
