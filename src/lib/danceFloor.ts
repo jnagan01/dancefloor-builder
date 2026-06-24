@@ -342,6 +342,13 @@ export interface GenerationResult {
   perSectionTarget: number;
   perSectionBase: number;
   shortfall: { warmUp: number; transition: number; peak: number; total: number };
+  /**
+   * Shortfall measured AFTER expansion / AI / rebalance — i.e. how many
+   * songs each section is still missing once we've also fallen back to
+   * borrowing from neighbours to keep the energy ramp continuous.
+   * Populated by `reorderForEnergyProgression`.
+   */
+  finalShortfall?: { warmUp: number; transition: number; peak: number; total: number };
   duplicatesRemoved: number;
   blockedCount: number;
 }
