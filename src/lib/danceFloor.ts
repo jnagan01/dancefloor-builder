@@ -538,9 +538,33 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
   const warmEnd = Math.min(warmCount, n);
   const peakStart = Math.max(warmEnd, n - peakCount);
 
-  const warmUp = sorted.slice(0, warmEnd);
-  const transition = sorted.slice(warmEnd, peakStart);
-  const peak = sorted.slice(peakStart);
+  const warmUpRaw = sorted.slice(0, warmEnd);
+  const transitionRaw = sorted.slice(warmEnd, peakStart);
+  const peakRaw = sorted.slice(peakStart);
+
+  // Tag songs whose natural intensity band does not match the section they
+  // ended up in — these were "stretched" to keep the ramp continuous.
+  const tag = (list: ResultSong[], assigned: Section): ResultSong[] =>
+    list.map((s) => {
+      const natural = sectionForIntensity(intensityOf(s));
+      return natural === assigned
+        ? { ...s, stretched: false, naturalSection: natural }
+        : { ...s, stretched: true, naturalSection: natural };
+    });
+
+  const warmUp = tag(warmUpRaw, "Warm Up");
+  const transition = tag(transitionRaw, "Transition");
+  const peak = tag(peakRaw, "Peak");
+
+  // Flag duplicates (same artist+song appearing in more than one slot) as
+  // reused — the ramp borrowed a song to plug a shortfall.
+  const counts = new Map<string, number>();
+  [...warmUp, ...transition, ...peak].forEach((s) => {
+    const k = dedupeKey(s.artist, s.song);
+    counts.set(k, (counts.get(k) ?? 0) + 1);
+  });
+  const markReused = (list: ResultSong[]): ResultSong[] =>
+    list.map((s) => ((counts.get(dedupeKey(s.artist, s.song)) ?? 0) > 1 ? { ...s, reused: true } : s));
 
   const finalShortfall = {
     warmUp: Math.max(0, target - warmUp.length),
@@ -552,9 +576,9 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
 
   return {
     ...result,
-    warmUp,
-    transition,
-    peak,
+    warmUp: markReused(warmUp),
+    transition: markReused(transition),
+    peak: markReused(peak),
     finalShortfall,
   };
 }
