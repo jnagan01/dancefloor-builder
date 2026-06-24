@@ -684,6 +684,71 @@ function Index() {
     setSearchQuery("");
   }
 
+  function pickLocalFileForMatch(key: string, file: File) {
+    if (!/\.(mp3|m4a|wav|flac|ogg|aac|aif{1,2}|wma|opus|alac)$/i.test(file.name)) {
+      toast.error("Unsupported audio file type");
+      return;
+    }
+    const MANUAL_NAME = "Manually picked files";
+    const existing = audioSources.find((s) => s.name === MANUAL_NAME);
+    let newLibs: VdjLibrary[];
+    let newSources: AudioSource[];
+    let newSrcLabels: string[];
+    if (existing) {
+      // Skip if already present
+      if (existing.files.some((f) => f.name === file.name && f.size === file.size)) {
+        // still re-pick it
+      }
+      const manualFiles = existing.files.some((f) => f.name === file.name && f.size === file.size)
+        ? existing.files
+        : [...existing.files, file];
+      const tracks = tracksFromAudioFiles(manualFiles);
+      const manualLib = buildLibrary(tracks);
+      const manualIdx = existing.libraryIndex;
+      newLibs = libraries.map((l, i) => (i === manualIdx ? manualLib : l));
+      newSrcLabels = librarySources.map((s, i) =>
+        i === manualIdx ? `${MANUAL_NAME} (${tracks.length} files)` : s,
+      );
+      newSources = audioSources.map((s) =>
+        s.id === existing.id ? { ...s, files: manualFiles } : s,
+      );
+    } else {
+      const manualFiles = [file];
+      const tracks = tracksFromAudioFiles(manualFiles);
+      const manualLib = buildLibrary(tracks);
+      const manualIdx = libraries.length;
+      newLibs = [...libraries, manualLib];
+      newSrcLabels = [...librarySources, `${MANUAL_NAME} (${tracks.length} files)`];
+      newSources = [
+        ...audioSources,
+        {
+          id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          kind: "folder",
+          name: MANUAL_NAME,
+          files: manualFiles,
+          libraryIndex: manualIdx,
+        },
+      ];
+    }
+    setLibraries(newLibs);
+    setLibrarySources(newSrcLabels);
+    setAudioSources(newSources);
+    const merged = mergeLibraries(newLibs);
+    const newIdx = merged.tracks.findIndex((t) => t.filePath === file.name);
+    if (newIdx === -1) {
+      toast.error("Could not add file to library");
+      return;
+    }
+    updateMatch(key, {
+      status: "Manually Matched",
+      confidence: 1,
+      trackIndex: newIdx,
+      alternatives: [],
+      extraTrackIndices: [],
+    });
+    toast.success(`Matched → ${file.name}`);
+  }
+
   // --- Export helpers ---
 
   function getSectionRefs(section: SectionKey): ExportSongRef[] {
@@ -1606,7 +1671,8 @@ function Index() {
                       onMarkUnresolved={markUnresolved}
                       onToggleExclude={toggleExclude}
                       onToggleExtra={toggleExtraPick}
-                      onOpenSearch={openSearch}
+                     onOpenSearch={openSearch}
+                     onPickLocalFile={pickLocalFileForMatch}
                       onPreview={(t) => setPreviewTarget(t)}
                     />
                   </TabsContent>
@@ -1808,11 +1874,12 @@ interface SectionViewProps {
   onToggleExclude: (key: string) => void;
   onToggleExtra: (key: string, trackIndex: number) => void;
   onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
+  onPickLocalFile?: (key: string, file: File) => void;
   onPreview?: (target: { artist: string; song: string; filePath?: string }) => void;
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (key: string) => {
@@ -1953,6 +2020,7 @@ function SectionView(props: SectionViewProps) {
                         onPick={(ti) => onChoose(key, ti)}
                         onToggleExtra={(ti) => onToggleExtra(key, ti)}
                         onPreview={onPreview}
+                        onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
                       />
                     </TableCell>
                   </TableRow>
@@ -1975,6 +2043,7 @@ function InlineMatchSearch({
   onPick,
   onToggleExtra,
   onPreview,
+  onPickLocalFile,
 }: {
   song: Song;
   library: VdjLibrary;
@@ -1983,7 +2052,9 @@ function InlineMatchSearch({
   onPick: (trackIndex: number) => void;
   onToggleExtra: (trackIndex: number) => void;
   onPreview?: (target: { artist: string; song: string; filePath?: string }) => void;
+  onPickLocalFile?: (file: File) => void;
 }) {
+  const localFileRef = useRef<HTMLInputElement>(null);
   const defaultQuery = `${song.artist} ${song.song}`.trim();
   const [query, setQuery] = useState(defaultQuery);
   const [showAll, setShowAll] = useState(false);
@@ -2014,6 +2085,31 @@ function InlineMatchSearch({
             Reset
           </Button>
         )}
+        {onPickLocalFile && (
+          <>
+            <input
+              ref={localFileRef}
+              type="file"
+              accept="audio/*,.mp3,.m4a,.wav,.flac,.ogg,.aac,.aif,.aiff,.wma,.opus,.alac"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onPickLocalFile(f);
+                if (localFileRef.current) localFileRef.current.value = "";
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 px-2 text-xs"
+              onClick={() => localFileRef.current?.click()}
+              title="Pick an audio file from your computer"
+            >
+              <FolderOpen className="mr-1 h-3 w-3" />
+              Browse local file
+            </Button>
+          </>
+        )}
         {totalSelected > 1 && (
           <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
             {totalSelected} selected
@@ -2022,7 +2118,7 @@ function InlineMatchSearch({
       </div>
       {results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No matches in library. Try editing the search above (artist, title, or part of the file name).
+          No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Browse local file to pick one from your computer" : ""}.
         </p>
       ) : (
         <>
