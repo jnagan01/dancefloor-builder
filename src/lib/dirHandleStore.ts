@@ -7,11 +7,12 @@ const STORE = "handles";
 const DB_VERSION = 1;
 
 // Loose handle type so this file stays usable outside DOM-typed contexts.
-type AnyHandle = {
+export interface AnyHandle {
   name?: string;
   queryPermission?: (opts: { mode: "read" | "readwrite" }) => Promise<PermissionState>;
   requestPermission?: (opts: { mode: "read" | "readwrite" }) => Promise<PermissionState>;
-};
+  [k: string]: unknown;
+}
 
 function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
