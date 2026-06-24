@@ -1439,7 +1439,7 @@ function Index() {
                 Without a folder, ▶ falls back to a 30-second Apple Music preview.
               </p>
             )}
-            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3">
+            <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 sm:flex-row sm:flex-wrap sm:items-center">
               <div className="flex min-w-0 flex-1 flex-col">
                 <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   VirtualDJ export folder
