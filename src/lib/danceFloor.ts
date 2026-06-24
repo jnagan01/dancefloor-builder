@@ -511,25 +511,43 @@ export function generateLists(input: GenerationInput): GenerationResult {
  * picks are interleaved into a single ascending energy ramp.
  */
 export function reorderForEnergyProgression(result: GenerationResult): GenerationResult {
+  const target = result.perSectionTarget;
   const all: ResultSong[] = [
     ...result.warmUp.map((s) => ({ ...s })),
     ...result.transition.map((s) => ({ ...s })),
     ...result.peak.map((s) => ({ ...s })),
   ];
-  const warmUp: ResultSong[] = [];
-  const transition: ResultSong[] = [];
-  const peak: ResultSong[] = [];
-  for (const s of all) {
-    const sec = sectionForIntensity(intensityOf(s));
-    if (sec === "Warm Up") warmUp.push(s);
-    else if (sec === "Transition") transition.push(s);
-    else peak.push(s);
-  }
+  const sorted = sortByIntensity(all);
+  const n = sorted.length;
+
+  // Ideal split: lowest `target` → Warm Up, next `target` → Transition,
+  // last `target` → Peak. When supply is short we proportionally allocate
+  // (~⅓ each) so each section still has the relatively-lowest or
+  // relatively-highest songs, and we never silently empty a section.
+  const warmCount = Math.min(target, Math.max(1, Math.ceil(n / 3)));
+  const peakCount = Math.min(target, Math.max(1, Math.ceil(n / 3)));
+  // Guard against overlap when n < warmCount + peakCount (very small sets).
+  const warmEnd = Math.min(warmCount, n);
+  const peakStart = Math.max(warmEnd, n - peakCount);
+
+  const warmUp = sorted.slice(0, warmEnd);
+  const transition = sorted.slice(warmEnd, peakStart);
+  const peak = sorted.slice(peakStart);
+
+  const finalShortfall = {
+    warmUp: Math.max(0, target - warmUp.length),
+    transition: Math.max(0, target - transition.length),
+    peak: Math.max(0, target - peak.length),
+    total: 0,
+  };
+  finalShortfall.total = finalShortfall.warmUp + finalShortfall.transition + finalShortfall.peak;
+
   return {
     ...result,
-    warmUp: sortByIntensity(warmUp),
-    transition: sortByIntensity(transition),
-    peak: sortByIntensity(peak),
+    warmUp,
+    transition,
+    peak,
+    finalShortfall,
   };
 }
 
