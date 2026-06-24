@@ -1871,6 +1871,13 @@ function SectionView(props: SectionViewProps) {
                     </>
                   )}
                 </TableRow>
+                {expanded.has(key) && (
+                  <TableRow className="bg-muted/20 hover:bg-muted/20">
+                    <TableCell colSpan={library ? 8 : 2} className="py-2">
+                      <MetricsDetail song={s as BadgeSong} />
+                    </TableCell>
+                  </TableRow>
+                )}
                 {library && (
                   <TableRow className="bg-muted/30 hover:bg-muted/30">
                     <TableCell colSpan={8} className="py-2">
