@@ -50,7 +50,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, Sparkles, Database, HardDrive, RefreshCw } from "lucide-react";
+import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, Sparkles, Database, HardDrive, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
