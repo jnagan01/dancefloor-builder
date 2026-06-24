@@ -23,6 +23,7 @@ import {
 import {
   parseVdjDatabaseXml,
   buildLibrary,
+  tracksFromAudioFiles,
   mergeLibraries,
   matchSong,
   searchLibrary,
