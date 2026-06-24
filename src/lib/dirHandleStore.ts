@@ -65,6 +65,49 @@ export async function clearDirHandle(key: string): Promise<void> {
   db.close();
 }
 
+interface DirMeta {
+  savedAt: number;
+}
+
+export async function saveDirHandleMeta(key: string, meta: DirMeta): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(meta, `${key}:meta`);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+    tx.onabort = () => resolve();
+  });
+  db.close();
+}
+
+export async function loadDirHandleMeta(key: string): Promise<DirMeta | null> {
+  const db = await openDb();
+  if (!db) return null;
+  const result = await new Promise<DirMeta | null>((resolve) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).get(`${key}:meta`);
+    req.onsuccess = () => resolve((req.result as DirMeta) ?? null);
+    req.onerror = () => resolve(null);
+  });
+  db.close();
+  return result;
+}
+
+export async function clearDirHandleMeta(key: string): Promise<void> {
+  const db = await openDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(`${key}:meta`);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => resolve();
+    tx.onabort = () => resolve();
+  });
+  db.close();
+}
+
 /**
  * Ensure we still have readwrite permission. Returns true if permission was
  * already granted or successfully re-requested.

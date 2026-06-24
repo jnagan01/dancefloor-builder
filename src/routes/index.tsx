@@ -60,7 +60,7 @@ import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
-import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite } from "@/lib/dirHandleStore";
+import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
@@ -79,6 +79,11 @@ export const Route = createFileRoute("/")({
 });
 
 const DECADES = ["1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
+
+function formatSavedAt(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
 
 function toKebabCase(str: string): string {
   return str
@@ -164,6 +169,7 @@ function Index() {
   const [matches, setMatches] = useState<Record<string, SongMatch>>({});
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [vdjDirName, setVdjDirName] = useState<string | null>(null);
+  const [vdjDirSavedAt, setVdjDirSavedAt] = useState<number | null>(null);
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
@@ -594,7 +600,9 @@ function Index() {
     let cancelled = false;
     (async () => {
       const handle = await loadDirHandle(VDJ_DIR_KEY);
+      const meta = await loadDirHandleMeta(VDJ_DIR_KEY);
       if (cancelled || !handle) return;
+      if (meta) setVdjDirSavedAt(meta.savedAt);
       const ok = await verifyReadWrite(handle);
       if (cancelled) return;
       if (ok) {
@@ -620,7 +628,10 @@ function Index() {
       setVdjDirHandle(handle);
       const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
       setVdjDirName(name);
+      const now = Date.now();
+      setVdjDirSavedAt(now);
       await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
+      await saveDirHandleMeta(VDJ_DIR_KEY, { savedAt: now });
       toast.success(`VirtualDJ folder saved · ${name}`);
     }
   }
@@ -628,7 +639,9 @@ function Index() {
   function clearMyListsFolder() {
     setVdjDirHandle(null);
     setVdjDirName(null);
+    setVdjDirSavedAt(null);
     void clearDirHandle(VDJ_DIR_KEY);
+    void clearDirHandleMeta(VDJ_DIR_KEY);
     toast.success("VirtualDJ folder unlinked");
   }
 
@@ -645,7 +658,10 @@ function Index() {
     setVdjDirHandle(handle);
     const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
     setVdjDirName(name);
+    const now = Date.now();
+    setVdjDirSavedAt(now);
     await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
+    await saveDirHandleMeta(VDJ_DIR_KEY, { savedAt: now });
     toast.success(`VirtualDJ folder saved · ${name}`);
     return handle;
   }
@@ -1387,7 +1403,10 @@ function Index() {
                 {vdjDirHandle ? (
                   <span className="flex flex-wrap items-center gap-2 text-sm">
                     <Check className="h-4 w-4 text-emerald-500" />
-                    Saved · <span className="font-medium truncate">{vdjDirName}</span>
+                    <span className="font-medium truncate">{vdjDirName}</span>
+                    {vdjDirSavedAt ? (
+                      <span className="text-xs text-muted-foreground">· Saved {formatSavedAt(vdjDirSavedAt)}</span>
+                    ) : null}
                     <Badge variant="secondary" className="text-xs">remembered this session</Badge>
                   </span>
                 ) : (
