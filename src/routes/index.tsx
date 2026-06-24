@@ -340,7 +340,7 @@ function Index() {
     };
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
-    const r = generateLists({
+    let r = generateLists({
       uploaded: uniqueSongs,
       hours: hoursNum,
       expand: false,
