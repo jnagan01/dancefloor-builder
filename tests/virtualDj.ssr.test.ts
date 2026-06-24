@@ -46,6 +46,22 @@ assert(xml.includes("<VirtualFolder"), "buildVirtualDjXml emits VirtualFolder");
 const m3u = mod.buildM3u([item], merged);
 assert(m3u.includes("/music/"), `buildM3u emits path: ${m3u}`);
 
+// 1b. Building a library from raw audio files (no XML) must work and match.
+const folderTracks = mod.tracksFromAudioFiles([
+  { name: "Foo Bar - Hello World.mp3", size: 100, webkitRelativePath: "music/Foo Bar - Hello World.mp3" },
+  { name: "notes.txt", size: 1 },
+]);
+assert(folderTracks.length === 1, `tracksFromAudioFiles filters non-audio: ${folderTracks.length}`);
+assert(folderTracks[0].artist === "Foo Bar" && folderTracks[0].title === "Hello World", "filename parsed to artist/title");
+const folderLib = mod.buildLibrary(folderTracks);
+const fMatch = mod.matchSong({ artist: "Foo Bar", song: "Hello World" }, folderLib);
+assert(fMatch.trackIndex === 0, `folder-derived library matches: ${fMatch.status}`);
+const fXml = mod.buildVirtualDjXml(
+  [{ artist: "Foo Bar", song: "Hello World", match: fMatch } as Parameters<typeof mod.buildVirtualDjXml>[0][number]],
+  folderLib,
+);
+assert(fXml.includes("<song "), `folder export emits <song>: ${fXml}`);
+
 // 2. Feature-detect helpers must return false (not throw) without a window.
 assert(mod.supportsDirectoryWrite() === false, "supportsDirectoryWrite returns false on server");
 
