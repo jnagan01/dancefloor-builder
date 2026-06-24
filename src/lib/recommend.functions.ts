@@ -41,6 +41,7 @@ const SuggestionSchema = z.object({
 export type RecommendedSong = z.infer<typeof SuggestionSchema>["suggestions"][number];
 
 export const recommendSongsForSection = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => InputSchema.parse(data))
   .handler(async ({ data }) => {
     const key = process.env.LOVABLE_API_KEY;
