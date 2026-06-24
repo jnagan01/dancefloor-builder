@@ -332,6 +332,14 @@ export interface ResultSong extends Song {
   danceability?: number;
   popularity?: number;
   valence?: number;
+  /** Set when the song's natural intensity band differs from the section it
+   * was placed in — i.e. it was stretched to keep the ramp continuous. */
+  stretched?: boolean;
+  /** Natural intensity-based section, used to explain the stretch. */
+  naturalSection?: Section;
+  /** Set when the same artist+song appears more than once across the result
+   * (reused to fill a shortfall). */
+  reused?: boolean;
 }
 
 export interface GenerationResult {
