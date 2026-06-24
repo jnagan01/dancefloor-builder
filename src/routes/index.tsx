@@ -2085,6 +2085,31 @@ function InlineMatchSearch({
             Reset
           </Button>
         )}
+        {onPickLocalFile && (
+          <>
+            <input
+              ref={localFileRef}
+              type="file"
+              accept="audio/*,.mp3,.m4a,.wav,.flac,.ogg,.aac,.aif,.aiff,.wma,.opus,.alac"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onPickLocalFile(f);
+                if (localFileRef.current) localFileRef.current.value = "";
+              }}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 shrink-0 px-2 text-xs"
+              onClick={() => localFileRef.current?.click()}
+              title="Pick an audio file from your computer"
+            >
+              <FolderOpen className="mr-1 h-3 w-3" />
+              Browse local file
+            </Button>
+          </>
+        )}
         {totalSelected > 1 && (
           <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
             {totalSelected} selected
@@ -2093,7 +2118,7 @@ function InlineMatchSearch({
       </div>
       {results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No matches in library. Try editing the search above (artist, title, or part of the file name).
+          No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Browse local file to pick one from your computer" : ""}.
         </p>
       ) : (
         <>
