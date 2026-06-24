@@ -1,61 +1,49 @@
-## Goals
+# Smarter AI recommendations + energy progression
 
-1. Let the user connect **multiple music sources** for matching/preview — any number of local folders, plus tracks already loaded from VirtualDJ `database.xml` libraries (when those file paths are reachable as local files).
-2. Make the **VirtualDJ "My Lists" export folder** explicitly changeable: show the linked folder, a "Change folder" button, and a "Clear" button.
+Two related improvements to how songs get suggested and ordered.
 
-## 1. Multiple music sources
+## 1. AI uses danceability, energy, popularity & valence
 
-### Data model (src/routes/index.tsx)
+Today `recommendSongsForSection` (in `src/lib/recommend.functions.ts`) only asks the model for `energy` and `danceability` (1–10). Popularity and valence aren't requested or used.
 
-Replace single-folder state with a list:
+Changes:
+- Extend the output schema so every suggestion includes:
+  - `energy` (1–10)
+  - `danceability` (1–10)
+  - `popularity` (1–10 — how widely recognized / crowd‑pleasing)
+  - `valence` (1–10 — musical positivity / "feel‑good")
+- Update the prompt to:
+  - Tell the model to **score every track on all four signals** and use them as the primary basis for the recommendation.
+  - Explicitly say suggestions do **not** need to come from any built‑in library — any real released song that fits is fair game (this preserves current behavior but makes it explicit so the model doesn't bias toward famous mainstream picks).
+  - Define per‑section targets in terms of those signals:
+    - Warm Up → lower energy (≈3–6) + mid danceability + high popularity (singalongs) + warm/positive valence
+    - Transition → mid‑to‑high energy (≈6–8) + high danceability + high popularity
+    - Peak → high energy (≈8–10) + high danceability + high‑to‑euphoric valence
+- Surface the new fields back to the caller (returned from the server function) so the client can use them for ordering.
 
-```ts
-type AudioSource =
-  | { id: string; kind: "folder"; name: string; files: File[] }
-  | { id: string; kind: "vdj"; name: string; libraryIndex: number };
+## 2. Section assignment + intra‑section ordering = constant energy ramp
 
-const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
-```
+Right now uploaded songs are bucketed by `estimateEnergy` / `bestSection`, and within each section the order is just insertion order. The user wants a smooth ramp from the very first Warm Up song to the very last Peak song.
 
-`audioIndex` becomes derived: rebuild from the union of all `folder` source files plus any `vdj` source whose tracks have a matching `File` (vdj source is opportunistic — included only when the VirtualDJ library entries can be resolved to actual `File` objects from a connected folder; otherwise it stays as metadata-only and contributes nothing to playback). Memoize the rebuild on `audioSources` changes.
+Changes in `src/lib/danceFloor.ts`:
+- **Bucketing rule (deterministic, matches the user's ask):** combine energy + danceability into a single "intensity" score = `(energy + danceability) / 2`. Lowest third → Warm Up, middle third → Transition, top third → Peak. The existing soft‑rebalance pass is replaced by this rank‑based split so a song's section always reflects its scores.
+  - Library songs keep their hand‑curated section only if it doesn't contradict their scores by more than 1 bucket; otherwise the score wins.
+- **Ordering inside each section:** sort by intensity ascending. Warm Up starts at the lowest score in the set; Peak ends at the highest. Ties broken by `popularity` (less‑known first) so the most familiar bangers land late.
+- **Cross‑section continuity:** after sorting each bucket, nudge the last 1–2 songs of Warm Up to be ≤ the first song of Transition, and same for Transition → Peak, by swapping with the next‑closest neighbor when there's a discontinuity. Result: monotonic non‑decreasing energy from song #1 to the final song.
+- AI‑suggested songs returned from `recommendSongsForSection` flow through the same scoring/sorting path so uploads and AI picks are interleaved by intensity, not segregated.
 
-### `src/lib/audioMatch.ts`
+## Technical details
 
-- Add optional `extraEntries?: { path: string; basename: string; file: File }[]` parameter to `buildAudioIndex` so VirtualDJ-derived entries (when a `File` is available) can be folded into the same indexes (`byBasename`, `byNormBasename`, `byArtistTitle`, `byTitleOnly`).
-- No change to `resolveAudioFile` lookup semantics.
+Files touched:
+- `src/lib/recommend.functions.ts` — schema + prompt (adds `popularity`, `valence`; rewrites section guidance around the 4 signals).
+- `src/lib/danceFloor.ts` — new `intensityOf()` helper, rank‑based section split, sort‑and‑smooth pass; `ScoredSong` gains optional `popularity` and `valence`.
+- `src/routes/index.tsx` — when merging AI suggestions into buckets, pass `popularity`/`valence` through so sorting uses them. No UI copy changes unless you want a small "sorted by energy ramp" note under each section header (happy to add — say the word).
 
-### UI changes
+Tests:
+- Extend `tests/danceFloor.sectionFit.test.ts` with cases asserting: (a) lowest‑intensity uploaded song ends up in Warm Up, (b) each section's output is sorted ascending by intensity, (c) last(WarmUp).intensity ≤ first(Transition).intensity ≤ … ≤ last(Peak).intensity.
 
-Replace the single "Connected …" row with a **Music sources** card:
+## Out of scope (ask if you want them)
 
-- Header: "Music sources" + buttons `Add folder`, `Add from VirtualDJ library` (only enabled when a parsed VirtualDJ library exists and is resolvable), `Rebuild index`.
-- List of connected sources, each row showing: name, file count, `Remove` button.
-- Footer: combined stats — `N files · M indexed variants across K sources`.
-
-Behavior:
-- `Add folder` → existing `pickDirectoryFiles()`, append new `folder` source (dedupe by folder name + size signature).
-- `Remove` → drop source, rebuild index, clear stale `resolveCache` entry.
-- `Rebuild index` → keep the button; rebuilds the combined index from all current sources.
-
-`resolveLocalFile` continues to consume the combined `audioIndex`; the `PreviewPlayer` requires no changes.
-
-## 2. Changeable VirtualDJ export folder
-
-In the existing "Save to VirtualDJ My Lists" row (around line 1200):
-
-- When unlinked: button `Choose VirtualDJ My Lists folder`.
-- When linked: show the folder name (from the `DirectoryHandle.name` — store it alongside the handle in a new `vdjDirName` state) plus two ghost buttons: `Change folder` (re-runs `pickDirectoryHandle`) and `Clear` (resets handle + name).
-- Disabled state + helper text preserved when `!canDirWrite`.
-
-Small helper update in `src/lib/virtualDj.ts`: `pickDirectoryHandle()` already returns the handle; the route code reads `handle.name` directly (the `DirHandleLike` type in `index.tsx` gains an optional `name?: string`).
-
-## Files touched
-
-- `src/routes/index.tsx` — new `audioSources` state, derived `audioIndex`, sources UI, export-folder UI with Change/Clear.
-- `src/lib/audioMatch.ts` — accept extra pre-resolved entries in `buildAudioIndex`.
-- `src/lib/virtualDj.ts` — minor: ensure `pickDirectoryHandle` return type exposes `name` (no behavior change).
-
-## Out of scope
-
-- Persisting sources across reloads (browser security forbids re-using `File`/`FileSystemDirectoryHandle` without re-pick).
-- Per-section export folders, remembered named export profiles, or switching between sources instead of combining them — explicitly deferred based on the answers.
+- Showing the four scores per song in the UI table.
+- Letting the DJ tune the warm‑up/peak intensity cutoffs.
+- Re‑ordering already‑exported playlists retroactively (new generations will be ordered; old saved sets stay as‑is unless regenerated).
