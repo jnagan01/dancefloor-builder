@@ -1890,6 +1890,7 @@ function SectionView(props: SectionViewProps) {
                         extraTrackIndices={m?.extraTrackIndices ?? []}
                         onPick={(ti) => onChoose(key, ti)}
                         onToggleExtra={(ti) => onToggleExtra(key, ti)}
+                        onPreview={onPreview}
                       />
                     </TableCell>
                   </TableRow>
