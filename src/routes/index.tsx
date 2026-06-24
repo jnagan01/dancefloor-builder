@@ -438,7 +438,19 @@ function Index() {
       });
       setMatches(m);
     }
-    toast.success("Lists generated");
+    const fs = r.finalShortfall;
+    if (fs && fs.total > 0) {
+      const parts: string[] = [];
+      if (fs.warmUp > 0) parts.push(`${fs.warmUp} short in Warm Up`);
+      if (fs.transition > 0) parts.push(`${fs.transition} short in Transition`);
+      if (fs.peak > 0) parts.push(`${fs.peak} short in Peak`);
+      toast.warning(
+        `Not enough songs to fill every section — ${parts.join(", ")}. Lowest-energy songs are still first, highest last. Add more songs or enable AI/library expansion to close the gap.`,
+        { duration: 8000 },
+      );
+    } else {
+      toast.success("Lists generated");
+    }
     setTimeout(() => {
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
