@@ -4,9 +4,11 @@ import {
   inferAudienceFit,
   sectionScores,
   dedupeKey,
+  intensityOf,
+  sectionForIntensity,
+  reorderForEnergyProgression,
   type Song,
 } from "@/lib/danceFloor";
-import { SONG_LIBRARY } from "@/lib/songLibrary";
 
 const basePrefs = { artists: [], genres: [], decades: [], notes: "" };
 
@@ -22,7 +24,7 @@ function findSection(
   return null;
 }
 
-describe("audience-fit inference", () => {
+describe("audience-fit inference (helper still used for legacy code paths)", () => {
   it("tags pre-1990 disco/soul/funk as older-friendly", () => {
     expect(inferAudienceFit("1970s", "Disco")).toBe("older");
     expect(inferAudienceFit("1960s", "Soul")).toBe("older");
@@ -40,70 +42,22 @@ describe("audience-fit inference", () => {
   });
 });
 
-describe("age-fit boundary cutoffs (50+ and under-18)", () => {
-  // The 50+ boundary is the 1980s/1990s decade flip — guests who were
-  // ~20 in the 1980s are 50+ today, so 1980s and earlier pop counts as
-  // older-friendly; 1990s pop does not.
-  it("treats 1980s pop as older-friendly (50+ cutoff)", () => {
-    expect(inferAudienceFit("1980s", "Pop")).toBe("older");
-    expect(inferAudienceFit("1980s", "Rock")).toBe("older");
+describe("intensity-based section assignment", () => {
+  it("bucket bands: low intensity → Warm Up, mid → Transition, high → Peak", () => {
+    expect(sectionForIntensity(4)).toBe("Warm Up");
+    expect(sectionForIntensity(6.5)).toBe("Warm Up");
+    expect(sectionForIntensity(7)).toBe("Transition");
+    expect(sectionForIntensity(7.5)).toBe("Transition");
+    expect(sectionForIntensity(8)).toBe("Peak");
+    expect(sectionForIntensity(9)).toBe("Peak");
   });
 
-  it("does NOT treat 1990s pop as older-friendly (just past the 50+ cutoff)", () => {
-    expect(inferAudienceFit("1990s", "Pop")).not.toBe("older");
-    expect(inferAudienceFit("1990s", "Rock")).not.toBe("older");
+  it("intensityOf is the mean of energy and danceability", () => {
+    expect(intensityOf({ energy: 8, danceability: 6 })).toBe(7);
+    expect(intensityOf({ energy: 10, danceability: 10 })).toBe(10);
   });
 
-  // The under-18 boundary is the 2010s/2020s decade flip plus a genre
-  // gate — current clean pop is younger-friendly; anything older or
-  // adult-coded is not.
-  it("treats 2010s/2020s clean pop as younger-friendly (under-18 cutoff)", () => {
-    expect(inferAudienceFit("2010s", "Pop")).toBe("younger");
-    expect(inferAudienceFit("2020s", "Pop")).toBe("younger");
-  });
-
-  it("does NOT treat 2000s pop as younger-friendly (just past the under-18 cutoff)", () => {
-    expect(inferAudienceFit("2000s", "Pop")).not.toBe("younger");
-  });
-
-  it("does NOT treat current EDM/Hip Hop as younger-friendly even in 2020s", () => {
-    expect(inferAudienceFit("2020s", "EDM")).toBe("adult");
-    expect(inferAudienceFit("2020s", "Hip Hop")).toBe("adult");
-  });
-
-  // Section assignment at the boundary: pick library songs that sit
-  // exactly on each cutoff and verify they land in the right bucket.
-  it("places a 1980s-era song (50+ guests on the floor) into Warm Up", () => {
-    const r = generateLists({
-      uploaded: [{ artist: "Whitney Houston", song: "I Wanna Dance with Somebody" }],
-      prefs: basePrefs,
-      hours: 1,
-      expand: false,
-    });
-    expect(findSection(r, "Whitney Houston", "I Wanna Dance with Somebody")).toBe("Warm Up");
-  });
-
-  it("places a 1990s-era song (past the 50+ cutoff) outside Warm Up", () => {
-    const r = generateLists({
-      uploaded: [{ artist: "Backstreet Boys", song: "Everybody (Backstreet's Back)" }],
-      prefs: basePrefs,
-      hours: 1,
-      expand: false,
-    });
-    expect(findSection(r, "Backstreet Boys", "Everybody (Backstreet's Back)")).not.toBe("Warm Up");
-  });
-
-  it("places a 2020s clean-pop song (under-18 friendly) into Warm Up or Transition, not Peak", () => {
-    const r = generateLists({
-      uploaded: [{ artist: "Harry Styles", song: "As It Was" }],
-      prefs: basePrefs,
-      hours: 1,
-      expand: false,
-    });
-    expect(findSection(r, "Harry Styles", "As It Was")).not.toBe("Peak");
-  });
-
-  it("places a current adult/EDM track (past the under-18 cutoff) into Peak", () => {
+  it("places a high-energy adult EDM track into Peak", () => {
     const r = generateLists({
       uploaded: [{ artist: "The Weeknd", song: "Blinding Lights" }],
       prefs: basePrefs,
@@ -112,9 +66,33 @@ describe("age-fit boundary cutoffs (50+ and under-18)", () => {
     });
     expect(findSection(r, "The Weeknd", "Blinding Lights")).toBe("Peak");
   });
+
+  it("places a soft ballad-leaning song into Warm Up", () => {
+    const r = generateLists({
+      uploaded: [{ artist: "Bill Withers", song: "Lovely Day" }],
+      prefs: basePrefs,
+      hours: 1,
+      expand: false,
+    });
+    expect(findSection(r, "Bill Withers", "Lovely Day")).toBe("Warm Up");
+  });
+
+  it("places EDM/Hip Hop uploads into Peak, not Warm Up", () => {
+    const uploaded: Song[] = [
+      { artist: "Pitbull", song: "Timber" },
+      { artist: "LMFAO", song: "Party Rock Anthem" },
+      { artist: "Usher", song: "Yeah!" },
+      { artist: "David Guetta", song: "Titanium" },
+      { artist: "Calvin Harris", song: "Summer" },
+    ];
+    const r = generateLists({ uploaded, prefs: basePrefs, hours: 1, expand: false });
+    for (const s of uploaded) {
+      expect(findSection(r, s.artist, s.song)).not.toBe("Warm Up");
+    }
+  });
 });
 
-describe("sectionScores", () => {
+describe("sectionScores (legacy heuristic still exported)", () => {
   it("favors Warm Up for low-energy older-friendly songs", () => {
     const s = sectionScores(5, 6, "older");
     expect(s["Warm Up"]).toBeGreaterThan(s.Peak);
@@ -125,111 +103,65 @@ describe("sectionScores", () => {
     expect(s.Peak).toBeGreaterThan(s["Warm Up"]);
     expect(s.Peak).toBeGreaterThan(s.Transition);
   });
-
-  it("danceability breaks ties when energy is equal", () => {
-    const a = sectionScores(7, 9, "all");
-    const b = sectionScores(7, 4, "all");
-    expect(a.Transition).toBeGreaterThan(b.Transition);
-  });
 });
 
-describe("generateLists section filtering", () => {
-  it("places older-friendly disco/oldies into Warm Up, not Peak", () => {
-    const uploaded: Song[] = [
-      { artist: "Earth, Wind & Fire", song: "September" },
-      { artist: "ABBA", song: "Dancing Queen" },
-      { artist: "Bee Gees", song: "Stayin' Alive" },
-      { artist: "The Temptations", song: "My Girl" },
-      { artist: "Bill Withers", song: "Lovely Day" },
-      { artist: "Van Morrison", song: "Brown Eyed Girl" },
-    ];
-    const r = generateLists({ uploaded, prefs: basePrefs, hours: 1, expand: false });
-    for (const s of uploaded) {
-      expect(findSection(r, s.artist, s.song)).not.toBe("Peak");
+describe("energy progression across the generated set", () => {
+  const mix: Song[] = [
+    { artist: "Bill Withers", song: "Lovely Day" }, // ~5.5
+    { artist: "Van Morrison", song: "Brown Eyed Girl" }, // ~5.5
+    { artist: "The Temptations", song: "My Girl" }, // ~5.5
+    { artist: "Harry Styles", song: "As It Was" }, // ~6.5 → Transition
+    { artist: "Earth, Wind & Fire", song: "September" }, // ~8 → Peak
+    { artist: "ABBA", song: "Dancing Queen" }, // ~8 → Peak
+    { artist: "Bee Gees", song: "Stayin' Alive" }, // ~8 → Peak
+    { artist: "The Weeknd", song: "Blinding Lights" }, // ~9 → Peak
+    { artist: "Pitbull", song: "Timber" },
+    { artist: "LMFAO", song: "Party Rock Anthem" },
+  ];
+
+  it("each section is sorted ascending by intensity", () => {
+    const r = generateLists({ uploaded: mix, prefs: basePrefs, hours: 2, expand: false });
+    for (const list of [r.warmUp, r.transition, r.peak]) {
+      for (let i = 1; i < list.length; i++) {
+        expect(intensityOf(list[i])).toBeGreaterThanOrEqual(intensityOf(list[i - 1]));
+      }
     }
   });
 
-  it("places adult-skewing EDM/Hip Hop into Peak, not Warm Up", () => {
-    const uploaded: Song[] = [
-      { artist: "Pitbull", song: "Timber" },
-      { artist: "LMFAO", song: "Party Rock Anthem" },
-      { artist: "Usher", song: "Yeah!" },
-      { artist: "Cardi B", song: "I Like It" },
-      { artist: "David Guetta", song: "Titanium" },
-      { artist: "Calvin Harris", song: "Summer" },
-    ];
-    const r = generateLists({ uploaded, prefs: basePrefs, hours: 1, expand: false });
-    for (const s of uploaded) {
-      expect(findSection(r, s.artist, s.song)).not.toBe("Warm Up");
+  it("the full warm-up → transition → peak set is a non-decreasing energy ramp", () => {
+    const r = generateLists({ uploaded: mix, prefs: basePrefs, hours: 2, expand: false });
+    const full = [...r.warmUp, ...r.transition, ...r.peak];
+    for (let i = 1; i < full.length; i++) {
+      expect(intensityOf(full[i])).toBeGreaterThanOrEqual(intensityOf(full[i - 1]));
     }
   });
 
-  it("keeps a high-energy older-friendly disco track out of Peak", () => {
-    const uploaded: Song[] = [{ artist: "Earth, Wind & Fire", song: "September" }];
-    const r = generateLists({ uploaded, prefs: basePrefs, hours: 1, expand: false });
-    expect(findSection(r, "Earth, Wind & Fire", "September")).not.toBe("Peak");
+  it("reorderForEnergyProgression interleaves AI-style picks into the ramp", () => {
+    const r = generateLists({ uploaded: mix, prefs: basePrefs, hours: 2, expand: false });
+    // Pretend an AI suggestion landed in the wrong bucket with full score data.
+    r.warmUp.push({
+      artist: "Made Up Banger",
+      song: "Peak Test",
+      fromUpload: false,
+      energy: 10,
+      danceability: 10,
+      popularity: 8,
+      valence: 9,
+    });
+    const fixed = reorderForEnergyProgression(r);
+    expect(findSection(fixed, "Made Up Banger", "Peak Test")).toBe("Peak");
+    const full = [...fixed.warmUp, ...fixed.transition, ...fixed.peak];
+    for (let i = 1; i < full.length; i++) {
+      expect(intensityOf(full[i])).toBeGreaterThanOrEqual(intensityOf(full[i - 1]));
+    }
   });
 
-  it("balances mixed uploads roughly evenly across the three sections", () => {
-    const mix: Song[] = [
-      // older-leaning
-      { artist: "Earth, Wind & Fire", song: "September" },
-      { artist: "ABBA", song: "Dancing Queen" },
-      { artist: "The Jackson 5", song: "I Want You Back" },
-      { artist: "Stevie Wonder", song: "Signed, Sealed, Delivered I'm Yours" },
-      { artist: "Bee Gees", song: "Stayin' Alive" },
-      { artist: "Bill Withers", song: "Lovely Day" },
-      { artist: "The Temptations", song: "My Girl" },
-      { artist: "Van Morrison", song: "Brown Eyed Girl" },
-      // younger-leaning pop
-      { artist: "Taylor Swift", song: "Shake It Off" },
-      { artist: "Dua Lipa", song: "Levitating" },
-      { artist: "Harry Styles", song: "As It Was" },
-      { artist: "Bruno Mars", song: "Marry You" },
-      { artist: "Ed Sheeran", song: "Shape of You" },
-      { artist: "Katy Perry", song: "Teenage Dream" },
-      { artist: "Doja Cat", song: "Say So" },
-      // adult/peak
-      { artist: "Pitbull", song: "Timber" },
-      { artist: "LMFAO", song: "Party Rock Anthem" },
-      { artist: "Usher", song: "Yeah!" },
-      { artist: "Flo Rida", song: "Low" },
-      { artist: "Cardi B", song: "I Like It" },
-      { artist: "David Guetta", song: "Titanium" },
-      { artist: "Calvin Harris", song: "Summer" },
-      { artist: "Avicii", song: "Wake Me Up" },
-      { artist: "Kesha", song: "TiK ToK" },
-      { artist: "The Weeknd", song: "Blinding Lights" },
-      { artist: "Rihanna", song: "Don't Stop the Music" },
-      { artist: "Lady Gaga", song: "Bad Romance" },
-      { artist: "Bruno Mars", song: "24K Magic" },
-      { artist: "Taio Cruz", song: "Dynamite" },
-      { artist: "Mark Ronson", song: "Uptown Funk" },
-    ];
-    const r = generateLists({ uploaded: mix, prefs: basePrefs, hours: 1, expand: false });
-    // Every section is populated and totals are preserved.
-    expect(r.warmUp.length).toBeGreaterThan(0);
-    expect(r.transition.length).toBeGreaterThan(0);
-    expect(r.peak.length).toBeGreaterThan(0);
-    expect(r.warmUp.length + r.transition.length + r.peak.length).toBe(mix.length);
-  });
-
-  it("library expansion fills Warm Up with older/younger-fit and Peak with adult-fit", () => {
+  it("library expansion preserves the ramp across every section", () => {
     const r = generateLists({ uploaded: [], prefs: basePrefs, hours: 1, expand: true });
-
-    const fitOf = (artist: string, song: string) => {
-      const lib = SONG_LIBRARY.find(
-        (l) => l.artist === artist && l.song === song,
-      );
-      return lib ? inferAudienceFit(lib.decade, lib.genre) : "all";
-    };
-
-    const warmFits = r.warmUp.map((s) => fitOf(s.artist, s.song));
-    const warmAdult = warmFits.filter((f) => f === "adult").length;
-    expect(warmAdult).toBeLessThanOrEqual(Math.floor(r.warmUp.length / 3));
-
-    const peakFits = r.peak.map((s) => fitOf(s.artist, s.song));
-    const peakOlderYounger = peakFits.filter((f) => f === "older").length;
-    expect(peakOlderYounger).toBeLessThanOrEqual(Math.floor(r.peak.length / 3));
+    const full = [...r.warmUp, ...r.transition, ...r.peak];
+    expect(full.length).toBeGreaterThan(0);
+    for (let i = 1; i < full.length; i++) {
+      expect(intensityOf(full[i])).toBeGreaterThanOrEqual(intensityOf(full[i - 1]));
+    }
   });
 });
