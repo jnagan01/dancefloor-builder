@@ -684,6 +684,71 @@ function Index() {
     setSearchQuery("");
   }
 
+  function pickLocalFileForMatch(key: string, file: File) {
+    if (!/\.(mp3|m4a|wav|flac|ogg|aac|aif{1,2}|wma|opus|alac)$/i.test(file.name)) {
+      toast.error("Unsupported audio file type");
+      return;
+    }
+    const MANUAL_NAME = "Manually picked files";
+    const existing = audioSources.find((s) => s.name === MANUAL_NAME);
+    let newLibs: VdjLibrary[];
+    let newSources: AudioSource[];
+    let newSrcLabels: string[];
+    if (existing) {
+      // Skip if already present
+      if (existing.files.some((f) => f.name === file.name && f.size === file.size)) {
+        // still re-pick it
+      }
+      const manualFiles = existing.files.some((f) => f.name === file.name && f.size === file.size)
+        ? existing.files
+        : [...existing.files, file];
+      const tracks = tracksFromAudioFiles(manualFiles);
+      const manualLib = buildLibrary(tracks);
+      const manualIdx = existing.libraryIndex;
+      newLibs = libraries.map((l, i) => (i === manualIdx ? manualLib : l));
+      newSrcLabels = librarySources.map((s, i) =>
+        i === manualIdx ? `${MANUAL_NAME} (${tracks.length} files)` : s,
+      );
+      newSources = audioSources.map((s) =>
+        s.id === existing.id ? { ...s, files: manualFiles } : s,
+      );
+    } else {
+      const manualFiles = [file];
+      const tracks = tracksFromAudioFiles(manualFiles);
+      const manualLib = buildLibrary(tracks);
+      const manualIdx = libraries.length;
+      newLibs = [...libraries, manualLib];
+      newSrcLabels = [...librarySources, `${MANUAL_NAME} (${tracks.length} files)`];
+      newSources = [
+        ...audioSources,
+        {
+          id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          kind: "folder",
+          name: MANUAL_NAME,
+          files: manualFiles,
+          libraryIndex: manualIdx,
+        },
+      ];
+    }
+    setLibraries(newLibs);
+    setLibrarySources(newSrcLabels);
+    setAudioSources(newSources);
+    const merged = mergeLibraries(newLibs);
+    const newIdx = merged.tracks.findIndex((t) => t.filePath === file.name);
+    if (newIdx === -1) {
+      toast.error("Could not add file to library");
+      return;
+    }
+    updateMatch(key, {
+      status: "Manually Matched",
+      confidence: 1,
+      trackIndex: newIdx,
+      alternatives: [],
+      extraTrackIndices: [],
+    });
+    toast.success(`Matched → ${file.name}`);
+  }
+
   // --- Export helpers ---
 
   function getSectionRefs(section: SectionKey): ExportSongRef[] {
