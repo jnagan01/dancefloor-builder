@@ -1,25 +1,23 @@
 ## Goal
 
-Decouple matching/export from the VirtualDJ `database.xml`. Any selected audio folder becomes a valid library source — its files can be matched against the generated set list and exported into the VirtualDJ MyLists folder as `.vdjfolder` / `.m3u`.
+Remove the separate "Playback sources" UI. Any folder added for music matching is automatically used as the playback source — no second step.
 
-## Approach
+## Changes (all in `src/routes/index.tsx`)
 
-1. **Treat folders as first-class libraries.** When a user adds an audio folder (`addAudioFolder`), synthesize `VdjTrack` entries directly from the files (artist/title parsed from `"Artist - Title.ext"` filename, `fileSize` from `File.size`, `filePath` from `webkitRelativePath` or `name`). Wrap with `buildLibrary` and register alongside XML-derived libraries.
-2. **Unify the audio source list.** Drop the separate "VDJ source vs folder source" distinction in `AudioSource`; every source contributes both a `VdjLibrary` (for matching/export rows) and a `File[]` (for playback). XML-only sources keep `files: []`; folder-only sources keep a synthesized library.
-3. **Matching pipeline stays the same.** `matchSong` already runs against `mergedLibrary` — once folder-derived tracks live in `libraries`, no XML is required for results to populate. Empty-library state stops blocking export buttons; we only require *some* library (XML or folder) to be present.
-4. **Export.** `buildVirtualDjXml` / `buildM3u` already accept any `VdjLibrary` — they will emit `<song path=... />` using the folder's `webkitRelativePath`. Add a short disclaimer near the export buttons that paths from a browser-selected folder are relative basenames and VirtualDJ may require the folder to be added to its search paths the first time. The MyLists write target (`vdjDirHandle`) is unchanged.
-5. **UI copy.** Rename "VirtualDJ library" section to "Music libraries"; relabel "Add database.xml" as optional. The empty state should say something like "Add a `database.xml` or any audio folder to match songs."
-6. **Tests.** Extend `tests/virtualDj.ssr.test.ts` with a case that builds a library from File-like inputs (filename → artist/title) and asserts `matchSong` + `buildVirtualDjXml` produce a non-empty `<VirtualFolder>`.
+1. **Remove the entire "Playback sources" section** (lines ~1440–1492 inside the Step 5 card): the heading, the "Add folder" / "Use library #N" / "Rebuild index" buttons, the source list, and the index summary line.
 
-## Technical Details
+2. **Drop the `addVdjSource` function** and the `kind: "vdj"` branch of `AudioSource`. `AudioSource` simplifies to just folder entries (id, name, files, libraryIndex). The `audioIndex` useMemo no longer needs the VDJ extras loop — it just builds from folder files.
 
-- New helper in `src/lib/virtualDj.ts`: `tracksFromAudioFiles(files: File[]): VdjTrack[]` reusing the filename split logic already in `audioMatch.ts` (`splitFileName` / `stripExt`). Export it so `index.tsx` can do `buildLibrary(tracksFromAudioFiles(files))` when a folder is added.
-- `index.tsx`: when `addAudioFolder` runs, also push the synthesized library into `libraries` / `librarySources`; when `removeAudioSource` runs on a folder, remove the corresponding library entry too (track via a stable id).
-- Export gating: replace `libraries.length === 0` checks with `mergedLibrary == null` checks (equivalent today, but explicit) and remove copy that implies an XML is required.
-- No changes to `danceFloor.ts`, recommend functions, or playback (`PreviewPlayer` already resolves via `audioIndex`).
+3. **Keep `addAudioFolder` as-is** (already adds both a library and an audio source in one click). It stays wired to the existing "Add music folder" button in Step 5.
 
-## Out of Scope
+4. **Keep `removeAudioSource` for the folder case only**; invoke it from the library list in Step 5 so removing a folder library also removes its playback files (single source of truth).
 
-- Persisting library state across reloads.
-- Reading ID3 tags from audio files (filename parsing only, matching existing behavior).
-- Writing absolute Windows/macOS paths into the exported `.vdjfolder` (browser sandbox prevents this).
+5. **Surface index status inline in Step 5's library card** (the existing "Indexed N tracks from M sources" block): append a small line like "N audio files indexed for playback" when `audioIndex.files.length > 0`. No separate panel.
+
+6. **Update the empty-state hint** under Step 5 to mention that adding a music folder also enables in-app playback; without a folder, ▶ falls back to a 30-second Apple Music preview.
+
+7. **Remove now-unused imports/handlers** (`addVdjSource`, `rebuildAudioIndex` if unreferenced, `Database` icon if unused elsewhere).
+
+## Out of scope
+
+VirtualDJ `database.xml` and "Scan VirtualDJ folder" continue to work as match-only library sources (no playback files attached) — unchanged.
