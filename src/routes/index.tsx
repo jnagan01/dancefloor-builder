@@ -387,7 +387,8 @@ function Index() {
                   popularity: sug.popularity,
                   valence: sug.valence,
                   aiSuggestion: true,
-                } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean });
+                  aiReason: sug.reason,
+                } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string });
               }
             } catch (err) {
               console.error("AI recommend failed", err);
