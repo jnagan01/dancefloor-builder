@@ -598,7 +598,7 @@ function Index() {
       const ok = await verifyReadWrite(handle);
       if (cancelled) return;
       if (ok) {
-        setVdjDirHandle(handle as DirHandleLike);
+        setVdjDirHandle(handle as unknown as DirHandleLike);
         setVdjDirName(handle.name ?? "VirtualDJ folder");
       } else {
         // Permission lapsed; keep the saved handle so the user can re-grant
