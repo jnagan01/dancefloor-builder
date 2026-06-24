@@ -60,6 +60,9 @@ import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
+import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite } from "@/lib/dirHandleStore";
+
+const VDJ_DIR_KEY = "vdjExportFolder";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -586,6 +589,27 @@ function Index() {
   }
 
 
+  // Restore a previously chosen export folder from IndexedDB on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const handle = await loadDirHandle(VDJ_DIR_KEY);
+      if (cancelled || !handle) return;
+      const ok = await verifyReadWrite(handle);
+      if (cancelled) return;
+      if (ok) {
+        setVdjDirHandle(handle as unknown as DirHandleLike);
+        setVdjDirName(handle.name ?? "VirtualDJ folder");
+      } else {
+        // Permission lapsed; keep the saved handle so the user can re-grant
+        // via a single click without re-picking the folder.
+        setVdjDirHandle(handle as unknown as DirHandleLike);
+        setVdjDirName(handle.name ?? "VirtualDJ folder");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   async function chooseMyListsFolder() {
     if (!supportsDirectoryWrite()) {
       toast.error("Direct folder writing not supported in this browser");
@@ -594,16 +618,38 @@ function Index() {
     const handle = await pickDirectoryHandle();
     if (handle) {
       setVdjDirHandle(handle);
-      setVdjDirName((handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder");
-      toast.success("VirtualDJ folder linked");
+      const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
+      setVdjDirName(name);
+      await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
+      toast.success(`VirtualDJ folder saved · ${name}`);
     }
   }
 
   function clearMyListsFolder() {
     setVdjDirHandle(null);
     setVdjDirName(null);
+    void clearDirHandle(VDJ_DIR_KEY);
     toast.success("VirtualDJ folder unlinked");
   }
+
+  // Ensure we have a writable folder handle, prompting the user if needed.
+  // Returns the handle or null if the user cancelled / permission denied.
+  async function ensureExportFolder(): Promise<DirHandleLike | null> {
+    if (vdjDirHandle) {
+      const ok = await verifyReadWrite(vdjDirHandle as unknown as Parameters<typeof verifyReadWrite>[0]);
+      if (ok) return vdjDirHandle;
+    }
+    if (!supportsDirectoryWrite()) return null;
+    const handle = await pickDirectoryHandle();
+    if (!handle) return null;
+    setVdjDirHandle(handle);
+    const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
+    setVdjDirName(name);
+    await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
+    toast.success(`VirtualDJ folder saved · ${name}`);
+    return handle;
+  }
+
 
 
   // --- Match controls ---
@@ -711,11 +757,12 @@ function Index() {
     }
     const refs = getSectionRefs(section);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    if (vdjDirHandle) {
+    const dir = await ensureExportFolder();
+    if (dir) {
       const m3u = buildM3u(refs, mergedLibrary);
       const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
       try {
-        await writeFileToDir(vdjDirHandle, fname, m3u);
+        await writeFileToDir(dir, fname, m3u);
         toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
         return;
       } catch {
@@ -727,6 +774,7 @@ function Index() {
     const xml = buildVirtualDjXml(refs, mergedLibrary);
     const fname = `${prefix}${SECTION_FILES[section]}.xml`;
     downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
+
 
   }
 
@@ -1331,31 +1379,45 @@ function Index() {
                 Add a music folder or VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
               </p>
             )}
-            <div className="flex flex-wrap items-center gap-3 border-t pt-3">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  VirtualDJ export folder
+                </span>
+                {vdjDirHandle ? (
+                  <span className="flex flex-wrap items-center gap-2 text-sm">
+                    <Check className="h-4 w-4 text-emerald-500" />
+                    Saved · <span className="font-medium truncate">{vdjDirName}</span>
+                    <Badge variant="secondary" className="text-xs">remembered this session</Badge>
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    Not set — exports will download as files until you pick a folder.
+                  </span>
+                )}
+              </div>
               {!vdjDirHandle ? (
-                <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
+                <Button variant="default" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
                   <FolderOpen className="mr-1 h-4 w-4" />
-                  Choose VirtualDJ export folder
+                  Choose export folder
                 </Button>
               ) : (
                 <>
-                  <span className="text-sm">
-                    Exporting to <span className="font-medium">{vdjDirName}</span>
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
-                    <FolderOpen className="mr-1 h-4 w-4" /> Change folder
+                  <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
+                    <FolderOpen className="mr-1 h-4 w-4" /> Change
                   </Button>
                   <Button variant="ghost" size="sm" onClick={clearMyListsFolder}>
-                    <X className="mr-1 h-4 w-4" /> Clear
+                    <X className="mr-1 h-4 w-4" /> Forget
                   </Button>
                 </>
               )}
               {!canDirWrite && (
-                <span className="text-xs text-muted-foreground">
+                <span className="w-full text-xs text-muted-foreground">
                   Direct saving unsupported in this browser — files will download instead.
                 </span>
               )}
             </div>
+
             <div className="space-y-2 border-t pt-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">Playback sources</span>
