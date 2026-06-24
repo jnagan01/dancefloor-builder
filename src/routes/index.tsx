@@ -80,6 +80,11 @@ export const Route = createFileRoute("/")({
 
 const DECADES = ["1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
 
+function formatSavedAt(ts: number): string {
+  const d = new Date(ts);
+  return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 function toKebabCase(str: string): string {
   return str
     .toLowerCase()
