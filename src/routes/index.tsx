@@ -1403,7 +1403,10 @@ function Index() {
                 {vdjDirHandle ? (
                   <span className="flex flex-wrap items-center gap-2 text-sm">
                     <Check className="h-4 w-4 text-emerald-500" />
-                    Saved · <span className="font-medium truncate">{vdjDirName}</span>
+                    <span className="font-medium truncate">{vdjDirName}</span>
+                    {vdjDirSavedAt ? (
+                      <span className="text-xs text-muted-foreground">· Saved {formatSavedAt(vdjDirSavedAt)}</span>
+                    ) : null}
                     <Badge variant="secondary" className="text-xs">remembered this session</Badge>
                   </span>
                 ) : (
