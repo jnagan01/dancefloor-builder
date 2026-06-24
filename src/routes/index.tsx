@@ -1912,6 +1912,7 @@ function InlineMatchSearch({
   extraTrackIndices,
   onPick,
   onToggleExtra,
+  onPreview,
 }: {
   song: Song;
   library: VdjLibrary;
@@ -1919,6 +1920,7 @@ function InlineMatchSearch({
   extraTrackIndices: number[];
   onPick: (trackIndex: number) => void;
   onToggleExtra: (trackIndex: number) => void;
+  onPreview?: (target: { artist: string; song: string; filePath?: string }) => void;
 }) {
   const defaultQuery = `${song.artist} ${song.song}`.trim();
   const [query, setQuery] = useState(defaultQuery);
