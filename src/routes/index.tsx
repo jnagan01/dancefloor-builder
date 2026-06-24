@@ -438,7 +438,19 @@ function Index() {
       });
       setMatches(m);
     }
-    toast.success("Lists generated");
+    const fs = r.finalShortfall;
+    if (fs && fs.total > 0) {
+      const parts: string[] = [];
+      if (fs.warmUp > 0) parts.push(`${fs.warmUp} short in Warm Up`);
+      if (fs.transition > 0) parts.push(`${fs.transition} short in Transition`);
+      if (fs.peak > 0) parts.push(`${fs.peak} short in Peak`);
+      toast.warning(
+        `Not enough songs to fill every section — ${parts.join(", ")}. Lowest-energy songs are still first, highest last. Add more songs or enable AI/library expansion to close the gap.`,
+        { duration: 8000 },
+      );
+    } else {
+      toast.success("Lists generated");
+    }
     setTimeout(() => {
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
@@ -1471,6 +1483,18 @@ function Index() {
                   Include combined reference CSV
                 </label>
               </div>
+
+              {result.finalShortfall && result.finalShortfall.total > 0 ? (
+                <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <div>
+                    <div className="font-medium">Not enough songs to fully fill every section</div>
+                    <div className="mt-0.5 text-xs">
+                      Short by {result.finalShortfall.warmUp} in Warm Up, {result.finalShortfall.transition} in Transition, {result.finalShortfall.peak} in Peak (target {result.perSectionTarget} each). The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
+                    </div>
+                  </div>
+                </div>
+              ) : null}
 
               <Tabs defaultValue="warmUp">
                 <TabsList>
