@@ -11,7 +11,6 @@ export interface AnyHandle {
   name?: string;
   queryPermission?: (opts: { mode: "read" | "readwrite" }) => Promise<PermissionState>;
   requestPermission?: (opts: { mode: "read" | "readwrite" }) => Promise<PermissionState>;
-  [k: string]: unknown;
 }
 
 function openDb(): Promise<IDBDatabase | null> {
