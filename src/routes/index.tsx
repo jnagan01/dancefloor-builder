@@ -1293,32 +1293,29 @@ function Index() {
         {/* Step 5 - VirtualDJ Library */}
         <Card>
           <CardHeader>
-            <CardTitle>Step 5 · VirtualDJ Library Matching (optional)</CardTitle>
+            <CardTitle>Step 5 · Music Library Matching</CardTitle>
             <CardDescription>
-              Select your VirtualDJ database.xml or VirtualDJ folder. Files are read and indexed only in your browser — nothing is uploaded.
+              Add any audio folder, or optionally a VirtualDJ <code>database.xml</code>. Files are read and indexed only in your browser — nothing is uploaded.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
+              <Button variant="default" size="sm" onClick={addAudioFolder}>
+                <Plus className="mr-1 h-4 w-4" /> Add music folder
+              </Button>
               <Button variant="outline" size="sm" onClick={selectDatabaseXml}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Select VirtualDJ database.xml
+                <FolderOpen className="mr-1 h-4 w-4" /> Add VirtualDJ database.xml (optional)
               </Button>
               <Button variant="outline" size="sm" onClick={() => selectFolder("VirtualDJ Folder")}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Select VirtualDJ Folder
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => selectFolder("External Drive VirtualDJ")}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Select External Drive VirtualDJ Folder
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => selectFolder("Music Folder")}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Select Music Folder
+                <FolderOpen className="mr-1 h-4 w-4" /> Scan VirtualDJ folder
               </Button>
               {libraries.length > 0 && (
                 <Button variant="ghost" size="sm" onClick={clearLibraries}>
-                  <X className="mr-1 h-4 w-4" /> Clear library
+                  <X className="mr-1 h-4 w-4" /> Clear libraries
                 </Button>
               )}
             </div>
-            {mergedLibrary && (
+            {mergedLibrary ? (
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
                 <p className="font-medium">
                   Indexed {mergedLibrary.tracks.length} tracks from {libraries.length} source{libraries.length > 1 ? "s" : ""}
@@ -1327,6 +1324,10 @@ function Index() {
                   {librarySources.map((s, i) => <li key={i}>{s}</li>)}
                 </ul>
               </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Add a music folder or VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
+              </p>
             )}
             <div className="flex flex-wrap items-center gap-3 border-t pt-3">
               {!vdjDirHandle ? (
@@ -1355,16 +1356,16 @@ function Index() {
             </div>
             <div className="space-y-2 border-t pt-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">Music sources</span>
+                <span className="text-sm font-medium">Playback sources</span>
                 <Button variant="outline" size="sm" onClick={addAudioFolder}>
                   <Plus className="mr-1 h-4 w-4" /> Add folder
                 </Button>
                 {libraries.map((_, i) => {
-                  const already = audioSources.some((s) => s.kind === "vdj" && s.libraryIndex === i);
+                  const already = audioSources.some((s) => s.libraryIndex === i);
                   if (already) return null;
                   return (
                     <Button key={`add-vdj-${i}`} variant="outline" size="sm" onClick={() => addVdjSource(i)}>
-                      <Database className="mr-1 h-4 w-4" /> Use VirtualDJ library {libraries.length > 1 ? `#${i + 1}` : ""}
+                      <Database className="mr-1 h-4 w-4" /> Use library {libraries.length > 1 ? `#${i + 1}` : ""}
                     </Button>
                   );
                 })}
@@ -1374,6 +1375,7 @@ function Index() {
                   </Button>
                 )}
               </div>
+
               {audioSources.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Add one or more folders (and optionally a loaded VirtualDJ library) for in-app playback and better matching.
