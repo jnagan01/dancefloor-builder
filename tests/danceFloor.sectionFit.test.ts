@@ -45,10 +45,10 @@ describe("audience-fit inference (helper still used for legacy code paths)", () 
 describe("intensity-based section assignment", () => {
   it("bucket bands: low intensity → Warm Up, mid → Transition, high → Peak", () => {
     expect(sectionForIntensity(4)).toBe("Warm Up");
-    expect(sectionForIntensity(5.75)).toBe("Warm Up");
-    expect(sectionForIntensity(6.5)).toBe("Transition");
+    expect(sectionForIntensity(6.5)).toBe("Warm Up");
+    expect(sectionForIntensity(7)).toBe("Transition");
     expect(sectionForIntensity(7.5)).toBe("Transition");
-    expect(sectionForIntensity(7.75)).toBe("Peak");
+    expect(sectionForIntensity(8)).toBe("Peak");
     expect(sectionForIntensity(9)).toBe("Peak");
   });
 
