@@ -1986,11 +1986,22 @@ function InlineMatchSearch({
                     variant={isExtra ? "secondary" : "ghost"}
                     className="h-6 shrink-0 px-2 text-xs"
                     onClick={() => onToggleExtra(ti)}
-                    disabled={isCurrent}
+                    disabled={isExtra ? false : isCurrent}
                     title={isExtra ? "Remove additional pick" : "Also include this track in the export"}
                   >
                     {isExtra ? "✓ Also" : "+ Also"}
                   </Button>
+                  {onPreview && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 w-6 shrink-0 p-0"
+                      onClick={() => onPreview({ artist: t.artist, song: t.title, filePath: t.filePath })}
+                      title="Preview / play this file"
+                    >
+                      <Play className="h-3 w-3" />
+                    </Button>
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{t.artist} — {t.title}</p>
                     <p className="truncate text-[11px] text-muted-foreground" title={t.filePath}>{t.filePath}</p>
