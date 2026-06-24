@@ -387,7 +387,8 @@ function Index() {
                   popularity: sug.popularity,
                   valence: sug.valence,
                   aiSuggestion: true,
-                } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean });
+                  aiReason: sug.reason,
+                } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string });
               }
             } catch (err) {
               console.error("AI recommend failed", err);
@@ -1615,10 +1616,45 @@ function Index() {
 type BadgeSong = Song & {
   fromUpload?: boolean;
   aiSuggestion?: boolean;
+  aiReason?: string;
   stretched?: boolean;
   naturalSection?: "Warm Up" | "Transition" | "Peak";
   reused?: boolean;
+  energy?: number;
+  danceability?: number;
+  popularity?: number;
+  valence?: number;
 };
+
+function MetricsChip({ song }: { song: BadgeSong }) {
+  const hasAny =
+    typeof song.energy === "number" ||
+    typeof song.danceability === "number" ||
+    typeof song.popularity === "number" ||
+    typeof song.valence === "number";
+  if (!hasAny) return null;
+  const fmt = (n?: number) => (typeof n === "number" ? n.toFixed(1).replace(/\.0$/, "") : "—");
+  const intensity =
+    typeof song.energy === "number" && typeof song.danceability === "number"
+      ? ((song.energy + song.danceability) / 2).toFixed(1)
+      : null;
+  const lines = [
+    `Energy: ${fmt(song.energy)}/10`,
+    `Danceability: ${fmt(song.danceability)}/10`,
+    `Popularity: ${fmt(song.popularity)}/10`,
+    `Valence: ${fmt(song.valence)}/10`,
+    intensity ? `Intensity (avg): ${intensity}/10` : null,
+    song.aiReason ? `AI: ${song.aiReason}` : null,
+  ].filter(Boolean) as string[];
+  return (
+    <span
+      className="cursor-help rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700"
+      title={lines.join("\n")}
+    >
+      E{fmt(song.energy)} · D{fmt(song.danceability)}
+    </span>
+  );
+}
 
 function SourceBadge({ song }: { song: BadgeSong }) {
   if (song.aiSuggestion) {
@@ -1777,6 +1813,7 @@ function SectionView(props: SectionViewProps) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span>{s.song}</span>
+                      <MetricsChip song={s as BadgeSong} />
                     </div>
                   </TableCell>
                   {library && (
