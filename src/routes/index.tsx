@@ -603,7 +603,7 @@ function Index() {
       } else {
         // Permission lapsed; keep the saved handle so the user can re-grant
         // via a single click without re-picking the folder.
-        setVdjDirHandle(handle as DirHandleLike);
+        setVdjDirHandle(handle as unknown as DirHandleLike);
         setVdjDirName(handle.name ?? "VirtualDJ folder");
       }
     })();
