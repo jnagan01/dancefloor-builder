@@ -26,6 +26,12 @@ const listsSchema = z.object({
   peak: z.array(songSchema).max(2000),
 });
 
+function dbError(op: string, error: { message: string; code?: string }): Error {
+  console.error(`[history.functions] ${op} failed:`, error.message, error.code ?? "");
+  if (error.code === "PGRST116") return new Error("Not found.");
+  return new Error("An error occurred. Please try again.");
+}
+
 export const listWorkflows = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -34,7 +40,7 @@ export const listWorkflows = createServerFn({ method: "GET" })
       .from("workflow_history")
       .select("id, name, created_at, updated_at, lists")
       .order("created_at", { ascending: false });
-    if (error) throw new Error(error.message);
+    if (error) throw dbError("listWorkflows", error);
     return (data ?? []).map((r) => {
       const lists = (r.lists ?? {}) as { warmUp?: unknown[]; transition?: unknown[]; peak?: unknown[] };
       return {
@@ -60,7 +66,7 @@ export const getWorkflow = createServerFn({ method: "POST" })
       .select("id, name, created_at, inputs, lists")
       .eq("id", data.id)
       .single();
-    if (error) throw new Error(error.message);
+    if (error) throw dbError("getWorkflow", error);
     return row;
   });
 
@@ -87,7 +93,7 @@ export const saveWorkflow = createServerFn({ method: "POST" })
       })
       .select("id")
       .single();
-    if (error) throw new Error(error.message);
+    if (error) throw dbError("saveWorkflow", error);
     return { id: row.id as string };
   });
 
@@ -101,7 +107,7 @@ export const renameWorkflow = createServerFn({ method: "POST" })
       .from("workflow_history")
       .update({ name: data.name })
       .eq("id", data.id);
-    if (error) throw new Error(error.message);
+    if (error) throw dbError("renameWorkflow", error);
     return { ok: true };
   });
 
@@ -110,6 +116,6 @@ export const deleteWorkflow = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("workflow_history").delete().eq("id", data.id);
-    if (error) throw new Error(error.message);
+    if (error) throw dbError("deleteWorkflow", error);
     return { ok: true };
   });
