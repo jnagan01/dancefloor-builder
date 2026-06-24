@@ -365,8 +365,8 @@ export function intensityOf(s: { energy?: number; danceability?: number }): numb
  * peak = high. Stable for any list size (works for 1 song or 100).
  */
 export function sectionForIntensity(intensity: number): Section {
-  if (intensity <= 5.75) return "Warm Up";
-  if (intensity >= 7.75) return "Peak";
+  if (intensity <= 6.5) return "Warm Up";
+  if (intensity >= 8) return "Peak";
   return "Transition";
 }
 
