@@ -2020,6 +2020,7 @@ function SectionView(props: SectionViewProps) {
                         onPick={(ti) => onChoose(key, ti)}
                         onToggleExtra={(ti) => onToggleExtra(key, ti)}
                         onPreview={onPreview}
+                        onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
                       />
                     </TableCell>
                   </TableRow>
