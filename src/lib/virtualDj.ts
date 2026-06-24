@@ -145,6 +145,41 @@ export function parseVdjDatabaseXml(text: string): VdjTrack[] {
   return tracks;
 }
 
+// Build VdjTrack entries from a list of audio files (e.g. one selected folder).
+// Filename is parsed as "Artist - Title.ext" when possible; otherwise the whole
+// basename becomes the title. Works with browser File objects and any object
+// exposing { name, size, webkitRelativePath? }.
+const AUDIO_EXT_RE = /\.(mp3|m4a|wav|flac|ogg|aac|aif{1,2}|wma|opus|alac)$/i;
+export interface FileLike {
+  name: string;
+  size?: number;
+  webkitRelativePath?: string;
+}
+export function tracksFromAudioFiles(files: ReadonlyArray<FileLike>): VdjTrack[] {
+  const out: VdjTrack[] = [];
+  for (const f of files) {
+    if (!AUDIO_EXT_RE.test(f.name)) continue;
+    const rel = f.webkitRelativePath || f.name;
+    const noExt = f.name.replace(/\.[^.]+$/, "");
+    let artist = "";
+    let title = noExt;
+    const parts = noExt.split(/\s+[-–—]\s+/);
+    if (parts.length >= 2 && parts[0].trim() && parts.slice(1).join(" - ").trim()) {
+      artist = parts[0].trim();
+      title = parts.slice(1).join(" - ").trim();
+    }
+    const { remix } = stripRemix(title);
+    out.push({
+      filePath: rel,
+      fileSize: typeof f.size === "number" ? String(f.size) : undefined,
+      artist,
+      title,
+      remix,
+    });
+  }
+  return out;
+}
+
 // --- Indexing & matching ---
 
 export interface VdjLibrary {
