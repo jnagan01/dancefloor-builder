@@ -636,7 +636,7 @@ function Index() {
   // Returns the handle or null if the user cancelled / permission denied.
   async function ensureExportFolder(): Promise<DirHandleLike | null> {
     if (vdjDirHandle) {
-      const ok = await verifyReadWrite(vdjDirHandle);
+      const ok = await verifyReadWrite(vdjDirHandle as unknown as Parameters<typeof verifyReadWrite>[0]);
       if (ok) return vdjDirHandle;
     }
     if (!supportsDirectoryWrite()) return null;
