@@ -1769,7 +1769,9 @@ function SectionView(props: SectionViewProps) {
                         <Play className="h-3.5 w-3.5" />
                       </Button>
                       <span>{s.artist}</span>
-                      <SourceBadge song={s as Song & { fromUpload?: boolean; aiSuggestion?: boolean }} />
+                      <SourceBadge song={s as BadgeSong} />
+                      <FallbackBadges song={s as BadgeSong} />
+
                     </div>
                   </TableCell>
                   <TableCell>
