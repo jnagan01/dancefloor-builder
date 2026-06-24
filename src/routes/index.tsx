@@ -1490,7 +1490,7 @@ function Index() {
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="w-full">
                     <div className="font-medium">Not enough songs to fully fill every section</div>
-                    <div className="mt-1.5 grid grid-cols-3 gap-2 text-xs">
+                    <div className="mt-1.5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                       <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Warm Up</div>
                         <div>{result.warmUp.length} / {result.perSectionTarget}</div>
@@ -1507,6 +1507,7 @@ function Index() {
                         <div className="text-amber-700 dark:text-amber-300">-{result.finalShortfall.peak} short</div>
                       </div>
                     </div>
+
                     <div className="mt-1.5 text-xs">
                       Target {result.perSectionTarget} songs per section. The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
                     </div>
@@ -1515,17 +1516,18 @@ function Index() {
               ) : null}
 
               <Tabs defaultValue="warmUp">
-                <TabsList>
-                  <TabsTrigger value="warmUp">
+                <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+                  <TabsTrigger value="warmUp" className="h-auto whitespace-normal text-left leading-tight">
                     Warm Up ({result.warmUp.length}{result.finalShortfall && result.finalShortfall.warmUp > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.warmUp}` : ""})
                   </TabsTrigger>
-                  <TabsTrigger value="transition">
+                  <TabsTrigger value="transition" className="h-auto whitespace-normal text-left leading-tight">
                     Transition ({result.transition.length}{result.finalShortfall && result.finalShortfall.transition > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.transition}` : ""})
                   </TabsTrigger>
-                  <TabsTrigger value="peak">
+                  <TabsTrigger value="peak" className="h-auto whitespace-normal text-left leading-tight">
                     Peak ({result.peak.length}{result.finalShortfall && result.finalShortfall.peak > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.peak}` : ""})
                   </TabsTrigger>
                 </TabsList>
+
                 {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => (
                   <TabsContent key={sec} value={sec}>
                     <SectionView
@@ -1793,8 +1795,8 @@ function SectionView(props: SectionViewProps) {
               return (
                 <Fragment key={i}>
                 <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+                  <TableCell className="align-top">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <Button
                         size="icon"
                         variant="ghost"
@@ -1804,18 +1806,18 @@ function SectionView(props: SectionViewProps) {
                       >
                         <Play className="h-3.5 w-3.5" />
                       </Button>
-                      <span>{s.artist}</span>
+                      <span className="break-words">{s.artist}</span>
                       <SourceBadge song={s as BadgeSong} />
                       <FallbackBadges song={s as BadgeSong} />
-
                     </div>
                   </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span>{s.song}</span>
+                  <TableCell className="align-top">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="break-words">{s.song}</span>
                       <MetricsChip song={s as BadgeSong} />
                     </div>
                   </TableCell>
+
                   {library && (
                     <>
                       <TableCell>{m ? statusBadge(m.status) : statusBadge("Missing From Library")}</TableCell>
