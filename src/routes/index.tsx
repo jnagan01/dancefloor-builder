@@ -1487,10 +1487,27 @@ function Index() {
               {result.finalShortfall && result.finalShortfall.total > 0 ? (
                 <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  <div>
+                  <div className="w-full">
                     <div className="font-medium">Not enough songs to fully fill every section</div>
-                    <div className="mt-0.5 text-xs">
-                      Short by {result.finalShortfall.warmUp} in Warm Up, {result.finalShortfall.transition} in Transition, {result.finalShortfall.peak} in Peak (target {result.perSectionTarget} each). The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
+                    <div className="mt-1.5 grid grid-cols-3 gap-2 text-xs">
+                      <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-center">
+                        <div className="font-semibold">Warm Up</div>
+                        <div>{result.warmUp.length} / {result.perSectionTarget}</div>
+                        <div className="text-amber-700 dark:text-amber-300">-{result.finalShortfall.warmUp} short</div>
+                      </div>
+                      <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-center">
+                        <div className="font-semibold">Transition</div>
+                        <div>{result.transition.length} / {result.perSectionTarget}</div>
+                        <div className="text-amber-700 dark:text-amber-300">-{result.finalShortfall.transition} short</div>
+                      </div>
+                      <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-center">
+                        <div className="font-semibold">Peak</div>
+                        <div>{result.peak.length} / {result.perSectionTarget}</div>
+                        <div className="text-amber-700 dark:text-amber-300">-{result.finalShortfall.peak} short</div>
+                      </div>
+                    </div>
+                    <div className="mt-1.5 text-xs">
+                      Target {result.perSectionTarget} songs per section. The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
                     </div>
                   </div>
                 </div>
