@@ -2043,6 +2043,7 @@ function InlineMatchSearch({
   onPick,
   onToggleExtra,
   onPreview,
+  onPickLocalFile,
 }: {
   song: Song;
   library: VdjLibrary;
@@ -2051,7 +2052,9 @@ function InlineMatchSearch({
   onPick: (trackIndex: number) => void;
   onToggleExtra: (trackIndex: number) => void;
   onPreview?: (target: { artist: string; song: string; filePath?: string }) => void;
+  onPickLocalFile?: (file: File) => void;
 }) {
+  const localFileRef = useRef<HTMLInputElement>(null);
   const defaultQuery = `${song.artist} ${song.song}`.trim();
   const [query, setQuery] = useState(defaultQuery);
   const [showAll, setShowAll] = useState(false);
