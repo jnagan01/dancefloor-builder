@@ -50,7 +50,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, Sparkles, Database, HardDrive, RefreshCw } from "lucide-react";
+import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, Sparkles, Database, HardDrive, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
@@ -1628,33 +1628,35 @@ type BadgeSong = Song & {
   valence?: number;
 };
 
-function MetricsChip({ song }: { song: BadgeSong }) {
+function MetricsDetail({ song }: { song: BadgeSong }) {
   const hasAny =
     typeof song.energy === "number" ||
     typeof song.danceability === "number" ||
     typeof song.popularity === "number" ||
     typeof song.valence === "number";
-  if (!hasAny) return null;
+  if (!hasAny) return <span className="text-xs text-muted-foreground">No metrics available</span>;
   const fmt = (n?: number) => (typeof n === "number" ? n.toFixed(1).replace(/\.0$/, "") : "—");
   const intensity =
     typeof song.energy === "number" && typeof song.danceability === "number"
       ? ((song.energy + song.danceability) / 2).toFixed(1)
       : null;
-  const lines = [
-    `Energy: ${fmt(song.energy)}/10`,
-    `Danceability: ${fmt(song.danceability)}/10`,
-    `Popularity: ${fmt(song.popularity)}/10`,
-    `Valence: ${fmt(song.valence)}/10`,
-    intensity ? `Intensity (avg): ${intensity}/10` : null,
-    song.aiReason ? `AI: ${song.aiReason}` : null,
-  ].filter(Boolean) as string[];
+  const items = [
+    { label: "Energy", value: fmt(song.energy) },
+    { label: "Danceability", value: fmt(song.danceability) },
+    { label: "Popularity", value: fmt(song.popularity) },
+    { label: "Valence", value: fmt(song.valence) },
+    intensity ? { label: "Intensity (avg)", value: intensity } : null,
+    song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
+  ].filter(Boolean) as { label: string; value: string }[];
   return (
-    <span
-      className="cursor-help rounded border border-neutral-200 bg-neutral-50 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700"
-      title={lines.join("\n")}
-    >
-      E{fmt(song.energy)} · D{fmt(song.danceability)}
-    </span>
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-center gap-1 text-xs">
+          <span className="text-muted-foreground">{item.label}:</span>
+          <span className="font-medium tabular-nums">{item.value}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1750,6 +1752,15 @@ interface SectionViewProps {
 function SectionView(props: SectionViewProps) {
   const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpanded = (key: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap justify-end gap-2">
@@ -1813,8 +1824,16 @@ function SectionView(props: SectionViewProps) {
                   </TableCell>
                   <TableCell className="align-top">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => toggleExpanded(key)}
+                        title={expanded.has(key) ? "Collapse metrics" : "Expand metrics"}
+                      >
+                        {expanded.has(key) ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </Button>
                       <span className="break-words">{s.song}</span>
-                      <MetricsChip song={s as BadgeSong} />
                     </div>
                   </TableCell>
 
@@ -1854,6 +1873,13 @@ function SectionView(props: SectionViewProps) {
                     </>
                   )}
                 </TableRow>
+                {expanded.has(key) && (
+                  <TableRow className="bg-muted/20 hover:bg-muted/20">
+                    <TableCell colSpan={library ? 8 : 2} className="py-2">
+                      <MetricsDetail song={s as BadgeSong} />
+                    </TableCell>
+                  </TableRow>
+                )}
                 {library && (
                   <TableRow className="bg-muted/30 hover:bg-muted/30">
                     <TableCell colSpan={8} className="py-2">
