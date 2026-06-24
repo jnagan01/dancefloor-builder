@@ -620,7 +620,7 @@ function Index() {
       setVdjDirHandle(handle);
       const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
       setVdjDirName(name);
-      await saveDirHandle(VDJ_DIR_KEY, handle);
+      await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
       toast.success(`VirtualDJ folder saved · ${name}`);
     }
   }
