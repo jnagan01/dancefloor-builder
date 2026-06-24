@@ -1379,31 +1379,45 @@ function Index() {
                 Add a music folder or VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
               </p>
             )}
-            <div className="flex flex-wrap items-center gap-3 border-t pt-3">
+            <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3">
+              <div className="flex min-w-0 flex-1 flex-col">
+                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  VirtualDJ export folder
+                </span>
+                {vdjDirHandle ? (
+                  <span className="flex flex-wrap items-center gap-2 text-sm">
+                    <Check className="h-4 w-4 text-emerald-500" />
+                    Saved · <span className="font-medium truncate">{vdjDirName}</span>
+                    <Badge variant="secondary" className="text-xs">remembered this session</Badge>
+                  </span>
+                ) : (
+                  <span className="text-sm text-muted-foreground">
+                    Not set — exports will download as files until you pick a folder.
+                  </span>
+                )}
+              </div>
               {!vdjDirHandle ? (
-                <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
+                <Button variant="default" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
                   <FolderOpen className="mr-1 h-4 w-4" />
-                  Choose VirtualDJ export folder
+                  Choose export folder
                 </Button>
               ) : (
                 <>
-                  <span className="text-sm">
-                    Exporting to <span className="font-medium">{vdjDirName}</span>
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
-                    <FolderOpen className="mr-1 h-4 w-4" /> Change folder
+                  <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
+                    <FolderOpen className="mr-1 h-4 w-4" /> Change
                   </Button>
                   <Button variant="ghost" size="sm" onClick={clearMyListsFolder}>
-                    <X className="mr-1 h-4 w-4" /> Clear
+                    <X className="mr-1 h-4 w-4" /> Forget
                   </Button>
                 </>
               )}
               {!canDirWrite && (
-                <span className="text-xs text-muted-foreground">
+                <span className="w-full text-xs text-muted-foreground">
                   Direct saving unsupported in this browser — files will download instead.
                 </span>
               )}
             </div>
+
             <div className="space-y-2 border-t pt-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm font-medium">Playback sources</span>
