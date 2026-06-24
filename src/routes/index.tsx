@@ -1386,13 +1386,37 @@ function Index() {
                 <p className="font-medium">
                   Indexed {mergedLibrary.tracks.length} tracks from {libraries.length} source{libraries.length > 1 ? "s" : ""}
                 </p>
-                <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">
-                  {librarySources.map((s, i) => <li key={i}>{s}</li>)}
+                <ul className="mt-1 space-y-1 pl-0 text-xs text-muted-foreground">
+                  {librarySources.map((s, i) => {
+                    const folderSource = audioSources.find((a) => a.libraryIndex === i);
+                    return (
+                      <li key={i} className="flex items-center gap-2">
+                        <span className="flex-1 truncate">• {s}</span>
+                        {folderSource && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2"
+                            onClick={() => removeAudioSource(folderSource.id)}
+                            title="Remove folder"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
+                {audioIndex.files.length > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {audioIndex.files.length.toLocaleString()} audio file{audioIndex.files.length === 1 ? "" : "s"} indexed for in-app playback
+                  </p>
+                )}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Add a music folder or VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
+                Add a music folder (also used as the playback source) or a VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
+                Without a folder, ▶ falls back to a 30-second Apple Music preview.
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-3">
