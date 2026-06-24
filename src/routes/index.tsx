@@ -623,7 +623,10 @@ function Index() {
       setVdjDirHandle(handle);
       const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
       setVdjDirName(name);
+      const now = Date.now();
+      setVdjDirSavedAt(now);
       await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
+      await saveDirHandleMeta(VDJ_DIR_KEY, { savedAt: now });
       toast.success(`VirtualDJ folder saved · ${name}`);
     }
   }
@@ -631,7 +634,9 @@ function Index() {
   function clearMyListsFolder() {
     setVdjDirHandle(null);
     setVdjDirName(null);
+    setVdjDirSavedAt(null);
     void clearDirHandle(VDJ_DIR_KEY);
+    void clearDirHandleMeta(VDJ_DIR_KEY);
     toast.success("VirtualDJ folder unlinked");
   }
 
