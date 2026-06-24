@@ -1822,8 +1822,16 @@ function SectionView(props: SectionViewProps) {
                   </TableCell>
                   <TableCell className="align-top">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-6 w-6 shrink-0"
+                        onClick={() => toggleExpanded(key)}
+                        title={expanded.has(key) ? "Collapse metrics" : "Expand metrics"}
+                      >
+                        {expanded.has(key) ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </Button>
                       <span className="break-words">{s.song}</span>
-                      <MetricsChip song={s as BadgeSong} />
                     </div>
                   </TableCell>
 
