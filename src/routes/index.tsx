@@ -757,11 +757,12 @@ function Index() {
     }
     const refs = getSectionRefs(section);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    if (vdjDirHandle) {
+    const dir = await ensureExportFolder();
+    if (dir) {
       const m3u = buildM3u(refs, mergedLibrary);
       const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
       try {
-        await writeFileToDir(vdjDirHandle, fname, m3u);
+        await writeFileToDir(dir, fname, m3u);
         toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
         return;
       } catch {
@@ -773,6 +774,7 @@ function Index() {
     const xml = buildVirtualDjXml(refs, mergedLibrary);
     const fname = `${prefix}${SECTION_FILES[section]}.xml`;
     downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
+
 
   }
 
