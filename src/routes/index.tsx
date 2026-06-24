@@ -1671,7 +1671,8 @@ function Index() {
                       onMarkUnresolved={markUnresolved}
                       onToggleExclude={toggleExclude}
                       onToggleExtra={toggleExtraPick}
-                      onOpenSearch={openSearch}
+                     onOpenSearch={openSearch}
+                     onPickLocalFile={pickLocalFileForMatch}
                       onPreview={(t) => setPreviewTarget(t)}
                     />
                   </TabsContent>
