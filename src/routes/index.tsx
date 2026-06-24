@@ -1986,7 +1986,7 @@ function InlineMatchSearch({
                     variant={isExtra ? "secondary" : "ghost"}
                     className="h-6 shrink-0 px-2 text-xs"
                     onClick={() => onToggleExtra(ti)}
-                    disabled={isExtra ? false : isCurrent}
+                    disabled={isCurrent}
                     title={isExtra ? "Remove additional pick" : "Also include this track in the export"}
                   >
                     {isExtra ? "✓ Also" : "+ Also"}
