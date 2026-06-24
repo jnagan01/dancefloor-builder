@@ -60,6 +60,9 @@ import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
+import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite } from "@/lib/dirHandleStore";
+
+const VDJ_DIR_KEY = "vdjExportFolder";
 
 export const Route = createFileRoute("/")({
   component: Index,
