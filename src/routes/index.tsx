@@ -1461,59 +1461,6 @@ function Index() {
               )}
             </div>
 
-            <div className="space-y-2 border-t pt-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">Playback sources</span>
-                <Button variant="outline" size="sm" onClick={addAudioFolder}>
-                  <Plus className="mr-1 h-4 w-4" /> Add folder
-                </Button>
-                {libraries.map((_, i) => {
-                  const already = audioSources.some((s) => s.libraryIndex === i);
-                  if (already) return null;
-                  return (
-                    <Button key={`add-vdj-${i}`} variant="outline" size="sm" onClick={() => addVdjSource(i)}>
-                      <Database className="mr-1 h-4 w-4" /> Use library {libraries.length > 1 ? `#${i + 1}` : ""}
-                    </Button>
-                  );
-                })}
-                {audioSources.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={rebuildAudioIndex}>
-                    <RefreshCw className="mr-1 h-4 w-4" /> Rebuild index
-                  </Button>
-                )}
-              </div>
-
-              {audioSources.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  Add one or more folders (and optionally a loaded VirtualDJ library) for in-app playback and better matching.
-                  Without any source, ▶ falls back to a 30-second Apple Music preview.
-                </p>
-              ) : (
-                <>
-                  <ul className="space-y-1 text-sm">
-                    {audioSources.map((s) => {
-                      const count =
-                        s.kind === "folder"
-                          ? s.files.filter((f) => /\.(mp3|m4a|wav|flac|ogg|aac|aif{1,2}|wma|opus|alac)$/i.test(f.name)).length
-                          : libraries[s.libraryIndex]?.tracks.length ?? 0;
-                      return (
-                        <li key={s.id} className="flex items-center gap-2 rounded-md border bg-muted/30 px-2 py-1">
-                          {s.kind === "folder" ? <FolderOpen className="h-4 w-4" /> : <Database className="h-4 w-4" />}
-                          <span className="flex-1 truncate">{s.name}</span>
-                          <span className="text-xs text-muted-foreground">{count.toLocaleString()} {s.kind === "folder" ? "files" : "tracks"}</span>
-                          <Button variant="ghost" size="sm" onClick={() => removeAudioSource(s.id)}>
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  <p className="text-xs text-muted-foreground">
-                    {audioIndex.files.length.toLocaleString()} files · {audioIndex.variantCount.toLocaleString()} indexed variants across {audioSources.length} source{audioSources.length === 1 ? "" : "s"}
-                  </p>
-                </>
-              )}
-            </div>
 
           </CardContent>
         </Card>
