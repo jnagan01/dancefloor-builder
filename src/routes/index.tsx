@@ -23,6 +23,7 @@ import {
 import {
   parseVdjDatabaseXml,
   buildLibrary,
+  tracksFromAudioFiles,
   mergeLibraries,
   matchSong,
   searchLibrary,
@@ -165,7 +166,7 @@ function Index() {
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
 
   type AudioSource =
-    | { id: string; kind: "folder"; name: string; files: File[] }
+    | { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number }
     | { id: string; kind: "vdj"; name: string; libraryIndex: number };
   const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
   const [canDirWrite, setCanDirWrite] = useState(false);
@@ -203,10 +204,28 @@ function Index() {
     }
     const rel = (audio[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "";
     const name = rel.split("/")[0] || `Folder ${audioSources.length + 1}`;
+    const tracks = tracksFromAudioFiles(audio);
+    const folderLib = buildLibrary(tracks);
+    const sourceLabel = `Folder: ${name} (${tracks.length} files)`;
+    const newLibIndex = libraries.length;
+    const updatedLibs = [...libraries, folderLib];
+    setLibraries(updatedLibs);
+    setLibrarySources([...librarySources, sourceLabel]);
     setAudioSources((prev) => [
       ...prev,
-      { id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, kind: "folder", name, files },
+      { id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, kind: "folder", name, files: audio, libraryIndex: newLibIndex },
     ]);
+    // Re-match if results exist
+    if (result) {
+      const merged = mergeLibraries(updatedLibs);
+      const m: Record<string, SongMatch> = {};
+      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
+        result[section].forEach((s, i) => {
+          m[songKey(section, i, s)] = matchSong(s, merged);
+        });
+      });
+      setMatches(m);
+    }
     toast.success(`Added folder "${name}" · ${audio.length} audio file${audio.length === 1 ? "" : "s"}`);
   }
 
@@ -214,8 +233,8 @@ function Index() {
     const lib = libraries[libIndex];
     if (!lib) return;
     const name = librarySources[libIndex] || `VirtualDJ library ${libIndex + 1}`;
-    if (audioSources.some((s) => s.kind === "vdj" && s.libraryIndex === libIndex)) {
-      toast.error("That VirtualDJ library is already a source");
+    if (audioSources.some((s) => s.libraryIndex === libIndex)) {
+      toast.error("That library is already a source");
       return;
     }
     setAudioSources((prev) => [
@@ -226,7 +245,38 @@ function Index() {
   }
 
   function removeAudioSource(id: string) {
-    setAudioSources((prev) => prev.filter((s) => s.id !== id));
+    const target = audioSources.find((s) => s.id === id);
+    if (!target) return;
+    if (target.kind === "folder") {
+      // Drop the synthesized library too and remap remaining indices.
+      const removedIdx = target.libraryIndex;
+      const newLibs = libraries.filter((_, i) => i !== removedIdx);
+      const newSrcLabels = librarySources.filter((_, i) => i !== removedIdx);
+      setLibraries(newLibs);
+      setLibrarySources(newSrcLabels);
+      setAudioSources((prev) =>
+        prev
+          .filter((s) => s.id !== id)
+          .map((s) =>
+            s.libraryIndex > removedIdx ? { ...s, libraryIndex: s.libraryIndex - 1 } : s,
+          ),
+      );
+      // Re-match against the reduced library set
+      if (result) {
+        const merged = newLibs.length ? mergeLibraries(newLibs) : null;
+        const m: Record<string, SongMatch> = {};
+        if (merged) {
+          (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
+            result[section].forEach((s, i) => {
+              m[songKey(section, i, s)] = matchSong(s, merged);
+            });
+          });
+        }
+        setMatches(m);
+      }
+    } else {
+      setAudioSources((prev) => prev.filter((s) => s.id !== id));
+    }
   }
 
   function rebuildAudioIndex() {
@@ -240,6 +290,7 @@ function Index() {
     () => (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioFile(audioIndex, q),
     [audioIndex]
   );
+
 
 
   const mergedLibrary = useMemo<VdjLibrary | null>(() => {
@@ -529,9 +580,11 @@ function Index() {
   function clearLibraries() {
     setLibraries([]);
     setLibrarySources([]);
+    setAudioSources([]);
     setMatches({});
-    toast.success("VirtualDJ library cleared");
+    toast.success("Libraries cleared");
   }
+
 
   async function chooseMyListsFolder() {
     if (!supportsDirectoryWrite()) {
@@ -1242,32 +1295,29 @@ function Index() {
         {/* Step 5 - VirtualDJ Library */}
         <Card>
           <CardHeader>
-            <CardTitle>Step 5 · VirtualDJ Library Matching (optional)</CardTitle>
+            <CardTitle>Step 5 · Music Library Matching</CardTitle>
             <CardDescription>
-              Select your VirtualDJ database.xml or VirtualDJ folder. Files are read and indexed only in your browser — nothing is uploaded.
+              Add any audio folder, or optionally a VirtualDJ <code>database.xml</code>. Files are read and indexed only in your browser — nothing is uploaded.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
+              <Button variant="default" size="sm" onClick={addAudioFolder}>
+                <Plus className="mr-1 h-4 w-4" /> Add music folder
+              </Button>
               <Button variant="outline" size="sm" onClick={selectDatabaseXml}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Select VirtualDJ database.xml
+                <FolderOpen className="mr-1 h-4 w-4" /> Add VirtualDJ database.xml (optional)
               </Button>
               <Button variant="outline" size="sm" onClick={() => selectFolder("VirtualDJ Folder")}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Select VirtualDJ Folder
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => selectFolder("External Drive VirtualDJ")}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Select External Drive VirtualDJ Folder
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => selectFolder("Music Folder")}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Select Music Folder
+                <FolderOpen className="mr-1 h-4 w-4" /> Scan VirtualDJ folder
               </Button>
               {libraries.length > 0 && (
                 <Button variant="ghost" size="sm" onClick={clearLibraries}>
-                  <X className="mr-1 h-4 w-4" /> Clear library
+                  <X className="mr-1 h-4 w-4" /> Clear libraries
                 </Button>
               )}
             </div>
-            {mergedLibrary && (
+            {mergedLibrary ? (
               <div className="rounded-md border bg-muted/30 p-3 text-sm">
                 <p className="font-medium">
                   Indexed {mergedLibrary.tracks.length} tracks from {libraries.length} source{libraries.length > 1 ? "s" : ""}
@@ -1276,6 +1326,10 @@ function Index() {
                   {librarySources.map((s, i) => <li key={i}>{s}</li>)}
                 </ul>
               </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Add a music folder or VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
+              </p>
             )}
             <div className="flex flex-wrap items-center gap-3 border-t pt-3">
               {!vdjDirHandle ? (
@@ -1304,16 +1358,16 @@ function Index() {
             </div>
             <div className="space-y-2 border-t pt-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">Music sources</span>
+                <span className="text-sm font-medium">Playback sources</span>
                 <Button variant="outline" size="sm" onClick={addAudioFolder}>
                   <Plus className="mr-1 h-4 w-4" /> Add folder
                 </Button>
                 {libraries.map((_, i) => {
-                  const already = audioSources.some((s) => s.kind === "vdj" && s.libraryIndex === i);
+                  const already = audioSources.some((s) => s.libraryIndex === i);
                   if (already) return null;
                   return (
                     <Button key={`add-vdj-${i}`} variant="outline" size="sm" onClick={() => addVdjSource(i)}>
-                      <Database className="mr-1 h-4 w-4" /> Use VirtualDJ library {libraries.length > 1 ? `#${i + 1}` : ""}
+                      <Database className="mr-1 h-4 w-4" /> Use library {libraries.length > 1 ? `#${i + 1}` : ""}
                     </Button>
                   );
                 })}
@@ -1323,6 +1377,7 @@ function Index() {
                   </Button>
                 )}
               </div>
+
               {audioSources.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   Add one or more folders (and optionally a loaded VirtualDJ library) for in-app playback and better matching.
