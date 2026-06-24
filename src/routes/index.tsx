@@ -589,6 +589,27 @@ function Index() {
   }
 
 
+  // Restore a previously chosen export folder from IndexedDB on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const handle = await loadDirHandle(VDJ_DIR_KEY);
+      if (cancelled || !handle) return;
+      const ok = await verifyReadWrite(handle);
+      if (cancelled) return;
+      if (ok) {
+        setVdjDirHandle(handle as DirHandleLike);
+        setVdjDirName(handle.name ?? "VirtualDJ folder");
+      } else {
+        // Permission lapsed; keep the saved handle so the user can re-grant
+        // via a single click without re-picking the folder.
+        setVdjDirHandle(handle as DirHandleLike);
+        setVdjDirName(handle.name ?? "VirtualDJ folder");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   async function chooseMyListsFolder() {
     if (!supportsDirectoryWrite()) {
       toast.error("Direct folder writing not supported in this browser");
@@ -597,16 +618,38 @@ function Index() {
     const handle = await pickDirectoryHandle();
     if (handle) {
       setVdjDirHandle(handle);
-      setVdjDirName((handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder");
-      toast.success("VirtualDJ folder linked");
+      const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
+      setVdjDirName(name);
+      await saveDirHandle(VDJ_DIR_KEY, handle);
+      toast.success(`VirtualDJ folder saved · ${name}`);
     }
   }
 
   function clearMyListsFolder() {
     setVdjDirHandle(null);
     setVdjDirName(null);
+    void clearDirHandle(VDJ_DIR_KEY);
     toast.success("VirtualDJ folder unlinked");
   }
+
+  // Ensure we have a writable folder handle, prompting the user if needed.
+  // Returns the handle or null if the user cancelled / permission denied.
+  async function ensureExportFolder(): Promise<DirHandleLike | null> {
+    if (vdjDirHandle) {
+      const ok = await verifyReadWrite(vdjDirHandle);
+      if (ok) return vdjDirHandle;
+    }
+    if (!supportsDirectoryWrite()) return null;
+    const handle = await pickDirectoryHandle();
+    if (!handle) return null;
+    setVdjDirHandle(handle);
+    const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
+    setVdjDirName(name);
+    await saveDirHandle(VDJ_DIR_KEY, handle);
+    toast.success(`VirtualDJ folder saved · ${name}`);
+    return handle;
+  }
+
 
 
   // --- Match controls ---
