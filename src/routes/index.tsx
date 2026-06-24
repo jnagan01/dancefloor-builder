@@ -7,6 +7,7 @@ import {
   dedupeSongs,
   dedupeKey,
   generateLists,
+  reorderForEnergyProgression,
   songsToCsv,
   combinedCsv,
   downloadBlob,
