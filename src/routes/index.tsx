@@ -1515,9 +1515,15 @@ function Index() {
 
               <Tabs defaultValue="warmUp">
                 <TabsList>
-                  <TabsTrigger value="warmUp">Warm Up ({result.warmUp.length})</TabsTrigger>
-                  <TabsTrigger value="transition">Transition ({result.transition.length})</TabsTrigger>
-                  <TabsTrigger value="peak">Peak ({result.peak.length})</TabsTrigger>
+                  <TabsTrigger value="warmUp">
+                    Warm Up ({result.warmUp.length}{result.finalShortfall && result.finalShortfall.warmUp > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.warmUp}` : ""})
+                  </TabsTrigger>
+                  <TabsTrigger value="transition">
+                    Transition ({result.transition.length}{result.finalShortfall && result.finalShortfall.transition > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.transition}` : ""})
+                  </TabsTrigger>
+                  <TabsTrigger value="peak">
+                    Peak ({result.peak.length}{result.finalShortfall && result.finalShortfall.peak > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.peak}` : ""})
+                  </TabsTrigger>
                 </TabsList>
                 {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => (
                   <TabsContent key={sec} value={sec}>
