@@ -382,6 +382,10 @@ function Index() {
                   artist: sug.artist,
                   song: sug.song,
                   fromUpload: false,
+                  energy: sug.energy,
+                  danceability: sug.danceability,
+                  popularity: sug.popularity,
+                  valence: sug.valence,
                   aiSuggestion: true,
                 } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean });
               }
@@ -416,6 +420,11 @@ function Index() {
         setIsGenerating(false);
       }
     }
+
+    // Re-bucket + sort the merged set so uploads and AI picks interleave into
+    // a single ascending energy ramp from the first warm-up song to the last
+    // peak song.
+    r = reorderForEnergyProgression(r);
 
     setResult(r);
     setMatches({});
