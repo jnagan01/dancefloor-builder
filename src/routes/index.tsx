@@ -1612,7 +1612,15 @@ function Index() {
     </div>
   );
 }
-function SourceBadge({ song }: { song: Song & { fromUpload?: boolean; aiSuggestion?: boolean } }) {
+type BadgeSong = Song & {
+  fromUpload?: boolean;
+  aiSuggestion?: boolean;
+  stretched?: boolean;
+  naturalSection?: "Warm Up" | "Transition" | "Peak";
+  reused?: boolean;
+};
+
+function SourceBadge({ song }: { song: BadgeSong }) {
   if (song.aiSuggestion) {
     return (
       <Badge variant="secondary" className="gap-1 text-[10px] bg-violet-100 text-violet-800 border-violet-200 hover:bg-violet-100">
@@ -1631,6 +1639,31 @@ function SourceBadge({ song }: { song: Song & { fromUpload?: boolean; aiSuggesti
     <Badge variant="secondary" className="gap-1 text-[10px] bg-neutral-100 text-neutral-700 border-neutral-200 hover:bg-neutral-100">
       <Database className="h-3 w-3" /> Library
     </Badge>
+  );
+}
+
+function FallbackBadges({ song }: { song: BadgeSong }) {
+  return (
+    <>
+      {song.stretched && (
+        <Badge
+          variant="secondary"
+          className="gap-1 text-[10px] bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100"
+          title={song.naturalSection ? `Natural fit: ${song.naturalSection} — stretched to fill the ramp` : "Stretched to fill the ramp"}
+        >
+          Stretched{song.naturalSection ? ` ← ${song.naturalSection}` : ""}
+        </Badge>
+      )}
+      {song.reused && (
+        <Badge
+          variant="secondary"
+          className="gap-1 text-[10px] bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-100"
+          title="Reused across sections to plug a shortfall"
+        >
+          Reused
+        </Badge>
+      )}
+    </>
   );
 }
 
@@ -1736,7 +1769,9 @@ function SectionView(props: SectionViewProps) {
                         <Play className="h-3.5 w-3.5" />
                       </Button>
                       <span>{s.artist}</span>
-                      <SourceBadge song={s as Song & { fromUpload?: boolean; aiSuggestion?: boolean }} />
+                      <SourceBadge song={s as BadgeSong} />
+                      <FallbackBadges song={s as BadgeSong} />
+
                     </div>
                   </TableCell>
                   <TableCell>
