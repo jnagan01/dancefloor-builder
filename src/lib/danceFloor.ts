@@ -326,10 +326,18 @@ export interface GenerationInput {
   expand: boolean;
 }
 
+export interface ResultSong extends Song {
+  fromUpload?: boolean;
+  energy?: number;
+  danceability?: number;
+  popularity?: number;
+  valence?: number;
+}
+
 export interface GenerationResult {
-  warmUp: Array<Song & { fromUpload?: boolean }>;
-  transition: Array<Song & { fromUpload?: boolean }>;
-  peak: Array<Song & { fromUpload?: boolean }>;
+  warmUp: ResultSong[];
+  transition: ResultSong[];
+  peak: ResultSong[];
   targetTotal: number;
   perSectionTarget: number;
   perSectionBase: number;
@@ -342,6 +350,42 @@ export interface GenerationResult {
 const SONGS_PER_HOUR = 15; // ~4 min/song
 export const SECTION_BUFFER = 1.5;
 
+/**
+ * Combined intensity score (1–10). Mean of energy & danceability — the two
+ * signals the user explicitly wants driving section placement and ordering.
+ */
+export function intensityOf(s: { energy?: number; danceability?: number }): number {
+  const e = typeof s.energy === "number" ? s.energy : 7;
+  const d = typeof s.danceability === "number" ? s.danceability : 6;
+  return (e + d) / 2;
+}
+
+/**
+ * Bucket by absolute intensity band so warm-up = low energy/danceability,
+ * peak = high. Stable for any list size (works for 1 song or 100).
+ */
+export function sectionForIntensity(intensity: number): Section {
+  if (intensity <= 5.75) return "Warm Up";
+  if (intensity >= 7.75) return "Peak";
+  return "Transition";
+}
+
+/**
+ * Sort ascending by intensity (low → high) so each section, and the
+ * concatenated warm-up→transition→peak set, forms a continuous energy ramp.
+ * Popularity is a tiebreaker — less-known first so the biggest crowd-pleasers
+ * land later in their section.
+ */
+export function sortByIntensity<T extends { energy?: number; danceability?: number; popularity?: number }>(list: T[]): T[] {
+  return [...list].sort((a, b) => {
+    const ai = intensityOf(a);
+    const bi = intensityOf(b);
+    if (ai !== bi) return ai - bi;
+    const ap = typeof a.popularity === "number" ? a.popularity : 5;
+    const bp = typeof b.popularity === "number" ? b.popularity : 5;
+    return ap - bp;
+  });
+}
 
 export function generateLists(input: GenerationInput): GenerationResult {
   const { uploaded, prefs, hours, expand } = input;
@@ -352,24 +396,18 @@ export function generateLists(input: GenerationInput): GenerationResult {
   const duplicatesRemoved = validUploaded.length - dedupedUploaded.length;
   const blockedCount = dedupedUploaded.length - cleanUploaded.length;
 
-  // Score uploaded songs (energy, danceability, audience fit).
-  // Prefer the library's hand-curated section for known songs; otherwise pick
-  // the section with the highest score.
-  type Scored = ScoredSong & { section: Section; energy: number; danceability: number; audienceFit: AudienceFit; scores: SectionScores };
+  // Score every upload, then bucket by intensity band (energy + danceability).
+  type Scored = ResultSong & { section: Section };
   const scored: Scored[] = cleanUploaded.map((s) => {
     const est = estimateEnergy(s.artist, s.song, prefs);
-    const scores = sectionScores(est.energy, est.danceability, est.audienceFit);
-    const lib = lookupLibrary(s.artist, s.song);
+    const intensity = intensityOf(est);
     return {
-      ...s,
+      artist: s.artist,
+      song: s.song,
       fromUpload: true,
       energy: est.energy,
       danceability: est.danceability,
-      genre: est.genre,
-      decade: est.decade,
-      audienceFit: est.audienceFit,
-      section: lib ? lib.section : bestSection(scores),
-      scores,
+      section: sectionForIntensity(intensity),
     };
   });
 
@@ -378,33 +416,6 @@ export function generateLists(input: GenerationInput): GenerationResult {
   const peak: Scored[] = [];
   const bucketOf = (sec: Section) => (sec === "Warm Up" ? warmUp : sec === "Transition" ? transition : peak);
   scored.forEach((s) => bucketOf(s.section).push(s));
-
-  // Soft rebalance: only move songs whose preference margin between the
-  // over-full and under-full sections is small (≤ 2). Songs that strongly
-  // belong somewhere stay put — e.g. all-disco uploads remain in Warm Up.
-  const sectionList: Section[] = ["Warm Up", "Transition", "Peak"];
-  const totalScored = scored.length;
-  const ceilTarget = Math.ceil(totalScored / 3);
-  const floorTarget = Math.floor(totalScored / 3);
-  const MARGIN_LIMIT = 2;
-  for (let pass = 0; pass < 8; pass++) {
-    const buckets = sectionList.map((sec) => ({ sec, bucket: bucketOf(sec) }));
-    const over = buckets.find((b) => b.bucket.length > ceilTarget + 1);
-    const under = buckets.find((b) => b.bucket.length < floorTarget - 1);
-    if (!over || !under) break;
-    let bestIdx = -1;
-    let bestMargin = Infinity;
-    over.bucket.forEach((s, i) => {
-      const margin = s.scores[over.sec] - s.scores[under.sec];
-      if (margin < bestMargin) { bestMargin = margin; bestIdx = i; }
-    });
-    if (bestIdx < 0 || bestMargin > MARGIN_LIMIT) break;
-    const [moved] = over.bucket.splice(bestIdx, 1);
-    moved.section = under.sec;
-    under.bucket.push(moved);
-  }
-
-
 
   const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
   const perSectionBase = Math.ceil(totalSongsNeeded / 3);
@@ -433,33 +444,28 @@ export function generateLists(input: GenerationInput): GenerationResult {
       return score;
     };
 
+    // Score library candidates by intensity and pick the section they belong
+    // in based on the same band rule used for uploads.
     const candidates = SONG_LIBRARY
       .filter((l) => !seen.has(dedupeKey(l.artist, l.song)))
       .filter((l) => !isBlocked(l.artist, l.song, prefs.doNotPlay))
-      .map((l) => ({ lib: l, score: matchScore(l) }))
+      .map((l) => ({ lib: l, score: matchScore(l), section: sectionForIntensity(intensityOf(l)) }))
       .sort((a, b) => b.score - a.score);
 
-    const padTo = (bucket: typeof warmUp, section: Section, target: number) => {
-      // Pad the section with library songs until it reaches `target`.
-      for (const { lib } of candidates) {
+    const padTo = (bucket: Scored[], section: Section, target: number) => {
+      for (const { lib, section: libSec } of candidates) {
         if (bucket.length >= target) break;
-        if (lib.section !== section) continue;
+        if (libSec !== section) continue;
         const k = dedupeKey(lib.artist, lib.song);
         if (seen.has(k)) continue;
         seen.add(k);
-        const audienceFit = inferAudienceFit(lib.decade, lib.genre);
-        const libScores = sectionScores(lib.energy, lib.danceability, audienceFit);
         bucket.push({
           artist: lib.artist,
           song: lib.song,
           fromUpload: false,
           energy: lib.energy,
           danceability: lib.danceability,
-          genre: lib.genre,
-          decade: lib.decade,
-          audienceFit,
           section,
-          scores: libScores,
         });
       }
     };
@@ -469,16 +475,54 @@ export function generateLists(input: GenerationInput): GenerationResult {
     padTo(peak, "Peak", perSectionTarget);
   }
 
+  // Sort each section ascending by intensity for a smooth energy ramp.
+  const toResult = (list: Scored[]): ResultSong[] =>
+    sortByIntensity(list).map((s) => ({
+      artist: s.artist,
+      song: s.song,
+      fromUpload: s.fromUpload,
+      energy: s.energy,
+      danceability: s.danceability,
+    }));
+
   return {
-    warmUp: warmUp.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
-    transition: transition.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
-    peak: peak.map((s) => ({ artist: s.artist, song: s.song, fromUpload: s.fromUpload })),
+    warmUp: toResult(warmUp),
+    transition: toResult(transition),
+    peak: toResult(peak),
     targetTotal: perSectionTarget * 3,
     perSectionTarget,
     perSectionBase,
     shortfall,
     duplicatesRemoved,
     blockedCount,
+  };
+}
+
+/**
+ * Re-bucket + re-sort an already-generated result using the scores attached
+ * to each song. Used after AI suggestions are merged in so uploads and AI
+ * picks are interleaved into a single ascending energy ramp.
+ */
+export function reorderForEnergyProgression(result: GenerationResult): GenerationResult {
+  const all: ResultSong[] = [
+    ...result.warmUp.map((s) => ({ ...s })),
+    ...result.transition.map((s) => ({ ...s })),
+    ...result.peak.map((s) => ({ ...s })),
+  ];
+  const warmUp: ResultSong[] = [];
+  const transition: ResultSong[] = [];
+  const peak: ResultSong[] = [];
+  for (const s of all) {
+    const sec = sectionForIntensity(intensityOf(s));
+    if (sec === "Warm Up") warmUp.push(s);
+    else if (sec === "Transition") transition.push(s);
+    else peak.push(s);
+  }
+  return {
+    ...result,
+    warmUp: sortByIntensity(warmUp),
+    transition: sortByIntensity(transition),
+    peak: sortByIntensity(peak),
   };
 }
 
