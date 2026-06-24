@@ -580,9 +580,11 @@ function Index() {
   function clearLibraries() {
     setLibraries([]);
     setLibrarySources([]);
+    setAudioSources([]);
     setMatches({});
-    toast.success("VirtualDJ library cleared");
+    toast.success("Libraries cleared");
   }
+
 
   async function chooseMyListsFolder() {
     if (!supportsDirectoryWrite()) {
