@@ -1813,6 +1813,7 @@ function SectionView(props: SectionViewProps) {
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span>{s.song}</span>
+                      <MetricsChip song={s as BadgeSong} />
                     </div>
                   </TableCell>
                   {library && (
