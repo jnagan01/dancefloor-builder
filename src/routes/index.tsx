@@ -174,35 +174,16 @@ function Index() {
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
 
-  type AudioSource =
-    | { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number }
-    | { id: string; kind: "vdj"; name: string; libraryIndex: number };
+  type AudioSource = { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number };
   const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
   const [canDirWrite, setCanDirWrite] = useState(false);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
 
   const audioIndex = useMemo<AudioIndex>(() => {
     const allFiles: File[] = [];
-    for (const s of audioSources) {
-      if (s.kind === "folder") allFiles.push(...s.files);
-    }
-    // Build a basename → File map from all folder files so VDJ-source tracks
-    // can be matched to actual files for metadata enrichment.
-    const byBase = new Map<string, File>();
-    for (const f of allFiles) byBase.set(f.name.toLowerCase(), f);
-    const extras: { file: File; artist?: string; title?: string }[] = [];
-    for (const s of audioSources) {
-      if (s.kind !== "vdj") continue;
-      const lib = libraries[s.libraryIndex];
-      if (!lib) continue;
-      for (const t of lib.tracks) {
-        const base = (t.filePath.split(/[\\/]/).pop() || "").toLowerCase();
-        const file = base ? byBase.get(base) : undefined;
-        if (file) extras.push({ file, artist: t.artist, title: t.title });
-      }
-    }
-    return buildAudioIndex(allFiles, extras);
-  }, [audioSources, libraries]);
+    for (const s of audioSources) allFiles.push(...s.files);
+    return buildAudioIndex(allFiles, []);
+  }, [audioSources]);
 
   async function addAudioFolder() {
     const files = await pickDirectoryFiles();
@@ -238,61 +219,35 @@ function Index() {
     toast.success(`Added folder "${name}" · ${audio.length} audio file${audio.length === 1 ? "" : "s"}`);
   }
 
-  function addVdjSource(libIndex: number) {
-    const lib = libraries[libIndex];
-    if (!lib) return;
-    const name = librarySources[libIndex] || `VirtualDJ library ${libIndex + 1}`;
-    if (audioSources.some((s) => s.libraryIndex === libIndex)) {
-      toast.error("That library is already a source");
-      return;
-    }
-    setAudioSources((prev) => [
-      ...prev,
-      { id: `vdj-${libIndex}-${Date.now()}`, kind: "vdj", name, libraryIndex: libIndex },
-    ]);
-    toast.success(`Added VirtualDJ library as source`);
-  }
-
   function removeAudioSource(id: string) {
     const target = audioSources.find((s) => s.id === id);
     if (!target) return;
-    if (target.kind === "folder") {
-      // Drop the synthesized library too and remap remaining indices.
-      const removedIdx = target.libraryIndex;
-      const newLibs = libraries.filter((_, i) => i !== removedIdx);
-      const newSrcLabels = librarySources.filter((_, i) => i !== removedIdx);
-      setLibraries(newLibs);
-      setLibrarySources(newSrcLabels);
-      setAudioSources((prev) =>
-        prev
-          .filter((s) => s.id !== id)
-          .map((s) =>
-            s.libraryIndex > removedIdx ? { ...s, libraryIndex: s.libraryIndex - 1 } : s,
-          ),
-      );
-      // Re-match against the reduced library set
-      if (result) {
-        const merged = newLibs.length ? mergeLibraries(newLibs) : null;
-        const m: Record<string, SongMatch> = {};
-        if (merged) {
-          (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-            result[section].forEach((s, i) => {
-              m[songKey(section, i, s)] = matchSong(s, merged);
-            });
+    // Drop the synthesized library too and remap remaining indices.
+    const removedIdx = target.libraryIndex;
+    const newLibs = libraries.filter((_, i) => i !== removedIdx);
+    const newSrcLabels = librarySources.filter((_, i) => i !== removedIdx);
+    setLibraries(newLibs);
+    setLibrarySources(newSrcLabels);
+    setAudioSources((prev) =>
+      prev
+        .filter((s) => s.id !== id)
+        .map((s) =>
+          s.libraryIndex > removedIdx ? { ...s, libraryIndex: s.libraryIndex - 1 } : s,
+        ),
+    );
+    // Re-match against the reduced library set
+    if (result) {
+      const merged = newLibs.length ? mergeLibraries(newLibs) : null;
+      const m: Record<string, SongMatch> = {};
+      if (merged) {
+        (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
+          result[section].forEach((s, i) => {
+            m[songKey(section, i, s)] = matchSong(s, merged);
           });
-        }
-        setMatches(m);
+        });
       }
-    } else {
-      setAudioSources((prev) => prev.filter((s) => s.id !== id));
+      setMatches(m);
     }
-  }
-
-  function rebuildAudioIndex() {
-    // useMemo recomputes when audioSources changes; bump a no-op state to
-    // force recompute when underlying File contents may have changed.
-    setAudioSources((prev) => prev.map((s) => ({ ...s })));
-    toast.success(`Rebuilt index: ${audioIndex.files.length.toLocaleString()} files · ${audioIndex.variantCount.toLocaleString()} indexed variants`);
   }
 
   const resolveLocalFile = useMemo(
