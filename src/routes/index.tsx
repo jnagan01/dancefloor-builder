@@ -404,11 +404,11 @@ function Index() {
         // itself comes only from the current uploaded `songs`). Do not add
         // any data here that could come from a previous workflow — the AI
         // recommender must only see the active workflow's inputs.
-        const existing: { artist: string; song: string }[] = [
-          ...r.warmUp,
-          ...r.transition,
-          ...r.peak,
-        ].map((s) => ({ artist: s.artist, song: s.song }));
+        const existing = buildRecommendExisting({
+          warmUp: r.warmUp,
+          transition: r.transition,
+          peak: r.peak,
+        });
 
         const failed: SectionKey[] = [];
         await Promise.all(
