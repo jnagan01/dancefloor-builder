@@ -332,6 +332,18 @@ export interface ResultSong extends Song {
   danceability?: number;
   popularity?: number;
   valence?: number;
+  /** Tempo in BPM (from VirtualDJ DB or AI estimate). */
+  bpm?: number;
+  /** Musical key in Camelot notation (e.g. "8A"). */
+  camelot?: string;
+  /** Genre string when known. */
+  genre?: string;
+  /** 4-digit year when known. */
+  year?: number;
+  /** Short mood label (e.g. "euphoric"). */
+  mood?: string;
+  /** Where the audio-feature metadata came from. */
+  metaSource?: "VirtualDJ" | "AI" | "Library" | "Upload";
   /** Set when the song's natural intensity band differs from the section it
    * was placed in — i.e. it was stretched to keep the ramp continuous. */
   stretched?: boolean;
