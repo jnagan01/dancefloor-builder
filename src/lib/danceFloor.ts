@@ -688,9 +688,10 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
         : { ...s, stretched: true, naturalSection: natural };
     });
 
-  const warmUp = tag(warmUpRaw, "Warm Up");
-  const transition = tag(transitionRaw, "Transition");
-  const peak = tag(peakRaw, "Peak");
+  // Apply variety re-ranker per section (artist cap + smooth BPM/key transitions).
+  const warmUp = applyVarietyReranker(tag(warmUpRaw, "Warm Up"));
+  const transition = applyVarietyReranker(tag(transitionRaw, "Transition"));
+  const peak = applyVarietyReranker(tag(peakRaw, "Peak"));
 
   // Flag duplicates (same artist+song appearing in more than one slot) as
   // reused — the ramp borrowed a song to plug a shortfall.
