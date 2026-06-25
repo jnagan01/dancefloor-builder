@@ -394,7 +394,7 @@ function Index() {
 
     // Enrich uploads with metadata from connected VirtualDJ libraries
     // (BPM, key→Camelot, genre, year). Best-effort: missing fields stay missing.
-    const enrichFromLibrary = (s: ResultSongLike): ResultSongLike => {
+    const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
       const m = matchSong({ artist: s.artist, song: s.song }, mergedLibrary);
       if (m.trackIndex == null) return s;
