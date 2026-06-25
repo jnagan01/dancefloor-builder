@@ -397,6 +397,12 @@ function Index() {
           { key: "transition", label: "Transition" },
           { key: "peak", label: "Peak" },
         ];
+        // IMPORTANT: workflow isolation.
+        // `prefs` is rebuilt above from current form state only, and
+        // `existing` is derived strictly from the freshly-computed `r` (which
+        // itself comes only from the current uploaded `songs`). Do not add
+        // any data here that could come from a previous workflow — the AI
+        // recommender must only see the active workflow's inputs.
         const existing: { artist: string; song: string }[] = [
           ...r.warmUp,
           ...r.transition,
