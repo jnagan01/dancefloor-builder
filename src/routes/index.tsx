@@ -173,6 +173,33 @@ function Index() {
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
+  // Bumped whenever the workflow is reset or a saved workflow is loaded.
+  // Used as a React `key` on workflow-scoped components so any internal state
+  // they hold is dropped — guarantees no cross-workflow leakage in the UI.
+  const [workflowInstanceId, setWorkflowInstanceId] = useState(0);
+
+  // Resets every piece of state that belongs to a single workflow. Device-level
+  // setup (connected music folders, VirtualDJ export folder) is intentionally
+  // left alone — those represent the DJ's machine, not workflow content.
+  function clearWorkflowState() {
+    setSongs([]);
+    setHours("3");
+    setArtistsInput("");
+    setGenresInput("");
+    setDecades(["2000s", "2010s", "2020s"]);
+    setNotes("");
+    setDoNotPlayInput("");
+    setExpand(false);
+    setIncludeCombined(false);
+    setEventName("");
+    setResult(null);
+    setMatches({});
+    setSearchOpen(null);
+    setSearchQuery("");
+    setPreviewTarget(null);
+    setIsGenerating(false);
+    setWorkflowInstanceId((n) => n + 1);
+  }
 
   type AudioSource = { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number };
   const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
@@ -370,6 +397,12 @@ function Index() {
           { key: "transition", label: "Transition" },
           { key: "peak", label: "Peak" },
         ];
+        // IMPORTANT: workflow isolation.
+        // `prefs` is rebuilt above from current form state only, and
+        // `existing` is derived strictly from the freshly-computed `r` (which
+        // itself comes only from the current uploaded `songs`). Do not add
+        // any data here that could come from a previous workflow — the AI
+        // recommender must only see the active workflow's inputs.
         const existing: { artist: string; song: string }[] = [
           ...r.warmUp,
           ...r.transition,
@@ -975,6 +1008,10 @@ function Index() {
                 lists: result ? { warmUp: result.warmUp, transition: result.transition, peak: result.peak } : { warmUp: [], transition: [], peak: [] },
               })}
               applySnapshot={(s) => {
+                // Start from a fully clean workflow so matches, open search
+                // panels, preview player state, etc. from the previous
+                // workflow cannot bleed into the loaded one.
+                clearWorkflowState();
                 setSongs(s.inputs.songs ?? []);
                 setHours(s.inputs.hours ?? "3");
                 setArtistsInput(s.inputs.artistsInput ?? "");
@@ -1001,22 +1038,7 @@ function Index() {
                   setResult(null);
                 }
               }}
-              resetWorkflow={() => {
-                setSongs([]);
-                setHours("3");
-                setArtistsInput("");
-                setGenresInput("");
-                setDecades(["2000s", "2010s", "2020s"]);
-                setNotes("");
-                setDoNotPlayInput("");
-                setExpand(false);
-                setIncludeCombined(false);
-                setEventName("");
-                setResult(null);
-                setMatches({});
-                setSearchOpen(null);
-                setSearchQuery("");
-              }}
+              resetWorkflow={clearWorkflowState}
             />
           </div>
         </div>
@@ -1739,7 +1761,7 @@ function Index() {
           </div>
         </DialogContent>
       </Dialog>
-      <PreviewPlayer target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} resolveLocalFile={resolveLocalFile} />
+      <PreviewPlayer key={`preview-${workflowInstanceId}`} target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} resolveLocalFile={resolveLocalFile} />
     </div>
   );
 }
