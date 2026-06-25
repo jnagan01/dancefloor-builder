@@ -1002,6 +1002,10 @@ function Index() {
                 lists: result ? { warmUp: result.warmUp, transition: result.transition, peak: result.peak } : { warmUp: [], transition: [], peak: [] },
               })}
               applySnapshot={(s) => {
+                // Start from a fully clean workflow so matches, open search
+                // panels, preview player state, etc. from the previous
+                // workflow cannot bleed into the loaded one.
+                clearWorkflowState();
                 setSongs(s.inputs.songs ?? []);
                 setHours(s.inputs.hours ?? "3");
                 setArtistsInput(s.inputs.artistsInput ?? "");
@@ -1028,22 +1032,7 @@ function Index() {
                   setResult(null);
                 }
               }}
-              resetWorkflow={() => {
-                setSongs([]);
-                setHours("3");
-                setArtistsInput("");
-                setGenresInput("");
-                setDecades(["2000s", "2010s", "2020s"]);
-                setNotes("");
-                setDoNotPlayInput("");
-                setExpand(false);
-                setIncludeCombined(false);
-                setEventName("");
-                setResult(null);
-                setMatches({});
-                setSearchOpen(null);
-                setSearchQuery("");
-              }}
+              resetWorkflow={clearWorkflowState}
             />
           </div>
         </div>
