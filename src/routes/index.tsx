@@ -199,7 +199,7 @@ function Index() {
     setSearchQuery("");
     setPreviewTarget(null);
     setIsGenerating(false);
-    setWorkflowInstanceId((n) => n + 1);
+    setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
 
   type AudioSource = { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number };
