@@ -61,6 +61,7 @@ import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
+import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
