@@ -62,6 +62,8 @@ import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioM
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
+import { toCamelot, parseBpm } from "@/lib/musicTheory";
+import type { ResultSong } from "@/lib/danceFloor";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
