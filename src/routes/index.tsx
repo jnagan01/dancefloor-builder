@@ -61,6 +61,7 @@ import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
+import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
@@ -198,7 +199,7 @@ function Index() {
     setSearchQuery("");
     setPreviewTarget(null);
     setIsGenerating(false);
-    setWorkflowInstanceId((n) => n + 1);
+    setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
 
   type AudioSource = { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number };
@@ -403,11 +404,11 @@ function Index() {
         // itself comes only from the current uploaded `songs`). Do not add
         // any data here that could come from a previous workflow — the AI
         // recommender must only see the active workflow's inputs.
-        const existing: { artist: string; song: string }[] = [
-          ...r.warmUp,
-          ...r.transition,
-          ...r.peak,
-        ].map((s) => ({ artist: s.artist, song: s.song }));
+        const existing = buildRecommendExisting({
+          warmUp: r.warmUp,
+          transition: r.transition,
+          peak: r.peak,
+        });
 
         const failed: SectionKey[] = [];
         await Promise.all(
