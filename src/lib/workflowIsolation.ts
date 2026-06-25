@@ -17,23 +17,47 @@ export type SectionLists<T extends { artist: string; song: string }> = {
   peak: T[];
 };
 
-export type RecommendExistingEntry = { artist: string; song: string };
+export type RecommendExistingEntry = {
+  artist: string;
+  song: string;
+  bpm?: number;
+  camelot?: string;
+  energy?: number;
+  danceability?: number;
+  genre?: string;
+};
+
+type ExistingFeatured = {
+  artist: string;
+  song: string;
+  bpm?: number;
+  camelot?: string;
+  energy?: number;
+  danceability?: number;
+  genre?: string;
+};
 
 /**
  * Build the `existing` array that gets sent to the AI recommender. The
- * recommender uses this to avoid re-suggesting songs already in the set.
+ * recommender uses this to avoid re-suggesting songs already in the set
+ * AND to sequence new picks against neighbor BPM/key/energy.
  *
  * INVARIANT: the returned array contains ONLY entries from the lists passed
  * in. Callers must construct `lists` from the current workflow's songs;
  * never merge in data from another workflow.
  */
-export function buildRecommendExisting<T extends { artist: string; song: string }>(
+export function buildRecommendExisting<T extends ExistingFeatured>(
   lists: SectionLists<T>,
 ): RecommendExistingEntry[] {
-  return [...lists.warmUp, ...lists.transition, ...lists.peak].map((s) => ({
-    artist: s.artist,
-    song: s.song,
-  }));
+  return [...lists.warmUp, ...lists.transition, ...lists.peak].map((s) => {
+    const out: RecommendExistingEntry = { artist: s.artist, song: s.song };
+    if (typeof s.bpm === "number") out.bpm = s.bpm;
+    if (s.camelot) out.camelot = s.camelot;
+    if (typeof s.energy === "number") out.energy = s.energy;
+    if (typeof s.danceability === "number") out.danceability = s.danceability;
+    if (s.genre) out.genre = s.genre;
+    return out;
+  });
 }
 
 /**
