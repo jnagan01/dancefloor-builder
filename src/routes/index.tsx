@@ -173,6 +173,33 @@ function Index() {
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
+  // Bumped whenever the workflow is reset or a saved workflow is loaded.
+  // Used as a React `key` on workflow-scoped components so any internal state
+  // they hold is dropped — guarantees no cross-workflow leakage in the UI.
+  const [workflowInstanceId, setWorkflowInstanceId] = useState(0);
+
+  // Resets every piece of state that belongs to a single workflow. Device-level
+  // setup (connected music folders, VirtualDJ export folder) is intentionally
+  // left alone — those represent the DJ's machine, not workflow content.
+  function clearWorkflowState() {
+    setSongs([]);
+    setHours("3");
+    setArtistsInput("");
+    setGenresInput("");
+    setDecades(["2000s", "2010s", "2020s"]);
+    setNotes("");
+    setDoNotPlayInput("");
+    setExpand(false);
+    setIncludeCombined(false);
+    setEventName("");
+    setResult(null);
+    setMatches({});
+    setSearchOpen(null);
+    setSearchQuery("");
+    setPreviewTarget(null);
+    setIsGenerating(false);
+    setWorkflowInstanceId((n) => n + 1);
+  }
 
   type AudioSource = { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number };
   const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
