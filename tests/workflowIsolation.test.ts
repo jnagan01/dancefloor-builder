@@ -56,16 +56,33 @@ describe("buildRecommendExisting (AI payload isolation)", () => {
     expect(lists.warmUp[0]).toEqual({ artist: "X", song: "x1" });
   });
 
-  it("projects to only artist/song (no extra fields leak into the prompt)", () => {
+  it("projects only the whitelisted feature fields (no AI reasoning or upload flags leak)", () => {
     const lists = {
       warmUp: [
-        { artist: "X", song: "x1", aiReason: "secret notes", energy: 9, fromUpload: true } as Song & Record<string, unknown>,
+        {
+          artist: "X",
+          song: "x1",
+          aiReason: "secret notes",
+          energy: 9,
+          bpm: 124,
+          camelot: "8A",
+          fromUpload: true,
+        } as Song & Record<string, unknown>,
       ],
       transition: [] as Song[],
       peak: [] as Song[],
     };
     const out = buildRecommendExisting(lists);
-    expect(Object.keys(out[0]).sort()).toEqual(["artist", "song"]);
+    const keys = Object.keys(out[0]);
+    // Audio features are allowed (used as neighbor context for sequencing).
+    expect(keys).toContain("artist");
+    expect(keys).toContain("song");
+    expect(keys).toContain("energy");
+    expect(keys).toContain("bpm");
+    expect(keys).toContain("camelot");
+    // But internal flags / AI reasoning must NOT leak into the prompt.
+    expect(keys).not.toContain("aiReason");
+    expect(keys).not.toContain("fromUpload");
   });
 });
 
