@@ -62,6 +62,8 @@ import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioM
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
+import { toCamelot, parseBpm } from "@/lib/musicTheory";
+import type { ResultSong } from "@/lib/danceFloor";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
@@ -390,6 +392,30 @@ function Index() {
       prefs,
     });
 
+    // Enrich uploads with metadata from connected VirtualDJ libraries
+    // (BPM, key→Camelot, genre, year). Best-effort: missing fields stay missing.
+    const enrichFromLibrary = (s: ResultSong): ResultSong => {
+      if (!mergedLibrary) return s;
+      const m = matchSong({ artist: s.artist, song: s.song }, mergedLibrary);
+      if (m.trackIndex == null) return s;
+      const t = mergedLibrary.tracks[m.trackIndex];
+      if (!t) return s;
+      const bpmNum = parseBpm(t.bpm);
+      const cam = toCamelot(t.key);
+      const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
+      return {
+        ...s,
+        bpm: s.bpm ?? bpmNum,
+        camelot: s.camelot ?? cam,
+        genre: s.genre ?? t.genre,
+        year: s.year ?? yearNum,
+        metaSource: s.metaSource ?? "VirtualDJ",
+      };
+    };
+    (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
+      r[k] = r[k].map(enrichFromLibrary);
+    });
+
     if (expand) {
       setIsGenerating(true);
       try {
@@ -435,10 +461,18 @@ function Index() {
                   danceability: sug.danceability,
                   popularity: sug.popularity,
                   valence: sug.valence,
+                  bpm: typeof sug.bpm === "number" ? sug.bpm : undefined,
+                  camelot: toCamelot(sug.camelot),
+                  genre: sug.genre,
+                  year: typeof sug.year === "number" ? sug.year : undefined,
+                  mood: sug.mood,
+                  metaSource: "AI",
                   aiSuggestion: true,
                   aiReason: sug.reason,
                 } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string });
               }
+              // Enrich the AI picks too if they happen to match a connected library.
+              r[key] = r[key].map(enrichFromLibrary);
             } catch (err) {
               console.error("AI recommend failed", err);
               failed.push(key);
@@ -461,7 +495,7 @@ function Index() {
               const k = dedupeKey(s.artist, s.song);
               if (have.has(k)) continue;
               have.add(k);
-              r[key].push(s);
+              r[key].push({ ...s, metaSource: "Library" });
             }
           }
           toast.error("AI suggestions unavailable for some sections — used built-in library.");
@@ -1777,6 +1811,12 @@ type BadgeSong = Song & {
   danceability?: number;
   popularity?: number;
   valence?: number;
+  bpm?: number;
+  camelot?: string;
+  genre?: string;
+  year?: number;
+  mood?: string;
+  metaSource?: "VirtualDJ" | "AI" | "Library" | "Upload";
 };
 
 function MetricsDetail({ song }: { song: BadgeSong }) {
@@ -1784,7 +1824,11 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
     typeof song.energy === "number" ||
     typeof song.danceability === "number" ||
     typeof song.popularity === "number" ||
-    typeof song.valence === "number";
+    typeof song.valence === "number" ||
+    typeof song.bpm === "number" ||
+    !!song.camelot ||
+    !!song.genre ||
+    typeof song.year === "number";
   if (!hasAny) return <span className="text-xs text-muted-foreground">No metrics available</span>;
   const fmt = (n?: number) => (typeof n === "number" ? n.toFixed(1).replace(/\.0$/, "") : "—");
   const intensity =
@@ -1797,6 +1841,12 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
     { label: "Popularity", value: fmt(song.popularity) },
     { label: "Valence", value: fmt(song.valence) },
     intensity ? { label: "Intensity (avg)", value: intensity } : null,
+    typeof song.bpm === "number" ? { label: "BPM", value: Math.round(song.bpm).toString() } : null,
+    song.camelot ? { label: "Key", value: song.camelot } : null,
+    song.genre ? { label: "Genre", value: song.genre } : null,
+    typeof song.year === "number" ? { label: "Year", value: String(song.year) } : null,
+    song.mood ? { label: "Mood", value: song.mood } : null,
+    song.metaSource ? { label: "Source", value: song.metaSource } : null,
     song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
   ].filter(Boolean) as { label: string; value: string }[];
   return (

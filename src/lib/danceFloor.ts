@@ -332,6 +332,18 @@ export interface ResultSong extends Song {
   danceability?: number;
   popularity?: number;
   valence?: number;
+  /** Tempo in BPM (from VirtualDJ DB or AI estimate). */
+  bpm?: number;
+  /** Musical key in Camelot notation (e.g. "8A"). */
+  camelot?: string;
+  /** Genre string when known. */
+  genre?: string;
+  /** 4-digit year when known. */
+  year?: number;
+  /** Short mood label (e.g. "euphoric"). */
+  mood?: string;
+  /** Where the audio-feature metadata came from. */
+  metaSource?: "VirtualDJ" | "AI" | "Library" | "Upload";
   /** Set when the song's natural intensity band differs from the section it
    * was placed in — i.e. it was stretched to keep the ramp continuous. */
   stretched?: boolean;
@@ -514,6 +526,130 @@ export function generateLists(input: GenerationInput): GenerationResult {
 }
 
 /**
+ * Apply balanced variety rules to an ordered list of songs.
+ *
+ * Soft constraints (penalties, not hard removals — short libraries still fill):
+ * - Cap any one artist at `artistCap` total (default 2).
+ * - Avoid back-to-back same artist.
+ * - Avoid near-duplicate titles (normalized title match).
+ * - Prefer small BPM jumps (≤8%) and adjacent Camelot keys.
+ *
+ * Returns a new list, same length. Songs flagged by the artist cap get a
+ * higher index assignment so the ramp still ends with the highest-energy
+ * track. We use a greedy insertion pass: for each "next" slot we pick the
+ * remaining song that best satisfies the constraints against the previous
+ * accepted song, breaking ties by intensity ascending.
+ */
+export function applyVarietyReranker(
+  songs: ResultSong[],
+  opts: { artistCap?: number } = {},
+): ResultSong[] {
+  const artistCap = opts.artistCap ?? 2;
+  if (songs.length <= 1) return songs.slice();
+
+  // Step 1: enforce the artist cap by demoting overflow tracks toward the
+  // end of the list so they only land when truly needed.
+  const counts = new Map<string, number>();
+  const allowed: ResultSong[] = [];
+  const overflow: ResultSong[] = [];
+  for (const s of [...songs].sort((a, b) => intensityOf(a) - intensityOf(b))) {
+    const ak = normalizeKey(s.artist);
+    const c = counts.get(ak) ?? 0;
+    if (c < artistCap) {
+      counts.set(ak, c + 1);
+      allowed.push(s);
+    } else {
+      overflow.push(s);
+    }
+  }
+
+  // Step 2: deduplicate near-identical titles (same normalized artist + title
+  // base). Push the duplicate to overflow.
+  const seenTitle = new Set<string>();
+  const unique: ResultSong[] = [];
+  for (const s of allowed) {
+    const k = `${normalizeKey(s.artist)}|${normalizeKey(s.song)}`;
+    if (seenTitle.has(k)) {
+      overflow.push(s);
+      continue;
+    }
+    seenTitle.add(k);
+    unique.push(s);
+  }
+
+  // Step 3: greedy sequencing — pick the next song that minimizes transition
+  // cost against the previous accepted song while staying close to the
+  // intensity ramp position.
+  const remaining = unique.slice();
+  const result: ResultSong[] = [];
+  // Seed with the lowest-intensity track.
+  remaining.sort((a, b) => intensityOf(a) - intensityOf(b));
+  let prev = remaining.shift();
+  if (prev) result.push(prev);
+
+  while (remaining.length) {
+    let bestIdx = 0;
+    let bestCost = Infinity;
+    const targetIntensity =
+      result.length === 0 ? 0 : intensityOf(result[result.length - 1]);
+    for (let i = 0; i < remaining.length; i++) {
+      const cand = remaining[i];
+      const cost = transitionCost(prev!, cand, targetIntensity);
+      if (cost < bestCost) {
+        bestCost = cost;
+        bestIdx = i;
+      }
+    }
+    prev = remaining.splice(bestIdx, 1)[0];
+    result.push(prev);
+  }
+
+  // Append overflow at the end in ascending intensity to preserve the ramp.
+  overflow.sort((a, b) => intensityOf(a) - intensityOf(b));
+  result.push(...overflow);
+  return result;
+}
+
+/**
+ * Cost of transitioning from `prev` to `cand`. Lower = smoother.
+ * Combines: same-artist penalty, BPM jump, Camelot wheel distance, and
+ * deviation from the ramp's current intensity (so the order stays monotonic).
+ */
+function transitionCost(
+  prev: ResultSong,
+  cand: ResultSong,
+  baseIntensity: number,
+): number {
+  let cost = 0;
+  // Back-to-back same artist: heavy penalty.
+  if (normalizeKey(prev.artist) === normalizeKey(cand.artist)) cost += 100;
+  // BPM jump (require both to count).
+  if (prev.bpm && cand.bpm) {
+    const diff = Math.abs(prev.bpm - cand.bpm) / Math.max(prev.bpm, cand.bpm);
+    if (diff > 0.08) cost += 20 * (diff / 0.08);
+  }
+  // Camelot key distance (require both).
+  if (prev.camelot && cand.camelot) {
+    // Lightweight inline wheel distance to avoid a circular import.
+    const am = prev.camelot.match(/^(\d{1,2})([AB])$/);
+    const bm = cand.camelot.match(/^(\d{1,2})([AB])$/);
+    if (am && bm) {
+      const an = parseInt(am[1], 10);
+      const bn = parseInt(bm[1], 10);
+      const ring = Math.min(Math.abs(an - bn), 12 - Math.abs(an - bn));
+      const sameRow = am[2] === bm[2];
+      const wheelDist = sameRow ? ring : an === bn ? 1 : ring + 1;
+      if (wheelDist > 1) cost += 5 * (wheelDist - 1);
+    }
+  }
+  // Stay near the ramp — penalize going backward in intensity.
+  const candI = intensityOf(cand);
+  if (candI < baseIntensity) cost += (baseIntensity - candI) * 8;
+  else cost += (candI - baseIntensity) * 1; // small forward push
+  return cost;
+}
+
+/**
  * Re-bucket + re-sort an already-generated result using the scores attached
  * to each song. Used after AI suggestions are merged in so uploads and AI
  * picks are interleaved into a single ascending energy ramp.
@@ -552,9 +688,10 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
         : { ...s, stretched: true, naturalSection: natural };
     });
 
-  const warmUp = tag(warmUpRaw, "Warm Up");
-  const transition = tag(transitionRaw, "Transition");
-  const peak = tag(peakRaw, "Peak");
+  // Apply variety re-ranker per section (artist cap + smooth BPM/key transitions).
+  const warmUp = applyVarietyReranker(tag(warmUpRaw, "Warm Up"));
+  const transition = applyVarietyReranker(tag(transitionRaw, "Transition"));
+  const peak = applyVarietyReranker(tag(peakRaw, "Peak"));
 
   // Flag duplicates (same artist+song appearing in more than one slot) as
   // reused — the ramp borrowed a song to plug a shortfall.
