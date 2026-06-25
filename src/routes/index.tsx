@@ -1811,6 +1811,12 @@ type BadgeSong = Song & {
   danceability?: number;
   popularity?: number;
   valence?: number;
+  bpm?: number;
+  camelot?: string;
+  genre?: string;
+  year?: number;
+  mood?: string;
+  metaSource?: "VirtualDJ" | "AI" | "Library" | "Upload";
 };
 
 function MetricsDetail({ song }: { song: BadgeSong }) {
@@ -1818,7 +1824,11 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
     typeof song.energy === "number" ||
     typeof song.danceability === "number" ||
     typeof song.popularity === "number" ||
-    typeof song.valence === "number";
+    typeof song.valence === "number" ||
+    typeof song.bpm === "number" ||
+    !!song.camelot ||
+    !!song.genre ||
+    typeof song.year === "number";
   if (!hasAny) return <span className="text-xs text-muted-foreground">No metrics available</span>;
   const fmt = (n?: number) => (typeof n === "number" ? n.toFixed(1).replace(/\.0$/, "") : "—");
   const intensity =
@@ -1831,6 +1841,12 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
     { label: "Popularity", value: fmt(song.popularity) },
     { label: "Valence", value: fmt(song.valence) },
     intensity ? { label: "Intensity (avg)", value: intensity } : null,
+    typeof song.bpm === "number" ? { label: "BPM", value: Math.round(song.bpm).toString() } : null,
+    song.camelot ? { label: "Key", value: song.camelot } : null,
+    song.genre ? { label: "Genre", value: song.genre } : null,
+    typeof song.year === "number" ? { label: "Year", value: String(song.year) } : null,
+    song.mood ? { label: "Mood", value: song.mood } : null,
+    song.metaSource ? { label: "Source", value: song.metaSource } : null,
     song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
   ].filter(Boolean) as { label: string; value: string }[];
   return (
