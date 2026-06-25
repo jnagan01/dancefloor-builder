@@ -1,43 +1,65 @@
-# Prevent workflow data from leaking into AI recommendations
+## Goal
 
-## What I checked
+Make the song selection and ordering noticeably better by giving the AI richer, more accurate audio metadata and stronger ranking rules — without changing the existing workflow inputs.
 
-- AI call (`src/lib/recommend.functions.ts`): the server function is **stateless**. It only reads the `prefs` and `existing` arrays sent in the request payload — there is no server-side memory of prior calls, and no other data is added to the prompt.
-- AI call site (`src/routes/index.tsx`, the Generate handler): `prefs` is rebuilt from the current form inputs and `existing` is built from a freshly computed `r.warmUp/transition/peak` (which itself is derived only from the currently uploaded `songs`). So the prompt itself is already clean.
-- The real leak risk is **client-side workflow state** that survives across "New workflow" / "Load workflow" actions. Some of it (matches, generated results, search/preview panels) belongs to one workflow and should not silently carry over.
+## 1. Richer feature set for every candidate song
 
-## Gaps to fix
+Expand the per-song feature vector used for ranking and AI prompting to include:
 
-`resetWorkflow` (new workflow) does not clear:
-- `previewTarget` (preview player can keep playing a track from the previous workflow)
-- `isGenerating` (stuck spinner if reset during a run)
+- `bpm` (tempo)
+- `key` / `camelot` (musical key in Camelot notation for harmonic mixing)
+- `genre` and `subgenre`
+- `year` / `era`
+- `mood` tags (e.g. euphoric, dark, groovy)
+- existing: `energy`, `danceability`, `valence`, `popularity`
 
-`applySnapshot` (load workflow from history) does not clear:
-- `matches` — manual/auto matches from the previous workflow stay attached to song keys
-- `searchOpen`, `searchQuery` — an inline search panel from the previous workflow stays open
-- `previewTarget`, `includeCombined`, `isGenerating`
+Source order (first hit wins, then merge missing fields from the next source):
 
-The VirtualDJ export folder handle (`vdjDirHandle/Name/SavedAt`) and the selected music folder (`audioSources`, `libraries`, `librarySources`) are deliberately persisted device-level via IndexedDB — they represent the DJ's machine setup, not workflow content, so they stay.
+1. **VirtualDJ database fields** — parse BPM, Key, Genre, Year, and any POI/grid tags already in the user's `database.xml`. Extend `src/lib/virtualDj.ts` to extract these into the `Track` model.
+2. **MusicBrainz + AcousticBrainz** (no API key required) — look up artist/title to enrich missing BPM, key, genre, mood, and high-level features. Calls go through a new `src/lib/musicMeta.functions.ts` server function with in-memory + IndexedDB caching keyed by normalized artist/title.
+3. **AI-inferred fallback** — only for the small set still missing features after steps 1–2, ask the model to estimate them as part of the recommendation call (clearly flagged as estimated in the UI tooltip).
 
-## Changes (frontend only, `src/routes/index.tsx`)
+## 2. Smarter AI recommendation prompt
 
-1. **Extract a single `clearWorkflowState()` helper** that resets every workflow-scoped piece of state: `songs`, `hours`, `artistsInput`, `genresInput`, `decades`, `notes`, `doNotPlayInput`, `expand`, `includeCombined`, `eventName`, `result`, `matches`, `searchOpen`, `searchQuery`, `previewTarget`, `isGenerating`. Call it from `resetWorkflow` so the existing reset path picks up the new fields.
+Update `src/lib/recommend.functions.ts`:
 
-2. **Make `applySnapshot` start from a clean slate**: call `clearWorkflowState()` first, then apply the snapshot's inputs and lists. This guarantees `matches`, `searchOpen`, `previewTarget`, etc. from the previous workflow cannot bleed into the loaded one.
+- Pass the enriched feature vector for every already-picked song plus the per-section target bands (Warm Up / Transition / Peak) and target counts.
+- Add explicit instructions:
+  - Pick songs that fit the requested vibe even if not in the user's library.
+  - Match the target energy / danceability band for the section.
+  - Prefer adjacent-Camelot keys and BPM within ±6% of neighbors for transition smoothness.
+  - Maintain a monotonic energy ramp across the full list.
+  - Return BPM, key (Camelot), genre, year, mood, energy, danceability, valence, popularity, and a 1‑sentence rationale per song.
+- Tighten the structured-output schema (keep it within Gemini's state limits — short field names, no long enums).
 
-3. **Harden the AI call site** with a short comment + a defensive local rebuild so it is obvious the payload is workflow-scoped:
-   - Build `prefs` and `existing` inside the Generate handler from current state only (already the case — add a comment that documents this is intentional and must not reference any outer/stale variables).
-   - Keep `existing` derived strictly from `r.warmUp/transition/peak` (already the case).
+## 3. Balanced variety rules (post-processing)
 
-4. **Re-key the preview player and inline search panel by workflow** so any internal state inside those components is dropped on reset/load. Introduce a `workflowInstanceId` (incrementing number in state) bumped inside `clearWorkflowState()` and inside `applySnapshot`, and pass it as `key` on `<PreviewPlayer>` and on the inline `InlineMatchSearch` wrapper.
+After the AI returns candidates, run a deterministic re-ranker in `src/lib/danceFloor.ts` before the energy-ramp sort:
 
-## Out of scope
+- Penalize back-to-back same artist; cap any artist at 2 tracks per playlist by default.
+- Penalize near-duplicate titles (normalized title match, remix/edit variants).
+- Penalize large BPM jumps (>8%) and non-adjacent Camelot jumps between neighbors.
+- Penalty is a score adjustment, not a hard filter, so short libraries still fill.
 
-- No change to the server function, prompt, schema, or model.
-- No change to persisted device-level state (VDJ export folder, music folder, audio sources).
-- No change to history storage or saved snapshot shape.
+## 4. UI surfacing (small additions only, no workflow input changes)
 
-## Verification
+In the existing expandable song row:
 
-- Manual: generate lists in workflow A (with distinct artists/genres/Do-Not-Play), click "New workflow", confirm form is empty, no matches, no preview, no open search panel. Repeat by loading a saved workflow B — confirm only B's data is visible and a fresh Generate call only contains B's `prefs`/`existing` (visible in network payload).
-- Existing tests still pass (`tests/*`).
+- Add BPM, Key (Camelot), Genre, Year to the metrics detail.
+- Add a small "metadata source" line: `VirtualDJ`, `MusicBrainz`, or `AI estimate`.
+- Keep all existing badges (Stretched / Reused / Upload / AI / Library).
+
+## 5. Tests
+
+Extend `tests/` with:
+
+- Unit tests for the MusicBrainz enrichment merge order and cache hit/miss.
+- Unit tests for the variety re-ranker (artist cap, back-to-back penalty, BPM/key jump penalty).
+- A regression test confirming the energy ramp is still monotonic after re-ranking.
+
+## Technical notes
+
+- MusicBrainz requires a descriptive `User-Agent`; AcousticBrainz is read-only and unauthenticated. Both are called server-side from a new `*.functions.ts` to avoid CORS and to allow caching.
+- All enrichment is best-effort: missing fields fall back gracefully and the existing shortfall banner logic is unchanged.
+- No new user-facing inputs; existing workflow controls remain the single source of intent.
+- Workflow isolation (`workflowInstanceId`) and the existing `clearWorkflowState` helper are preserved; the metadata cache is keyed by song identity, not workflow, which is safe because it stores only objective audio features.
