@@ -6,31 +6,32 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 const SectionEnum = z.enum(["Warm Up", "Transition", "Peak"]);
 
 const ExistingEntrySchema = z.object({
-  artist: z.string(),
-  song: z.string(),
+  artist: z.string().max(300),
+  song: z.string().max(300),
   // Optional features so the AI can place new picks beside compatible neighbors.
   bpm: z.number().optional(),
-  camelot: z.string().optional(),
+  camelot: z.string().max(10).optional(),
   energy: z.number().optional(),
   danceability: z.number().optional(),
-  genre: z.string().optional(),
+  genre: z.string().max(60).optional(),
 });
 
 const InputSchema = z.object({
   section: SectionEnum,
   count: z.number().int().min(1).max(40),
   prefs: z.object({
-    artists: z.array(z.string()).max(50).default([]),
-    genres: z.array(z.string()).max(50).default([]),
-    decades: z.array(z.string()).max(20).default([]),
+    artists: z.array(z.string().max(150)).max(50).default([]),
+    genres: z.array(z.string().max(60)).max(50).default([]),
+    decades: z.array(z.string().max(20)).max(20).default([]),
     notes: z.string().max(2000).default(""),
     doNotPlay: z
-      .array(z.object({ artist: z.string().optional(), song: z.string().optional() }))
+      .array(z.object({ artist: z.string().max(300).optional(), song: z.string().max(300).optional() }))
       .max(500)
       .default([]),
   }),
   existing: z.array(ExistingEntrySchema).max(500).default([]),
 });
+
 
 // Keep field names short so the constrained-decoding state machine stays
 // well under Gemini's schema-state cap.
