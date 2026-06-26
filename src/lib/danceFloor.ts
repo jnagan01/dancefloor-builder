@@ -375,7 +375,7 @@ export interface GenerationResult {
 
 
 const SONGS_PER_HOUR = 15; // ~4 min/song
-export const SECTION_BUFFER = 1.5;
+export const SECTION_BUFFER = 2;
 
 /**
  * Combined intensity score (1–10). Mean of energy & danceability — the two

@@ -1248,7 +1248,7 @@ function Index() {
                 />
                 {hoursNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
-                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs (<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section, 1.5× buffer)
+                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs (<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section, 2× buffer)
                   </p>
                 )}
               </div>
@@ -1269,7 +1269,7 @@ function Index() {
                 </div>
                 {hoursNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
-                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (1.5× buffer)
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (2× buffer)
 
                   </p>
                 )}
@@ -1408,7 +1408,7 @@ function Index() {
                 </p>
                 {hoursNum > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground transition-opacity duration-150">
-                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (1.5× buffer)
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (2× buffer)
                   </p>
                 )}
               </div>
@@ -1418,7 +1418,7 @@ function Index() {
               <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
                 <div>
-                  <p className="font-medium">Not enough uploaded songs to hit the 1.5× buffer.</p>
+                  <p className="font-medium">Not enough uploaded songs to hit the 2× buffer.</p>
                   <p className="mt-1 text-xs">
                     Short by <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.warmUp}</span> in Warm Up,
                     {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.transition}</span> in Transition,
@@ -1601,13 +1601,13 @@ function Index() {
                       )}
                     </div>
                     <p className="mb-3 text-xs text-muted-foreground transition-opacity duration-150">
-                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> (1.5× buffer over <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSectionBase}</span> needed)
+                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> (2× buffer over <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSectionBase}</span> needed)
                     </p>
                     {!expand && liveTargets.shortfall.total > 0 && (
                       <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
                         <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
                         <div>
-                          <p className="font-medium">Uploads fall short of the 1.5× buffer.</p>
+                          <p className="font-medium">Uploads fall short of the 2× buffer.</p>
                           <p className="mt-1">
                             Short by <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.warmUp}</span> in Warm Up,
                             {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.transition}</span> in Transition,
