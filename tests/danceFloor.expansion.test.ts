@@ -12,7 +12,7 @@ function fabricated(count: number, titleHint: string, prefix: string): Song[] {
 const basePrefs = { artists: [], genres: [], decades: [], notes: "" };
 
 describe("generateLists buffered targets", () => {
-  it("computes perSectionTarget as 1.5× the base per-section need", () => {
+  it("computes perSectionTarget as 2× the base per-section need", () => {
     const r = generateLists({ uploaded: [], prefs: basePrefs, hours: 2, expand: false });
     const base = Math.ceil((2 * 15) / 3);
     expect(r.perSectionBase).toBe(base);
