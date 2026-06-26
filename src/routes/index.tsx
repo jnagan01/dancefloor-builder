@@ -1408,7 +1408,7 @@ function Index() {
                 </p>
                 {hoursNum > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground transition-opacity duration-150">
-                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (1.5× buffer)
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (2× buffer)
                   </p>
                 )}
               </div>
