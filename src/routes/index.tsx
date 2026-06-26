@@ -1607,7 +1607,7 @@ function Index() {
                       <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
                         <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
                         <div>
-                          <p className="font-medium">Uploads fall short of the 1.5× buffer.</p>
+                          <p className="font-medium">Uploads fall short of the 2× buffer.</p>
                           <p className="mt-1">
                             Short by <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.warmUp}</span> in Warm Up,
                             {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.transition}</span> in Transition,
