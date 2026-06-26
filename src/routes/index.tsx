@@ -1601,7 +1601,7 @@ function Index() {
                       )}
                     </div>
                     <p className="mb-3 text-xs text-muted-foreground transition-opacity duration-150">
-                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> (1.5× buffer over <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSectionBase}</span> needed)
+                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> (2× buffer over <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSectionBase}</span> needed)
                     </p>
                     {!expand && liveTargets.shortfall.total > 0 && (
                       <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
