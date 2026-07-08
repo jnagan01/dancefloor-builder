@@ -56,6 +56,7 @@ interface Props {
 export function DjAccountBar({ hasGeneratedLists, getSnapshot, applySnapshot, resetWorkflow }: Props) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [saveOpen, setSaveOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
