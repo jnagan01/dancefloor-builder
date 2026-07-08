@@ -930,6 +930,14 @@ function Index() {
     ).length;
   }
 
+  function confirmUnmatched(exportResult: GenerationResult, section: SectionKey): boolean {
+    const unmatched = unmatchedCountForResult(exportResult, section);
+    if (unmatched === 0) return true;
+    return window.confirm(
+      `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ XML/M3U playlist unless matched. Continue?`,
+    );
+  }
+
   async function exportSectionXml(section: SectionKey) {
     if (!mergedLibrary) {
       toast.error("Load a VirtualDJ database first");
@@ -937,34 +945,14 @@ function Index() {
     }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    const unmatched = unmatchedCountForResult(exportResult, section);
-    if (unmatched > 0) {
-      const ok = window.confirm(
-        `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ XML playlist unless matched. Continue?`,
-      );
-      if (!ok) return;
-    }
+    if (!confirmUnmatched(exportResult, section)) return;
     const refs = getSectionRefsForResult(exportResult, section);
-    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    const dir = await ensureExportFolder();
-    if (dir) {
-      const m3u = buildM3u(refs, mergedLibrary);
-      const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
-      try {
-        await writeFileToDir(dir, fname, m3u);
-        toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
-        return;
-      } catch {
-        toast.error("Could not write to VirtualDJ folder, downloading instead");
-      }
-      downloadBlob(new Blob([m3u], { type: "audio/x-mpegurl" }), fname);
-      return;
-    }
     const xml = buildVirtualDjXml(refs, mergedLibrary);
-    const fname = `${prefix}${SECTION_FILES[section]}.xml`;
-    downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
-
-
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    downloadBlob(
+      new Blob([xml], { type: "application/xml" }),
+      `${prefix}${SECTION_FILES[section]}.xml`,
+    );
   }
 
   function exportSectionM3u(section: SectionKey) {
@@ -981,6 +969,106 @@ function Index() {
       new Blob([m3u], { type: "audio/x-mpegurl" }),
       `${prefix}${SECTION_FILES[section]}.m3u`,
     );
+  }
+
+  // --- Direct-to-VirtualDJ folder exports ---
+
+  async function exportSectionXmlToVdj(section: SectionKey) {
+    if (!mergedLibrary) {
+      toast.error("Load a VirtualDJ database first");
+      return;
+    }
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    if (!confirmUnmatched(exportResult, section)) return;
+    const dir = await ensureExportFolder();
+    if (!dir) {
+      toast.error("Pick a VirtualDJ export folder first");
+      return;
+    }
+    const refs = getSectionRefsForResult(exportResult, section);
+    const xml = buildVirtualDjXml(refs, mergedLibrary);
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    const fname = `${prefix}${SECTION_FILES[section]}.xml`;
+    try {
+      await writeFileToDir(dir, fname, xml);
+      toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
+    } catch {
+      toast.error("Could not write to VirtualDJ folder, downloading instead");
+      downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
+    }
+  }
+
+  async function exportSectionM3uToVdj(section: SectionKey) {
+    if (!mergedLibrary) {
+      toast.error("Load a VirtualDJ database first");
+      return;
+    }
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const dir = await ensureExportFolder();
+    if (!dir) {
+      toast.error("Pick a VirtualDJ export folder first");
+      return;
+    }
+    const refs = getSectionRefsForResult(exportResult, section);
+    const m3u = buildM3u(refs, mergedLibrary);
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
+    try {
+      await writeFileToDir(dir, fname, m3u);
+      toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
+    } catch {
+      toast.error("Could not write to VirtualDJ folder, downloading instead");
+      downloadBlob(new Blob([m3u], { type: "audio/x-mpegurl" }), fname);
+    }
+  }
+
+  async function exportAllToVdj() {
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const dir = await ensureExportFolder();
+    if (!dir) {
+      toast.error("Pick a VirtualDJ export folder first");
+      return;
+    }
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    const sections: SectionKey[] = ["warmUp", "transition", "peak"];
+    let written = 0;
+    let failed = 0;
+    for (const section of sections) {
+      const list = exportResult[section];
+      if (!list.length) continue;
+      const files: Array<{ name: string; data: string }> = [
+        { name: `${prefix}${SECTION_FILES[section]}.csv`, data: songsToCsv(list) },
+      ];
+      if (mergedLibrary) {
+        const refs = getSectionRefsForResult(exportResult, section);
+        files.push({ name: `${prefix}${SECTION_FILES[section]}.xml`, data: buildVirtualDjXml(refs, mergedLibrary) });
+        files.push({ name: `${prefix}${SECTION_FILES[section]}.m3u`, data: buildM3u(refs, mergedLibrary) });
+      }
+      for (const f of files) {
+        try {
+          await writeFileToDir(dir, f.name, f.data);
+          written += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+    }
+    if (includeCombined) {
+      try {
+        await writeFileToDir(dir, `${prefix}combined-dance-floor-lists.csv`, combinedCsv(exportResult));
+        written += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed === 0) {
+      toast.success(`Saved ${written} file${written === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}`);
+    } else {
+      toast.error(`Saved ${written}, failed ${failed}. Check folder permissions.`);
+    }
   }
 
   async function exportAllZip() {
