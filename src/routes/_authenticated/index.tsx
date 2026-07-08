@@ -210,7 +210,37 @@ function Index() {
   type AudioSource = { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number };
   const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
   const [canDirWrite, setCanDirWrite] = useState(false);
+  const [musicSetupOpen, setMusicSetupOpen] = useState(false);
+  const [musicSetupCompleted, setMusicSetupCompleted] = useState<boolean | null>(null);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
+
+  // Load the user's "music setup completed" flag from their profile once.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("music_setup_completed")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (!cancelled) setMusicSetupCompleted(!!data?.music_setup_completed);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist "setup completed" once the user has at least one library and an export folder configured on any device.
+  useEffect(() => {
+    if (musicSetupCompleted === false && libraries.length > 0 && vdjDirHandle) {
+      (async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        await supabase.from("profiles").update({ music_setup_completed: true }).eq("id", user.id);
+        setMusicSetupCompleted(true);
+      })();
+    }
+  }, [libraries.length, vdjDirHandle, musicSetupCompleted]);
 
   const audioIndex = useMemo<AudioIndex>(() => {
     const allFiles: File[] = [];
