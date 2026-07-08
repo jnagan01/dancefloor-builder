@@ -439,56 +439,93 @@ function Index() {
         const failed: SectionKey[] = [];
         await Promise.all(
           sectionMap.map(async ({ key, label }) => {
-            const need = r.perSectionTarget - r[key].length;
-            if (need <= 0) return;
-            try {
-              const res = await recommendFn({
-                data: { section: label, count: need, prefs, existing },
-              });
-              const seen = new Set(
-                [...r[key], ...existing].map((s) => dedupeKey(s.artist, s.song)),
-              );
-              for (const sug of res.suggestions) {
-                if (r[key].length >= r.perSectionTarget) break;
-                const k = dedupeKey(sug.artist, sug.song);
-                if (seen.has(k)) continue;
-                seen.add(k);
-                r[key].push({
-                  artist: sug.artist,
-                  song: sug.song,
-                  fromUpload: false,
-                  energy: sug.energy,
-                  danceability: sug.danceability,
-                  popularity: sug.popularity,
-                  valence: sug.valence,
-                  bpm: typeof sug.bpm === "number" ? sug.bpm : undefined,
-                  camelot: toCamelot(sug.camelot),
-                  genre: sug.genre,
-                  year: typeof sug.year === "number" ? sug.year : undefined,
-                  mood: sug.mood,
-                  metaSource: "AI",
-                  aiSuggestion: true,
-                  aiReason: sug.reason,
-                } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string });
+            // Retry loop: AI may return fewer items than requested (dedupes,
+            // MAX_TOKENS truncation, over-cautious schema output). Keep asking
+            // for the remaining shortfall until we either fill the section or
+            // hit the attempt cap. Without this a single short response leaves
+            // the playlist under the 2× buffer target.
+            const MAX_ATTEMPTS = 3;
+            let attempt = 0;
+            let lastErr: unknown = null;
+            let gotAny = false;
+            while (r[key].length < r.perSectionTarget && attempt < MAX_ATTEMPTS) {
+              attempt += 1;
+              const need = r.perSectionTarget - r[key].length;
+              try {
+                // Rebuild `existing` each attempt so the AI sees everything
+                // already picked (uploads + prior AI additions) and never
+                // re-suggests the same songs.
+                const existingNow = buildRecommendExisting({
+                  warmUp: r.warmUp,
+                  transition: r.transition,
+                  peak: r.peak,
+                });
+                const res = await recommendFn({
+                  data: { section: label, count: need, prefs, existing: existingNow },
+                });
+                if (!res.suggestions.length) {
+                  // No progress this attempt — stop looping to avoid burning
+                  // credits on a section the model can't fill.
+                  break;
+                }
+                gotAny = true;
+                const seen = new Set(
+                  [...r[key], ...existingNow].map((s) => dedupeKey(s.artist, s.song)),
+                );
+                let addedThisAttempt = 0;
+                for (const sug of res.suggestions) {
+                  if (r[key].length >= r.perSectionTarget) break;
+                  const k = dedupeKey(sug.artist, sug.song);
+                  if (seen.has(k)) continue;
+                  seen.add(k);
+                  r[key].push({
+                    artist: sug.artist,
+                    song: sug.song,
+                    fromUpload: false,
+                    energy: sug.energy,
+                    danceability: sug.danceability,
+                    popularity: sug.popularity,
+                    valence: sug.valence,
+                    bpm: typeof sug.bpm === "number" ? sug.bpm : undefined,
+                    camelot: toCamelot(sug.camelot),
+                    genre: sug.genre,
+                    year: typeof sug.year === "number" ? sug.year : undefined,
+                    mood: sug.mood,
+                    metaSource: "AI",
+                    aiSuggestion: true,
+                    aiReason: sug.reason,
+                  } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string });
+                  addedThisAttempt += 1;
+                }
+                if (addedThisAttempt === 0) break; // all suggestions were duplicates
+              } catch (err) {
+                lastErr = err;
+                console.error("AI recommend failed", err);
+                break;
               }
-              // Enrich the AI picks too if they happen to match a connected library.
-              r[key] = r[key].map(enrichFromLibrary);
-            } catch (err) {
-              console.error("AI recommend failed", err);
-              failed.push(key);
+            }
+            // Enrich AI picks against any connected library.
+            r[key] = r[key].map(enrichFromLibrary);
+            // Mark section as failed only when AI produced nothing at all
+            // AND we still have a gap — that's when we need library fallback.
+            if (!gotAny && r[key].length < r.perSectionTarget) {
+              if (lastErr) failed.push(key);
+              else failed.push(key);
             }
           }),
         );
 
-        if (failed.length) {
-          // Fallback to built-in library padding for sections where AI failed.
+        // Top up any sections still short (even after successful AI calls)
+        // from the built-in library so we always hit the buffered target.
+        const stillShort = sectionMap.filter(({ key }) => r[key].length < r.perSectionTarget);
+        if (stillShort.length) {
           const fallback = generateLists({
             uploaded: uniqueSongs,
             hours: hoursNum,
             expand: true,
             prefs,
           });
-          for (const key of failed) {
+          for (const { key } of stillShort) {
             const have = new Set(r[key].map((s) => dedupeKey(s.artist, s.song)));
             for (const s of fallback[key]) {
               if (r[key].length >= r.perSectionTarget) break;
@@ -498,7 +535,9 @@ function Index() {
               r[key].push({ ...s, metaSource: "Library" });
             }
           }
-          toast.error("AI suggestions unavailable for some sections — used built-in library.");
+          if (failed.length) {
+            toast.error("AI suggestions unavailable for some sections — used built-in library.");
+          }
         }
       } finally {
         setIsGenerating(false);
