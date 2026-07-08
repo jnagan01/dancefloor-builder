@@ -183,7 +183,18 @@ Rules:
       model: gateway("google/gemini-3-flash-preview"),
       schema: SuggestionSchema,
       prompt,
+      // Give the model plenty of headroom so it can emit the full count even
+      // for long sections (2× buffer × 20+ songs, each with a rationale).
+      // Without this, Gemini truncates mid-list (finishReason=length) and the
+      // caller gets fewer songs than it asked for, leaving the playlist short.
+      maxOutputTokens: 8192,
     });
+
+    if (result.finishReason && result.finishReason !== "stop") {
+      console.warn(
+        `[recommendSongsForSection] non-stop finishReason=${result.finishReason} section=${data.section} requested=${data.count} got=${result.object.suggestions.length}`,
+      );
+    }
 
     return { suggestions: result.object.suggestions };
   });
