@@ -1839,6 +1839,21 @@ function Index() {
                 <Button onClick={exportAllZip}>
                   <Download className="mr-1 h-4 w-4" /> Export All Files as ZIP
                 </Button>
+                <Button
+                  variant="secondary"
+                  onClick={exportAllToVdj}
+                  disabled={!canDirWrite}
+                  title={
+                    canDirWrite
+                      ? vdjDirName
+                        ? `Write all files directly to ${vdjDirName}`
+                        : "Choose a folder, then write all files directly to it"
+                      : "Direct folder export requires a Chromium-based browser"
+                  }
+                >
+                  <FolderOpen className="mr-1 h-4 w-4" />
+                  {vdjDirName ? `Export All to VirtualDJ (${vdjDirName})` : "Export All to VirtualDJ folder…"}
+                </Button>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={includeCombined} onCheckedChange={(v) => setIncludeCombined(!!v)} />
                   Include combined reference CSV
