@@ -1282,6 +1282,12 @@ function Index() {
               }}
               resetWorkflow={clearWorkflowState}
             />
+            <Button variant="outline" size="sm" onClick={() => setMusicSetupOpen(true)}>
+              <FolderOpen className="mr-1 h-4 w-4" /> Music setup
+              {libraries.length > 0 && vdjDirHandle && (
+                <Check className="ml-1 h-3 w-3 text-emerald-500" />
+              )}
+            </Button>
           </div>
         </div>
       </header>
