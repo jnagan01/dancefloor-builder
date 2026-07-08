@@ -56,14 +56,18 @@ interface Props {
 export function DjAccountBar({ hasGeneratedLists, getSnapshot, applySnapshot, resetWorkflow }: Props) {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const [saveOpen, setSaveOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
 
   async function handleSignOut() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
     await supabase.auth.signOut();
     toast.success("Signed out");
+    navigate({ to: "/auth", replace: true });
   }
 
   if (loading) return <div className="text-sm text-muted-foreground">…</div>;

@@ -1,65 +1,65 @@
 ## Goal
 
-Make the song selection and ordering noticeably better by giving the AI richer, more accurate audio metadata and stronger ranking rules — without changing the existing workflow inputs.
+1. Require sign-in to use the Dance Floor Builder.
+2. Remove Step 5 (Music Library Matching + VirtualDJ export folder) from the builder flow. Move that setup into a **Profile / Settings** page. On the builder, saved folders auto-restore silently from the browser; if a device is missing them, a small inline banner links to Profile.
 
-## 1. Richer feature set for every candidate song
+## Important constraint (already discussed)
 
-Expand the per-song feature vector used for ranking and AI prompting to include:
+Folder access uses the browser's File System Access API. Those permissions live in IndexedDB per browser/device and **cannot** be transferred to another device via the server profile. What we CAN store server-side: a flag that says "this user has configured folders before" plus display-name metadata (so we can distinguish "new device, reconnect" from "brand new user, do first-time setup"). Actual re-granting of folder access on a new device still requires one click by the user in the Profile page — but never again in the builder flow.
 
-- `bpm` (tempo)
-- `key` / `camelot` (musical key in Camelot notation for harmonic mixing)
-- `genre` and `subgenre`
-- `year` / `era`
-- `mood` tags (e.g. euphoric, dark, groovy)
-- existing: `energy`, `danceability`, `valence`, `popularity`
+## Changes
 
-Source order (first hit wins, then merge missing fields from the next source):
+### 1. Auth gate on the builder
 
-1. **VirtualDJ database fields** — parse BPM, Key, Genre, Year, and any POI/grid tags already in the user's `database.xml`. Extend `src/lib/virtualDj.ts` to extract these into the `Track` model.
-2. **MusicBrainz + AcousticBrainz** (no API key required) — look up artist/title to enrich missing BPM, key, genre, mood, and high-level features. Calls go through a new `src/lib/musicMeta.functions.ts` server function with in-memory + IndexedDB caching keyed by normalized artist/title.
-3. **AI-inferred fallback** — only for the small set still missing features after steps 1–2, ask the model to estimate them as part of the recommendation call (clearly flagged as estimated in the UI tooltip).
+- Create `src/routes/_authenticated/route.tsx` — the integration-standard pathless layout: `ssr: false`, `beforeLoad` calls `supabase.auth.getUser()` and `throw redirect({ to: "/auth" })` when unauthenticated; component returns `<Outlet />`.
+- Move `src/routes/index.tsx` → `src/routes/_authenticated/index.tsx` and update the route call to `createFileRoute("/_authenticated/")`. URL stays `/`.
+- On `/auth`, after successful sign-in, keep the existing redirect to `/`.
 
-## 2. Smarter AI recommendation prompt
+### 2. New Profile / Settings page
 
-Update `src/lib/recommend.functions.ts`:
+- Create `src/routes/_authenticated/profile.tsx` (URL `/profile`).
+- Move the entire Step 5 UI into this page:
+  - Add music folder / Add VirtualDJ `database.xml` / Scan VirtualDJ folder / Clear libraries
+  - VirtualDJ export folder picker (Choose / Change / Forget)
+  - Indexed-tracks summary + per-source list with remove
+- Add a "Music folders" status row to the builder page's header/nav that links to `/profile` when anything is missing on this device.
+- Add a top-level user menu (link to Profile, Sign out) to `__root.tsx` or the builder header.
 
-- Pass the enriched feature vector for every already-picked song plus the per-section target bands (Warm Up / Transition / Peak) and target counts.
-- Add explicit instructions:
-  - Pick songs that fit the requested vibe even if not in the user's library.
-  - Match the target energy / danceability band for the section.
-  - Prefer adjacent-Camelot keys and BPM within ±6% of neighbors for transition smoothness.
-  - Maintain a monotonic energy ramp across the full list.
-  - Return BPM, key (Camelot), genre, year, mood, energy, danceability, valence, popularity, and a 1‑sentence rationale per song.
-- Tighten the structured-output schema (keep it within Gemini's state limits — short field names, no long enums).
+### 3. Persist a "configured before" flag per user
 
-## 3. Balanced variety rules (post-processing)
+- Migration: add `music_setup_completed boolean default false` to the existing `profiles` table (no folder paths — those can't be reused across devices; this is only a UX hint).
+- When the Profile page has at least one library indexed AND an export folder set, upsert `music_setup_completed = true` for `auth.uid()`.
+- Existing RLS on `profiles` already scopes updates to the owner — reuse it.
 
-After the AI returns candidates, run a deterministic re-ranker in `src/lib/danceFloor.ts` before the energy-ramp sort:
+### 4. Builder page (index) behavior after Step 5 removal
 
-- Penalize back-to-back same artist; cap any artist at 2 tracks per playlist by default.
-- Penalize near-duplicate titles (normalized title match, remix/edit variants).
-- Penalize large BPM jumps (>8%) and non-adjacent Camelot jumps between neighbors.
-- Penalty is a score adjustment, not a hard filter, so short libraries still fill.
+- Delete the Step 5 `<Card>` block from the builder. Renumber the "Generate" button placement.
+- Keep the existing on-mount effect that reads handles from IndexedDB (`loadDirHandle(VDJ_DIR_KEY)`, `librariesStore`) — this is what "auto-restore silently" relies on.
+- If `music_setup_completed` is true but this browser has no handles (new device / cleared storage), render a compact inline notice above "Generate":
+  > "Music folders aren't connected on this device. [Reconnect in Profile]"
+- If `music_setup_completed` is false (brand-new user), the same banner reads "First time here? [Set up your music folders]".
+- Export buttons remain; when no export folder is present on this device they simply fall back to file downloads (already the current behavior).
 
-## 4. UI surfacing (small additions only, no workflow input changes)
+### 5. Root shell / navigation
 
-In the existing expandable song row:
+- In `__root.tsx`, add a lightweight header with app name, "Profile" link (visible when signed in), and "Sign out" (calls `supabase.auth.signOut()` + navigates to `/auth`, following the sign-out hygiene rules — `queryClient.cancelQueries()`, `clear()`, `signOut()`, `navigate({ to: "/auth", replace: true })`).
+- Keep `/auth` public. Keep the sitemap route public.
 
-- Add BPM, Key (Camelot), Genre, Year to the metrics detail.
-- Add a small "metadata source" line: `VirtualDJ`, `MusicBrainz`, or `AI estimate`.
-- Keep all existing badges (Stretched / Reused / Upload / AI / Library).
+## Files touched
 
-## 5. Tests
+- New: `src/routes/_authenticated/route.tsx`, `src/routes/_authenticated/profile.tsx`
+- Move: `src/routes/index.tsx` → `src/routes/_authenticated/index.tsx` (Step 5 removed, banner added)
+- Edit: `src/routes/__root.tsx` (user menu / profile link / sign out)
+- Migration: add `music_setup_completed` column to `public.profiles`
+- Auto-regenerated: `src/routeTree.gen.ts`
 
-Extend `tests/` with:
+## Out of scope
 
-- Unit tests for the MusicBrainz enrichment merge order and cache hit/miss.
-- Unit tests for the variety re-ranker (artist cap, back-to-back penalty, BPM/key jump penalty).
-- A regression test confirming the energy ramp is still monotonic after re-ranking.
+- Storing folder paths server-side (technically impossible with the File System Access API).
+- Cross-device sync of the audio index — each device indexes its own local files.
 
-## Technical notes
+## What the user will experience
 
-- MusicBrainz requires a descriptive `User-Agent`; AcousticBrainz is read-only and unauthenticated. Both are called server-side from a new `*.functions.ts` to avoid CORS and to allow caching.
-- All enrichment is best-effort: missing fields fall back gracefully and the existing shortfall banner logic is unchanged.
-- No new user-facing inputs; existing workflow controls remain the single source of intent.
-- Workflow isolation (`workflowInstanceId`) and the existing `clearWorkflowState` helper are preserved; the metadata cache is keyed by song identity, not workflow, which is safe because it stores only objective audio features.
+- Signed out → any URL other than `/auth` bounces to `/auth`.
+- Signed in on a device they've used before → land on `/`, folders auto-restore, generate right away. Step 5 is gone.
+- Signed in on a new device → land on `/`, see a one-line banner linking to `/profile` to reconnect. Once done, the banner disappears and never returns on that device.
