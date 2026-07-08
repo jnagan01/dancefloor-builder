@@ -425,16 +425,13 @@ function Index() {
           { key: "peak", label: "Peak" },
         ];
         // IMPORTANT: workflow isolation.
-        // `prefs` is rebuilt above from current form state only, and
-        // `existing` is derived strictly from the freshly-computed `r` (which
-        // itself comes only from the current uploaded `songs`). Do not add
-        // any data here that could come from a previous workflow — the AI
-        // recommender must only see the active workflow's inputs.
-        const existing = buildRecommendExisting({
-          warmUp: r.warmUp,
-          transition: r.transition,
-          peak: r.peak,
-        });
+        // `prefs` is rebuilt above from current form state only, and each AI
+        // call below rebuilds `existing` strictly from the freshly-computed
+        // `r` (which itself comes only from the current uploaded `songs`).
+        // Do not add any data here that could come from a previous workflow —
+        // the AI recommender must only see the active workflow's inputs.
+
+
 
         const failed: SectionKey[] = [];
         await Promise.all(
