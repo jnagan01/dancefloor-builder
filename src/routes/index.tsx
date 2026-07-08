@@ -2136,6 +2136,10 @@ interface SectionViewProps {
   onExportCsv: () => void;
   onExportXml: () => void;
   onExportM3u: () => void;
+  onExportXmlToVdj: () => void;
+  onExportM3uToVdj: () => void;
+  canWriteToVdj: boolean;
+  vdjFolderName: string | null;
   onConfirm: (key: string) => void;
   onChoose: (key: string, trackIndex: number) => void;
   onMarkUnresolved: (key: string) => void;
