@@ -69,7 +69,7 @@ import type { ResultSong } from "@/lib/danceFloor";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
-export const Route = createFileRoute("/")({
+export const Route = createFileRoute("/_authenticated/")({
   component: Index,
   head: () => ({
     meta: [
