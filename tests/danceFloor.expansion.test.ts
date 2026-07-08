@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { generateLists, dedupeKey, SECTION_BUFFER, type Song } from "@/lib/danceFloor";
+import {
+  generateLists,
+  dedupeKey,
+  reorderForEnergyProgression,
+  SECTION_BUFFER,
+  topUpSectionsFromLibrary,
+  type Song,
+} from "@/lib/danceFloor";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
 
 function fabricated(count: number, titleHint: string, prefix: string): Song[] {
@@ -56,5 +63,20 @@ describe("generateLists buffered targets", () => {
     });
     const blockedKey = dedupeKey(blocked.artist, blocked.song);
     expect(r.peak.some((s) => dedupeKey(s.artist, s.song) === blockedKey)).toBe(false);
+  });
+
+  it("tops sections back up from the library after reordering leaves a section short", () => {
+    const uploads = fabricated(6, "peak banger", "PeakOnly");
+    const generated = generateLists({ uploaded: uploads, prefs: basePrefs, hours: 1, expand: false });
+    generated.peak = generated.peak.map((s) => ({ ...s, energy: 10, danceability: 10 }));
+    const reordered = reorderForEnergyProgression(generated);
+    expect(reordered.finalShortfall?.total).toBeGreaterThan(0);
+
+    const topped = topUpSectionsFromLibrary(reordered, basePrefs);
+    expect(topped.warmUp.length).toBeGreaterThanOrEqual(topped.perSectionTarget);
+    expect(topped.transition.length).toBeGreaterThanOrEqual(topped.perSectionTarget);
+    expect(topped.peak.length).toBeGreaterThanOrEqual(topped.perSectionTarget);
+    expect(topped.finalShortfall?.total).toBe(0);
+    expect([...topped.warmUp, ...topped.transition, ...topped.peak].some((s) => s.metaSource === "Library")).toBe(true);
   });
 });

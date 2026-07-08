@@ -379,12 +379,6 @@ export const SECTION_BUFFER = 2;
 
 type SectionKey = "warmUp" | "transition" | "peak";
 
-const SECTION_TO_KEY: Record<Section, SectionKey> = {
-  "Warm Up": "warmUp",
-  Transition: "transition",
-  Peak: "peak",
-};
-
 const KEY_TO_SECTION: Record<SectionKey, Section> = {
   warmUp: "Warm Up",
   transition: "Transition",

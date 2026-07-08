@@ -920,7 +920,12 @@ function Index() {
   }
 
   function unmatchedCount(section: SectionKey): number {
-    return getSectionRefs(section).filter(
+    if (!result) return 0;
+    return unmatchedCountForResult(result, section);
+  }
+
+  function unmatchedCountForResult(source: GenerationResult, section: SectionKey): number {
+    return getSectionRefsForResult(source, section).filter(
       (r) => !r.match || r.match.trackIndex == null || r.match.excludedFromVdj,
     ).length;
   }
@@ -930,15 +935,15 @@ function Index() {
       toast.error("Load a VirtualDJ database first");
       return;
     }
-    const unmatched = unmatchedCount(section);
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const unmatched = unmatchedCountForResult(exportResult, section);
     if (unmatched > 0) {
       const ok = window.confirm(
         `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ XML playlist unless matched. Continue?`,
       );
       if (!ok) return;
     }
-    const exportResult = ensureBufferedResultForExport();
-    if (!exportResult) return;
     const refs = getSectionRefsForResult(exportResult, section);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const dir = await ensureExportFolder();
