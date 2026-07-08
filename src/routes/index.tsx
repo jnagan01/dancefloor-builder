@@ -2151,7 +2151,7 @@ interface SectionViewProps {
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (key: string) => {
@@ -2162,17 +2162,40 @@ function SectionView(props: SectionViewProps) {
       return next;
     });
   };
+  const vdjTitle = vdjFolderName
+    ? `Write directly to ${vdjFolderName}`
+    : canWriteToVdj
+      ? "Choose a folder, then write directly to it"
+      : "Direct folder export requires a Chromium-based browser";
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap justify-end gap-2">
         <Button size="sm" variant="outline" onClick={onExportCsv}>
-          <Download className="mr-1 h-4 w-4" /> Export {sectionLabel} CSV
+          <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} CSV
         </Button>
         <Button size="sm" variant="outline" onClick={onExportXml} disabled={!library}>
-          <Download className="mr-1 h-4 w-4" /> Export VirtualDJ {sectionLabel} XML
+          <Download className="mr-1 h-4 w-4" /> Download VirtualDJ {sectionLabel} XML
         </Button>
         <Button size="sm" variant="outline" onClick={onExportM3u} disabled={!library}>
-          <Download className="mr-1 h-4 w-4" /> Export M3U {sectionLabel} Playlist
+          <Download className="mr-1 h-4 w-4" /> Download M3U {sectionLabel} Playlist
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={onExportXmlToVdj}
+          disabled={!library || !canWriteToVdj}
+          title={vdjTitle}
+        >
+          <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} XML → VirtualDJ
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={onExportM3uToVdj}
+          disabled={!library || !canWriteToVdj}
+          title={vdjTitle}
+        >
+          <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} M3U → VirtualDJ
         </Button>
       </div>
       <div className="max-h-[32rem] overflow-auto rounded-md border">
