@@ -1914,6 +1914,10 @@ function Index() {
                       onExportCsv={() => exportSectionCsv(sec)}
                       onExportXml={() => exportSectionXml(sec)}
                       onExportM3u={() => exportSectionM3u(sec)}
+                      onExportXmlToVdj={() => exportSectionXmlToVdj(sec)}
+                      onExportM3uToVdj={() => exportSectionM3uToVdj(sec)}
+                      canWriteToVdj={canDirWrite}
+                      vdjFolderName={vdjDirName}
                       onConfirm={confirmMatch}
                       onChoose={chooseAlternative}
                       onMarkUnresolved={markUnresolved}
