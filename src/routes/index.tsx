@@ -930,6 +930,14 @@ function Index() {
     ).length;
   }
 
+  function confirmUnmatched(exportResult: GenerationResult, section: SectionKey): boolean {
+    const unmatched = unmatchedCountForResult(exportResult, section);
+    if (unmatched === 0) return true;
+    return window.confirm(
+      `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ XML/M3U playlist unless matched. Continue?`,
+    );
+  }
+
   async function exportSectionXml(section: SectionKey) {
     if (!mergedLibrary) {
       toast.error("Load a VirtualDJ database first");
@@ -937,34 +945,14 @@ function Index() {
     }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    const unmatched = unmatchedCountForResult(exportResult, section);
-    if (unmatched > 0) {
-      const ok = window.confirm(
-        `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ XML playlist unless matched. Continue?`,
-      );
-      if (!ok) return;
-    }
+    if (!confirmUnmatched(exportResult, section)) return;
     const refs = getSectionRefsForResult(exportResult, section);
-    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    const dir = await ensureExportFolder();
-    if (dir) {
-      const m3u = buildM3u(refs, mergedLibrary);
-      const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
-      try {
-        await writeFileToDir(dir, fname, m3u);
-        toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
-        return;
-      } catch {
-        toast.error("Could not write to VirtualDJ folder, downloading instead");
-      }
-      downloadBlob(new Blob([m3u], { type: "audio/x-mpegurl" }), fname);
-      return;
-    }
     const xml = buildVirtualDjXml(refs, mergedLibrary);
-    const fname = `${prefix}${SECTION_FILES[section]}.xml`;
-    downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
-
-
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    downloadBlob(
+      new Blob([xml], { type: "application/xml" }),
+      `${prefix}${SECTION_FILES[section]}.xml`,
+    );
   }
 
   function exportSectionM3u(section: SectionKey) {
@@ -981,6 +969,106 @@ function Index() {
       new Blob([m3u], { type: "audio/x-mpegurl" }),
       `${prefix}${SECTION_FILES[section]}.m3u`,
     );
+  }
+
+  // --- Direct-to-VirtualDJ folder exports ---
+
+  async function exportSectionXmlToVdj(section: SectionKey) {
+    if (!mergedLibrary) {
+      toast.error("Load a VirtualDJ database first");
+      return;
+    }
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    if (!confirmUnmatched(exportResult, section)) return;
+    const dir = await ensureExportFolder();
+    if (!dir) {
+      toast.error("Pick a VirtualDJ export folder first");
+      return;
+    }
+    const refs = getSectionRefsForResult(exportResult, section);
+    const xml = buildVirtualDjXml(refs, mergedLibrary);
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    const fname = `${prefix}${SECTION_FILES[section]}.xml`;
+    try {
+      await writeFileToDir(dir, fname, xml);
+      toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
+    } catch {
+      toast.error("Could not write to VirtualDJ folder, downloading instead");
+      downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
+    }
+  }
+
+  async function exportSectionM3uToVdj(section: SectionKey) {
+    if (!mergedLibrary) {
+      toast.error("Load a VirtualDJ database first");
+      return;
+    }
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const dir = await ensureExportFolder();
+    if (!dir) {
+      toast.error("Pick a VirtualDJ export folder first");
+      return;
+    }
+    const refs = getSectionRefsForResult(exportResult, section);
+    const m3u = buildM3u(refs, mergedLibrary);
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
+    try {
+      await writeFileToDir(dir, fname, m3u);
+      toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
+    } catch {
+      toast.error("Could not write to VirtualDJ folder, downloading instead");
+      downloadBlob(new Blob([m3u], { type: "audio/x-mpegurl" }), fname);
+    }
+  }
+
+  async function exportAllToVdj() {
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const dir = await ensureExportFolder();
+    if (!dir) {
+      toast.error("Pick a VirtualDJ export folder first");
+      return;
+    }
+    const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    const sections: SectionKey[] = ["warmUp", "transition", "peak"];
+    let written = 0;
+    let failed = 0;
+    for (const section of sections) {
+      const list = exportResult[section];
+      if (!list.length) continue;
+      const files: Array<{ name: string; data: string }> = [
+        { name: `${prefix}${SECTION_FILES[section]}.csv`, data: songsToCsv(list) },
+      ];
+      if (mergedLibrary) {
+        const refs = getSectionRefsForResult(exportResult, section);
+        files.push({ name: `${prefix}${SECTION_FILES[section]}.xml`, data: buildVirtualDjXml(refs, mergedLibrary) });
+        files.push({ name: `${prefix}${SECTION_FILES[section]}.m3u`, data: buildM3u(refs, mergedLibrary) });
+      }
+      for (const f of files) {
+        try {
+          await writeFileToDir(dir, f.name, f.data);
+          written += 1;
+        } catch {
+          failed += 1;
+        }
+      }
+    }
+    if (includeCombined) {
+      try {
+        await writeFileToDir(dir, `${prefix}combined-dance-floor-lists.csv`, combinedCsv(exportResult));
+        written += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    if (failed === 0) {
+      toast.success(`Saved ${written} file${written === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}`);
+    } else {
+      toast.error(`Saved ${written}, failed ${failed}. Check folder permissions.`);
+    }
   }
 
   async function exportAllZip() {
@@ -1751,6 +1839,21 @@ function Index() {
                 <Button onClick={exportAllZip}>
                   <Download className="mr-1 h-4 w-4" /> Export All Files as ZIP
                 </Button>
+                <Button
+                  variant="secondary"
+                  onClick={exportAllToVdj}
+                  disabled={!canDirWrite}
+                  title={
+                    canDirWrite
+                      ? vdjDirName
+                        ? `Write all files directly to ${vdjDirName}`
+                        : "Choose a folder, then write all files directly to it"
+                      : "Direct folder export requires a Chromium-based browser"
+                  }
+                >
+                  <FolderOpen className="mr-1 h-4 w-4" />
+                  {vdjDirName ? `Export All to VirtualDJ (${vdjDirName})` : "Export All to VirtualDJ folder…"}
+                </Button>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={includeCombined} onCheckedChange={(v) => setIncludeCombined(!!v)} />
                   Include combined reference CSV
@@ -1811,6 +1914,10 @@ function Index() {
                       onExportCsv={() => exportSectionCsv(sec)}
                       onExportXml={() => exportSectionXml(sec)}
                       onExportM3u={() => exportSectionM3u(sec)}
+                      onExportXmlToVdj={() => exportSectionXmlToVdj(sec)}
+                      onExportM3uToVdj={() => exportSectionM3uToVdj(sec)}
+                      canWriteToVdj={canDirWrite}
+                      vdjFolderName={vdjDirName}
                       onConfirm={confirmMatch}
                       onChoose={chooseAlternative}
                       onMarkUnresolved={markUnresolved}
@@ -2029,6 +2136,10 @@ interface SectionViewProps {
   onExportCsv: () => void;
   onExportXml: () => void;
   onExportM3u: () => void;
+  onExportXmlToVdj: () => void;
+  onExportM3uToVdj: () => void;
+  canWriteToVdj: boolean;
+  vdjFolderName: string | null;
   onConfirm: (key: string) => void;
   onChoose: (key: string, trackIndex: number) => void;
   onMarkUnresolved: (key: string) => void;
@@ -2040,7 +2151,7 @@ interface SectionViewProps {
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (key: string) => {
@@ -2051,17 +2162,40 @@ function SectionView(props: SectionViewProps) {
       return next;
     });
   };
+  const vdjTitle = vdjFolderName
+    ? `Write directly to ${vdjFolderName}`
+    : canWriteToVdj
+      ? "Choose a folder, then write directly to it"
+      : "Direct folder export requires a Chromium-based browser";
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap justify-end gap-2">
         <Button size="sm" variant="outline" onClick={onExportCsv}>
-          <Download className="mr-1 h-4 w-4" /> Export {sectionLabel} CSV
+          <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} CSV
         </Button>
         <Button size="sm" variant="outline" onClick={onExportXml} disabled={!library}>
-          <Download className="mr-1 h-4 w-4" /> Export VirtualDJ {sectionLabel} XML
+          <Download className="mr-1 h-4 w-4" /> Download VirtualDJ {sectionLabel} XML
         </Button>
         <Button size="sm" variant="outline" onClick={onExportM3u} disabled={!library}>
-          <Download className="mr-1 h-4 w-4" /> Export M3U {sectionLabel} Playlist
+          <Download className="mr-1 h-4 w-4" /> Download M3U {sectionLabel} Playlist
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={onExportXmlToVdj}
+          disabled={!library || !canWriteToVdj}
+          title={vdjTitle}
+        >
+          <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} XML → VirtualDJ
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={onExportM3uToVdj}
+          disabled={!library || !canWriteToVdj}
+          title={vdjTitle}
+        >
+          <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} M3U → VirtualDJ
         </Button>
       </div>
       <div className="max-h-[32rem] overflow-auto rounded-md border">
