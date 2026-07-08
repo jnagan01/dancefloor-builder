@@ -62,8 +62,11 @@ export function DjAccountBar({ hasGeneratedLists, getSnapshot, applySnapshot, re
   const [historyOpen, setHistoryOpen] = useState(false);
 
   async function handleSignOut() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
     await supabase.auth.signOut();
     toast.success("Signed out");
+    navigate({ to: "/auth", replace: true });
   }
 
   if (loading) return <div className="text-sm text-muted-foreground">…</div>;
