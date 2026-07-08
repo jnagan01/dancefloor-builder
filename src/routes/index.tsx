@@ -8,6 +8,7 @@ import {
   dedupeKey,
   generateLists,
   reorderForEnergyProgression,
+  topUpSectionsFromLibrary,
   songsToCsv,
   combinedCsv,
   downloadBlob,
@@ -555,6 +556,9 @@ function Index() {
     // a single ascending energy ramp from the first warm-up song to the last
     // peak song.
     r = reorderForEnergyProgression(r);
+    if (expand && r.finalShortfall && r.finalShortfall.total > 0) {
+      r = topUpSectionsFromLibrary(r, prefs);
+    }
 
     setResult(r);
     setMatches({});
