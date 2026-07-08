@@ -102,6 +102,7 @@ const SECTION_FILES: Record<SectionKey, string> = {
   transition: "transition",
   peak: "peak",
 };
+const MAX_AI_RECOMMENDATION_BATCH_SIZE = 40;
 
 interface DirHandleLike {
   getFileHandle(name: string, options?: { create?: boolean }): Promise<unknown>;
@@ -441,13 +442,22 @@ function Index() {
             // for the remaining shortfall until we either fill the section or
             // hit the attempt cap. Without this a single short response leaves
             // the playlist under the 2× buffer target.
-            const MAX_ATTEMPTS = 3;
+            // The server recommender accepts at most 40 songs per call. Long
+            // dance floors can need more than that for a single section, so
+            // chunk the shortfall into multiple AI calls instead of sending an
+            // over-limit request that gets rejected before the AI can add any
+            // songs.
+            const MAX_ATTEMPTS = Math.max(
+              4,
+              Math.ceil(r.perSectionTarget / MAX_AI_RECOMMENDATION_BATCH_SIZE) + 3,
+            );
             let attempt = 0;
             let lastErr: unknown = null;
             let gotAny = false;
             while (r[key].length < r.perSectionTarget && attempt < MAX_ATTEMPTS) {
               attempt += 1;
               const need = r.perSectionTarget - r[key].length;
+              const requestCount = Math.min(need, MAX_AI_RECOMMENDATION_BATCH_SIZE);
               try {
                 // Rebuild `existing` each attempt so the AI sees everything
                 // already picked (uploads + prior AI additions) and never
@@ -458,7 +468,7 @@ function Index() {
                   peak: r.peak,
                 });
                 const res = await recommendFn({
-                  data: { section: label, count: need, prefs, existing: existingNow },
+                  data: { section: label, count: requestCount, prefs, existing: existingNow },
                 });
                 if (!res.suggestions.length) {
                   // No progress this attempt — stop looping to avoid burning
