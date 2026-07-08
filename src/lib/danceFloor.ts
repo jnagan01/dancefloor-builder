@@ -377,6 +377,20 @@ export interface GenerationResult {
 const SONGS_PER_HOUR = 15; // ~4 min/song
 export const SECTION_BUFFER = 2;
 
+type SectionKey = "warmUp" | "transition" | "peak";
+
+const SECTION_TO_KEY: Record<Section, SectionKey> = {
+  "Warm Up": "warmUp",
+  Transition: "transition",
+  Peak: "peak",
+};
+
+const KEY_TO_SECTION: Record<SectionKey, Section> = {
+  warmUp: "Warm Up",
+  transition: "Transition",
+  peak: "Peak",
+};
+
 /**
  * Combined intensity score (1–10). Mean of energy & danceability — the two
  * signals the user explicitly wants driving section placement and ordering.
@@ -412,6 +426,103 @@ export function sortByIntensity<T extends { energy?: number; danceability?: numb
     const bp = typeof b.popularity === "number" ? b.popularity : 5;
     return ap - bp;
   });
+}
+
+function libraryPreferenceScore(lib: LibrarySong, prefs: Preferences): number {
+  let score = 0;
+  if (prefs.artists.some((a) => a && lib.artist.toLowerCase().includes(a.toLowerCase()))) score += 5;
+  if (prefs.genres.some((g) => g && lib.genre.toLowerCase().includes(g.toLowerCase()))) score += 3;
+  if (prefs.decades.includes(lib.decade)) score += 2;
+  const notesLower = prefs.notes.toLowerCase();
+  if (notesLower && (notesLower.includes(lib.genre.toLowerCase()) || notesLower.includes(lib.artist.toLowerCase()))) score += 1;
+  return score;
+}
+
+function librarySongToResult(lib: LibrarySong, assignedSection: Section, reused = false): ResultSong {
+  const naturalSection = sectionForIntensity(intensityOf(lib));
+  return {
+    artist: lib.artist,
+    song: lib.song,
+    fromUpload: false,
+    energy: lib.energy,
+    danceability: lib.danceability,
+    genre: lib.genre,
+    metaSource: "Library",
+    stretched: naturalSection !== assignedSection,
+    naturalSection,
+    reused,
+  };
+}
+
+function sectionShortfall(result: GenerationResult): GenerationResult["finalShortfall"] {
+  const target = result.perSectionTarget;
+  const finalShortfall = {
+    warmUp: Math.max(0, target - result.warmUp.length),
+    transition: Math.max(0, target - result.transition.length),
+    peak: Math.max(0, target - result.peak.length),
+    total: 0,
+  };
+  finalShortfall.total = finalShortfall.warmUp + finalShortfall.transition + finalShortfall.peak;
+  return finalShortfall;
+}
+
+/**
+ * Hard safety net for AI under-fill: after AI has had a chance to add songs,
+ * fill every still-short section from the built-in library before export.
+ *
+ * The function first uses unique library songs, preferring songs whose natural
+ * intensity matches the short section. If a long event needs more songs than
+ * the built-in library contains, it cycles unblocked library songs and marks
+ * those repeats as reused so the exported counts still meet the buffered target.
+ */
+export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Preferences): GenerationResult {
+  const next: GenerationResult = {
+    ...result,
+    warmUp: result.warmUp.map((s) => ({ ...s })),
+    transition: result.transition.map((s) => ({ ...s })),
+    peak: result.peak.map((s) => ({ ...s })),
+  };
+  const allSeen = new Set(
+    ([...next.warmUp, ...next.transition, ...next.peak]).map((s) => dedupeKey(s.artist, s.song)),
+  );
+  const unblockedLibrary = SONG_LIBRARY.filter((l) => !isBlocked(l.artist, l.song, prefs.doNotPlay));
+
+  for (const key of ["warmUp", "transition", "peak"] as SectionKey[]) {
+    const assignedSection = KEY_TO_SECTION[key];
+    const list = next[key];
+    const ranked = unblockedLibrary
+      .map((lib, index) => {
+        const naturalSection = sectionForIntensity(intensityOf(lib));
+        const sectionFit = naturalSection === assignedSection ? 1000 : 0;
+        const intensityDistance = Math.abs(intensityOf(lib) - (assignedSection === "Warm Up" ? 5.5 : assignedSection === "Transition" ? 7.25 : 9));
+        return {
+          lib,
+          index,
+          rank: sectionFit + libraryPreferenceScore(lib, prefs) * 10 - intensityDistance,
+        };
+      })
+      .sort((a, b) => b.rank - a.rank || a.index - b.index);
+    if (!ranked.length) continue;
+
+    let reuseIndex = 0;
+    while (list.length < next.perSectionTarget) {
+      const uniqueCandidate = ranked.find(({ lib }) => !allSeen.has(dedupeKey(lib.artist, lib.song)));
+      if (uniqueCandidate) {
+        const keyForSong = dedupeKey(uniqueCandidate.lib.artist, uniqueCandidate.lib.song);
+        allSeen.add(keyForSong);
+        list.push(librarySongToResult(uniqueCandidate.lib, assignedSection));
+        continue;
+      }
+
+      const reusedCandidate = ranked[reuseIndex % ranked.length].lib;
+      reuseIndex += 1;
+      list.push(librarySongToResult(reusedCandidate, assignedSection, true));
+    }
+    next[key] = sortByIntensity(list);
+  }
+
+  next.finalShortfall = sectionShortfall(next);
+  return next;
 }
 
 export function generateLists(input: GenerationInput): GenerationResult {
@@ -461,22 +572,12 @@ export function generateLists(input: GenerationInput): GenerationResult {
   if (expand) {
     const seen = new Set(cleanUploaded.map((s) => dedupeKey(s.artist, s.song)));
 
-    const matchScore = (lib: LibrarySong): number => {
-      let score = 0;
-      if (prefs.artists.some((a) => a && lib.artist.toLowerCase().includes(a.toLowerCase()))) score += 5;
-      if (prefs.genres.some((g) => g && lib.genre.toLowerCase().includes(g.toLowerCase()))) score += 3;
-      if (prefs.decades.includes(lib.decade)) score += 2;
-      const notesLower = prefs.notes.toLowerCase();
-      if (notesLower && (notesLower.includes(lib.genre.toLowerCase()) || notesLower.includes(lib.artist.toLowerCase()))) score += 1;
-      return score;
-    };
-
     // Score library candidates by intensity and pick the section they belong
     // in based on the same band rule used for uploads.
     const candidates = SONG_LIBRARY
       .filter((l) => !seen.has(dedupeKey(l.artist, l.song)))
       .filter((l) => !isBlocked(l.artist, l.song, prefs.doNotPlay))
-      .map((l) => ({ lib: l, score: matchScore(l), section: sectionForIntensity(intensityOf(l)) }))
+      .map((l) => ({ lib: l, score: libraryPreferenceScore(l, prefs), section: sectionForIntensity(intensityOf(l)) }))
       .sort((a, b) => b.score - a.score);
 
     const padTo = (bucket: Scored[], section: Section, target: number) => {
