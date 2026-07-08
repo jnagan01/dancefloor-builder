@@ -1640,114 +1640,37 @@ function Index() {
           </CardContent>
         </Card>
 
-        {/* Step 5 - VirtualDJ Library */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 5 · Music Library Matching</CardTitle>
-            <CardDescription>
-              Add any audio folder, or optionally a VirtualDJ <code>database.xml</code>. Files are read and indexed only in your browser — nothing is uploaded.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <Button variant="default" size="sm" onClick={addAudioFolder}>
-                <Plus className="mr-1 h-4 w-4" /> Add music folder
-              </Button>
-              <Button variant="outline" size="sm" onClick={selectDatabaseXml}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Add VirtualDJ database.xml (optional)
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => selectFolder("VirtualDJ Folder")}>
-                <FolderOpen className="mr-1 h-4 w-4" /> Scan VirtualDJ folder
-              </Button>
-              {libraries.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearLibraries}>
-                  <X className="mr-1 h-4 w-4" /> Clear libraries
-                </Button>
-              )}
-            </div>
-            {mergedLibrary ? (
-              <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                <p className="font-medium">
-                  Indexed {mergedLibrary.tracks.length} tracks from {libraries.length} source{libraries.length > 1 ? "s" : ""}
-                </p>
-                <ul className="mt-1 space-y-1 pl-0 text-xs text-muted-foreground">
-                  {librarySources.map((s, i) => {
-                    const folderSource = audioSources.find((a) => a.libraryIndex === i);
-                    return (
-                      <li key={i} className="flex items-center gap-2">
-                        <span className="flex-1 truncate">• {s}</span>
-                        {folderSource && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2"
-                            onClick={() => removeAudioSource(folderSource.id)}
-                            title="Remove folder"
-                          >
-                            <X className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-                {audioIndex.files.length > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {audioIndex.files.length.toLocaleString()} audio file{audioIndex.files.length === 1 ? "" : "s"} indexed for in-app playback
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                Add a music folder (also used as the playback source) or a VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
-                Without a folder, ▶ falls back to a 30-second Apple Music preview.
-              </p>
-            )}
-            <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 sm:flex-row sm:flex-wrap sm:items-center">
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  VirtualDJ export folder
-                </span>
-                {vdjDirHandle ? (
-                  <span className="flex flex-wrap items-center gap-2 text-sm">
-                    <Check className="h-4 w-4 text-emerald-500" />
-                    <span className="font-medium truncate">{vdjDirName}</span>
-                    {vdjDirSavedAt ? (
-                      <span className="text-xs text-muted-foreground">· Saved {formatSavedAt(vdjDirSavedAt)}</span>
-                    ) : null}
-                    <Badge variant="secondary" className="text-xs">remembered this session</Badge>
-                  </span>
+        {/* Music setup status (moved out of the linear flow — configured once per device from your profile menu) */}
+        {(() => {
+          const hasLibrary = libraries.length > 0;
+          const hasExport = !!vdjDirHandle;
+          const fullyReady = hasLibrary && hasExport;
+          if (fullyReady) return null;
+          const isNewUser = musicSetupCompleted === false;
+          return (
+            <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
+              <div className="flex-1 min-w-[200px]">
+                {isNewUser ? (
+                  <>
+                    <p className="font-medium">First time here? Connect your music folders.</p>
+                    <p className="text-xs">One-time setup on this device — add your music folder and pick your VirtualDJ export folder.</p>
+                  </>
                 ) : (
-                  <span className="text-sm text-muted-foreground">
-                    Not set — exports will download as files until you pick a folder.
-                  </span>
+                  <>
+                    <p className="font-medium">Music folders aren't connected on this device.</p>
+                    <p className="text-xs">
+                      {hasLibrary ? "Export folder missing." : "Music library missing."} Reconnect to enable direct exports and playback matching.
+                    </p>
+                  </>
                 )}
               </div>
-              {!vdjDirHandle ? (
-                <Button variant="default" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
-                  <FolderOpen className="mr-1 h-4 w-4" />
-                  Choose export folder
-                </Button>
-              ) : (
-                <>
-                  <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
-                    <FolderOpen className="mr-1 h-4 w-4" /> Change
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={clearMyListsFolder}>
-                    <X className="mr-1 h-4 w-4" /> Forget
-                  </Button>
-                </>
-              )}
-              {!canDirWrite && (
-                <span className="w-full text-xs text-muted-foreground">
-                  Direct saving unsupported in this browser — files will download instead.
-                </span>
-              )}
+              <Button size="sm" onClick={() => setMusicSetupOpen(true)}>
+                <FolderOpen className="mr-1 h-4 w-4" /> {isNewUser ? "Set up music folders" : "Reconnect"}
+              </Button>
             </div>
-
-
-          </CardContent>
-        </Card>
+          );
+        })()}
 
         {/* Generate */}
         <div className="flex justify-center">
@@ -1755,6 +1678,115 @@ function Index() {
             {isGenerating ? "Generating with AI…" : "Generate Dance Floor Lists"}
           </Button>
         </div>
+
+        {/* Music setup dialog (formerly Step 5) */}
+        <Dialog open={musicSetupOpen} onOpenChange={setMusicSetupOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Music setup</DialogTitle>
+              <DialogDescription>
+                Connect your music folders and VirtualDJ export folder. This is stored in your browser on this device only — the app will remember it next time you visit.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Button variant="default" size="sm" onClick={addAudioFolder}>
+                  <Plus className="mr-1 h-4 w-4" /> Add music folder
+                </Button>
+                <Button variant="outline" size="sm" onClick={selectDatabaseXml}>
+                  <FolderOpen className="mr-1 h-4 w-4" /> Add VirtualDJ database.xml (optional)
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => selectFolder("VirtualDJ Folder")}>
+                  <FolderOpen className="mr-1 h-4 w-4" /> Scan VirtualDJ folder
+                </Button>
+                {libraries.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearLibraries}>
+                    <X className="mr-1 h-4 w-4" /> Clear libraries
+                  </Button>
+                )}
+              </div>
+              {mergedLibrary ? (
+                <div className="rounded-md border bg-muted/30 p-3 text-sm">
+                  <p className="font-medium">
+                    Indexed {mergedLibrary.tracks.length} tracks from {libraries.length} source{libraries.length > 1 ? "s" : ""}
+                  </p>
+                  <ul className="mt-1 space-y-1 pl-0 text-xs text-muted-foreground">
+                    {librarySources.map((s, i) => {
+                      const folderSource = audioSources.find((a) => a.libraryIndex === i);
+                      return (
+                        <li key={i} className="flex items-center gap-2">
+                          <span className="flex-1 truncate">• {s}</span>
+                          {folderSource && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 px-2"
+                              onClick={() => removeAudioSource(folderSource.id)}
+                              title="Remove folder"
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {audioIndex.files.length > 0 && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {audioIndex.files.length.toLocaleString()} audio file{audioIndex.files.length === 1 ? "" : "s"} indexed for in-app playback
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Add a music folder (also used as the playback source) or a VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
+                </p>
+              )}
+              <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    VirtualDJ export folder
+                  </span>
+                  {vdjDirHandle ? (
+                    <span className="flex flex-wrap items-center gap-2 text-sm">
+                      <Check className="h-4 w-4 text-emerald-500" />
+                      <span className="font-medium truncate">{vdjDirName}</span>
+                      {vdjDirSavedAt ? (
+                        <span className="text-xs text-muted-foreground">· Saved {formatSavedAt(vdjDirSavedAt)}</span>
+                      ) : null}
+                      <Badge variant="secondary" className="text-xs">remembered on this device</Badge>
+                    </span>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      Not set — exports will download as files until you pick a folder.
+                    </span>
+                  )}
+                </div>
+                {!vdjDirHandle ? (
+                  <Button variant="default" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
+                    <FolderOpen className="mr-1 h-4 w-4" />
+                    Choose export folder
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
+                      <FolderOpen className="mr-1 h-4 w-4" /> Change
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={clearMyListsFolder}>
+                      <X className="mr-1 h-4 w-4" /> Forget
+                    </Button>
+                  </>
+                )}
+                {!canDirWrite && (
+                  <span className="w-full text-xs text-muted-foreground">
+                    Direct saving unsupported in this browser — files will download instead.
+                  </span>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
 
         {/* Results */}
         {result && (
