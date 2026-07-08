@@ -19,6 +19,7 @@ import {
   normalizeKey,
   type Song,
   type GenerationResult,
+  type Preferences,
 } from "@/lib/danceFloor";
 
 import {
@@ -330,6 +331,16 @@ function Index() {
 
   const doNotPlayEntries = useMemo(() => parseDoNotPlay(doNotPlayInput), [doNotPlayInput]);
 
+  function buildCurrentPrefs(): Preferences {
+    return {
+      artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean),
+      genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean),
+      decades,
+      notes,
+      doNotPlay: parseDoNotPlay(doNotPlayInput),
+    };
+  }
+
   const dnpDuplicateKeys = useMemo(() => {
     const counts = new Map<string, number>();
     doNotPlayEntries.forEach((e) => {
@@ -378,13 +389,7 @@ function Index() {
       return;
     }
     const uniqueSongs = dedupeSongs(songs);
-    const prefs = {
-      artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean),
-      genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean),
-      decades,
-      notes,
-      doNotPlay: parseDoNotPlay(doNotPlayInput),
-    };
+    const prefs = buildCurrentPrefs();
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
     let r = generateLists({
@@ -871,15 +876,38 @@ function Index() {
 
   function getSectionRefs(section: SectionKey): ExportSongRef[] {
     if (!result) return [];
-    return result[section].map((s, i) => ({
+    return getSectionRefsForResult(result, section);
+  }
+
+  function getSectionRefsForResult(source: GenerationResult, section: SectionKey): ExportSongRef[] {
+    return source[section].map((s, i) => ({
       song: s,
       match: matches[songKey(section, i, s)],
     }));
   }
 
+  function ensureBufferedResultForExport(): GenerationResult | null {
+    if (!result) return null;
+    if (!expand || !result.finalShortfall || result.finalShortfall.total === 0) return result;
+    const topped = topUpSectionsFromLibrary(result, buildCurrentPrefs());
+    setResult(topped);
+    if (mergedLibrary) {
+      const m: Record<string, SongMatch> = {};
+      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
+        topped[section].forEach((s, i) => {
+          m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
+        });
+      });
+      setMatches(m);
+    }
+    toast.success("Filled short sections from the built-in library before export");
+    return topped;
+  }
+
   function exportSectionCsv(section: SectionKey) {
-    if (!result) return;
-    const list = result[section];
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const list = exportResult[section];
     if (!list.length) {
       toast.error("No songs in this section");
       return;
@@ -909,7 +937,9 @@ function Index() {
       );
       if (!ok) return;
     }
-    const refs = getSectionRefs(section);
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const refs = getSectionRefsForResult(exportResult, section);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const dir = await ensureExportFolder();
     if (dir) {
@@ -937,7 +967,9 @@ function Index() {
       toast.error("Load a VirtualDJ database first");
       return;
     }
-    const refs = getSectionRefs(section);
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const refs = getSectionRefsForResult(exportResult, section);
     const m3u = buildM3u(refs, mergedLibrary);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
@@ -947,18 +979,19 @@ function Index() {
   }
 
   async function exportAllZip() {
-    if (!result) return;
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const zip = new JSZip();
     (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-      zip.file(`${prefix}${SECTION_FILES[section]}.csv`, songsToCsv(result[section]));
+      zip.file(`${prefix}${SECTION_FILES[section]}.csv`, songsToCsv(exportResult[section]));
       if (mergedLibrary) {
-        const refs = getSectionRefs(section);
+        const refs = getSectionRefsForResult(exportResult, section);
         zip.file(`${prefix}${SECTION_FILES[section]}.xml`, buildVirtualDjXml(refs, mergedLibrary));
         zip.file(`${prefix}${SECTION_FILES[section]}.m3u`, buildM3u(refs, mergedLibrary));
       }
     });
-    if (includeCombined) zip.file(`${prefix}combined-dance-floor-lists.csv`, combinedCsv(result));
+    if (includeCombined) zip.file(`${prefix}combined-dance-floor-lists.csv`, combinedCsv(exportResult));
     const blob = await zip.generateAsync({ type: "blob" });
     downloadBlob(blob, `${prefix}dance-floor-lists.zip`);
   }
