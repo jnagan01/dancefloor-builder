@@ -211,6 +211,12 @@ You score every track on these signals (integers 1–10 unless noted) and pick s
 
 You are NOT limited to any built-in library. Recommend the songs that best fit the section targets even if obscure or new — as long as they are real released songs. Match by SCORES first, preferences second.
 
+AVAILABILITY REQUIREMENT (hard filter): Only recommend songs that a working DJ can actually source. Every suggestion MUST be commercially available through at least one of these channels:
+- DJ record pools (e.g. BPM Supreme, DJcity, Beatport LINK, Beatsource, Digital DJ Pool)
+- Purchase stores: Apple Music / iTunes Store, Amazon Music, Beatport
+- Major streaming services: Spotify, Tidal, Apple Music, Amazon Music
+Do NOT suggest unreleased tracks, leaks, bootlegs, mashups, edits, or remixes that only exist on SoundCloud/YouTube/private servers and are not licensed on the platforms above. Do NOT invent titles. If uncertain a track is officially distributed, pick a different real, widely-available song instead.
+
 SEQUENCING / TRANSITION RULES (use the existing set's features below as neighbors):
 - Prefer picks whose BPM is within ±6% of nearby existing songs in the same section.
 - Prefer picks whose Camelot key is the same, adjacent (±1 on the wheel), or the relative major/minor of a neighbor (smooth harmonic mixing).
