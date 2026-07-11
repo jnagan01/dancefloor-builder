@@ -755,8 +755,20 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
     ...result.transition.map((s) => ({ ...s })),
     ...result.peak.map((s) => ({ ...s })),
   ];
-  const sorted = sortByIntensity(all);
+  // Cross-section dedupe: if the same artist+song landed in more than one
+  // list (e.g. from the shortfall fallback or an AI retry race), keep only
+  // the first occurrence before we re-bucket by intensity.
+  const seenAcross = new Set<string>();
+  const deduped: ResultSong[] = [];
+  for (const s of all) {
+    const k = dedupeKey(s.artist, s.song);
+    if (!k || seenAcross.has(k)) continue;
+    seenAcross.add(k);
+    deduped.push(s);
+  }
+  const sorted = sortByIntensity(deduped);
   const n = sorted.length;
+
 
   // Ideal split: lowest `target` → Warm Up, next `target` → Transition,
   // last `target` → Peak. When supply is short we proportionally allocate
