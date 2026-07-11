@@ -658,19 +658,18 @@ export function applyVarietyReranker(
     }
   }
 
-  // Step 2: deduplicate near-identical titles (same normalized artist + title
-  // base). Push the duplicate to overflow.
+  // Step 2: drop near-identical duplicates (same normalized artist + title).
+  // Previously duplicates were pushed to overflow and re-appended at the end,
+  // which caused the same song to appear twice inside the same section.
   const seenTitle = new Set<string>();
   const unique: ResultSong[] = [];
   for (const s of allowed) {
     const k = `${normalizeKey(s.artist)}|${normalizeKey(s.song)}`;
-    if (seenTitle.has(k)) {
-      overflow.push(s);
-      continue;
-    }
+    if (seenTitle.has(k)) continue;
     seenTitle.add(k);
     unique.push(s);
   }
+
 
   // Step 3: greedy sequencing — pick the next song that minimizes transition
   // cost against the previous accepted song while staying close to the
