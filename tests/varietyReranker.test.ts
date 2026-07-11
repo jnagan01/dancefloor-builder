@@ -68,17 +68,18 @@ describe("applyVarietyReranker", () => {
     expect(idx150).toBe(out.length - 1);
   });
 
-  it("dedupes near-identical entries", () => {
+  it("drops near-identical duplicate entries", () => {
     const songs: ResultSong[] = [
       mk("A", "Hit", 5, 5),
       mk("A", "Hit", 5, 5),
       mk("B", "Other", 6, 6),
     ];
     const out = applyVarietyReranker(songs);
-    expect(out).toHaveLength(3); // overflow appended, length preserved
-    const earlyTitles = out.slice(0, 2).map((s) => `${s.artist}|${s.song}`);
-    expect(new Set(earlyTitles).size).toBe(2);
+    expect(out).toHaveLength(2); // duplicate dropped, not appended
+    const titles = out.map((s) => `${s.artist}|${s.song}`);
+    expect(new Set(titles).size).toBe(2);
   });
+
 
   it("is a no-op for single song", () => {
     const songs = [mk("A", "1", 5, 5)];

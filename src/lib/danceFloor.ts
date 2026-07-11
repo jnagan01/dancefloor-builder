@@ -658,19 +658,18 @@ export function applyVarietyReranker(
     }
   }
 
-  // Step 2: deduplicate near-identical titles (same normalized artist + title
-  // base). Push the duplicate to overflow.
+  // Step 2: drop near-identical duplicates (same normalized artist + title).
+  // Previously duplicates were pushed to overflow and re-appended at the end,
+  // which caused the same song to appear twice inside the same section.
   const seenTitle = new Set<string>();
   const unique: ResultSong[] = [];
   for (const s of allowed) {
     const k = `${normalizeKey(s.artist)}|${normalizeKey(s.song)}`;
-    if (seenTitle.has(k)) {
-      overflow.push(s);
-      continue;
-    }
+    if (seenTitle.has(k)) continue;
     seenTitle.add(k);
     unique.push(s);
   }
+
 
   // Step 3: greedy sequencing — pick the next song that minimizes transition
   // cost against the previous accepted song while staying close to the
@@ -756,8 +755,20 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
     ...result.transition.map((s) => ({ ...s })),
     ...result.peak.map((s) => ({ ...s })),
   ];
-  const sorted = sortByIntensity(all);
+  // Cross-section dedupe: if the same artist+song landed in more than one
+  // list (e.g. from the shortfall fallback or an AI retry race), keep only
+  // the first occurrence before we re-bucket by intensity.
+  const seenAcross = new Set<string>();
+  const deduped: ResultSong[] = [];
+  for (const s of all) {
+    const k = dedupeKey(s.artist, s.song);
+    if (!k || seenAcross.has(k)) continue;
+    seenAcross.add(k);
+    deduped.push(s);
+  }
+  const sorted = sortByIntensity(deduped);
   const n = sorted.length;
+
 
   // Ideal split: lowest `target` → Warm Up, next `target` → Transition,
   // last `target` → Peak. When supply is short we proportionally allocate

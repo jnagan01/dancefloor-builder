@@ -569,13 +569,17 @@ function Index() {
             expand: true,
             prefs,
           });
+          // Track keys across ALL sections so a library song can't be added
+          // to two different lists during the fallback pass.
+          const globalHave = new Set<string>(
+            [...r.warmUp, ...r.transition, ...r.peak].map((s) => dedupeKey(s.artist, s.song)),
+          );
           for (const { key } of stillShort) {
-            const have = new Set(r[key].map((s) => dedupeKey(s.artist, s.song)));
             for (const s of fallback[key]) {
               if (r[key].length >= r.perSectionTarget) break;
               const k = dedupeKey(s.artist, s.song);
-              if (have.has(k)) continue;
-              have.add(k);
+              if (globalHave.has(k)) continue;
+              globalHave.add(k);
               r[key].push({ ...s, metaSource: "Library" });
             }
           }
@@ -583,6 +587,7 @@ function Index() {
             toast.error("AI suggestions unavailable for some sections — used built-in library.");
           }
         }
+
       } finally {
         setIsGenerating(false);
       }
