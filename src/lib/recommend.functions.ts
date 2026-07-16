@@ -250,6 +250,7 @@ Rules:
 - Every item inside suggestions MUST use the field name "song" for the title. Do not use "title", "track", or a raw array.
 - Suggest REAL released songs you are confident exist; no fabrications.
 - energy, danceability, popularity, valence are integers 1–10 inside the section target band.
+- popularity MUST be 6 or higher for every suggestion — recommend only songs a general wedding/party crowd will recognize. If a track scores below 6, replace it with a more widely-known song even if the obscure track fit the energy/BPM/key targets better.
 - decade is like "1970s", "2020s". year is a 4-digit number when known.
 - bpm is a realistic number for the song. camelot is "<1-12><A|B>".
 - Keep reason to one short sentence that references at least two of: energy, danceability, popularity, valence, BPM, key (e.g. "E9 D9 pop10 122BPM 8A — peak banger that mixes from 7A").
