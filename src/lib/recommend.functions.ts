@@ -203,7 +203,7 @@ Section targets: ${sectionGuide[data.section]}
 You score every track on these signals (integers 1–10 unless noted) and pick songs whose scores match the target band above. These signals are the PRIMARY basis for your picks — not artist popularity alone:
 - energy: arousal / intensity / tempo + loudness perception
 - danceability: how rhythmically suited to dancing
-- popularity: how widely the song is recognized by a general wedding/party crowd (10 = everyone sings along, 1 = obscure)
+- popularity: how widely the song is recognized by a general wedding/party crowd (10 = everyone sings along, 1 = obscure). HARD MINIMUM: every recommendation MUST score at least 6. Do not suggest anything below 6.
 - valence: musical positivity (10 = euphoric/happy, 1 = sad/dark)
 - bpm: tempo in BPM (number, e.g. 122)
 - camelot: musical key in Camelot notation (e.g. "8A", "11B")
