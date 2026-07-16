@@ -276,15 +276,22 @@ Rules:
         );
       }
 
-      return { suggestions: result.object.suggestions };
+      const filtered = result.object.suggestions.filter((s) => (s.popularity ?? 0) >= 6);
+      if (filtered.length !== result.object.suggestions.length) {
+        console.warn(
+          `[recommendSongsForSection] dropped ${result.object.suggestions.length - filtered.length} sub-6 popularity picks section=${data.section}`,
+        );
+      }
+      return { suggestions: filtered };
     } catch (error) {
       if (NoObjectGeneratedError.isInstance(error)) {
         const recovered = fallbackParseSuggestions(error.text ?? "");
         if (recovered) {
+          const filtered = recovered.filter((s) => (s.popularity ?? 0) >= 6);
           console.warn(
-            `[recommendSongsForSection] recovered ${recovered.length} suggestions from nonconforming AI output section=${data.section} requested=${data.count}`,
+            `[recommendSongsForSection] recovered ${filtered.length}/${recovered.length} suggestions from nonconforming AI output section=${data.section} requested=${data.count}`,
           );
-          return { suggestions: recovered };
+          return { suggestions: filtered };
         }
       }
       throw error;
