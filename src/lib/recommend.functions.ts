@@ -203,7 +203,7 @@ Section targets: ${sectionGuide[data.section]}
 You score every track on these signals (integers 1–10 unless noted) and pick songs whose scores match the target band above. These signals are the PRIMARY basis for your picks — not artist popularity alone:
 - energy: arousal / intensity / tempo + loudness perception
 - danceability: how rhythmically suited to dancing
-- popularity: how widely the song is recognized by a general wedding/party crowd (10 = everyone sings along, 1 = obscure)
+- popularity: how widely the song is recognized by a general wedding/party crowd (10 = everyone sings along, 1 = obscure). HARD MINIMUM: every recommendation MUST score at least 6. Do not suggest anything below 6.
 - valence: musical positivity (10 = euphoric/happy, 1 = sad/dark)
 - bpm: tempo in BPM (number, e.g. 122)
 - camelot: musical key in Camelot notation (e.g. "8A", "11B")
@@ -250,6 +250,7 @@ Rules:
 - Every item inside suggestions MUST use the field name "song" for the title. Do not use "title", "track", or a raw array.
 - Suggest REAL released songs you are confident exist; no fabrications.
 - energy, danceability, popularity, valence are integers 1–10 inside the section target band.
+- popularity MUST be 6 or higher for every suggestion — recommend only songs a general wedding/party crowd will recognize. If a track scores below 6, replace it with a more widely-known song even if the obscure track fit the energy/BPM/key targets better.
 - decade is like "1970s", "2020s". year is a 4-digit number when known.
 - bpm is a realistic number for the song. camelot is "<1-12><A|B>".
 - Keep reason to one short sentence that references at least two of: energy, danceability, popularity, valence, BPM, key (e.g. "E9 D9 pop10 122BPM 8A — peak banger that mixes from 7A").
@@ -275,15 +276,22 @@ Rules:
         );
       }
 
-      return { suggestions: result.object.suggestions };
+      const filtered = result.object.suggestions.filter((s) => (s.popularity ?? 0) >= 6);
+      if (filtered.length !== result.object.suggestions.length) {
+        console.warn(
+          `[recommendSongsForSection] dropped ${result.object.suggestions.length - filtered.length} sub-6 popularity picks section=${data.section}`,
+        );
+      }
+      return { suggestions: filtered };
     } catch (error) {
       if (NoObjectGeneratedError.isInstance(error)) {
         const recovered = fallbackParseSuggestions(error.text ?? "");
         if (recovered) {
+          const filtered = recovered.filter((s) => (s.popularity ?? 0) >= 6);
           console.warn(
-            `[recommendSongsForSection] recovered ${recovered.length} suggestions from nonconforming AI output section=${data.section} requested=${data.count}`,
+            `[recommendSongsForSection] recovered ${filtered.length}/${recovered.length} suggestions from nonconforming AI output section=${data.section} requested=${data.count}`,
           );
-          return { suggestions: recovered };
+          return { suggestions: filtered };
         }
       }
       throw error;
