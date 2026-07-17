@@ -39,8 +39,23 @@ const ARTIST_KEYS = ["artist", "artists", "performer", "performers"];
 const SONG_KEYS = ["song", "track", "track name", "title", "name", "song name", "song title"];
 
 export function normalizeKey(s: string): string {
-  return s
+  return (s || "")
     .toLowerCase()
+    // Strip parenthetical/bracketed qualifiers: (Radio Edit), [Remastered 2011], {Live}
+    .replace(/[([{][^)\]}]*[)\]}]/g, " ")
+    // Drop "feat./ft./featuring/with X" tails
+    .replace(/\s+(feat\.?|ft\.?|featuring|with|w\/)\s+.*$/gi, " ")
+    // Drop trailing " - Remaster/Remastered/Radio Edit/Extended/Version/Mix/Live/Mono/Stereo/Deluxe/Single/Album Version/Anniversary/Explicit/Clean/Instrumental/Acoustic/Demo/Reissue/Original/<year>"
+    .replace(
+      /\s*[-–—:]\s*(the\s+)?(\d{2,4}\s+)?(re[- ]?master(ed)?|radio edit|edit|extended( (mix|version|edit))?|version|mix|live|mono|stereo|deluxe|single|album version|anniversary( edition)?|bonus track|explicit|clean|instrumental|acoustic|demo|reissue|original( mix| version)?)(\s+\d{2,4})?\s*$/gi,
+      " ",
+    )
+    // Drop trailing collaborator lists on artist (& X, and X, x X, vs X)
+    .replace(/\s+(&|and|x|vs\.?)\s+.*$/gi, " ")
+    // Strip diacritics
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    // Remove punctuation/symbols
     .replace(/[^\p{L}\p{N}\s]/gu, "")
     .replace(/\s+/g, " ")
     .trim();
