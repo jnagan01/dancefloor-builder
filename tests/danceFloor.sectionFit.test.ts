@@ -165,3 +165,59 @@ describe("energy progression across the generated set", () => {
     }
   });
 });
+
+describe("era + explicit placement bias", () => {
+  const perSectionTarget = 4;
+  const baseResult = () => ({
+    warmUp: [] as any[],
+    transition: [] as any[],
+    peak: [] as any[],
+    targetTotal: perSectionTarget * 3,
+    perSectionTarget,
+    perSectionBase: perSectionTarget,
+    shortfall: { warmUp: 0, transition: 0, peak: 0, total: 0 },
+    duplicatesRemoved: 0,
+    blockedCount: 0,
+  });
+
+  it("pushes a mid-intensity pre-1990 disco track into Warm Up (not Peak)", () => {
+    // A high-energy 70s disco track (raw intensity 8) would normally sit in
+    // Peak; the era bias should pull it into Warm Up for older guests.
+    const mix = [
+      { artist: "70s Disco", song: "Boogie", energy: 8, danceability: 8, year: 1978 },
+      { artist: "Modern A", song: "A", energy: 5, danceability: 5, year: 2020 },
+      { artist: "Modern B", song: "B", energy: 6, danceability: 6, year: 2020 },
+      { artist: "Modern C", song: "C", energy: 7, danceability: 7, year: 2020 },
+      { artist: "Modern D", song: "D", energy: 9, danceability: 9, year: 2020 },
+      { artist: "Modern E", song: "E", energy: 10, danceability: 10, year: 2020 },
+    ];
+    const r = reorderForEnergyProgression({ ...baseResult(), warmUp: mix });
+    expect(findSection(r, "70s Disco", "Boogie")).not.toBe("Peak");
+  });
+
+  it("pushes an explicit low-intensity track out of Warm Up when alternatives exist", () => {
+    const mix = [
+      { artist: "Explicit Rap", song: "Track", energy: 5, danceability: 5, year: 2018, explicit: true },
+      { artist: "Clean A", song: "A", energy: 4, danceability: 4, year: 2020 },
+      { artist: "Clean B", song: "B", energy: 5, danceability: 5, year: 2020 },
+      { artist: "Clean C", song: "C", energy: 6, danceability: 6, year: 2020 },
+      { artist: "Clean D", song: "D", energy: 7, danceability: 7, year: 2020 },
+      { artist: "Clean E", song: "E", energy: 8, danceability: 8, year: 2020 },
+      { artist: "Clean F", song: "F", energy: 9, danceability: 9, year: 2020 },
+    ];
+    const r = reorderForEnergyProgression({ ...baseResult(), warmUp: mix });
+    expect(findSection(r, "Explicit Rap", "Track")).not.toBe("Warm Up");
+  });
+
+  it("still respects raw intensity when no year/explicit is present (legacy behavior)", () => {
+    const mix = [
+      { artist: "Low", song: "L", energy: 3, danceability: 3 },
+      { artist: "Mid", song: "M", energy: 7, danceability: 7 },
+      { artist: "High", song: "H", energy: 10, danceability: 10 },
+    ];
+    const r = reorderForEnergyProgression({ ...baseResult(), warmUp: mix });
+    expect(findSection(r, "Low", "L")).toBe("Warm Up");
+    expect(findSection(r, "High", "H")).toBe("Peak");
+  });
+});
+

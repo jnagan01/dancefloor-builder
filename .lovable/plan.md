@@ -1,70 +1,66 @@
-# Enrich Song Metadata from Online Sources
 
 ## Goal
-Replace VirtualDJ as the primary source of `energy`, `danceability`, `popularity`, `valence`, `genre`, and `year`. Pull that data from **ReccoBeats** (Spotify-derived audio features + popularity) and **MusicBrainz** (genre tags + release year). Keep VirtualDJ tags as an offline fallback. Fetch on generate — not on upload — so unused songs never cost network calls.
 
-## Data sources
+Nudge section placement so:
+- **Pre-1990 songs** (60s/70s/80s) lean toward Warm Up and Transition — engaging older guests during the first hour.
+- **Explicit / aggressive songs** lean toward Transition and Peak, and rarely land in Warm Up.
+- The existing intensity-based ramp (energy + danceability, ascending across the whole set) still governs ordering.
 
-**ReccoBeats** — free, no API key, no auth. Public endpoints:
-- `GET https://api.reccobeats.com/v1/track/search?q=<artist>+<title>` → track candidates with an internal id + Spotify id + popularity.
-- `GET https://api.reccobeats.com/v1/track/{id}/audio-features` → energy, danceability, valence, tempo (BPM), key.
-- Rate limit: ~1 request/second per IP. Batch with polite spacing.
+## Approach
 
-**MusicBrainz** — free, no key, requires a descriptive `User-Agent`.
-- `GET https://musicbrainz.org/ws/2/recording?query=artist:"X" AND recording:"Y"&fmt=json` → release year (`first-release-date`) + genre tags.
-- Rate limit: 1 request/second. Same batching.
+Introduce a small **placement bias** applied to each song's effective intensity when bucketing into Warm Up / Transition / Peak. Ordering *within* the full set still uses the raw intensity, so the ramp stays monotonic.
 
-Both are fetched server-side from a new server function so keys, headers, and rate limits stay off the client.
+```text
+effectiveIntensity = intensity + eraBias(year) + explicitBias(explicit)
+section             = sectionForIntensity(effectiveIntensity)
+displayIntensity    = intensity   ← unchanged; ramp sort uses this
+```
 
-## Changes
+### Bias values
 
-### 1. New server function: `src/lib/enrich.functions.ts`
-`enrichSongs({ songs: [{ artist, song }] })` returns `[{ artist, song, energy, danceability, valence, popularity, bpm, camelot, genre, year, source: "reccobeats" | "musicbrainz" | "partial" | "none" }]`.
-- Sequential per-song calls with a 1.1s spacer (respect both APIs).
-- Parallel fan-out per song across ReccoBeats + MusicBrainz.
-- Normalizes ReccoBeats' 0–1 features to the app's 1–10 scale (matches `intensityOf`).
-- Converts musical key → Camelot via existing `src/lib/musicTheory.ts`.
-- Small in-memory LRU (per request) keyed by normalized `artist|song` so retry loops don't refetch.
-- Wrapped in `requireSupabaseAuth` — same auth posture as the AI recommender. Zod-validates input, caps batch at 200 songs per call, per-string max 300 chars.
-- On any per-song failure, returns `source: "none"` for that entry and keeps going (never throws for the whole batch).
+- Era bias (pre-1990 only):
+  - 1960s / 1970s → −2.0
+  - 1980s → −1.5
+  - 1990s+ → 0
+- Explicit bias:
+  - explicit → +2.0 (strong push out of Warm Up but not a hard block)
+  - clean/unknown → 0
 
-### 2. Persistent cache: new table `song_metadata_cache`
-Avoid re-hitting ReccoBeats/MusicBrainz for the same song across workflows and users.
-- Columns: `artist_key text`, `song_key text` (normalized via `normalizeKey`), features + genre + year + source + `fetched_at timestamptz`, PK on `(artist_key, song_key)`.
-- RLS: `SELECT` for `authenticated`, no direct writes (server fn uses service role to upsert).
-- `enrichSongs` reads cache first, only calls APIs for misses, upserts results.
-- TTL: refetch anything older than 90 days on next miss (features can drift as popularity moves).
+Both biases only shift bucket assignment. A pre-1990 disco track that's genuinely peak-intensity can still land in Peak if the boost isn't enough to move it; likewise an explicit track with very low intensity can still fall into Warm Up if nothing else fits.
 
-### 3. Wire into generation flow: `src/routes/_authenticated/index.tsx`
-Current flow enriches uploads from VirtualDJ library tags in `generate()` before calling the AI recommender. Change order:
-1. Build the uploaded song list as today.
-2. **New step** — call `enrichSongs` for every uploaded song. Merge returned features onto the song objects.
-3. For any song where the online source returned `source: "none"` (or partial), fall back to VirtualDJ library tag lookup (existing code path) to fill remaining gaps.
-4. Anything still missing → keep the current `estimateEnergy` heuristic as the last-resort default (no change).
-5. Pass the fully enriched `existing` list to the AI recommender (this already reads `energy/danceability/popularity/valence/genre/year/bpm/camelot`).
-6. After AI returns suggestions, run `enrichSongs` on the AI picks too so section re-bucketing (`reorderForEnergyProgression`) uses real values, not the AI's self-reported guesses.
+### Explicit detection (AI-tagged + keyword fallback)
 
-Show a small progress line in the existing loading state: "Enriching N songs from online sources…".
+- Add `explicit: boolean` to the AI suggestion schema and instruct the model to flag songs with profanity, slurs, or aggressive sexual/violent content.
+- Add a keyword fallback in `src/lib/danceFloor.ts` that flags titles containing markers like `[Explicit]`, `(Explicit)`, `(Dirty)`, `(Uncensored)` for uploads and library songs where the AI flag isn't available.
+- Persist `explicit` on `ResultSong` so the flag survives dedupe, reranking, and top-up.
 
-### 4. UI hints in `MetricsDetail`
-Update the existing metrics tooltip to show a `Source: ReccoBeats + MusicBrainz` / `VirtualDJ` / `Estimated` line, replacing the current `metaSource` label. No new UI surface.
+### Ordering & ramp preserved
 
-### 5. Tests
-- `tests/enrich.test.ts` — unit test the normalization (0–1 → 1–10), Camelot conversion path, and cache-hit short-circuit with a mocked fetch.
-- Extend `tests/workflowIsolation.test.ts` to confirm enriched features never carry across `workflowInstanceId` boundaries (cache is per song, not per workflow — still fine, but the workflow's `existing` array must be rebuilt from the current workflow only).
+- `reorderForEnergyProgression` continues to sort by raw `intensityOf(song)` inside each section and across the full set — the ramp visualization and existing tests still pass.
+- Only the section-assignment step (`sectionForIntensity`) receives the biased value.
+- Variety reranker (`applyVarietyReranker`) is unchanged; harmonic/BPM transition rules keep working.
 
-## Out of scope
-- No new user-facing setting or API-key form (both sources are keyless).
-- No change to the VirtualDJ export folder or local file matching — VirtualDJ stays useful for playback + export, just not as the primary metadata source.
-- No historical backfill — cache warms as songs are generated.
+### UI
 
-## Verification
-- `bunx vitest run` — new + existing tests pass.
-- Manual: generate a 2-hour dance floor from ~30 uploaded songs with the VirtualDJ folder disconnected; confirm energy/danceability tooltips show real ReccoBeats values and section placement matches (high-energy tracks land in Peak).
-- Manual: repeat with VirtualDJ folder connected but network offline (block requests in devtools) — confirm the fallback path fills features from VirtualDJ tags and generation still completes.
+- Add a subtle **Older-friendly** chip (year < 1990) and an **Explicit** chip to the expandable song row's `MetricsDetail`, alongside existing Stretched/Reused badges — so users can see why a track was nudged.
 
-## Technical notes
-- ReccoBeats search is fuzzy; pick the top result whose artist token-overlap ≥ 0.6 with the query artist to avoid mismatches (e.g. "Adele" vs "Adele Roberts").
-- MusicBrainz `first-release-date` can be `YYYY` or `YYYY-MM-DD`; parse just the year.
-- Both services must be called from the server (CORS + `User-Agent` requirement for MusicBrainz).
-- `enrichSongs` runs inside the existing generation server-fn call, so no new client-side network activity.
+## Files to change
+
+- `src/lib/danceFloor.ts`
+  - Add `eraBias(year)`, `explicitBias(explicit)`, `effectiveIntensityFor(song)` helpers.
+  - Add `detectExplicitFromTitle(title)` keyword fallback.
+  - Extend `ResultSong` with `explicit?: boolean`.
+  - Use `effectiveIntensityFor` in the bucketing pass of `reorderForEnergyProgression` (and initial `generateLists` assignment); keep raw `intensityOf` for the ramp sort.
+- `src/lib/recommend.functions.ts`
+  - Add `explicit: z.boolean().optional()` to `SuggestionSchema`.
+  - Add a prompt bullet: flag songs with explicit language / aggressive lyrics; note that the app biases older songs into Warm Up and explicit songs into Transition/Peak so the model can lean into that when choosing.
+  - Pass `explicit` through in `normalizeSuggestion` and `fallbackParseSuggestions`.
+- `src/lib/workflowIsolation.ts`
+  - Propagate `year` and `explicit` when building payloads / merging AI results so the biases apply consistently.
+- `src/routes/_authenticated/index.tsx`
+  - Backfill `explicit` from AI suggestions and keyword fallback onto uploads/library tracks.
+  - Add **Older-friendly** and **Explicit** chips in `MetricsDetail`.
+- `tests/danceFloor.sectionFit.test.ts` (+ new cases)
+  - Pre-1990 mid-intensity disco track → Warm Up or Transition, not Peak.
+  - Explicit low-intensity track → not Warm Up when a non-explicit alternative exists.
+  - Ramp remains non-decreasing across the full warm-up → transition → peak sequence with biases applied.
