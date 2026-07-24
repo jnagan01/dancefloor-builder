@@ -501,8 +501,7 @@ function Index() {
     });
 
     if (expand) {
-      setIsGenerating(true);
-      try {
+      {
         const sectionMap: Array<{ key: SectionKey; label: "Warm Up" | "Transition" | "Peak" }> = [
           { key: "warmUp", label: "Warm Up" },
           { key: "transition", label: "Transition" },
