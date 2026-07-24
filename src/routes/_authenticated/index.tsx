@@ -667,8 +667,6 @@ function Index() {
           });
         }
 
-      } finally {
-        setIsGenerating(false);
       }
     }
 
