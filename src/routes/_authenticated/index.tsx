@@ -2172,8 +2172,10 @@ type BadgeSong = Song & {
   genre?: string;
   year?: number;
   mood?: string;
+  explicit?: boolean;
   metaSource?: "Online" | "VirtualDJ" | "AI" | "Library" | "Upload" | "Estimated";
 };
+
 
 function MetricsDetail({ song }: { song: BadgeSong }) {
   const hasAny =
