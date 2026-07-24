@@ -2193,7 +2193,17 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
     song.genre ? { label: "Genre", value: song.genre } : null,
     typeof song.year === "number" ? { label: "Year", value: String(song.year) } : null,
     song.mood ? { label: "Mood", value: song.mood } : null,
-    song.metaSource ? { label: "Source", value: song.metaSource } : null,
+    song.metaSource
+      ? {
+          label: "Source",
+          value:
+            song.metaSource === "Online"
+              ? "ReccoBeats + MusicBrainz"
+              : song.metaSource === "VirtualDJ"
+                ? "VirtualDJ (offline fallback)"
+                : song.metaSource,
+        }
+      : null,
     song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
   ].filter(Boolean) as { label: string; value: string }[];
   return (
