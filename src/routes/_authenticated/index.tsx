@@ -59,6 +59,7 @@ import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
+import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
 import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
@@ -125,6 +126,7 @@ function Index() {
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const recommendFn = useServerFn(recommendSongsForSection);
+  const enrichFn = useServerFn(enrichSongs);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dnpFileRef = useRef<HTMLInputElement>(null);
@@ -419,6 +421,8 @@ function Index() {
       toast.error("Enter a valid dance floor length");
       return;
     }
+    setIsGenerating(true);
+    try {
     const uniqueSongs = dedupeSongs(songs);
     const prefs = buildCurrentPrefs();
     // Always build the base from uploads only; AI fills the gap when expand=true,
@@ -430,8 +434,27 @@ function Index() {
       prefs,
     });
 
-    // Enrich uploads with metadata from connected VirtualDJ libraries
-    // (BPM, key→Camelot, genre, year). Best-effort: missing fields stay missing.
+    // Metadata enrichment strategy (per user request):
+    //   1) Online sources (ReccoBeats + MusicBrainz) via `enrichSongs`.
+    //   2) VirtualDJ tags as an offline fallback for anything the online
+    //      sources didn't return.
+    //   3) Existing per-song heuristics stay as the last-resort default.
+    // We only fetch metadata for songs actually used in a generation.
+    const applyOnlineEnrichment = (s: ResultSong, e: EnrichedSong | undefined): ResultSong => {
+      if (!e || e.source === "none") return s;
+      return {
+        ...s,
+        energy: s.energy ?? e.energy,
+        danceability: s.danceability ?? e.danceability,
+        popularity: s.popularity ?? e.popularity,
+        valence: s.valence ?? e.valence,
+        bpm: s.bpm ?? e.bpm,
+        camelot: s.camelot ?? e.camelot,
+        genre: s.genre ?? e.genre,
+        year: s.year ?? e.year,
+        metaSource: s.metaSource ?? "Online",
+      };
+    };
     const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
       const m = matchSong({ artist: s.artist, song: s.song }, mergedLibrary);
@@ -450,13 +473,35 @@ function Index() {
         metaSource: s.metaSource ?? "VirtualDJ",
       };
     };
+    // Small helper: fetch online enrichment for a flat list of songs and
+    // return a map keyed by "artist||song" (raw values). Best-effort — a
+    // network failure returns an empty map so generation continues.
+    const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
+      const map = new Map<string, EnrichedSong>();
+      if (!list.length) return map;
+      try {
+        const payload = list.slice(0, 200).map((s) => ({ artist: s.artist, song: s.song }));
+        const res = await enrichFn({ data: { songs: payload } });
+        for (const e of res.results) {
+          map.set(`${e.artist}||${e.song}`, e);
+        }
+      } catch (err) {
+        console.warn("Online enrichment failed — falling back to VirtualDJ/heuristic", err);
+      }
+      return map;
+    };
+
+    // Enrich uploads: online first, then VirtualDJ fallback.
+    const initialFlat = ([...r.warmUp, ...r.transition, ...r.peak]);
+    const initialOnline = await enrichBatch(initialFlat);
     (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
-      r[k] = r[k].map(enrichFromLibrary);
+      r[k] = r[k].map((s) =>
+        enrichFromLibrary(applyOnlineEnrichment(s, initialOnline.get(`${s.artist}||${s.song}`))),
+      );
     });
 
     if (expand) {
-      setIsGenerating(true);
-      try {
+      {
         const sectionMap: Array<{ key: SectionKey; label: "Warm Up" | "Transition" | "Peak" }> = [
           { key: "warmUp", label: "Warm Up" },
           { key: "transition", label: "Transition" },
@@ -548,8 +593,8 @@ function Index() {
                 break;
               }
             }
-            // Enrich AI picks against any connected library.
-            r[key] = r[key].map(enrichFromLibrary);
+            // NOTE: online + VirtualDJ enrichment for AI picks runs after all
+            // sections finish (see enrichBatch call below) so we do it once.
             // Mark section as failed only when AI produced nothing at all
             // AND we still have a gap — that's when we need library fallback.
             if (!gotAny && r[key].length < r.perSectionTarget) {
@@ -588,8 +633,40 @@ function Index() {
           }
         }
 
-      } finally {
-        setIsGenerating(false);
+        // Enrich AI-added picks online too, so section re-bucketing uses real
+        // ReccoBeats/MusicBrainz values instead of the AI's self-reported guesses.
+        // Only fetch for songs whose metaSource is still AI/Library (i.e. skip
+        // uploads we already enriched above).
+        const needsAiEnrich: ResultSong[] = [];
+        (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
+          for (const s of r[k]) {
+            if (s.metaSource === "AI" || s.metaSource === "Library") needsAiEnrich.push(s);
+          }
+        });
+        if (needsAiEnrich.length) {
+          const aiOnline = await enrichBatch(needsAiEnrich);
+          (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
+            r[k] = r[k].map((s) => {
+              if (s.metaSource !== "AI" && s.metaSource !== "Library") return s;
+              const e = aiOnline.get(`${s.artist}||${s.song}`);
+              if (!e || e.source === "none") return enrichFromLibrary(s);
+              // For AI picks the model's numbers were guesses — prefer online.
+              return enrichFromLibrary({
+                ...s,
+                energy: e.energy ?? s.energy,
+                danceability: e.danceability ?? s.danceability,
+                popularity: e.popularity ?? s.popularity,
+                valence: e.valence ?? s.valence,
+                bpm: e.bpm ?? s.bpm,
+                camelot: e.camelot ?? s.camelot,
+                genre: e.genre ?? s.genre,
+                year: e.year ?? s.year,
+                metaSource: "Online",
+              });
+            });
+          });
+        }
+
       }
     }
 
@@ -629,6 +706,9 @@ function Index() {
     setTimeout(() => {
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   function removeDuplicates() {
@@ -2085,7 +2165,7 @@ type BadgeSong = Song & {
   genre?: string;
   year?: number;
   mood?: string;
-  metaSource?: "VirtualDJ" | "AI" | "Library" | "Upload";
+  metaSource?: "Online" | "VirtualDJ" | "AI" | "Library" | "Upload" | "Estimated";
 };
 
 function MetricsDetail({ song }: { song: BadgeSong }) {
@@ -2115,7 +2195,17 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
     song.genre ? { label: "Genre", value: song.genre } : null,
     typeof song.year === "number" ? { label: "Year", value: String(song.year) } : null,
     song.mood ? { label: "Mood", value: song.mood } : null,
-    song.metaSource ? { label: "Source", value: song.metaSource } : null,
+    song.metaSource
+      ? {
+          label: "Source",
+          value:
+            song.metaSource === "Online"
+              ? "ReccoBeats + MusicBrainz"
+              : song.metaSource === "VirtualDJ"
+                ? "VirtualDJ (offline fallback)"
+                : song.metaSource,
+        }
+      : null,
     song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
   ].filter(Boolean) as { label: string; value: string }[];
   return (

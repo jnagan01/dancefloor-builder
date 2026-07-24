@@ -41,6 +41,54 @@ export type Database = {
         }
         Relationships: []
       }
+      song_metadata_cache: {
+        Row: {
+          artist_key: string
+          bpm: number | null
+          camelot: string | null
+          danceability: number | null
+          energy: number | null
+          fetched_at: string
+          genre: string | null
+          musical_key: string | null
+          popularity: number | null
+          song_key: string
+          source: string
+          valence: number | null
+          year: number | null
+        }
+        Insert: {
+          artist_key: string
+          bpm?: number | null
+          camelot?: string | null
+          danceability?: number | null
+          energy?: number | null
+          fetched_at?: string
+          genre?: string | null
+          musical_key?: string | null
+          popularity?: number | null
+          song_key: string
+          source: string
+          valence?: number | null
+          year?: number | null
+        }
+        Update: {
+          artist_key?: string
+          bpm?: number | null
+          camelot?: string | null
+          danceability?: number | null
+          energy?: number | null
+          fetched_at?: string
+          genre?: string | null
+          musical_key?: string | null
+          popularity?: number | null
+          song_key?: string
+          source?: string
+          valence?: number | null
+          year?: number | null
+        }
+        Relationships: []
+      }
       spotify_connections: {
         Row: {
           connected_at: string

@@ -358,7 +358,7 @@ export interface ResultSong extends Song {
   /** Short mood label (e.g. "euphoric"). */
   mood?: string;
   /** Where the audio-feature metadata came from. */
-  metaSource?: "VirtualDJ" | "AI" | "Library" | "Upload";
+  metaSource?: "Online" | "VirtualDJ" | "AI" | "Library" | "Upload" | "Estimated";
   /** Set when the song's natural intensity band differs from the section it
    * was placed in — i.e. it was stretched to keep the ramp continuous. */
   stretched?: boolean;
