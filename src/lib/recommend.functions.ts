@@ -137,9 +137,11 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
         bpm: bpmValue && bpmValue > 0 ? Math.round(bpmValue) : undefined,
         camelot: typeof row.camelot === "string" ? sanitize(row.camelot, 10) || undefined : undefined,
         mood: typeof row.mood === "string" ? sanitize(row.mood, 40) || undefined : undefined,
+        explicit: typeof row.explicit === "boolean" ? row.explicit : undefined,
         reason: typeof row.reason === "string" ? sanitize(row.reason, 240) || "Fits the requested section energy and danceability." : "Fits the requested section energy and danceability.",
       };
     };
+
     const fallbackParseSuggestions = (text: string): RecommendedSong[] | null => {
       const trimmed = text.trim();
       const firstArray = trimmed.indexOf("[");
