@@ -706,6 +706,9 @@ function Index() {
     setTimeout(() => {
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   function removeDuplicates() {
