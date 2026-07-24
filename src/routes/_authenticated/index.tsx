@@ -421,6 +421,8 @@ function Index() {
       toast.error("Enter a valid dance floor length");
       return;
     }
+    setIsGenerating(true);
+    try {
     const uniqueSongs = dedupeSongs(songs);
     const prefs = buildCurrentPrefs();
     // Always build the base from uploads only; AI fills the gap when expand=true,
