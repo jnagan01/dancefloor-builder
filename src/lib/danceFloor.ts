@@ -796,8 +796,20 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
   const peakStart = Math.max(warmEnd, n - peakCount);
 
   const warmUpRaw = sorted.slice(0, warmEnd);
-  const transitionRaw = sorted.slice(warmEnd, peakStart);
+  let transitionRaw = sorted.slice(warmEnd, peakStart);
   const peakRaw = sorted.slice(peakStart);
+
+  // Cap transition at perSectionTarget. Without this, when AI/library
+  // over-supply mid-intensity songs the middle slice grows unbounded while
+  // warm/peak stay capped at `target`, leaving transition much longer than
+  // the other two sections. Trim symmetrically from both ends so what
+  // remains stays centered on the true transition intensity band.
+  if (transitionRaw.length > target) {
+    const excess = transitionRaw.length - target;
+    const dropFront = Math.floor(excess / 2);
+    const dropBack = excess - dropFront;
+    transitionRaw = transitionRaw.slice(dropFront, transitionRaw.length - dropBack);
+  }
 
   // Tag songs whose natural intensity band does not match the section they
   // ended up in — these were "stretched" to keep the ramp continuous.
