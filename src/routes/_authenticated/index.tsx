@@ -126,6 +126,7 @@ function Index() {
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const recommendFn = useServerFn(recommendSongsForSection);
+  const enrichFn = useServerFn(enrichSongs);
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const dnpFileRef = useRef<HTMLInputElement>(null);
