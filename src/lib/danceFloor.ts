@@ -831,8 +831,18 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
     seenAcross.add(k);
     deduped.push(s);
   }
-  const sorted = sortByIntensity(deduped);
+  // Bucket by *effective* intensity so pre-1990 songs bias into Warm Up and
+  // explicit songs bias into Transition/Peak, while we still sort/display the
+  // raw intensity ramp. Songs without year/explicit metadata get effective ==
+  // raw, preserving legacy behavior.
+  const sorted = [...deduped].sort((a, b) => {
+    const ai = effectiveIntensityFor(a);
+    const bi = effectiveIntensityFor(b);
+    if (ai !== bi) return ai - bi;
+    return intensityOf(a) - intensityOf(b);
+  });
   const n = sorted.length;
+
 
 
   // Ideal split: lowest `target` → Warm Up, next `target` → Transition,
