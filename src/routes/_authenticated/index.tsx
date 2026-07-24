@@ -432,8 +432,27 @@ function Index() {
       prefs,
     });
 
-    // Enrich uploads with metadata from connected VirtualDJ libraries
-    // (BPM, key→Camelot, genre, year). Best-effort: missing fields stay missing.
+    // Metadata enrichment strategy (per user request):
+    //   1) Online sources (ReccoBeats + MusicBrainz) via `enrichSongs`.
+    //   2) VirtualDJ tags as an offline fallback for anything the online
+    //      sources didn't return.
+    //   3) Existing per-song heuristics stay as the last-resort default.
+    // We only fetch metadata for songs actually used in a generation.
+    const applyOnlineEnrichment = (s: ResultSong, e: EnrichedSong | undefined): ResultSong => {
+      if (!e || e.source === "none") return s;
+      return {
+        ...s,
+        energy: s.energy ?? e.energy,
+        danceability: s.danceability ?? e.danceability,
+        popularity: s.popularity ?? e.popularity,
+        valence: s.valence ?? e.valence,
+        bpm: s.bpm ?? e.bpm,
+        camelot: s.camelot ?? e.camelot,
+        genre: s.genre ?? e.genre,
+        year: s.year ?? e.year,
+        metaSource: s.metaSource ?? "Online",
+      };
+    };
     const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
       const m = matchSong({ artist: s.artist, song: s.song }, mergedLibrary);
@@ -452,8 +471,31 @@ function Index() {
         metaSource: s.metaSource ?? "VirtualDJ",
       };
     };
+    // Small helper: fetch online enrichment for a flat list of songs and
+    // return a map keyed by "artist||song" (raw values). Best-effort — a
+    // network failure returns an empty map so generation continues.
+    const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
+      const map = new Map<string, EnrichedSong>();
+      if (!list.length) return map;
+      try {
+        const payload = list.slice(0, 200).map((s) => ({ artist: s.artist, song: s.song }));
+        const res = await enrichFn({ data: { songs: payload } });
+        for (const e of res.results) {
+          map.set(`${e.artist}||${e.song}`, e);
+        }
+      } catch (err) {
+        console.warn("Online enrichment failed — falling back to VirtualDJ/heuristic", err);
+      }
+      return map;
+    };
+
+    // Enrich uploads: online first, then VirtualDJ fallback.
+    const initialFlat = ([...r.warmUp, ...r.transition, ...r.peak]);
+    const initialOnline = await enrichBatch(initialFlat);
     (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
-      r[k] = r[k].map(enrichFromLibrary);
+      r[k] = r[k].map((s) =>
+        enrichFromLibrary(applyOnlineEnrichment(s, initialOnline.get(`${s.artist}||${s.song}`))),
+      );
     });
 
     if (expand) {
