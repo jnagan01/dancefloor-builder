@@ -580,10 +580,15 @@ function Index() {
                     genre: sug.genre,
                     year: typeof sug.year === "number" ? sug.year : undefined,
                     mood: sug.mood,
+                    explicit:
+                      typeof sug.explicit === "boolean"
+                        ? sug.explicit
+                        : detectExplicitFromTitle(sug.song),
                     metaSource: "AI",
                     aiSuggestion: true,
                     aiReason: sug.reason,
                   } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string });
+
                   addedThisAttempt += 1;
                 }
                 if (addedThisAttempt === 0) break; // all suggestions were duplicates
