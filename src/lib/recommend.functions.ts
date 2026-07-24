@@ -50,10 +50,12 @@ const SuggestionSchema = z.object({
       bpm: z.number().optional(),
       camelot: z.string().optional(),
       mood: z.string().optional(),
+      explicit: z.boolean().optional(),
       reason: z.string(),
     }),
   ),
 });
+
 
 export type RecommendedSong = z.infer<typeof SuggestionSchema>["suggestions"][number];
 
