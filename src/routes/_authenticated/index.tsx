@@ -632,6 +632,40 @@ function Index() {
           }
         }
 
+        // Enrich AI-added picks online too, so section re-bucketing uses real
+        // ReccoBeats/MusicBrainz values instead of the AI's self-reported guesses.
+        // Only fetch for songs whose metaSource is still AI/Library (i.e. skip
+        // uploads we already enriched above).
+        const needsAiEnrich: ResultSong[] = [];
+        (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
+          for (const s of r[k]) {
+            if (s.metaSource === "AI" || s.metaSource === "Library") needsAiEnrich.push(s);
+          }
+        });
+        if (needsAiEnrich.length) {
+          const aiOnline = await enrichBatch(needsAiEnrich);
+          (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
+            r[k] = r[k].map((s) => {
+              if (s.metaSource !== "AI" && s.metaSource !== "Library") return s;
+              const e = aiOnline.get(`${s.artist}||${s.song}`);
+              if (!e || e.source === "none") return enrichFromLibrary(s);
+              // For AI picks the model's numbers were guesses — prefer online.
+              return enrichFromLibrary({
+                ...s,
+                energy: e.energy ?? s.energy,
+                danceability: e.danceability ?? s.danceability,
+                popularity: e.popularity ?? s.popularity,
+                valence: e.valence ?? s.valence,
+                bpm: e.bpm ?? s.bpm,
+                camelot: e.camelot ?? s.camelot,
+                genre: e.genre ?? s.genre,
+                year: e.year ?? s.year,
+                metaSource: "Online",
+              });
+            });
+          });
+        }
+
       } finally {
         setIsGenerating(false);
       }
