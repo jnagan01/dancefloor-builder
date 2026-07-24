@@ -17,6 +17,8 @@ import {
   parseDoNotPlayFile,
   doNotPlayEntriesToText,
   normalizeKey,
+  detectExplicitFromTitle,
+
   type Song,
   type GenerationResult,
   type Preferences,
