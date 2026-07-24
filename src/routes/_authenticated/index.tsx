@@ -2163,7 +2163,7 @@ type BadgeSong = Song & {
   genre?: string;
   year?: number;
   mood?: string;
-  metaSource?: "VirtualDJ" | "AI" | "Library" | "Upload";
+  metaSource?: "Online" | "VirtualDJ" | "AI" | "Library" | "Upload" | "Estimated";
 };
 
 function MetricsDetail({ song }: { song: BadgeSong }) {
