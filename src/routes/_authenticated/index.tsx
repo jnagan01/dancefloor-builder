@@ -2250,8 +2250,28 @@ function SourceBadge({ song }: { song: BadgeSong }) {
 }
 
 function FallbackBadges({ song }: { song: BadgeSong }) {
+  const olderFriendly = typeof song.year === "number" && song.year < 1990;
+  const isExplicit = song.explicit === true || detectExplicitFromTitle(song.song);
   return (
     <>
+      {olderFriendly && (
+        <Badge
+          variant="secondary"
+          className="gap-1 text-[10px] bg-teal-100 text-teal-800 border-teal-200 hover:bg-teal-100"
+          title={`Pre-1990 (${song.year}) — biased toward Warm Up / Transition for older guests`}
+        >
+          Older-friendly
+        </Badge>
+      )}
+      {isExplicit && (
+        <Badge
+          variant="secondary"
+          className="gap-1 text-[10px] bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-100"
+          title="Explicit / aggressive lyrics — biased toward Transition / Peak"
+        >
+          Explicit
+        </Badge>
+      )}
       {song.stretched && (
         <Badge
           variant="secondary"
@@ -2273,6 +2293,7 @@ function FallbackBadges({ song }: { song: BadgeSong }) {
     </>
   );
 }
+
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "success" | "warning" | "destructive" }) {
   const toneCls =
