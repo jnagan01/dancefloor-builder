@@ -592,8 +592,8 @@ function Index() {
                 break;
               }
             }
-            // Enrich AI picks against any connected library.
-            r[key] = r[key].map(enrichFromLibrary);
+            // NOTE: online + VirtualDJ enrichment for AI picks runs after all
+            // sections finish (see enrichBatch call below) so we do it once.
             // Mark section as failed only when AI produced nothing at all
             // AND we still have a gap — that's when we need library fallback.
             if (!gotAny && r[key].length < r.perSectionTarget) {
