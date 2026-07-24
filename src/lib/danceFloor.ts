@@ -357,6 +357,9 @@ export interface ResultSong extends Song {
   year?: number;
   /** Short mood label (e.g. "euphoric"). */
   mood?: string;
+  /** True when the track has explicit / profane / aggressive lyrics.
+   * Biases placement toward Transition/Peak (away from Warm Up). */
+  explicit?: boolean;
   /** Where the audio-feature metadata came from. */
   metaSource?: "Online" | "VirtualDJ" | "AI" | "Library" | "Upload" | "Estimated";
   /** Set when the song's natural intensity band differs from the section it
@@ -368,6 +371,53 @@ export interface ResultSong extends Song {
    * (reused to fill a shortfall). */
   reused?: boolean;
 }
+
+/**
+ * Era bias (in intensity units, applied only to bucket assignment — never to
+ * the raw intensity we sort/display). Pre-1990 tracks get pulled toward the
+ * Warm Up section so older guests hear engaging music in the first hour.
+ */
+export function eraBias(year?: number): number {
+  if (typeof year !== "number" || !Number.isFinite(year)) return 0;
+  if (year < 1980) return -2.0; // 60s / 70s
+  if (year < 1990) return -1.5; // 80s
+  return 0;
+}
+
+/**
+ * Explicit bias — pushes profane / aggressive tracks toward Transition/Peak.
+ * A strong bias but not an absolute block, so if nothing else fits Warm Up
+ * a mild explicit track can still land there.
+ */
+export function explicitBias(explicit?: boolean): number {
+  return explicit ? 2.0 : 0;
+}
+
+/**
+ * Keyword-based fallback for tagging explicit tracks when the AI hasn't
+ * flagged them (uploaded lists, library rows). Matches common release
+ * markers like "[Explicit]", "(Dirty)", "(Uncensored)".
+ */
+export function detectExplicitFromTitle(title: string): boolean {
+  if (!title) return false;
+  return /[\[(]\s*(explicit|dirty|uncensored|nsfw)\s*[\])]/i.test(title);
+}
+
+/**
+ * Intensity used for bucketing into Warm Up / Transition / Peak. Combines
+ * raw energy+danceability with era and explicit-content biases. The raw
+ * `intensityOf` value is still what we sort and display; only the section
+ * assignment uses this effective value.
+ */
+export function effectiveIntensityFor(s: {
+  energy?: number;
+  danceability?: number;
+  year?: number;
+  explicit?: boolean;
+}): number {
+  return intensityOf(s) + eraBias(s.year) + explicitBias(s.explicit);
+}
+
 
 export interface GenerationResult {
   warmUp: ResultSong[];
