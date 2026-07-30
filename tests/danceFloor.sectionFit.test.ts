@@ -221,3 +221,38 @@ describe("era + explicit placement bias", () => {
   });
 });
 
+
+describe("uploads are never dropped by transition trimming", () => {
+  it("keeps every uploaded song in the final result", () => {
+    const uploads: ResultSong[] = Array.from({ length: 60 }, (_, i) => ({
+      artist: `Upload Artist ${i}`,
+      song: `Upload Song ${i}`,
+      fromUpload: true,
+      energy: 6 + (i % 5) * 0.2,
+      danceability: 6 + (i % 5) * 0.2,
+    }));
+    const filler: ResultSong[] = Array.from({ length: 60 }, (_, i) => ({
+      artist: `Filler Artist ${i}`,
+      song: `Filler Song ${i}`,
+      fromUpload: false,
+      energy: 6 + (i % 5) * 0.2,
+      danceability: 6 + (i % 5) * 0.2,
+    }));
+    const result = reorderForEnergyProgression({
+      warmUp: [],
+      transition: [...uploads, ...filler],
+      peak: [],
+      targetTotal: 30,
+      perSectionTarget: 10,
+      perSectionBase: 5,
+      shortfall: { warmUp: 0, transition: 0, peak: 0, total: 0 },
+      duplicatesRemoved: 0,
+      blockedCount: 0,
+    });
+    const all = [...result.warmUp, ...result.transition, ...result.peak];
+    const keys = new Set(all.map((s) => `${s.artist}|${s.song}`));
+    for (const u of uploads) {
+      expect(keys.has(`${u.artist}|${u.song}`)).toBe(true);
+    }
+  });
+});
