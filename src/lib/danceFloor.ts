@@ -1036,20 +1036,34 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
         : { ...s, stretched: true, naturalSection: natural };
     });
 
-  // Apply variety re-ranker per section (artist cap + smooth BPM/key transitions).
+  // Apply variety re-ranker per section (artist cap + smooth BPM/key
+  // transitions + rolling genre/decade variety windows).
   const warmUp = applyVarietyReranker(tag(warmUpRaw, "Warm Up"));
   const transition = applyVarietyReranker(tag(transitionRaw, "Transition"));
-  const peak = applyVarietyReranker(tag(peakRaw, "Peak"));
+  // Peak breathes: bangers with a recovery sing-along roughly every 5th slot.
+  const peak = applyPeakWave(applyVarietyReranker(tag(peakRaw, "Peak")));
+
+  // Attach a per-slot explanation of the placement decision.
+  const totalPlaced = warmUp.length + transition.length + peak.length;
+  const explain = (list: ResultSong[], section: Section, offset: number): ResultSong[] =>
+    list.map((s, i) => ({
+      ...s,
+      placementReason: describePlacement(s, section, offset + i, totalPlaced),
+    }));
+  const warmUpEx = explain(warmUp, "Warm Up", 0);
+  const transitionEx = explain(transition, "Transition", warmUp.length);
+  const peakEx = explain(peak, "Peak", warmUp.length + transition.length);
 
   // Flag duplicates (same artist+song appearing in more than one slot) as
   // reused — the ramp borrowed a song to plug a shortfall.
   const counts = new Map<string, number>();
-  [...warmUp, ...transition, ...peak].forEach((s) => {
+  [...warmUpEx, ...transitionEx, ...peakEx].forEach((s) => {
     const k = dedupeKey(s.artist, s.song);
     counts.set(k, (counts.get(k) ?? 0) + 1);
   });
   const markReused = (list: ResultSong[]): ResultSong[] =>
     list.map((s) => ((counts.get(dedupeKey(s.artist, s.song)) ?? 0) > 1 ? { ...s, reused: true } : s));
+
 
   const finalShortfall = {
     warmUp: Math.max(0, target - warmUp.length),
