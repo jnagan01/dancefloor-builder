@@ -178,6 +178,13 @@ function Index() {
   const [libraries, setLibraries] = useState<VdjLibrary[]>([]);
   const [librarySources, setLibrarySources] = useState<string[]>([]);
   const [matches, setMatches] = useState<Record<string, SongMatch>>({});
+  // Mirror of `matches` readable synchronously inside export handlers, which
+  // may add match entries and consume them in the same tick (before React
+  // has re-rendered with the new state).
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
+  // Guards against a slow in-flight generate() overwriting newer state.
+  const genTokenRef = useRef(0);
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [vdjDirName, setVdjDirName] = useState<string | null>(null);
   const [vdjDirSavedAt, setVdjDirSavedAt] = useState<number | null>(null);
@@ -423,6 +430,7 @@ function Index() {
       toast.error("Enter a valid dance floor length");
       return;
     }
+    const myToken = ++genTokenRef.current;
     setIsGenerating(true);
     try {
     const uniqueSongs = dedupeSongs(songs);
@@ -478,6 +486,7 @@ function Index() {
     // Small helper: fetch online enrichment for a flat list of songs and
     // return a map keyed by "artist||song" (raw values). Best-effort — a
     // network failure returns an empty map so generation continues.
+    let enrichFailed = false;
     const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
       const map = new Map<string, EnrichedSong>();
       if (!list.length) return map;
@@ -489,6 +498,12 @@ function Index() {
         }
       } catch (err) {
         console.warn("Online enrichment failed — falling back to VirtualDJ/heuristic", err);
+        if (!enrichFailed) {
+          enrichFailed = true;
+          toast.warning(
+            "Couldn't reach the online music data service — energy, BPM and genre are estimated for this run.",
+          );
+        }
       }
       return map;
     };
@@ -685,6 +700,10 @@ function Index() {
       r = topUpSectionsFromLibrary(r, prefs);
     }
 
+    // A newer generate() (or a workflow reset) started while we were awaiting
+    // AI/enrichment — drop this stale result instead of clobbering state.
+    if (genTokenRef.current !== myToken) return;
+
     setResult(r);
     setMatches({});
     if (mergedLibrary) {
@@ -695,7 +714,10 @@ function Index() {
           m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
         });
       });
+      matchesRef.current = m;
       setMatches(m);
+    } else {
+      matchesRef.current = {};
     }
     const fs = r.finalShortfall;
     if (fs && fs.total > 0) {
@@ -1005,7 +1027,7 @@ function Index() {
   function getSectionRefsForResult(source: GenerationResult, section: SectionKey): ExportSongRef[] {
     return source[section].map((s, i) => ({
       song: s,
-      match: matches[songKey(section, i, s)],
+      match: matchesRef.current[songKey(section, i, s)],
     }));
   }
 
@@ -1015,12 +1037,17 @@ function Index() {
     const topped = topUpSectionsFromLibrary(result, buildCurrentPrefs());
     setResult(topped);
     if (mergedLibrary) {
-      const m: Record<string, SongMatch> = {};
+      // Preserve existing matches (manual picks, extra tracks, VDJ exclusions)
+      // and only auto-match songs that were just added by the top-up.
+      const existing = matchesRef.current;
+      const m: Record<string, SongMatch> = { ...existing };
       (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
         topped[section].forEach((s, i) => {
-          m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
+          const key = songKey(section, i, s);
+          if (!m[key]) m[key] = matchSong(s, mergedLibrary);
         });
       });
+      matchesRef.current = m;
       setMatches(m);
     }
     toast.success("Filled short sections from the built-in library before export");

@@ -6,7 +6,7 @@
  * `window` / `document` / `navigator` unguarded at import or invocation time,
  * this script throws and exits non-zero.
  *
- * Run: bun tests/virtualDj.ssr.test.ts
+ * Runs under vitest (single smoke test) or directly with bun.
  */
 
 // Hard guarantee: the DOM globals the module must guard are NOT defined.
@@ -15,6 +15,8 @@ for (const name of ["window", "document", "localStorage"] as const) {
     throw new Error(`Test precondition failed: ${name} is defined in this runtime`);
   }
 }
+
+import { it, expect } from "vitest";
 
 const mod = await import("../src/lib/virtualDj");
 
@@ -69,4 +71,7 @@ assert(mod.supportsDirectoryWrite() === false, "supportsDirectoryWrite returns f
 // use document.createElement — these are only invoked from user-triggered file
 // pickers (event handlers, client-only), so they are not exercised here.
 
-console.log("✓ virtualDj.ts is SSR-safe");
+it("virtualDj.ts is SSR-safe", () => {
+  expect(lib.tracks.length).toBe(1);
+  expect(mod.supportsDirectoryWrite()).toBe(false);
+});
