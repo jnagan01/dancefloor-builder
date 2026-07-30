@@ -53,6 +53,21 @@ export interface EnrichedSong {
 }
 
 const CACHE_TTL_DAYS = 90;
+// Bounded parallelism + hard budget keep generation responsive; anything not
+// enriched in time falls back to VirtualDJ metadata / heuristics.
+const FETCH_CONCURRENCY = 8;
+const FETCH_BUDGET_MS = 20_000;
+const REQUEST_TIMEOUT_MS = 6_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ReccoBeats: 0..1 continuous → app's 1..10 integer scale (matches intensityOf).
 function toScore10(v: unknown): number | undefined {
