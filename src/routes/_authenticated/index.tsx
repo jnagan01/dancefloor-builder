@@ -483,6 +483,7 @@ function Index() {
     // Small helper: fetch online enrichment for a flat list of songs and
     // return a map keyed by "artist||song" (raw values). Best-effort — a
     // network failure returns an empty map so generation continues.
+    let enrichFailed = false;
     const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
       const map = new Map<string, EnrichedSong>();
       if (!list.length) return map;
@@ -494,6 +495,12 @@ function Index() {
         }
       } catch (err) {
         console.warn("Online enrichment failed — falling back to VirtualDJ/heuristic", err);
+        if (!enrichFailed) {
+          enrichFailed = true;
+          toast.warning(
+            "Couldn't reach the online music data service — energy, BPM and genre are estimated for this run.",
+          );
+        }
       }
       return map;
     };
