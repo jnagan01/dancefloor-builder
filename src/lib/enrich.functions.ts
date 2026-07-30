@@ -53,6 +53,21 @@ export interface EnrichedSong {
 }
 
 const CACHE_TTL_DAYS = 90;
+// Bounded parallelism + hard budget keep generation responsive; anything not
+// enriched in time falls back to VirtualDJ metadata / heuristics.
+const FETCH_CONCURRENCY = 8;
+const FETCH_BUDGET_MS = 20_000;
+const REQUEST_TIMEOUT_MS = 6_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // ReccoBeats: 0..1 continuous → app's 1..10 integer scale (matches intensityOf).
 function toScore10(v: unknown): number | undefined {
@@ -109,7 +124,7 @@ async function fetchReccoBeats(
 ): Promise<ReccoBeatsFeatures | null> {
   try {
     const q = encodeURIComponent(`${song} ${artist}`.trim());
-    const searchRes = await fetch(
+    const searchRes = await fetchWithTimeout(
       `https://api.reccobeats.com/v1/track/search?searchText=${q}&limit=10`,
       { headers: { Accept: "application/json" } },
     );
@@ -132,7 +147,7 @@ async function fetchReccoBeats(
     });
     if (!match?.id) return null;
 
-    const featRes = await fetch(
+    const featRes = await fetchWithTimeout(
       `https://api.reccobeats.com/v1/track/${encodeURIComponent(match.id)}/audio-features`,
       { headers: { Accept: "application/json" } },
     );
@@ -184,7 +199,7 @@ async function fetchMusicBrainz(
     // MusicBrainz Lucene query — quoted terms escape reserved chars.
     const escape = (s: string) => s.replace(/["\\]/g, " ").trim();
     const q = `artist:"${escape(artist)}" AND recording:"${escape(song)}"`;
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=5`,
       {
         headers: {
@@ -297,32 +312,46 @@ export const enrichSongs = createServerFn({ method: "POST" })
       missOrder.push(q);
     }
 
-    // 3) Fetch misses sequentially with a polite spacer (both APIs ~1 req/s).
+    // 3) Fetch misses with a bounded worker pool and an overall deadline.
+    //    Previously this ran strictly sequentially with a 1.1s spacer, so a
+    //    single 200-song batch cost 220s+. Providers tolerate modest
+    //    concurrency; anything that fails or runs past the deadline simply
+    //    falls back to VirtualDJ/heuristic data on the caller side.
     const fetched = new Map<string, EnrichedSong>();
-    for (const q of missOrder) {
-      const [reco, mb] = await Promise.all([
-        fetchReccoBeats(q.original.artist, q.original.song),
-        fetchMusicBrainz(q.original.artist, q.original.song),
-      ]);
-      const source = pickSource(!!reco, !!mb);
-      const enriched: EnrichedSong = {
-        artist: q.original.artist,
-        song: q.original.song,
-        energy: reco?.energy,
-        danceability: reco?.danceability,
-        valence: reco?.valence,
-        popularity: reco?.popularity,
-        bpm: reco?.bpm,
-        camelot: reco?.camelot,
-        genre: mb?.genre,
-        year: mb?.year,
-        source,
-      };
-      fetched.set(`${q.artistKey}\u0000${q.songKey}`, enriched);
-      // Space out the next iteration so we stay under both providers' 1 rps.
-      if (missOrder.indexOf(q) < missOrder.length - 1) {
-        await new Promise((r) => setTimeout(r, 1100));
+    const deadline = Date.now() + FETCH_BUDGET_MS;
+    let cursor = 0;
+    const worker = async () => {
+      for (;;) {
+        const i = cursor++;
+        if (i >= missOrder.length) return;
+        if (Date.now() > deadline) return;
+        const q = missOrder[i];
+        const [reco, mb] = await Promise.all([
+          fetchReccoBeats(q.original.artist, q.original.song),
+          fetchMusicBrainz(q.original.artist, q.original.song),
+        ]);
+        fetched.set(`${q.artistKey}\u0000${q.songKey}`, {
+          artist: q.original.artist,
+          song: q.original.song,
+          energy: reco?.energy,
+          danceability: reco?.danceability,
+          valence: reco?.valence,
+          popularity: reco?.popularity,
+          bpm: reco?.bpm,
+          camelot: reco?.camelot,
+          genre: mb?.genre,
+          year: mb?.year,
+          source: pickSource(!!reco, !!mb),
+        });
       }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(FETCH_CONCURRENCY, missOrder.length) }, worker),
+    );
+    if (fetched.size < missOrder.length) {
+      console.warn(
+        `[enrichSongs] enriched ${fetched.size}/${missOrder.length} misses before budget (${FETCH_BUDGET_MS}ms)`,
+      );
     }
 
     // 4) Upsert successful fetches into the cache (service role bypasses RLS).
