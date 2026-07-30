@@ -370,6 +370,10 @@ export interface ResultSong extends Song {
   /** Set when the same artist+song appears more than once across the result
    * (reused to fill a shortfall). */
   reused?: boolean;
+  /** Role inside the peak "wave": a lift track or a recovery breather. */
+  waveRole?: "lift" | "breather";
+  /** Human-readable explanation of why the song landed in this slot. */
+  placementReason?: string;
 }
 
 /**
