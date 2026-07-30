@@ -566,9 +566,17 @@ function Index() {
                   transition: r.transition,
                   peak: r.peak,
                 });
+                // Tell the AI which holes to fill (genre/decade/tempo gaps,
+                // artists already at the cap) so batches stop repeating.
+                const gaps = buildGapProfile(
+                  r[key],
+                  [...r.warmUp, ...r.transition, ...r.peak],
+                  label,
+                );
                 const res = await recommendFn({
-                  data: { section: label, count: requestCount, prefs, existing: existingNow },
+                  data: { section: label, count: requestCount, prefs, existing: existingNow, gaps },
                 });
+
                 if (!res.suggestions.length) {
                   // No progress this attempt — stop looping to avoid burning
                   // credits on a section the model can't fill.
