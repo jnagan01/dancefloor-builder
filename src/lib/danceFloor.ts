@@ -978,15 +978,24 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
 
 
 
-  // Ideal split: lowest `target` → Warm Up, next `target` → Transition,
-  // last `target` → Peak. When supply is short we proportionally allocate
-  // (~⅓ each) so each section still has the relatively-lowest or
-  // relatively-highest songs, and we never silently empty a section.
-  const warmCount = Math.min(target, Math.max(1, Math.ceil(n / 3)));
-  const peakCount = Math.min(target, Math.max(1, Math.ceil(n / 3)));
+  // Curve-based split: walk the target intensity curve across the whole set
+  // and let the curve decide where Warm Up ends and Peak begins, instead of
+  // three flat buckets. Positions whose curve target is still in the warm band
+  // form Warm Up, positions already in the peak band form Peak. Each side is
+  // capped at `target` so no section can run away.
+  let curveWarm = 0;
+  let curvePeak = 0;
+  for (let i = 0; i < n; i++) {
+    const t = targetCurve(i, n);
+    if (t <= 6.5) curveWarm += 1;
+    else if (t >= 8) curvePeak += 1;
+  }
+  const warmCount = Math.min(target, Math.max(1, curveWarm || Math.ceil(n / 3)));
+  const peakCount = Math.min(target, Math.max(1, curvePeak || Math.ceil(n / 3)));
   // Guard against overlap when n < warmCount + peakCount (very small sets).
   const warmEnd = Math.min(warmCount, n);
   const peakStart = Math.max(warmEnd, n - peakCount);
+
 
   const warmUpRaw = sorted.slice(0, warmEnd);
   let transitionRaw = sorted.slice(warmEnd, peakStart);
