@@ -2219,6 +2219,8 @@ type BadgeSong = Song & {
   fromUpload?: boolean;
   aiSuggestion?: boolean;
   aiReason?: string;
+  placementReason?: string;
+  waveRole?: "lift" | "breather";
   stretched?: boolean;
   naturalSection?: "Warm Up" | "Transition" | "Peak";
   reused?: boolean;
