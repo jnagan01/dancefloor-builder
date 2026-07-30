@@ -219,9 +219,39 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
       .slice(0, 50)
       .join(", ");
 
+    // Gap-driven brief: tell the model exactly which holes to fill so
+    // successive batches stop repeating the same genres/eras/artists.
+    const g = data.gaps;
+    const gapLines: string[] = [];
+    if (g) {
+      if (typeof g.targetIntensity === "number")
+        gapLines.push(`- Aim for an average of energy+danceability near ${g.targetIntensity.toFixed(1)}/10.`);
+      if (typeof g.bpmMin === "number" && typeof g.bpmMax === "number")
+        gapLines.push(`- Target tempo range: ${Math.round(g.bpmMin)}–${Math.round(g.bpmMax)} BPM.`);
+      if (typeof g.valenceMin === "number" || typeof g.valenceMax === "number")
+        gapLines.push(
+          `- Target valence: ${typeof g.valenceMin === "number" ? `≥${g.valenceMin}` : "any"}${typeof g.valenceMax === "number" ? ` and ≤${g.valenceMax}` : ""}.`,
+        );
+      const over = sanitizeList(g.overGenres, 20, 60);
+      if (over.length) gapLines.push(`- The set is ALREADY heavy on these genres — avoid them: ${over.join(", ")}.`);
+      const under = sanitizeList(g.underGenres, 20, 60);
+      if (under.length) gapLines.push(`- The set is LIGHT on these genres — favor them: ${under.join(", ")}.`);
+      const overD = sanitizeList(g.overDecades, 20, 20);
+      if (overD.length) gapLines.push(`- Already heavy on these decades — avoid them: ${overD.join(", ")}.`);
+      const underD = sanitizeList(g.underDecades, 20, 20);
+      if (underD.length) gapLines.push(`- Light on these decades — favor them: ${underD.join(", ")}.`);
+      const ex = sanitizeList(g.excludeArtists, 80, 150);
+      if (ex.length) gapLines.push(`- Do NOT suggest anything by: ${ex.join(", ")}.`);
+    }
+    const gapBrief = gapLines.length
+      ? `\nGAP BRIEF (highest priority — these picks must fill the holes below):\n${gapLines.join("\n")}\n`
+      : "";
+
     const prompt = `You are an expert wedding/party DJ. Suggest ${data.count} real released songs for the "${data.section}" portion of a dance floor set.
 
 Section targets: ${sectionGuide[data.section]}
+${gapBrief}
+
 
 You score every track on these signals (integers 1–10 unless noted) and pick songs whose scores match the target band above. These signals are the PRIMARY basis for your picks — not artist popularity alone:
 - energy: arousal / intensity / tempo + loudness perception
