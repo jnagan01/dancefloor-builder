@@ -1075,12 +1075,40 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
 
   return {
     ...result,
-    warmUp: markReused(warmUp),
-    transition: markReused(transition),
-    peak: markReused(peak),
+    warmUp: markReused(warmUpEx),
+    transition: markReused(transitionEx),
+    peak: markReused(peakEx),
     finalShortfall,
   };
 }
+
+/**
+ * Short human-readable explanation of why a song sits in this slot: how it
+ * scored against the night's target curve, plus the harmonic/tempo and wave
+ * context. Shown in the expandable song row.
+ */
+export function describePlacement(
+  s: ResultSong,
+  section: Section,
+  position: number,
+  total: number,
+): string {
+  const score = placementScore(s);
+  const targetHere = targetCurve(position, total);
+  const parts: string[] = [
+    `${section} slot ${position + 1}/${total}`,
+    `placement ${score.toFixed(1)} vs curve target ${targetHere.toFixed(1)}`,
+  ];
+  if (typeof s.bpm === "number") parts.push(`${Math.round(s.bpm)} BPM`);
+  if (s.camelot) parts.push(`key ${s.camelot}`);
+  if (typeof s.valence === "number") parts.push(`valence ${s.valence}`);
+  if (s.waveRole === "breather") parts.push("peak breather (recovery slot)");
+  if (typeof s.year === "number" && s.year < 1990) parts.push("pre-1990, biased earlier for older guests");
+  if (s.explicit) parts.push("explicit, held back from Warm Up");
+  if (s.stretched && s.naturalSection) parts.push(`stretched from ${s.naturalSection}`);
+  return parts.join(" · ");
+}
+
 
 
 export function songsToCsv(songs: Song[]): string {
