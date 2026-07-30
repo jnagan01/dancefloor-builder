@@ -178,6 +178,11 @@ function Index() {
   const [libraries, setLibraries] = useState<VdjLibrary[]>([]);
   const [librarySources, setLibrarySources] = useState<string[]>([]);
   const [matches, setMatches] = useState<Record<string, SongMatch>>({});
+  // Mirror of `matches` readable synchronously inside export handlers, which
+  // may add match entries and consume them in the same tick (before React
+  // has re-rendered with the new state).
+  const matchesRef = useRef(matches);
+  matchesRef.current = matches;
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [vdjDirName, setVdjDirName] = useState<string | null>(null);
   const [vdjDirSavedAt, setVdjDirSavedAt] = useState<number | null>(null);
