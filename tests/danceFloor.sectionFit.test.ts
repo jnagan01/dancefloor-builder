@@ -8,6 +8,7 @@ import {
   sectionForIntensity,
   reorderForEnergyProgression,
   type Song,
+  type ResultSong,
 } from "@/lib/danceFloor";
 
 const basePrefs = { artists: [], genres: [], decades: [], notes: "" };
