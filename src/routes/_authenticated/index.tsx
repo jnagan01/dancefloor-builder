@@ -2445,7 +2445,7 @@ function SectionView(props: SectionViewProps) {
               const m = matches[key];
               const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
               return (
-                <Fragment key={i}>
+                <Fragment key={key}>
                 <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
                   <TableCell className="align-top">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -2570,6 +2570,15 @@ function InlineMatchSearch({
   const defaultQuery = `${song.artist} ${song.song}`.trim();
   const [query, setQuery] = useState(defaultQuery);
   const [showAll, setShowAll] = useState(false);
+  // If this component instance gets reused for a different song (list
+  // regenerated/reordered), reset the query so the results below always
+  // belong to the song shown in the row above.
+  const [trackedSong, setTrackedSong] = useState(defaultQuery);
+  if (trackedSong !== defaultQuery) {
+    setTrackedSong(defaultQuery);
+    setQuery(defaultQuery);
+    setShowAll(false);
+  }
   const debounced = useDebounce(query, 150);
   const limit = showAll ? 200 : 10;
   const allResults = useMemo(() => {
