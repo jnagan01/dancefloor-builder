@@ -16,6 +16,23 @@ const ExistingEntrySchema = z.object({
   genre: z.string().max(60).optional(),
 });
 
+/**
+ * Gap profile: what the already-selected set is missing. Lets the recommender
+ * ask for the specific tracks that fill holes instead of generic section picks.
+ */
+const GapsSchema = z.object({
+  targetIntensity: z.number().min(1).max(10).optional(),
+  bpmMin: z.number().min(40).max(220).optional(),
+  bpmMax: z.number().min(40).max(220).optional(),
+  valenceMin: z.number().min(1).max(10).optional(),
+  valenceMax: z.number().min(1).max(10).optional(),
+  overGenres: z.array(z.string().max(60)).max(20).default([]),
+  underGenres: z.array(z.string().max(60)).max(20).default([]),
+  overDecades: z.array(z.string().max(20)).max(20).default([]),
+  underDecades: z.array(z.string().max(20)).max(20).default([]),
+  excludeArtists: z.array(z.string().max(150)).max(80).default([]),
+});
+
 const InputSchema = z.object({
   section: SectionEnum,
   count: z.number().int().min(1).max(40),
@@ -30,7 +47,9 @@ const InputSchema = z.object({
       .default([]),
   }),
   existing: z.array(ExistingEntrySchema).max(500).default([]),
+  gaps: GapsSchema.optional(),
 });
+
 
 
 // Keep field names short so the constrained-decoding state machine stays
