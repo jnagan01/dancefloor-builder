@@ -862,14 +862,27 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
   // Cap transition at perSectionTarget. Without this, when AI/library
   // over-supply mid-intensity songs the middle slice grows unbounded while
   // warm/peak stay capped at `target`, leaving transition much longer than
-  // the other two sections. Trim symmetrically from both ends so what
-  // remains stays centered on the true transition intensity band.
+  // the other two sections.
+  //
+  // IMPORTANT: uploaded songs are never dropped. Trimming removes only
+  // AI/library filler (fromUpload !== true), taken symmetrically from both
+  // ends so what remains stays centered on the true transition band. If the
+  // uploads alone exceed the target, the section is allowed to run long
+  // rather than losing the user's own tracks.
   if (transitionRaw.length > target) {
     const excess = transitionRaw.length - target;
+    const fillerIdx = transitionRaw
+      .map((s, i) => (s.fromUpload ? -1 : i))
+      .filter((i) => i >= 0);
     const dropFront = Math.floor(excess / 2);
     const dropBack = excess - dropFront;
-    transitionRaw = transitionRaw.slice(dropFront, transitionRaw.length - dropBack);
+    const toDrop = new Set<number>([
+      ...fillerIdx.slice(0, Math.min(dropFront, fillerIdx.length)),
+      ...fillerIdx.slice(Math.max(0, fillerIdx.length - dropBack)),
+    ]);
+    transitionRaw = transitionRaw.filter((_, i) => !toDrop.has(i));
   }
+
 
   // Tag songs whose natural intensity band does not match the section they
   // ended up in — these were "stretched" to keep the ramp continuous.
