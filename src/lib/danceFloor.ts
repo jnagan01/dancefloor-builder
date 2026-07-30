@@ -845,9 +845,12 @@ export function applyVarietyReranker(
     let bestCost = Infinity;
     const targetIntensity =
       result.length === 0 ? 0 : intensityOf(result[result.length - 1]);
+    // Rolling windows: last 4 for genre, last 6 for decade.
+    const recentGenres = result.slice(-4).map((s) => genreKey(s));
+    const recentDecades = result.slice(-6).map((s) => decadeKey(s));
     for (let i = 0; i < remaining.length; i++) {
       const cand = remaining[i];
-      const cost = transitionCost(prev!, cand, targetIntensity);
+      const cost = transitionCost(prev!, cand, targetIntensity, recentGenres, recentDecades);
       if (cost < bestCost) {
         bestCost = cost;
         bestIdx = i;
@@ -863,15 +866,39 @@ export function applyVarietyReranker(
   return result;
 }
 
+/** Coarse genre bucket used by the rolling-window variety rules. */
+function genreKey(s: ResultSong): string {
+  const g = (s.genre ?? "").toLowerCase();
+  if (!g) return "";
+  if (/hip hop|rap|trap/.test(g)) return "hiphop";
+  if (/edm|house|dance|techno|electro/.test(g)) return "edm";
+  if (/r&b|rnb|soul|motown|funk/.test(g)) return "soul";
+  if (/country/.test(g)) return "country";
+  if (/rock|metal|punk/.test(g)) return "rock";
+  if (/latin|reggaeton|salsa|afro/.test(g)) return "latin";
+  if (/disco/.test(g)) return "disco";
+  if (/pop/.test(g)) return "pop";
+  return g.slice(0, 12);
+}
+
+/** Decade bucket ("1980s") from the year, when known. */
+function decadeKey(s: ResultSong): string {
+  if (typeof s.year !== "number" || !Number.isFinite(s.year)) return "";
+  return `${Math.floor(s.year / 10) * 10}s`;
+}
+
 /**
  * Cost of transitioning from `prev` to `cand`. Lower = smoother.
- * Combines: same-artist penalty, BPM jump, Camelot wheel distance, and
- * deviation from the ramp's current intensity (so the order stays monotonic).
+ * Combines: same-artist penalty, BPM jump, Camelot wheel distance, rolling
+ * genre/decade variety windows, and deviation from the ramp's current
+ * intensity (so the order stays monotonic).
  */
 function transitionCost(
   prev: ResultSong,
   cand: ResultSong,
   baseIntensity: number,
+  recentGenres: string[] = [],
+  recentDecades: string[] = [],
 ): number {
   let cost = 0;
   // Back-to-back same artist: heavy penalty.
@@ -895,12 +922,24 @@ function transitionCost(
       if (wheelDist > 1) cost += 5 * (wheelDist - 1);
     }
   }
+  // Rolling variety windows: at most 2 of a genre per 4, 3 of a decade per 6.
+  const gk = genreKey(cand);
+  if (gk) {
+    const n = recentGenres.filter((g) => g === gk).length;
+    if (n >= 2) cost += 30 * (n - 1);
+  }
+  const dk = decadeKey(cand);
+  if (dk) {
+    const n = recentDecades.filter((d) => d === dk).length;
+    if (n >= 3) cost += 15 * (n - 2);
+  }
   // Stay near the ramp — penalize going backward in intensity.
   const candI = intensityOf(cand);
   if (candI < baseIntensity) cost += (baseIntensity - candI) * 8;
   else cost += (candI - baseIntensity) * 1; // small forward push
   return cost;
 }
+
 
 /**
  * Re-bucket + re-sort an already-generated result using the scores attached
