@@ -1109,6 +1109,97 @@ export function describePlacement(
   return parts.join(" · ");
 }
 
+/** Gap profile handed to the AI recommender so each batch fills real holes. */
+export interface GapProfile {
+  targetIntensity?: number;
+  bpmMin?: number;
+  bpmMax?: number;
+  valenceMin?: number;
+  valenceMax?: number;
+  overGenres: string[];
+  underGenres: string[];
+  overDecades: string[];
+  underDecades: string[];
+  excludeArtists: string[];
+}
+
+const CORE_GENRES = ["pop", "hip hop", "r&b/soul", "dance/edm", "rock", "disco/funk", "latin", "country"];
+const CORE_DECADES = ["1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
+
+/**
+ * Summarize what's already selected (genre mix, decade mix, artists at the
+ * cap, tempo/valence bands for the section) so the recommender can be asked
+ * for the specific tracks that are missing rather than more of the same.
+ */
+export function buildGapProfile(
+  sectionSongs: ResultSong[],
+  allSongs: ResultSong[],
+  section: Section,
+): GapProfile {
+  const genreCount = new Map<string, number>();
+  const decadeCount = new Map<string, number>();
+  const artistCount = new Map<string, number>();
+  for (const s of allSongs) {
+    const g = genreLabel(s.genre);
+    if (g) genreCount.set(g, (genreCount.get(g) ?? 0) + 1);
+    const d = typeof s.year === "number" ? `${Math.floor(s.year / 10) * 10}s` : "";
+    if (d) decadeCount.set(d, (decadeCount.get(d) ?? 0) + 1);
+    const a = s.artist?.trim();
+    if (a) artistCount.set(a, (artistCount.get(a) ?? 0) + 1);
+  }
+  const total = allSongs.length || 1;
+  const overGenres = [...genreCount.entries()]
+    .filter(([, n]) => n / total > 0.3)
+    .map(([g]) => g)
+    .slice(0, 10);
+  const underGenres = CORE_GENRES.filter((g) => (genreCount.get(g) ?? 0) / total < 0.05).slice(0, 10);
+  const overDecades = [...decadeCount.entries()]
+    .filter(([, n]) => n / total > 0.35)
+    .map(([d]) => d)
+    .slice(0, 10);
+  const underDecades = CORE_DECADES.filter((d) => !decadeCount.has(d)).slice(0, 10);
+  const excludeArtists = [...artistCount.entries()]
+    .filter(([, n]) => n >= 2)
+    .map(([a]) => a)
+    .slice(0, 80);
+
+  const bpms = sectionSongs.map((s) => s.bpm).filter((b): b is number => typeof b === "number" && b > 0);
+  const avgBpm = bpms.length ? bpms.reduce((a, b) => a + b, 0) / bpms.length : undefined;
+  const defaults =
+    section === "Warm Up"
+      ? { intensity: 5.5, bpm: 105, vMin: 6 }
+      : section === "Transition"
+        ? { intensity: 7.25, bpm: 118, vMin: 6 }
+        : { intensity: 9, bpm: 126, vMin: 6 };
+  const centerBpm = avgBpm ?? defaults.bpm;
+
+  return {
+    targetIntensity: defaults.intensity,
+    bpmMin: Math.round(centerBpm - 8),
+    bpmMax: Math.round(centerBpm + 8),
+    valenceMin: defaults.vMin,
+    overGenres,
+    underGenres,
+    overDecades,
+    underDecades,
+    excludeArtists,
+  };
+}
+
+/** Coarse, human-readable genre label used by the gap profile. */
+function genreLabel(genre?: string): string {
+  const g = (genre ?? "").toLowerCase();
+  if (!g) return "";
+  if (/hip hop|rap|trap/.test(g)) return "hip hop";
+  if (/edm|house|dance|techno|electro/.test(g)) return "dance/edm";
+  if (/r&b|rnb|soul|motown/.test(g)) return "r&b/soul";
+  if (/disco|funk/.test(g)) return "disco/funk";
+  if (/country/.test(g)) return "country";
+  if (/rock|metal|punk/.test(g)) return "rock";
+  if (/latin|reggaeton|salsa|afro/.test(g)) return "latin";
+  if (/pop/.test(g)) return "pop";
+  return g.slice(0, 20);
+}
 
 
 export function songsToCsv(songs: Song[]): string {
