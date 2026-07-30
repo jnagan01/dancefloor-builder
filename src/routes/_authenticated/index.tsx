@@ -2277,6 +2277,7 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
         }
       : null,
     song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
+    song.placementReason ? { label: "Why here", value: song.placementReason } : null,
   ].filter(Boolean) as { label: string; value: string }[];
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1">
