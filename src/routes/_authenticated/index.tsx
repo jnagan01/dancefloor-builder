@@ -1740,11 +1740,33 @@ function Index() {
 
         {/* Music setup status (moved out of the linear flow — configured once per device from your profile menu) */}
         {(() => {
+          const folderCount = audioSources.length;
+          const fileCount = audioSources.reduce((n, s) => n + s.files.length, 0);
           const hasLibrary = libraries.length > 0;
           const hasExport = !!vdjDirHandle;
-          const fullyReady = hasLibrary && hasExport;
-          if (fullyReady) return null;
-          const isNewUser = musicSetupCompleted === false;
+          if (hasLibrary && hasExport) return null;
+          const isNewUser = musicSetupCompleted === false && !hasLibrary && !hasExport;
+
+          // Only the export folder is missing — music is connected, so don't claim otherwise.
+          if (hasLibrary && !hasExport) {
+            return (
+              <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
+                <FolderOpen className="h-4 w-4 flex-shrink-0" />
+                <div className="flex-1 min-w-[200px]">
+                  <p className="font-medium text-foreground">
+                    Music connected{folderCount > 0 ? ` — ${folderCount} folder${folderCount === 1 ? "" : "s"}, ${fileCount.toLocaleString()} file${fileCount === 1 ? "" : "s"}` : ""}.
+                  </p>
+                  <p className="text-xs">
+                    VirtualDJ export folder isn't linked yet. Pick one to export playlists directly instead of downloading files.
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setMusicSetupOpen(true)}>
+                  <FolderOpen className="mr-1 h-4 w-4" /> Choose export folder
+                </Button>
+              </div>
+            );
+          }
+
           return (
             <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
               <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
@@ -1756,19 +1778,20 @@ function Index() {
                   </>
                 ) : (
                   <>
-                    <p className="font-medium">Music folders aren't connected on this device.</p>
+                    <p className="font-medium">No music folder is connected on this device.</p>
                     <p className="text-xs">
-                      {hasLibrary ? "Export folder missing." : "Music library missing."} Reconnect to enable direct exports and playback matching.
+                      {hasExport ? "Export folder is linked." : "Export folder isn't linked either."} Add a music folder to enable playback matching and direct exports.
                     </p>
                   </>
                 )}
               </div>
               <Button size="sm" onClick={() => setMusicSetupOpen(true)}>
-                <FolderOpen className="mr-1 h-4 w-4" /> {isNewUser ? "Set up music folders" : "Reconnect"}
+                <FolderOpen className="mr-1 h-4 w-4" /> {isNewUser ? "Set up music folders" : "Open music setup"}
               </Button>
             </div>
           );
         })()}
+
 
         {/* Generate */}
         <div className="flex justify-center">
