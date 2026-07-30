@@ -370,6 +370,10 @@ export interface ResultSong extends Song {
   /** Set when the same artist+song appears more than once across the result
    * (reused to fill a shortfall). */
   reused?: boolean;
+  /** Role inside the peak "wave": a lift track or a recovery breather. */
+  waveRole?: "lift" | "breather";
+  /** Human-readable explanation of why the song landed in this slot. */
+  placementReason?: string;
 }
 
 /**
@@ -403,20 +407,110 @@ export function detectExplicitFromTitle(title: string): boolean {
   return /[\[(]\s*(explicit|dirty|uncensored|nsfw)\s*[\])]/i.test(title);
 }
 
+/** Map BPM onto the 1–10 intensity scale (80 BPM ≈ 1, 140 BPM ≈ 10). */
+export function tempoScore(bpm?: number): number | undefined {
+  if (typeof bpm !== "number" || !Number.isFinite(bpm) || bpm <= 0) return undefined;
+  // Half-time correction so double-time tags (e.g. 174) don't read as max energy.
+  const b = bpm > 165 ? bpm / 2 : bpm;
+  return Math.max(1, Math.min(10, ((b - 80) / 60) * 9 + 1));
+}
+
 /**
- * Intensity used for bucketing into Warm Up / Transition / Peak. Combines
- * raw energy+danceability with era and explicit-content biases. The raw
+ * Weighted placement score (1–10) used to decide WHERE a track sits in the
+ * night. Energy and danceability still dominate, but valence and tempo matter:
+ * a 128-BPM melancholy track and a 128-BPM euphoric track do not belong in the
+ * same slot. Popularity nudges anthems later so the biggest sing-alongs land
+ * closer to peak.
+ *
+ * Weights sum to 1 so the result shares the same 1–10 scale (and the same
+ * section bands) as `intensityOf`. Tracks with only energy+danceability score
+ * essentially the same as before, preserving legacy behavior.
+ */
+export function placementScore(s: {
+  energy?: number;
+  danceability?: number;
+  valence?: number;
+  popularity?: number;
+  bpm?: number;
+}): number {
+  const base = intensityOf(s);
+  const e = typeof s.energy === "number" ? s.energy : 7;
+  const d = typeof s.danceability === "number" ? s.danceability : 6;
+  const v = typeof s.valence === "number" ? s.valence : base;
+  const t = tempoScore(s.bpm) ?? base;
+  const pop = typeof s.popularity === "number" ? s.popularity : 5;
+  const blended = e * 0.45 + d * 0.35 + v * 0.12 + t * 0.08;
+  return blended + (pop - 5) * 0.06;
+}
+
+/**
+ * Intensity used for bucketing into Warm Up / Transition / Peak. Combines the
+ * weighted placement score with era and explicit-content biases. The raw
  * `intensityOf` value is still what we sort and display; only the section
  * assignment uses this effective value.
  */
 export function effectiveIntensityFor(s: {
   energy?: number;
   danceability?: number;
+  valence?: number;
+  popularity?: number;
+  bpm?: number;
   year?: number;
   explicit?: boolean;
 }): number {
-  return intensityOf(s) + eraBias(s.year) + explicitBias(s.explicit);
+  return placementScore(s) + eraBias(s.year) + explicitBias(s.explicit);
 }
+
+/**
+ * Target intensity curve for the whole night: a gentle rise out of warm-up, a
+ * mid plateau, then a strong finish. Position is 0-based within the full
+ * concatenated set. Returns a 1–10 target the sequencer places songs against.
+ */
+export function targetCurve(position: number, total: number): number {
+  if (total <= 1) return 4.5;
+  const p = Math.max(0, Math.min(1, position / (total - 1)));
+  const eased = Math.pow(p, 0.85);
+  return 4.5 + eased * 5.0; // 4.5 → 9.5
+}
+
+/**
+ * Peak hours need to breathe: 4 bangers, one crowd sing-along breather, back
+ * up. Rearranges an already-ordered peak list so every 5th slot dips to a
+ * lower-intensity crowd-pleaser instead of running 30 straight max-energy
+ * tracks. Overall trend stays ascending; the dips are bounded and local.
+ */
+export function applyPeakWave(songs: ResultSong[]): ResultSong[] {
+  if (songs.length < 6) return songs.slice();
+  const ordered = [...songs];
+  // Breathers = the lower-intensity third, preferring the most recognizable.
+  const byIntensity = [...ordered].sort((a, b) => intensityOf(a) - intensityOf(b));
+  const breatherCount = Math.max(1, Math.floor(ordered.length / 5));
+  const pool = byIntensity.slice(0, Math.max(breatherCount, Math.floor(ordered.length / 3)));
+  const breathers = [...pool]
+    .sort((a, b) => (b.popularity ?? 5) - (a.popularity ?? 5))
+    .slice(0, breatherCount)
+    .sort((a, b) => intensityOf(a) - intensityOf(b));
+  const breatherKeys = new Set(breathers.map((s) => dedupeKey(s.artist, s.song)));
+  const bangers = ordered.filter((s) => !breatherKeys.has(dedupeKey(s.artist, s.song)));
+
+  const out: ResultSong[] = [];
+  let bi = 0;
+  let breatherIdx = 0;
+  while (bi < bangers.length) {
+    out.push({ ...bangers[bi], waveRole: "lift" });
+    bi += 1;
+    if (bi % 4 === 0 && breatherIdx < breathers.length && bi < bangers.length) {
+      out.push({ ...breathers[breatherIdx], waveRole: "breather" });
+      breatherIdx += 1;
+    }
+  }
+  while (breatherIdx < breathers.length) {
+    out.push({ ...breathers[breatherIdx], waveRole: "breather" });
+    breatherIdx += 1;
+  }
+  return out;
+}
+
 
 
 export interface GenerationResult {
@@ -751,9 +845,12 @@ export function applyVarietyReranker(
     let bestCost = Infinity;
     const targetIntensity =
       result.length === 0 ? 0 : intensityOf(result[result.length - 1]);
+    // Rolling windows: last 4 for genre, last 6 for decade.
+    const recentGenres = result.slice(-4).map((s) => genreKey(s));
+    const recentDecades = result.slice(-6).map((s) => decadeKey(s));
     for (let i = 0; i < remaining.length; i++) {
       const cand = remaining[i];
-      const cost = transitionCost(prev!, cand, targetIntensity);
+      const cost = transitionCost(prev!, cand, targetIntensity, recentGenres, recentDecades);
       if (cost < bestCost) {
         bestCost = cost;
         bestIdx = i;
@@ -769,15 +866,39 @@ export function applyVarietyReranker(
   return result;
 }
 
+/** Coarse genre bucket used by the rolling-window variety rules. */
+function genreKey(s: ResultSong): string {
+  const g = (s.genre ?? "").toLowerCase();
+  if (!g) return "";
+  if (/hip hop|rap|trap/.test(g)) return "hiphop";
+  if (/edm|house|dance|techno|electro/.test(g)) return "edm";
+  if (/r&b|rnb|soul|motown|funk/.test(g)) return "soul";
+  if (/country/.test(g)) return "country";
+  if (/rock|metal|punk/.test(g)) return "rock";
+  if (/latin|reggaeton|salsa|afro/.test(g)) return "latin";
+  if (/disco/.test(g)) return "disco";
+  if (/pop/.test(g)) return "pop";
+  return g.slice(0, 12);
+}
+
+/** Decade bucket ("1980s") from the year, when known. */
+function decadeKey(s: ResultSong): string {
+  if (typeof s.year !== "number" || !Number.isFinite(s.year)) return "";
+  return `${Math.floor(s.year / 10) * 10}s`;
+}
+
 /**
  * Cost of transitioning from `prev` to `cand`. Lower = smoother.
- * Combines: same-artist penalty, BPM jump, Camelot wheel distance, and
- * deviation from the ramp's current intensity (so the order stays monotonic).
+ * Combines: same-artist penalty, BPM jump, Camelot wheel distance, rolling
+ * genre/decade variety windows, and deviation from the ramp's current
+ * intensity (so the order stays monotonic).
  */
 function transitionCost(
   prev: ResultSong,
   cand: ResultSong,
   baseIntensity: number,
+  recentGenres: string[] = [],
+  recentDecades: string[] = [],
 ): number {
   let cost = 0;
   // Back-to-back same artist: heavy penalty.
@@ -801,12 +922,24 @@ function transitionCost(
       if (wheelDist > 1) cost += 5 * (wheelDist - 1);
     }
   }
+  // Rolling variety windows: at most 2 of a genre per 4, 3 of a decade per 6.
+  const gk = genreKey(cand);
+  if (gk) {
+    const n = recentGenres.filter((g) => g === gk).length;
+    if (n >= 2) cost += 30 * (n - 1);
+  }
+  const dk = decadeKey(cand);
+  if (dk) {
+    const n = recentDecades.filter((d) => d === dk).length;
+    if (n >= 3) cost += 15 * (n - 2);
+  }
   // Stay near the ramp — penalize going backward in intensity.
   const candI = intensityOf(cand);
   if (candI < baseIntensity) cost += (baseIntensity - candI) * 8;
   else cost += (candI - baseIntensity) * 1; // small forward push
   return cost;
 }
+
 
 /**
  * Re-bucket + re-sort an already-generated result using the scores attached
@@ -845,15 +978,24 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
 
 
 
-  // Ideal split: lowest `target` → Warm Up, next `target` → Transition,
-  // last `target` → Peak. When supply is short we proportionally allocate
-  // (~⅓ each) so each section still has the relatively-lowest or
-  // relatively-highest songs, and we never silently empty a section.
-  const warmCount = Math.min(target, Math.max(1, Math.ceil(n / 3)));
-  const peakCount = Math.min(target, Math.max(1, Math.ceil(n / 3)));
+  // Curve-based split: walk the target intensity curve across the whole set
+  // and let the curve decide where Warm Up ends and Peak begins, instead of
+  // three flat buckets. Positions whose curve target is still in the warm band
+  // form Warm Up, positions already in the peak band form Peak. Each side is
+  // capped at `target` so no section can run away.
+  let curveWarm = 0;
+  let curvePeak = 0;
+  for (let i = 0; i < n; i++) {
+    const t = targetCurve(i, n);
+    if (t <= 6.5) curveWarm += 1;
+    else if (t >= 8) curvePeak += 1;
+  }
+  const warmCount = Math.min(target, Math.max(1, curveWarm || Math.ceil(n / 3)));
+  const peakCount = Math.min(target, Math.max(1, curvePeak || Math.ceil(n / 3)));
   // Guard against overlap when n < warmCount + peakCount (very small sets).
   const warmEnd = Math.min(warmCount, n);
   const peakStart = Math.max(warmEnd, n - peakCount);
+
 
   const warmUpRaw = sorted.slice(0, warmEnd);
   let transitionRaw = sorted.slice(warmEnd, peakStart);
@@ -894,20 +1036,34 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
         : { ...s, stretched: true, naturalSection: natural };
     });
 
-  // Apply variety re-ranker per section (artist cap + smooth BPM/key transitions).
+  // Apply variety re-ranker per section (artist cap + smooth BPM/key
+  // transitions + rolling genre/decade variety windows).
   const warmUp = applyVarietyReranker(tag(warmUpRaw, "Warm Up"));
   const transition = applyVarietyReranker(tag(transitionRaw, "Transition"));
-  const peak = applyVarietyReranker(tag(peakRaw, "Peak"));
+  // Peak breathes: bangers with a recovery sing-along roughly every 5th slot.
+  const peak = applyPeakWave(applyVarietyReranker(tag(peakRaw, "Peak")));
+
+  // Attach a per-slot explanation of the placement decision.
+  const totalPlaced = warmUp.length + transition.length + peak.length;
+  const explain = (list: ResultSong[], section: Section, offset: number): ResultSong[] =>
+    list.map((s, i) => ({
+      ...s,
+      placementReason: describePlacement(s, section, offset + i, totalPlaced),
+    }));
+  const warmUpEx = explain(warmUp, "Warm Up", 0);
+  const transitionEx = explain(transition, "Transition", warmUp.length);
+  const peakEx = explain(peak, "Peak", warmUp.length + transition.length);
 
   // Flag duplicates (same artist+song appearing in more than one slot) as
   // reused — the ramp borrowed a song to plug a shortfall.
   const counts = new Map<string, number>();
-  [...warmUp, ...transition, ...peak].forEach((s) => {
+  [...warmUpEx, ...transitionEx, ...peakEx].forEach((s) => {
     const k = dedupeKey(s.artist, s.song);
     counts.set(k, (counts.get(k) ?? 0) + 1);
   });
   const markReused = (list: ResultSong[]): ResultSong[] =>
     list.map((s) => ((counts.get(dedupeKey(s.artist, s.song)) ?? 0) > 1 ? { ...s, reused: true } : s));
+
 
   const finalShortfall = {
     warmUp: Math.max(0, target - warmUp.length),
@@ -919,11 +1075,130 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
 
   return {
     ...result,
-    warmUp: markReused(warmUp),
-    transition: markReused(transition),
-    peak: markReused(peak),
+    warmUp: markReused(warmUpEx),
+    transition: markReused(transitionEx),
+    peak: markReused(peakEx),
     finalShortfall,
   };
+}
+
+/**
+ * Short human-readable explanation of why a song sits in this slot: how it
+ * scored against the night's target curve, plus the harmonic/tempo and wave
+ * context. Shown in the expandable song row.
+ */
+export function describePlacement(
+  s: ResultSong,
+  section: Section,
+  position: number,
+  total: number,
+): string {
+  const score = placementScore(s);
+  const targetHere = targetCurve(position, total);
+  const parts: string[] = [
+    `${section} slot ${position + 1}/${total}`,
+    `placement ${score.toFixed(1)} vs curve target ${targetHere.toFixed(1)}`,
+  ];
+  if (typeof s.bpm === "number") parts.push(`${Math.round(s.bpm)} BPM`);
+  if (s.camelot) parts.push(`key ${s.camelot}`);
+  if (typeof s.valence === "number") parts.push(`valence ${s.valence}`);
+  if (s.waveRole === "breather") parts.push("peak breather (recovery slot)");
+  if (typeof s.year === "number" && s.year < 1990) parts.push("pre-1990, biased earlier for older guests");
+  if (s.explicit) parts.push("explicit, held back from Warm Up");
+  if (s.stretched && s.naturalSection) parts.push(`stretched from ${s.naturalSection}`);
+  return parts.join(" · ");
+}
+
+/** Gap profile handed to the AI recommender so each batch fills real holes. */
+export interface GapProfile {
+  targetIntensity?: number;
+  bpmMin?: number;
+  bpmMax?: number;
+  valenceMin?: number;
+  valenceMax?: number;
+  overGenres: string[];
+  underGenres: string[];
+  overDecades: string[];
+  underDecades: string[];
+  excludeArtists: string[];
+}
+
+const CORE_GENRES = ["pop", "hip hop", "r&b/soul", "dance/edm", "rock", "disco/funk", "latin", "country"];
+const CORE_DECADES = ["1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
+
+/**
+ * Summarize what's already selected (genre mix, decade mix, artists at the
+ * cap, tempo/valence bands for the section) so the recommender can be asked
+ * for the specific tracks that are missing rather than more of the same.
+ */
+export function buildGapProfile(
+  sectionSongs: ResultSong[],
+  allSongs: ResultSong[],
+  section: Section,
+): GapProfile {
+  const genreCount = new Map<string, number>();
+  const decadeCount = new Map<string, number>();
+  const artistCount = new Map<string, number>();
+  for (const s of allSongs) {
+    const g = genreLabel(s.genre);
+    if (g) genreCount.set(g, (genreCount.get(g) ?? 0) + 1);
+    const d = typeof s.year === "number" ? `${Math.floor(s.year / 10) * 10}s` : "";
+    if (d) decadeCount.set(d, (decadeCount.get(d) ?? 0) + 1);
+    const a = s.artist?.trim();
+    if (a) artistCount.set(a, (artistCount.get(a) ?? 0) + 1);
+  }
+  const total = allSongs.length || 1;
+  const overGenres = [...genreCount.entries()]
+    .filter(([, n]) => n / total > 0.3)
+    .map(([g]) => g)
+    .slice(0, 10);
+  const underGenres = CORE_GENRES.filter((g) => (genreCount.get(g) ?? 0) / total < 0.05).slice(0, 10);
+  const overDecades = [...decadeCount.entries()]
+    .filter(([, n]) => n / total > 0.35)
+    .map(([d]) => d)
+    .slice(0, 10);
+  const underDecades = CORE_DECADES.filter((d) => !decadeCount.has(d)).slice(0, 10);
+  const excludeArtists = [...artistCount.entries()]
+    .filter(([, n]) => n >= 2)
+    .map(([a]) => a)
+    .slice(0, 80);
+
+  const bpms = sectionSongs.map((s) => s.bpm).filter((b): b is number => typeof b === "number" && b > 0);
+  const avgBpm = bpms.length ? bpms.reduce((a, b) => a + b, 0) / bpms.length : undefined;
+  const defaults =
+    section === "Warm Up"
+      ? { intensity: 5.5, bpm: 105, vMin: 6 }
+      : section === "Transition"
+        ? { intensity: 7.25, bpm: 118, vMin: 6 }
+        : { intensity: 9, bpm: 126, vMin: 6 };
+  const centerBpm = avgBpm ?? defaults.bpm;
+
+  return {
+    targetIntensity: defaults.intensity,
+    bpmMin: Math.round(centerBpm - 8),
+    bpmMax: Math.round(centerBpm + 8),
+    valenceMin: defaults.vMin,
+    overGenres,
+    underGenres,
+    overDecades,
+    underDecades,
+    excludeArtists,
+  };
+}
+
+/** Coarse, human-readable genre label used by the gap profile. */
+function genreLabel(genre?: string): string {
+  const g = (genre ?? "").toLowerCase();
+  if (!g) return "";
+  if (/hip hop|rap|trap/.test(g)) return "hip hop";
+  if (/edm|house|dance|techno|electro/.test(g)) return "dance/edm";
+  if (/r&b|rnb|soul|motown/.test(g)) return "r&b/soul";
+  if (/disco|funk/.test(g)) return "disco/funk";
+  if (/country/.test(g)) return "country";
+  if (/rock|metal|punk/.test(g)) return "rock";
+  if (/latin|reggaeton|salsa|afro/.test(g)) return "latin";
+  if (/pop/.test(g)) return "pop";
+  return g.slice(0, 20);
 }
 
 

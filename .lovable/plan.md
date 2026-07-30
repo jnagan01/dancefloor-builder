@@ -1,66 +1,40 @@
+Here's what I found in the current pipeline and where the real quality gains are.
 
-## Goal
+## What the app does today
 
-Nudge section placement so:
-- **Pre-1990 songs** (60s/70s/80s) lean toward Warm Up and Transition — engaging older guests during the first hour.
-- **Explicit / aggressive songs** lean toward Transition and Peak, and rarely land in Warm Up.
-- The existing intensity-based ramp (energy + danceability, ascending across the whole set) still governs ordering.
+- Songs get an intensity = mean(energy, danceability); fixed bands assign sections (≤6.5 Warm Up, 7–7.5 Transition, ≥8 Peak), with era/explicit biases nudging placement.
+- Sections are filled to a 2x buffer, then a greedy re-ranker enforces a 2-track artist cap and prefers small BPM jumps / adjacent Camelot keys.
+- The AI is asked per-section for N picks with static energy/BPM guidance.
 
-## Approach
+The structure is sound; the weaknesses are that placement uses only two of the six signals, the ramp is linear and section-shaped rather than set-shaped, and the AI gets no feedback about what it already produced.
 
-Introduce a small **placement bias** applied to each song's effective intensity when bucketing into Warm Up / Transition / Peak. Ordering *within* the full set still uses the raw intensity, so the ramp stays monotonic.
+## Proposed improvements
 
-```text
-effectiveIntensity = intensity + eraBias(year) + explicitBias(explicit)
-section             = sectionForIntensity(effectiveIntensity)
-displayIntensity    = intensity   ← unchanged; ramp sort uses this
-```
+**1. Richer placement score (replaces the 2-signal intensity)**
+Blend energy, danceability, valence, tempo, and popularity into a placement score, while keeping raw energy/danceability visible in the UI. Valence and BPM matter a lot: a 128-BPM sad track and a 128-BPM euphoric track do not belong in the same slot. Popularity gets weighted higher inside Peak (anthems land late) and lower in Warm Up.
 
-### Bias values
+**2. Curve-based ramp instead of three flat bands**
+Model the night as a target intensity curve over the whole set (gentle rise → plateau → peak → optional short dip before final anthems) and place songs against the curve. This produces a smoother arc than three hard buckets, and it automatically fixes lopsided section sizes without the current symmetric-trim hack.
 
-- Era bias (pre-1990 only):
-  - 1960s / 1970s → −2.0
-  - 1980s → −1.5
-  - 1990s+ → 0
-- Explicit bias:
-  - explicit → +2.0 (strong push out of Warm Up but not a hard block)
-  - clean/unknown → 0
+**3. Peak "wave" micro-structure**
+Real peak hours breathe: 3–5 bangers, one crowd-singalong breather, back up. Add a small oscillation to the curve during Peak so the floor gets recovery moments instead of 30 straight max-energy tracks.
 
-Both biases only shift bucket assignment. A pre-1990 disco track that's genuinely peak-intensity can still land in Peak if the boost isn't enough to move it; likewise an explicit track with very low intensity can still fall into Warm Up if nothing else fits.
+**4. Smarter variety constraints**
+Beyond the artist cap, add rolling-window rules: no more than 2 tracks from the same genre in any 4, no more than 3 from the same decade in any 6, and spread the user's requested artists across sections rather than clustering them. Also add a same-era-run guard so the set doesn't sit in one decade for 20 minutes.
 
-### Explicit detection (AI-tagged + keyword fallback)
+**5. Feedback-loop AI recommendations**
+Currently each AI batch is independent, so batches repeat genres and artists. Change to: send the AI a compact profile of what's already selected (genre mix, decade mix, artist list, BPM histogram, current gaps) and ask it to fill the specific gaps — "I need 8 tracks, 100–110 BPM, valence ≥7, not hip-hop, not these 40 artists." Fewer wasted picks, better coverage.
 
-- Add `explicit: boolean` to the AI suggestion schema and instruct the model to flag songs with profanity, slurs, or aggressive sexual/violent content.
-- Add a keyword fallback in `src/lib/danceFloor.ts` that flags titles containing markers like `[Explicit]`, `(Explicit)`, `(Dirty)`, `(Uncensored)` for uploads and library songs where the AI flag isn't available.
-- Persist `explicit` on `ResultSong` so the flag survives dedupe, reranking, and top-up.
+**6. Per-slot AI reasoning surfaced in the UI**
+Store why each song was placed where it was (curve position, key/BPM fit, gap filled) and show it in the expandable row, so you can judge and override with context.
 
-### Ordering & ramp preserved
+## Technical details
 
-- `reorderForEnergyProgression` continues to sort by raw `intensityOf(song)` inside each section and across the full set — the ramp visualization and existing tests still pass.
-- Only the section-assignment step (`sectionForIntensity`) receives the biased value.
-- Variety reranker (`applyVarietyReranker`) is unchanged; harmonic/BPM transition rules keep working.
+- `src/lib/danceFloor.ts`: add `placementScore()` (weighted blend, section-aware weights), replace fixed bands with `targetCurve(position, totalCount)` + assignment against curve, add `peakWave()` modulation, extend `applyVarietyReranker` with rolling-window genre/decade constraints.
+- `src/lib/recommend.functions.ts`: extend the input schema with a `gaps` object (bpmRange, valenceMin/Max, excludeGenres, excludeArtists, targetIntensity) and rewrite the prompt to be gap-driven; keep the existing sanitization and bounds.
+- `src/routes/_authenticated/index.tsx`: compute the gap profile between AI batches; show the placement rationale in the expandable row.
+- Tests: extend `tests/varietyReranker.test.ts` and `tests/danceFloor.sectionFit.test.ts` for curve monotonicity, rolling-window variety, and peak-wave bounds.
 
-### UI
+## Suggested order
 
-- Add a subtle **Older-friendly** chip (year < 1990) and an **Explicit** chip to the expandable song row's `MetricsDetail`, alongside existing Stretched/Reused badges — so users can see why a track was nudged.
-
-## Files to change
-
-- `src/lib/danceFloor.ts`
-  - Add `eraBias(year)`, `explicitBias(explicit)`, `effectiveIntensityFor(song)` helpers.
-  - Add `detectExplicitFromTitle(title)` keyword fallback.
-  - Extend `ResultSong` with `explicit?: boolean`.
-  - Use `effectiveIntensityFor` in the bucketing pass of `reorderForEnergyProgression` (and initial `generateLists` assignment); keep raw `intensityOf` for the ramp sort.
-- `src/lib/recommend.functions.ts`
-  - Add `explicit: z.boolean().optional()` to `SuggestionSchema`.
-  - Add a prompt bullet: flag songs with explicit language / aggressive lyrics; note that the app biases older songs into Warm Up and explicit songs into Transition/Peak so the model can lean into that when choosing.
-  - Pass `explicit` through in `normalizeSuggestion` and `fallbackParseSuggestions`.
-- `src/lib/workflowIsolation.ts`
-  - Propagate `year` and `explicit` when building payloads / merging AI results so the biases apply consistently.
-- `src/routes/_authenticated/index.tsx`
-  - Backfill `explicit` from AI suggestions and keyword fallback onto uploads/library tracks.
-  - Add **Older-friendly** and **Explicit** chips in `MetricsDetail`.
-- `tests/danceFloor.sectionFit.test.ts` (+ new cases)
-  - Pre-1990 mid-intensity disco track → Warm Up or Transition, not Peak.
-  - Explicit low-intensity track → not Warm Up when a non-explicit alternative exists.
-  - Ramp remains non-decreasing across the full warm-up → transition → peak sequence with biases applied.
+Items 1, 2, 4 give the biggest immediate improvement in list quality. Item 5 improves what the AI returns. Items 3 and 6 are polish. I can do all of it in one pass, or start with 1/2/4 so you can hear the difference before adding the rest.

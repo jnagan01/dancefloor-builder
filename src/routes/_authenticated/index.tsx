@@ -22,6 +22,7 @@ import {
   type Song,
   type GenerationResult,
   type Preferences,
+  buildGapProfile,
 } from "@/lib/danceFloor";
 
 import {
@@ -566,9 +567,17 @@ function Index() {
                   transition: r.transition,
                   peak: r.peak,
                 });
+                // Tell the AI which holes to fill (genre/decade/tempo gaps,
+                // artists already at the cap) so batches stop repeating.
+                const gaps = buildGapProfile(
+                  r[key],
+                  [...r.warmUp, ...r.transition, ...r.peak],
+                  label,
+                );
                 const res = await recommendFn({
-                  data: { section: label, count: requestCount, prefs, existing: existingNow },
+                  data: { section: label, count: requestCount, prefs, existing: existingNow, gaps },
                 });
+
                 if (!res.suggestions.length) {
                   // No progress this attempt — stop looping to avoid burning
                   // credits on a section the model can't fill.
@@ -2210,6 +2219,8 @@ type BadgeSong = Song & {
   fromUpload?: boolean;
   aiSuggestion?: boolean;
   aiReason?: string;
+  placementReason?: string;
+  waveRole?: "lift" | "breather";
   stretched?: boolean;
   naturalSection?: "Warm Up" | "Transition" | "Peak";
   reused?: boolean;
@@ -2266,6 +2277,7 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
         }
       : null,
     song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
+    song.placementReason ? { label: "Why here", value: song.placementReason } : null,
   ].filter(Boolean) as { label: string; value: string }[];
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1">
