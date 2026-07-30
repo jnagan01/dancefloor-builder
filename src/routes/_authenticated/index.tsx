@@ -22,6 +22,7 @@ import {
   type Song,
   type GenerationResult,
   type Preferences,
+  buildGapProfile,
 } from "@/lib/danceFloor";
 
 import {
