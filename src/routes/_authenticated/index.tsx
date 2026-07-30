@@ -183,6 +183,8 @@ function Index() {
   // has re-rendered with the new state).
   const matchesRef = useRef(matches);
   matchesRef.current = matches;
+  // Guards against a slow in-flight generate() overwriting newer state.
+  const genTokenRef = useRef(0);
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [vdjDirName, setVdjDirName] = useState<string | null>(null);
   const [vdjDirSavedAt, setVdjDirSavedAt] = useState<number | null>(null);
@@ -428,6 +430,7 @@ function Index() {
       toast.error("Enter a valid dance floor length");
       return;
     }
+    const myToken = ++genTokenRef.current;
     setIsGenerating(true);
     try {
     const uniqueSongs = dedupeSongs(songs);
