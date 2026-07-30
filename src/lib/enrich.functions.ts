@@ -124,7 +124,7 @@ async function fetchReccoBeats(
 ): Promise<ReccoBeatsFeatures | null> {
   try {
     const q = encodeURIComponent(`${song} ${artist}`.trim());
-    const searchRes = await fetch(
+    const searchRes = await fetchWithTimeout(
       `https://api.reccobeats.com/v1/track/search?searchText=${q}&limit=10`,
       { headers: { Accept: "application/json" } },
     );
@@ -147,7 +147,7 @@ async function fetchReccoBeats(
     });
     if (!match?.id) return null;
 
-    const featRes = await fetch(
+    const featRes = await fetchWithTimeout(
       `https://api.reccobeats.com/v1/track/${encodeURIComponent(match.id)}/audio-features`,
       { headers: { Accept: "application/json" } },
     );
@@ -199,7 +199,7 @@ async function fetchMusicBrainz(
     // MusicBrainz Lucene query — quoted terms escape reserved chars.
     const escape = (s: string) => s.replace(/["\\]/g, " ").trim();
     const q = `artist:"${escape(artist)}" AND recording:"${escape(song)}"`;
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=5`,
       {
         headers: {
