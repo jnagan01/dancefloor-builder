@@ -1010,7 +1010,7 @@ function Index() {
   function getSectionRefsForResult(source: GenerationResult, section: SectionKey): ExportSongRef[] {
     return source[section].map((s, i) => ({
       song: s,
-      match: matches[songKey(section, i, s)],
+      match: matchesRef.current[songKey(section, i, s)],
     }));
   }
 
@@ -1020,12 +1020,17 @@ function Index() {
     const topped = topUpSectionsFromLibrary(result, buildCurrentPrefs());
     setResult(topped);
     if (mergedLibrary) {
-      const m: Record<string, SongMatch> = {};
+      // Preserve existing matches (manual picks, extra tracks, VDJ exclusions)
+      // and only auto-match songs that were just added by the top-up.
+      const existing = matchesRef.current;
+      const m: Record<string, SongMatch> = { ...existing };
       (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
         topped[section].forEach((s, i) => {
-          m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
+          const key = songKey(section, i, s);
+          if (!m[key]) m[key] = matchSong(s, mergedLibrary);
         });
       });
+      matchesRef.current = m;
       setMatches(m);
     }
     toast.success("Filled short sections from the built-in library before export");
