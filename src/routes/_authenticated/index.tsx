@@ -697,6 +697,10 @@ function Index() {
       r = topUpSectionsFromLibrary(r, prefs);
     }
 
+    // A newer generate() (or a workflow reset) started while we were awaiting
+    // AI/enrichment — drop this stale result instead of clobbering state.
+    if (genTokenRef.current !== myToken) return;
+
     setResult(r);
     setMatches({});
     if (mergedLibrary) {
@@ -707,7 +711,10 @@ function Index() {
           m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
         });
       });
+      matchesRef.current = m;
       setMatches(m);
+    } else {
+      matchesRef.current = {};
     }
     const fs = r.finalShortfall;
     if (fs && fs.total > 0) {
