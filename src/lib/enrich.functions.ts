@@ -297,32 +297,46 @@ export const enrichSongs = createServerFn({ method: "POST" })
       missOrder.push(q);
     }
 
-    // 3) Fetch misses sequentially with a polite spacer (both APIs ~1 req/s).
+    // 3) Fetch misses with a bounded worker pool and an overall deadline.
+    //    Previously this ran strictly sequentially with a 1.1s spacer, so a
+    //    single 200-song batch cost 220s+. Providers tolerate modest
+    //    concurrency; anything that fails or runs past the deadline simply
+    //    falls back to VirtualDJ/heuristic data on the caller side.
     const fetched = new Map<string, EnrichedSong>();
-    for (const q of missOrder) {
-      const [reco, mb] = await Promise.all([
-        fetchReccoBeats(q.original.artist, q.original.song),
-        fetchMusicBrainz(q.original.artist, q.original.song),
-      ]);
-      const source = pickSource(!!reco, !!mb);
-      const enriched: EnrichedSong = {
-        artist: q.original.artist,
-        song: q.original.song,
-        energy: reco?.energy,
-        danceability: reco?.danceability,
-        valence: reco?.valence,
-        popularity: reco?.popularity,
-        bpm: reco?.bpm,
-        camelot: reco?.camelot,
-        genre: mb?.genre,
-        year: mb?.year,
-        source,
-      };
-      fetched.set(`${q.artistKey}\u0000${q.songKey}`, enriched);
-      // Space out the next iteration so we stay under both providers' 1 rps.
-      if (missOrder.indexOf(q) < missOrder.length - 1) {
-        await new Promise((r) => setTimeout(r, 1100));
+    const deadline = Date.now() + FETCH_BUDGET_MS;
+    let cursor = 0;
+    const worker = async () => {
+      for (;;) {
+        const i = cursor++;
+        if (i >= missOrder.length) return;
+        if (Date.now() > deadline) return;
+        const q = missOrder[i];
+        const [reco, mb] = await Promise.all([
+          fetchReccoBeats(q.original.artist, q.original.song),
+          fetchMusicBrainz(q.original.artist, q.original.song),
+        ]);
+        fetched.set(`${q.artistKey}\u0000${q.songKey}`, {
+          artist: q.original.artist,
+          song: q.original.song,
+          energy: reco?.energy,
+          danceability: reco?.danceability,
+          valence: reco?.valence,
+          popularity: reco?.popularity,
+          bpm: reco?.bpm,
+          camelot: reco?.camelot,
+          genre: mb?.genre,
+          year: mb?.year,
+          source: pickSource(!!reco, !!mb),
+        });
       }
+    };
+    await Promise.all(
+      Array.from({ length: Math.min(FETCH_CONCURRENCY, missOrder.length) }, worker),
+    );
+    if (fetched.size < missOrder.length) {
+      console.warn(
+        `[enrichSongs] enriched ${fetched.size}/${missOrder.length} misses before budget (${FETCH_BUDGET_MS}ms)`,
+      );
     }
 
     // 4) Upsert successful fetches into the cache (service role bypasses RLS).
