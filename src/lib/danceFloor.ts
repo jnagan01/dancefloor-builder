@@ -403,20 +403,110 @@ export function detectExplicitFromTitle(title: string): boolean {
   return /[\[(]\s*(explicit|dirty|uncensored|nsfw)\s*[\])]/i.test(title);
 }
 
+/** Map BPM onto the 1–10 intensity scale (80 BPM ≈ 1, 140 BPM ≈ 10). */
+export function tempoScore(bpm?: number): number | undefined {
+  if (typeof bpm !== "number" || !Number.isFinite(bpm) || bpm <= 0) return undefined;
+  // Half-time correction so double-time tags (e.g. 174) don't read as max energy.
+  const b = bpm > 165 ? bpm / 2 : bpm;
+  return Math.max(1, Math.min(10, ((b - 80) / 60) * 9 + 1));
+}
+
 /**
- * Intensity used for bucketing into Warm Up / Transition / Peak. Combines
- * raw energy+danceability with era and explicit-content biases. The raw
+ * Weighted placement score (1–10) used to decide WHERE a track sits in the
+ * night. Energy and danceability still dominate, but valence and tempo matter:
+ * a 128-BPM melancholy track and a 128-BPM euphoric track do not belong in the
+ * same slot. Popularity nudges anthems later so the biggest sing-alongs land
+ * closer to peak.
+ *
+ * Weights sum to 1 so the result shares the same 1–10 scale (and the same
+ * section bands) as `intensityOf`. Tracks with only energy+danceability score
+ * essentially the same as before, preserving legacy behavior.
+ */
+export function placementScore(s: {
+  energy?: number;
+  danceability?: number;
+  valence?: number;
+  popularity?: number;
+  bpm?: number;
+}): number {
+  const base = intensityOf(s);
+  const e = typeof s.energy === "number" ? s.energy : 7;
+  const d = typeof s.danceability === "number" ? s.danceability : 6;
+  const v = typeof s.valence === "number" ? s.valence : base;
+  const t = tempoScore(s.bpm) ?? base;
+  const pop = typeof s.popularity === "number" ? s.popularity : 5;
+  const blended = e * 0.45 + d * 0.35 + v * 0.12 + t * 0.08;
+  return blended + (pop - 5) * 0.06;
+}
+
+/**
+ * Intensity used for bucketing into Warm Up / Transition / Peak. Combines the
+ * weighted placement score with era and explicit-content biases. The raw
  * `intensityOf` value is still what we sort and display; only the section
  * assignment uses this effective value.
  */
 export function effectiveIntensityFor(s: {
   energy?: number;
   danceability?: number;
+  valence?: number;
+  popularity?: number;
+  bpm?: number;
   year?: number;
   explicit?: boolean;
 }): number {
-  return intensityOf(s) + eraBias(s.year) + explicitBias(s.explicit);
+  return placementScore(s) + eraBias(s.year) + explicitBias(s.explicit);
 }
+
+/**
+ * Target intensity curve for the whole night: a gentle rise out of warm-up, a
+ * mid plateau, then a strong finish. Position is 0-based within the full
+ * concatenated set. Returns a 1–10 target the sequencer places songs against.
+ */
+export function targetCurve(position: number, total: number): number {
+  if (total <= 1) return 4.5;
+  const p = Math.max(0, Math.min(1, position / (total - 1)));
+  const eased = Math.pow(p, 0.85);
+  return 4.5 + eased * 5.0; // 4.5 → 9.5
+}
+
+/**
+ * Peak hours need to breathe: 4 bangers, one crowd sing-along breather, back
+ * up. Rearranges an already-ordered peak list so every 5th slot dips to a
+ * lower-intensity crowd-pleaser instead of running 30 straight max-energy
+ * tracks. Overall trend stays ascending; the dips are bounded and local.
+ */
+export function applyPeakWave(songs: ResultSong[]): ResultSong[] {
+  if (songs.length < 6) return songs.slice();
+  const ordered = [...songs];
+  // Breathers = the lower-intensity third, preferring the most recognizable.
+  const byIntensity = [...ordered].sort((a, b) => intensityOf(a) - intensityOf(b));
+  const breatherCount = Math.max(1, Math.floor(ordered.length / 5));
+  const pool = byIntensity.slice(0, Math.max(breatherCount, Math.floor(ordered.length / 3)));
+  const breathers = [...pool]
+    .sort((a, b) => (b.popularity ?? 5) - (a.popularity ?? 5))
+    .slice(0, breatherCount)
+    .sort((a, b) => intensityOf(a) - intensityOf(b));
+  const breatherKeys = new Set(breathers.map((s) => dedupeKey(s.artist, s.song)));
+  const bangers = ordered.filter((s) => !breatherKeys.has(dedupeKey(s.artist, s.song)));
+
+  const out: ResultSong[] = [];
+  let bi = 0;
+  let breatherIdx = 0;
+  while (bi < bangers.length) {
+    out.push({ ...bangers[bi], waveRole: "lift" });
+    bi += 1;
+    if (bi % 4 === 0 && breatherIdx < breathers.length && bi < bangers.length) {
+      out.push({ ...breathers[breatherIdx], waveRole: "breather" });
+      breatherIdx += 1;
+    }
+  }
+  while (breatherIdx < breathers.length) {
+    out.push({ ...breathers[breatherIdx], waveRole: "breather" });
+    breatherIdx += 1;
+  }
+  return out;
+}
+
 
 
 export interface GenerationResult {
