@@ -1974,12 +1974,8 @@ function Index() {
         })()}
 
 
-        {/* Generate */}
-        <div className="flex justify-center">
-          <Button size="lg" onClick={generate} disabled={isGenerating}>
-            {isGenerating ? "Generating with AI…" : "Generate Dance Floor Lists"}
-          </Button>
-        </div>
+
+
 
         {/* Music setup dialog (formerly Step 5) */}
         <Dialog open={musicSetupOpen} onOpenChange={setMusicSetupOpen}>
