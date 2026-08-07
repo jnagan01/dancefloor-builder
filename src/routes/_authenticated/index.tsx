@@ -66,7 +66,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
 import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
-import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
+import { buildAudioIndex, resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 import { supabase } from "@/integrations/supabase/client";
@@ -330,6 +330,11 @@ function Index() {
 
   const resolveLocalFile = useMemo(
     () => (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioFile(audioIndex, q),
+    [audioIndex]
+  );
+
+  const resolveLocalMatch = useMemo(
+    () => (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioMatch(audioIndex, q),
     [audioIndex]
   );
 
@@ -2332,7 +2337,7 @@ function Index() {
           </div>
         </DialogContent>
       </Dialog>
-      <PreviewPlayer key={`preview-${workflowInstanceId}`} target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} resolveLocalFile={resolveLocalFile} />
+      <PreviewPlayer key={`preview-${workflowInstanceId}`} target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} resolveLocalFile={resolveLocalFile} resolveLocalMatch={resolveLocalMatch} />
     </div>
   );
 }
