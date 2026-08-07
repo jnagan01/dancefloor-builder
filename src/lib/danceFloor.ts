@@ -1062,10 +1062,10 @@ export function reorderForEnergyProgression(
 
   // Apply variety re-ranker per section (artist cap + smooth BPM/key
   // transitions + rolling genre/decade variety windows).
-  const warmUp = applyVarietyReranker(tag(warmUpRaw, "Warm Up"));
-  const transition = applyVarietyReranker(tag(transitionRaw, "Transition"));
+  const warmUp = applyVarietyReranker(tag(warmUpRaw, "Warm Up"), { favoriteArtists });
+  const transition = applyVarietyReranker(tag(transitionRaw, "Transition"), { favoriteArtists });
   // Peak breathes: bangers with a recovery sing-along roughly every 5th slot.
-  const peak = applyPeakWave(applyVarietyReranker(tag(peakRaw, "Peak")));
+  const peak = applyPeakWave(applyVarietyReranker(tag(peakRaw, "Peak"), { favoriteArtists }));
 
   // Attach a per-slot explanation of the placement decision.
   const totalPlaced = warmUp.length + transition.length + peak.length;
