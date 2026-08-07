@@ -45,3 +45,19 @@ describe("favorite artists", () => {
     expect(gaps.excludeArtists).toContain("Random Band");
   });
 });
+
+describe("hard 3-per-artist cap", () => {
+  it("drops non-upload songs beyond 3 by the same artist", () => {
+    const songs = [1, 2, 3, 4, 5].map((i) => track("Beyonce", `Fav ${i}`, 5 + i * 0.1));
+    const out = applyVarietyReranker(songs, { favoriteArtists: ["Beyonce"] });
+    expect(out.filter((s) => s.artist === "Beyonce").length).toBe(3);
+  });
+
+  it("keeps every imported (uploaded) song by the same artist", () => {
+    const uploads = [1, 2, 3, 4, 5].map((i) => ({ ...track("Beyonce", `Up ${i}`, 5 + i * 0.1), fromUpload: true }));
+    const ai = [1, 2].map((i) => track("Beyonce", `AI ${i}`, 6 + i * 0.1));
+    const out = applyVarietyReranker([...uploads, ...ai], { favoriteArtists: ["Beyonce"] });
+    expect(out.filter((s) => s.song.startsWith("Up ")).length).toBe(5);
+    expect(out.filter((s) => s.song.startsWith("AI ")).length).toBe(0);
+  });
+});
