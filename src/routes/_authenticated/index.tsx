@@ -1467,26 +1467,45 @@ function Index() {
   }, [debouncedSongs, debouncedHours, debouncedExpand]);
 
 
+  const [step, setStep] = useState(1);
+  useEffect(() => {
+    if (result) setStep(5);
+  }, [result]);
+
+  const stepDefs: StepDef[] = [
+    { id: 1, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
+    { id: 2, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
+    { id: 3, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: hoursNum > 0 },
+    { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: hoursNum > 0 },
+    { id: 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
+  ];
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
 
-      <header className="border-b bg-card">
-        <div className="mx-auto max-w-6xl px-6 py-10">
-          <div className="flex items-start gap-3 justify-between flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Music className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                  Wedding Dance Floor List Builder
-                </h1>
-                <p className="text-sm text-muted-foreground md:text-base">
-                  Upload client playlists, choose the vibe, and export DJ-ready CSV files.
-                </p>
-              </div>
+      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur">
+        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/40 bg-primary/10 text-primary">
+              <Music className="h-5 w-5" />
             </div>
+            <div className="min-w-0">
+              <h1 className="display-title truncate text-xl leading-tight sm:text-2xl">
+                Wedding Dance Floor Builder
+              </h1>
+              <p className="truncate text-xs text-muted-foreground">
+                Upload the client list · shape the energy · export DJ-ready sets
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setMusicSetupOpen(true)}>
+              <FolderOpen className="mr-1 h-4 w-4" /> Music setup
+              {libraries.length > 0 && vdjDirHandle && (
+                <Check className="ml-1 h-3 w-3 text-success" />
+              )}
+            </Button>
             <DjAccountBar
               hasGeneratedLists={!!result}
               getSnapshot={(): WorkflowSnapshot => ({
@@ -1536,17 +1555,17 @@ function Index() {
               }}
               resetWorkflow={clearWorkflowState}
             />
-            <Button variant="outline" size="sm" onClick={() => setMusicSetupOpen(true)}>
-              <FolderOpen className="mr-1 h-4 w-4" /> Music setup
-              {libraries.length > 0 && vdjDirHandle && (
-                <Check className="ml-1 h-3 w-3 text-emerald-500" />
-              )}
-            </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+      <div className="mx-auto grid max-w-7xl gap-6 px-4 pb-32 pt-6 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+          <StepRail steps={stepDefs} current={step} onSelect={setStep} />
+        </aside>
+
+        <main className="min-w-0 space-y-6">
+
         {/* Step 1 */}
         <Card>
           <CardHeader>
