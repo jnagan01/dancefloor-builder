@@ -1699,12 +1699,14 @@ function Index() {
         </Card>
 
         {/* Step 3 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 3 · Dance floor details</CardTitle>
-            <CardDescription>Set the vibe and length of the open dance floor.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
+        {step === 3 && (
+        <StepPanel
+          eyebrow="Step 3"
+          title="Dance floor details"
+          description="Set the vibe and length of the open dance floor."
+        >
+          <div className="space-y-5">
+
             <div>
               <Label htmlFor="eventName">Couple / Event name (optional)</Label>
               <Input
