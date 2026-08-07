@@ -244,23 +244,31 @@ export interface VdjLibrary {
   byKey: Map<string, number[]>;
   // Map normalized artist -> indices (for fuzzy search)
   byArtist: Map<string, number[]>;
+  // Shared-core subjects + token inverted index for candidate generation.
+  subjects: MatchSubject[];
+  tokens: TokenIndex;
+}
+
+function subjectTokens(s: MatchSubject): string[] {
+  return [...s.title.tokens, ...s.artist.split(" ").filter((t) => t.length > 1)];
 }
 
 export function buildLibrary(tracks: VdjTrack[]): VdjLibrary {
   const byKey = new Map<string, number[]>();
   const byArtist = new Map<string, number[]>();
+  const subjects: MatchSubject[] = [];
   tracks.forEach((t, i) => {
-    const { base } = stripRemix(t.title);
-    const key = `${normForMatch(t.artist)}|${normForMatch(base)}`;
+    const subject = makeSubject(t.artist, t.title);
+    subjects.push(subject);
+    const key = `${subject.artist}|${subject.title.base}`;
     const arr = byKey.get(key) || [];
     arr.push(i);
     byKey.set(key, arr);
-    const ak = normForMatch(t.artist);
-    const ar = byArtist.get(ak) || [];
+    const ar = byArtist.get(subject.artist) || [];
     ar.push(i);
-    byArtist.set(ak, ar);
+    byArtist.set(subject.artist, ar);
   });
-  return { tracks, byKey, byArtist };
+  return { tracks, byKey, byArtist, subjects, tokens: buildTokenIndex(subjects.map(subjectTokens)) };
 }
 
 export function mergeLibraries(libs: VdjLibrary[]): VdjLibrary {
@@ -276,95 +284,98 @@ export function mergeLibraries(libs: VdjLibrary[]): VdjLibrary {
   return buildLibrary(all);
 }
 
+interface Ranked {
+  index: number;
+  score: number;
+  versionMatch: boolean;
+  size: number;
+  path: string;
+}
+
+function rankLibrary(subject: MatchSubject, lib: VdjLibrary, limit = 8): Ranked[] {
+  const cands = candidatesFor(lib.tokens, subjectTokens(subject));
+  const out: Ranked[] = [];
+  for (const i of cands) {
+    const parts = scorePair(subject, lib.subjects[i]);
+    if (parts.score < 0.4) continue;
+    const t = lib.tracks[i];
+    out.push({
+      index: i,
+      score: parts.score,
+      versionMatch: parts.versionMatch,
+      size: Number(t.fileSize) || 0,
+      path: t.filePath,
+    });
+  }
+  out.sort((a, b) => (Math.abs(a.score - b.score) > 0.001 ? b.score - a.score : tieBreak(a, b)));
+  return out.slice(0, limit);
+}
+
 export function matchSong(song: Song, lib: VdjLibrary): SongMatch {
   if (!lib.tracks.length) {
     return { status: "Missing From Library", confidence: 0, alternatives: [] };
   }
-  const { base } = stripRemix(song.song);
-  const aN = normForMatch(song.artist);
-  const sN = normForMatch(base);
-  const exactKey = `${aN}|${sN}`;
-  const exact = lib.byKey.get(exactKey);
-  if (exact && exact.length === 1) {
-    return { status: "Matched", confidence: 1, trackIndex: exact[0], alternatives: [] };
-  }
-  if (exact && exact.length > 1) {
-    return {
-      status: "Multiple Matches",
-      confidence: 0.95,
-      trackIndex: exact[0],
-      alternatives: exact.slice(1),
-    };
-  }
-
-  // Fuzzy: try same artist
-  const candidates = new Set<number>();
-  const sameArtist = lib.byArtist.get(aN);
-  if (sameArtist) sameArtist.forEach((i) => candidates.add(i));
-  // Also scan artists with high sim
-  if (candidates.size < 5) {
-    for (const [ak, idxs] of lib.byArtist) {
-      if (candidates.size > 20) break;
-      if (similarity(ak, aN) >= 0.82) idxs.forEach((i) => candidates.add(i));
-    }
-  }
-
-  let bestScore = 0;
-  let best: number[] = [];
-  for (const i of candidates) {
-    const t = lib.tracks[i];
-    const tBase = stripRemix(t.title).base;
-    const titleSim = similarity(normForMatch(tBase), sN);
-    const artistSim = similarity(normForMatch(t.artist), aN);
-    const score = titleSim * 0.7 + artistSim * 0.3;
-    if (score > bestScore + 0.001) {
-      bestScore = score;
-      best = [i];
-    } else if (Math.abs(score - bestScore) < 0.02) {
-      best.push(i);
-    }
-  }
-
-  if (!best.length || bestScore < 0.55) {
+  const subject = makeSubject(song.artist, song.song);
+  const ranked = rankLibrary(subject, lib);
+  if (!ranked.length || ranked[0].score < POSSIBLE_MATCH) {
     return { status: "Missing From Library", confidence: 0, alternatives: [] };
   }
-  if (best.length > 1 && bestScore >= 0.9) {
+
+  const best = ranked[0];
+  const alternatives = ranked.slice(1, 6).map((r) => r.index);
+  const runnerUp = ranked[1];
+  // Ambiguous when the runner-up is essentially as good as the winner.
+  const ambiguous = Boolean(runnerUp && best.score - runnerUp.score < 0.02);
+
+  if (ambiguous && best.score >= POSSIBLE_MATCH) {
     return {
       status: "Multiple Matches",
-      confidence: bestScore,
-      trackIndex: best[0],
-      alternatives: best.slice(1),
+      confidence: best.score,
+      trackIndex: best.index,
+      alternatives,
     };
   }
-  if (bestScore >= 0.92) {
-    return { status: "Matched", confidence: bestScore, trackIndex: best[0], alternatives: best.slice(1, 5) };
+  if (best.score >= STRONG_MATCH) {
+    return { status: "Matched", confidence: best.score, trackIndex: best.index, alternatives };
   }
   return {
     status: "Possible Match",
-    confidence: bestScore,
-    trackIndex: best[0],
-    alternatives: best.slice(1, 5),
+    confidence: best.score,
+    trackIndex: best.index,
+    alternatives,
   };
 }
 
 export function searchLibrary(query: string, lib: VdjLibrary, limit = 25): number[] {
-  const q = normForMatch(query);
+  const q = normalizeText(query);
   if (!q) return [];
+  const subject = makeSubject("", query);
+  const tokens = tokenize(q);
+
+  // Token-index candidates first; fall back to a bounded substring scan when
+  // the query is a fragment that tokenizes to nothing useful.
+  let cands = candidatesFor(lib.tokens, tokens, Math.max(limit * 20, 300));
+  if (!cands.length) {
+    cands = [];
+    for (let i = 0; i < lib.subjects.length && cands.length < limit * 20; i++) {
+      const s = lib.subjects[i];
+      if (s.title.base.includes(q) || s.artist.includes(q)) cands.push(i);
+    }
+  }
+
   const scored: Array<{ i: number; s: number }> = [];
-  for (let i = 0; i < lib.tracks.length; i++) {
-    const t = lib.tracks[i];
-    const hay = `${normForMatch(t.artist)} ${normForMatch(t.title)}`;
+  for (const i of cands) {
+    const s = lib.subjects[i];
+    const hay = `${s.artist} ${s.title.base}`;
     if (hay.includes(q)) {
       scored.push({ i, s: 1 });
       continue;
     }
-    const sim = Math.max(
-      similarity(normForMatch(t.title), q),
-      similarity(normForMatch(t.artist), q),
-    );
-    if (sim >= 0.6) scored.push({ i, s: sim });
+    const parts = scorePair(subject, s);
+    const sim = Math.max(parts.score, similarity(s.artist, q));
+    if (sim >= 0.55) scored.push({ i, s: sim });
   }
-  scored.sort((a, b) => b.s - a.s);
+  scored.sort((a, b) => b.s - a.s || a.i - b.i);
   return scored.slice(0, limit).map((x) => x.i);
 }
 
