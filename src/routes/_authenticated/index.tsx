@@ -23,6 +23,8 @@ import {
   type GenerationResult,
   type Preferences,
   buildGapProfile,
+  isFavoriteArtist,
+  FAVORITE_ARTIST_CAP,
 } from "@/lib/danceFloor";
 
 import {
