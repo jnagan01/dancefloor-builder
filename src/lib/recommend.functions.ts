@@ -48,6 +48,10 @@ const InputSchema = z.object({
   }),
   existing: z.array(ExistingEntrySchema).max(500).default([]),
   gaps: GapsSchema.optional(),
+  /** Favorites-only pass: restrict every suggestion to these artists. */
+  onlyArtists: z.array(z.string().max(150)).max(50).default([]),
+  /** Preferred artists context for the general pass (bias, not restriction). */
+  favoriteArtists: z.array(z.string().max(150)).max(50).default([]),
 });
 
 
