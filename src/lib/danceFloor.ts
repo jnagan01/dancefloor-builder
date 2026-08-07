@@ -65,6 +65,22 @@ export function dedupeKey(artist: string, song: string): string {
   return `${normalizeKey(artist)}|${normalizeKey(song)}`;
 }
 
+/** Max songs by a DJ-favorited artist allowed on any single list. */
+export const FAVORITE_ARTIST_CAP = 3;
+
+/**
+ * Match a song's artist against the DJ's favorite-artist list. Favorites are
+ * matched loosely (substring on normalized names) so "Beyonce" matches
+ * "Beyoncé feat. Jay-Z".
+ */
+export function isFavoriteArtist(artist: string, favorites: Set<string> | string[]): boolean {
+  const a = normalizeKey(artist);
+  if (!a) return false;
+  const list = favorites instanceof Set ? [...favorites] : favorites.map((f) => normalizeKey(f));
+  return list.some((f) => f && (a === f || a.includes(f) || f.includes(a)));
+}
+
+
 function pickKey(headers: string[], candidates: string[]): string | null {
   const lower = headers.map((h) => h.toLowerCase().trim());
   for (const c of candidates) {
@@ -796,9 +812,13 @@ export function generateLists(input: GenerationInput): GenerationResult {
  */
 export function applyVarietyReranker(
   songs: ResultSong[],
-  opts: { artistCap?: number } = {},
+  opts: { artistCap?: number; favoriteArtists?: string[]; favoriteArtistCap?: number } = {},
 ): ResultSong[] {
   const artistCap = opts.artistCap ?? 2;
+  const favoriteArtistCap = opts.favoriteArtistCap ?? FAVORITE_ARTIST_CAP;
+  const favSet = new Set((opts.favoriteArtists ?? []).map((a) => normalizeKey(a)).filter(Boolean));
+  const capFor = (artist: string): number =>
+    isFavoriteArtist(artist, favSet) ? Math.max(artistCap, favoriteArtistCap) : artistCap;
   if (songs.length <= 1) return songs.slice();
 
   // Step 1: enforce the artist cap by demoting overflow tracks toward the
@@ -809,7 +829,7 @@ export function applyVarietyReranker(
   for (const s of [...songs].sort((a, b) => intensityOf(a) - intensityOf(b))) {
     const ak = normalizeKey(s.artist);
     const c = counts.get(ak) ?? 0;
-    if (c < artistCap) {
+    if (c < capFor(s.artist)) {
       counts.set(ak, c + 1);
       allowed.push(s);
     } else {
@@ -946,7 +966,11 @@ function transitionCost(
  * to each song. Used after AI suggestions are merged in so uploads and AI
  * picks are interleaved into a single ascending energy ramp.
  */
-export function reorderForEnergyProgression(result: GenerationResult): GenerationResult {
+export function reorderForEnergyProgression(
+  result: GenerationResult,
+  opts: { favoriteArtists?: string[] } = {},
+): GenerationResult {
+  const favoriteArtists = opts.favoriteArtists ?? [];
   const target = result.perSectionTarget;
   const all: ResultSong[] = [
     ...result.warmUp.map((s) => ({ ...s })),
@@ -1038,10 +1062,10 @@ export function reorderForEnergyProgression(result: GenerationResult): Generatio
 
   // Apply variety re-ranker per section (artist cap + smooth BPM/key
   // transitions + rolling genre/decade variety windows).
-  const warmUp = applyVarietyReranker(tag(warmUpRaw, "Warm Up"));
-  const transition = applyVarietyReranker(tag(transitionRaw, "Transition"));
+  const warmUp = applyVarietyReranker(tag(warmUpRaw, "Warm Up"), { favoriteArtists });
+  const transition = applyVarietyReranker(tag(transitionRaw, "Transition"), { favoriteArtists });
   // Peak breathes: bangers with a recovery sing-along roughly every 5th slot.
-  const peak = applyPeakWave(applyVarietyReranker(tag(peakRaw, "Peak")));
+  const peak = applyPeakWave(applyVarietyReranker(tag(peakRaw, "Peak"), { favoriteArtists }));
 
   // Attach a per-slot explanation of the placement decision.
   const totalPlaced = warmUp.length + transition.length + peak.length;
@@ -1135,6 +1159,7 @@ export function buildGapProfile(
   sectionSongs: ResultSong[],
   allSongs: ResultSong[],
   section: Section,
+  opts: { favoriteArtists?: string[] } = {},
 ): GapProfile {
   const genreCount = new Map<string, number>();
   const decadeCount = new Map<string, number>();
@@ -1158,8 +1183,21 @@ export function buildGapProfile(
     .map(([d]) => d)
     .slice(0, 10);
   const underDecades = CORE_DECADES.filter((d) => !decadeCount.has(d)).slice(0, 10);
+  // Favorite artists get a longer leash: they're only excluded once they hit
+  // the per-list cap in THIS section. Everyone else is excluded at 2 overall.
+  const favorites = opts.favoriteArtists ?? [];
+  const sectionArtistCount = new Map<string, number>();
+  for (const s of sectionSongs) {
+    const a = s.artist?.trim();
+    if (a) sectionArtistCount.set(a, (sectionArtistCount.get(a) ?? 0) + 1);
+  }
   const excludeArtists = [...artistCount.entries()]
-    .filter(([, n]) => n >= 2)
+    .filter(([a, n]) => {
+      if (isFavoriteArtist(a, favorites)) {
+        return (sectionArtistCount.get(a) ?? 0) >= FAVORITE_ARTIST_CAP;
+      }
+      return n >= 2;
+    })
     .map(([a]) => a)
     .slice(0, 80);
 
