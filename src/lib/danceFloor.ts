@@ -1159,6 +1159,7 @@ export function buildGapProfile(
   sectionSongs: ResultSong[],
   allSongs: ResultSong[],
   section: Section,
+  opts: { favoriteArtists?: string[] } = {},
 ): GapProfile {
   const genreCount = new Map<string, number>();
   const decadeCount = new Map<string, number>();
