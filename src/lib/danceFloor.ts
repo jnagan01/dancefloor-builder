@@ -850,8 +850,10 @@ export function applyVarietyReranker(
       counts.set(ak, c + 1);
       allowed.push(s);
     } else {
+      counts.set(ak, c + 1);
       overflow.push(s);
     }
+
   }
 
 
