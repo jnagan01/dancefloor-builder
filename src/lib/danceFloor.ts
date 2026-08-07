@@ -680,20 +680,50 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
       .sort((a, b) => b.rank - a.rank || a.index - b.index);
     if (!ranked.length) continue;
 
+    // Per-section artist counts so top-ups respect the 3-per-list cap.
+    const artistCount = new Map<string, number>();
+    for (const s of list) {
+      const ak = normalizeKey(s.artist);
+      artistCount.set(ak, (artistCount.get(ak) ?? 0) + 1);
+    }
+    const underCap = (artist: string): boolean =>
+      (artistCount.get(normalizeKey(artist)) ?? 0) < HARD_ARTIST_CAP;
+    const bump = (artist: string): void => {
+      const ak = normalizeKey(artist);
+      artistCount.set(ak, (artistCount.get(ak) ?? 0) + 1);
+    };
+
     let reuseIndex = 0;
-    while (list.length < next.perSectionTarget) {
-      const uniqueCandidate = ranked.find(({ lib }) => !allSeen.has(dedupeKey(lib.artist, lib.song)));
+    let guard = 0;
+    while (list.length < next.perSectionTarget && guard++ < next.perSectionTarget * 20) {
+      const uniqueCandidate = ranked.find(
+        ({ lib }) => !allSeen.has(dedupeKey(lib.artist, lib.song)) && underCap(lib.artist),
+      );
       if (uniqueCandidate) {
         const keyForSong = dedupeKey(uniqueCandidate.lib.artist, uniqueCandidate.lib.song);
         allSeen.add(keyForSong);
+        bump(uniqueCandidate.lib.artist);
         list.push(librarySongToResult(uniqueCandidate.lib, assignedSection));
         continue;
       }
 
-      const reusedCandidate = ranked[reuseIndex % ranked.length].lib;
-      reuseIndex += 1;
+      // Reuse pass: prefer a candidate still under the artist cap; if every
+      // remaining option is capped, allow the reuse so the section still fills.
+      const startIndex = reuseIndex;
+      let reusedCandidate = ranked[reuseIndex % ranked.length].lib;
+      for (let i = 0; i < ranked.length; i++) {
+        const cand = ranked[(startIndex + i) % ranked.length].lib;
+        if (underCap(cand.artist)) {
+          reusedCandidate = cand;
+          reuseIndex = startIndex + i + 1;
+          break;
+        }
+        if (i === ranked.length - 1) reuseIndex = startIndex + 1;
+      }
+      bump(reusedCandidate.artist);
       list.push(librarySongToResult(reusedCandidate, assignedSection, true));
     }
+
     next[key] = sortByIntensity(list);
   }
 
