@@ -65,6 +65,22 @@ export function dedupeKey(artist: string, song: string): string {
   return `${normalizeKey(artist)}|${normalizeKey(song)}`;
 }
 
+/** Max songs by a DJ-favorited artist allowed on any single list. */
+export const FAVORITE_ARTIST_CAP = 3;
+
+/**
+ * Match a song's artist against the DJ's favorite-artist list. Favorites are
+ * matched loosely (substring on normalized names) so "Beyonce" matches
+ * "Beyoncé feat. Jay-Z".
+ */
+export function isFavoriteArtist(artist: string, favorites: Set<string> | string[]): boolean {
+  const a = normalizeKey(artist);
+  if (!a) return false;
+  const list = favorites instanceof Set ? [...favorites] : favorites.map((f) => normalizeKey(f));
+  return list.some((f) => f && (a === f || a.includes(f) || f.includes(a)));
+}
+
+
 function pickKey(headers: string[], candidates: string[]): string | null {
   const lower = headers.map((h) => h.toLowerCase().trim());
   for (const c of candidates) {
