@@ -817,7 +817,7 @@ function Index() {
     // Re-bucket + sort the merged set so uploads and AI picks interleave into
     // a single ascending energy ramp from the first warm-up song to the last
     // peak song.
-    r = reorderForEnergyProgression(r);
+    r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [] });
     if (expand && r.finalShortfall && r.finalShortfall.total > 0) {
       r = topUpSectionsFromLibrary(r, prefs);
     }
