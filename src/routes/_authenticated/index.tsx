@@ -1695,8 +1695,9 @@ function Index() {
                 </Table>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </StepPanel>
+        )}
+
 
         {/* Step 3 */}
         {step === 3 && (
