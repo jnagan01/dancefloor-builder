@@ -678,9 +678,17 @@ function Index() {
                   r[key],
                   [...r.warmUp, ...r.transition, ...r.peak],
                   label,
+                  { favoriteArtists },
                 );
                 const res = await recommendFn({
-                  data: { section: label, count: requestCount, prefs, existing: existingNow, gaps },
+                  data: {
+                    section: label,
+                    count: requestCount,
+                    prefs,
+                    existing: existingNow,
+                    gaps,
+                    favoriteArtists,
+                  },
                 });
 
                 if (!res.suggestions.length) {
