@@ -1182,8 +1182,21 @@ export function buildGapProfile(
     .map(([d]) => d)
     .slice(0, 10);
   const underDecades = CORE_DECADES.filter((d) => !decadeCount.has(d)).slice(0, 10);
+  // Favorite artists get a longer leash: they're only excluded once they hit
+  // the per-list cap in THIS section. Everyone else is excluded at 2 overall.
+  const favorites = opts.favoriteArtists ?? [];
+  const sectionArtistCount = new Map<string, number>();
+  for (const s of sectionSongs) {
+    const a = s.artist?.trim();
+    if (a) sectionArtistCount.set(a, (sectionArtistCount.get(a) ?? 0) + 1);
+  }
   const excludeArtists = [...artistCount.entries()]
-    .filter(([, n]) => n >= 2)
+    .filter(([a, n]) => {
+      if (isFavoriteArtist(a, favorites)) {
+        return (sectionArtistCount.get(a) ?? 0) >= FAVORITE_ARTIST_CAP;
+      }
+      return n >= 2;
+    })
     .map(([a]) => a)
     .slice(0, 80);
 
