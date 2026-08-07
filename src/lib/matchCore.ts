@@ -211,6 +211,10 @@ export function scorePair(q: MatchSubject, c: MatchSubject): ScoreParts {
     score = Math.min(1, score + 0.05);
   }
 
+  // A strong title hit against a clearly different artist is usually a
+  // coincidence (e.g. a song titled like some other band's name).
+  if (artistKnown && artistSim < 0.35) score *= 0.85;
+
   const versionMatch = q.title.version === c.title.version;
   if (!versionMatch) {
     // Asking for an original and getting a version (or vice versa) is a soft
