@@ -769,6 +769,7 @@ function Index() {
     let totalTracks = 0;
     const newLibs: VdjLibrary[] = [];
     const newSources: string[] = [];
+    const emptyFiles: string[] = [];
     for (const f of xmlFiles) {
       try {
         const text = await f.text();
@@ -777,15 +778,22 @@ function Index() {
           newLibs.push(buildLibrary(tracks));
           newSources.push(`${sourceLabel}: ${f.webkitRelativePath || f.name} (${tracks.length} tracks)`);
           totalTracks += tracks.length;
+        } else {
+          emptyFiles.push(f.name);
         }
       } catch {
         toast.error(`Could not parse ${f.name}`);
       }
     }
     if (!newLibs.length) {
-      toast.error("No tracks parsed from VirtualDJ database");
+      toast.error(
+        emptyFiles.length
+          ? `No song entries found in ${emptyFiles.join(", ")} — this doesn't look like a VirtualDJ database.xml. You can also just connect your music folder instead.`
+          : "No tracks parsed from VirtualDJ database",
+      );
       return;
     }
+
     const updated = [...libraries, ...newLibs];
     setLibraries(updated);
     setLibrarySources([...librarySources, ...newSources]);
