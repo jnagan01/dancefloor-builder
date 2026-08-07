@@ -821,14 +821,24 @@ export function applyVarietyReranker(
     isFavoriteArtist(artist, favSet) ? Math.max(artistCap, favoriteArtistCap) : artistCap;
   if (songs.length <= 1) return songs.slice();
 
-  // Step 1: enforce the artist cap by demoting overflow tracks toward the
-  // end of the list so they only land when truly needed.
+  // Step 1: enforce the artist cap. Uploaded (imported) songs are exempt —
+  // they must always stay in the set — but they still count toward the cap so
+  // AI/library filler can't stack more on top. Non-upload tracks beyond the
+  // hard cap of `FAVORITE_ARTIST_CAP` (3) per list are DROPPED, not demoted.
   const counts = new Map<string, number>();
   const allowed: ResultSong[] = [];
   const overflow: ResultSong[] = [];
-  for (const s of [...songs].sort((a, b) => intensityOf(a) - intensityOf(b))) {
+  const sorted = [...songs].sort((a, b) => intensityOf(a) - intensityOf(b));
+  // Uploads first so they always claim their slots.
+  for (const s of sorted.filter((s) => s.fromUpload)) {
+    const ak = normalizeKey(s.artist);
+    counts.set(ak, (counts.get(ak) ?? 0) + 1);
+    allowed.push(s);
+  }
+  for (const s of sorted.filter((s) => !s.fromUpload)) {
     const ak = normalizeKey(s.artist);
     const c = counts.get(ak) ?? 0;
+    if (c >= HARD_ARTIST_CAP) continue; // hard drop: never exceed 3 per list
     if (c < capFor(s.artist)) {
       counts.set(ak, c + 1);
       allowed.push(s);
@@ -836,6 +846,7 @@ export function applyVarietyReranker(
       overflow.push(s);
     }
   }
+
 
   // Step 2: drop near-identical duplicates (same normalized artist + title).
   // Previously duplicates were pushed to overflow and re-appended at the end,
