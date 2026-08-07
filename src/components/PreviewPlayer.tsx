@@ -23,11 +23,16 @@ export function PreviewPlayer({
   target,
   onOpenChange,
   resolveLocalFile,
+  resolveLocalMatch,
 }: {
   target: PreviewTarget | null;
   onOpenChange: (open: boolean) => void;
   /** Returns a File for a given query when the user has connected their music folder. */
   resolveLocalFile?: (query: { artist?: string; title?: string; filePath?: string }) => File | undefined;
+  /** Same as resolveLocalFile but also reports match confidence. */
+  resolveLocalMatch?: (query: { artist?: string; title?: string; filePath?: string }) =>
+    | { file: File; score: number; versionMatch: boolean; exact: boolean }
+    | undefined;
 }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ITunesResult[]>([]);
@@ -35,13 +40,17 @@ export function PreviewPlayer({
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const localFile = useMemo(
-    () =>
-      target && resolveLocalFile
-        ? resolveLocalFile({ artist: target.artist, title: target.song, filePath: target.filePath })
-        : undefined,
-    [target, resolveLocalFile]
-  );
+  const localMatch = useMemo(() => {
+    if (!target) return undefined;
+    const q = { artist: target.artist, title: target.song, filePath: target.filePath };
+    if (resolveLocalMatch) return resolveLocalMatch(q);
+    const f = resolveLocalFile?.(q);
+    return f ? { file: f, score: 1, versionMatch: true, exact: true } : undefined;
+  }, [target, resolveLocalFile, resolveLocalMatch]);
+
+  const localFile = localMatch?.file;
+  const lowConfidence = Boolean(localMatch && !localMatch.exact && localMatch.score < 0.82);
+  const versionDiffers = Boolean(localMatch && !localMatch.exact && !localMatch.versionMatch);
 
   const localUrl = useMemo(() => (localFile ? URL.createObjectURL(localFile) : null), [localFile]);
   useEffect(() => {
@@ -49,6 +58,7 @@ export function PreviewPlayer({
       if (localUrl) URL.revokeObjectURL(localUrl);
     };
   }, [localUrl]);
+
 
   // Only hit iTunes when we don't have a local file
   useEffect(() => {
@@ -82,8 +92,8 @@ export function PreviewPlayer({
     ? `https://www.youtube.com/results?search_query=${encodeURIComponent(`${target.artist} ${target.song}`)}`
     : "#";
 
-  // Tail filename for display
-  const fileName = target?.filePath ? target.filePath.split(/[\\/]/).pop() : undefined;
+  // Tail filename for display — prefer the file we actually resolved.
+  const fileName = localFile?.name || (target?.filePath ? target.filePath.split(/[\\/]/).pop() : undefined);
 
   return (
     <Dialog open={!!target} onOpenChange={onOpenChange}>
@@ -106,6 +116,13 @@ export function PreviewPlayer({
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
               <p className="truncate font-medium">{fileName}</p>
               <p className="truncate text-xs text-muted-foreground">{target?.filePath}</p>
+              {(lowConfidence || versionDiffers) && (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  {versionDiffers
+                    ? "Closest file is a different version (remix/edit) — confirm before exporting."
+                    : "Close match, not exact — confirm this is the right file."}
+                </p>
+              )}
             </div>
             <audio ref={audioRef} controls autoPlay src={localUrl} className="w-full" />
           </div>
