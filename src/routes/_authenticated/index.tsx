@@ -1567,12 +1567,13 @@ function Index() {
         <main className="min-w-0 space-y-6">
 
         {/* Step 1 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 1 · Upload song lists</CardTitle>
-            <CardDescription>Drop one or more CSV or TXT files. Processed in your browser.</CardDescription>
-          </CardHeader>
-          <CardContent>
+        {step === 1 && (
+        <StepPanel
+          eyebrow="Step 1"
+          title="Upload song lists"
+          description="Drop one or more CSV or TXT files. Processed in your browser."
+        >
+
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
