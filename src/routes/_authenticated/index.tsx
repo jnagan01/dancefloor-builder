@@ -1916,8 +1916,9 @@ function Index() {
               </div>
             )}
 
-          </CardContent>
-        </Card>
+          </StepPanel>
+        )}
+
 
         {/* Music setup status (moved out of the linear flow — configured once per device from your profile menu) */}
         {(() => {
