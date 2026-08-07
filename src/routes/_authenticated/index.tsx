@@ -1598,8 +1598,9 @@ function Index() {
                 onChange={(e) => e.target.files && handleFiles(e.target.files)}
               />
             </div>
-          </CardContent>
-        </Card>
+          </StepPanel>
+        )}
+
 
         {/* Step 2 */}
         {step === 2 && (
