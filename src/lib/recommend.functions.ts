@@ -251,10 +251,26 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
       ? `\nGAP BRIEF (highest priority — these picks must fill the holes below):\n${gapLines.join("\n")}\n`
       : "";
 
+    const safeOnly = sanitizeList(data.onlyArtists, 50, 150);
+    const safeFavorites = sanitizeList(data.favoriteArtists, 50, 150);
+    const onlyBrief = safeOnly.length
+      ? `
+FAVORITE-ARTIST PASS (hard restriction — overrides count):
+- Every suggestion MUST be a song performed by one of these artists: <favorite_artists>${safeOnly.join(", ")}</favorite_artists>
+- The song must still fit the section targets above (energy, danceability, tempo, valence, explicit rules). Fit wins over quantity.
+- If fewer than ${data.count} songs by these artists genuinely fit this section, return ONLY the ones that fit — returning zero suggestions is correct and expected. Do NOT substitute other artists, and do NOT pad with poor fits.
+`
+      : safeFavorites.length
+        ? `
+The DJ's favorite artists (${safeFavorites.join(", ")}) have already been mined for this section; prefer other artists now unless a favorite is an outstanding fit.
+`
+        : "";
+
     const prompt = `You are an expert wedding/party DJ. Suggest ${data.count} real released songs for the "${data.section}" portion of a dance floor set.
 
 Section targets: ${sectionGuide[data.section]}
-${gapBrief}
+${onlyBrief}${gapBrief}
+
 
 
 You score every track on these signals (integers 1–10 unless noted) and pick songs whose scores match the target band above. These signals are the PRIMARY basis for your picks — not artist popularity alone:
