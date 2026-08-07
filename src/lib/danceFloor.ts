@@ -796,9 +796,13 @@ export function generateLists(input: GenerationInput): GenerationResult {
  */
 export function applyVarietyReranker(
   songs: ResultSong[],
-  opts: { artistCap?: number } = {},
+  opts: { artistCap?: number; favoriteArtists?: string[]; favoriteArtistCap?: number } = {},
 ): ResultSong[] {
   const artistCap = opts.artistCap ?? 2;
+  const favoriteArtistCap = opts.favoriteArtistCap ?? FAVORITE_ARTIST_CAP;
+  const favSet = new Set((opts.favoriteArtists ?? []).map((a) => normalizeKey(a)).filter(Boolean));
+  const capFor = (artist: string): number =>
+    isFavoriteArtist(artist, favSet) ? Math.max(artistCap, favoriteArtistCap) : artistCap;
   if (songs.length <= 1) return songs.slice();
 
   // Step 1: enforce the artist cap by demoting overflow tracks toward the
@@ -809,7 +813,7 @@ export function applyVarietyReranker(
   for (const s of [...songs].sort((a, b) => intensityOf(a) - intensityOf(b))) {
     const ak = normalizeKey(s.artist);
     const c = counts.get(ak) ?? 0;
-    if (c < artistCap) {
+    if (c < capFor(s.artist)) {
       counts.set(ak, c + 1);
       allowed.push(s);
     } else {
