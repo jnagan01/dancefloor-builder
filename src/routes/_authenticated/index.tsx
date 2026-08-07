@@ -1876,9 +1876,9 @@ function Index() {
                 </div>
               )}
             </div>
+          </StepPanel>
+        )}
 
-          </CardContent>
-        </Card>
 
         {/* Step 4 */}
         {step === 4 && (
