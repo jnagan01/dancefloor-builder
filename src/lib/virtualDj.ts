@@ -70,37 +70,6 @@ function stripRemix(title: string): { base: string; remix?: string } {
   return { base: title };
 }
 
-// Damerau-Levenshtein-ish distance, normalized.
-function editDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  const al = a.length, bl = b.length;
-  if (!al) return bl;
-  if (!bl) return al;
-  const dp: number[] = new Array(bl + 1);
-  for (let j = 0; j <= bl; j++) dp[j] = j;
-  for (let i = 1; i <= al; i++) {
-    let prev = dp[0];
-    dp[0] = i;
-    for (let j = 1; j <= bl; j++) {
-      const tmp = dp[j];
-      dp[j] = Math.min(
-        dp[j] + 1,
-        dp[j - 1] + 1,
-        prev + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-      prev = tmp;
-    }
-  }
-  return dp[bl];
-}
-
-function similarity(a: string, b: string): number {
-  if (!a && !b) return 1;
-  if (!a || !b) return 0;
-  const d = editDistance(a, b);
-  const m = Math.max(a.length, b.length);
-  return 1 - d / m;
-}
 
 // --- XML parsing ---
 
