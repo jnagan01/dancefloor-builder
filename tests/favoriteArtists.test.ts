@@ -17,17 +17,17 @@ describe("favorite artists", () => {
     expect(isFavoriteArtist("Drake", ["Beyonce"])).toBe(false);
   });
 
-  it("allows up to 3 tracks per list for a favorite artist", () => {
-    const songs = [1, 2, 3, 4, 5].map((i) => track("Beyonce", `Song ${i}`, 5 + i * 0.1));
+  it("prioritizes 3 favorite tracks and 2 non-favorite tracks before demoting overflow", () => {
+    const songs = [
+      ...[1, 2, 3, 4, 5].map((i) => track("Beyonce", `Fav ${i}`, 5 + i * 0.1)),
+      ...[1, 2, 3, 4].map((i) => track("Random Band", `Other ${i}`, 5 + i * 0.1)),
+    ];
     const out = applyVarietyReranker(songs, { favoriteArtists: ["Beyonce"] });
-    expect(out.length).toBe(FAVORITE_ARTIST_CAP);
+    const head = out.slice(0, 5);
+    expect(head.filter((s) => s.artist === "Beyonce").length).toBe(FAVORITE_ARTIST_CAP);
+    expect(head.filter((s) => s.artist === "Random Band").length).toBe(2);
   });
 
-  it("keeps non-favorites capped at 2 per list", () => {
-    const songs = [1, 2, 3, 4].map((i) => track("Random Band", `Song ${i}`, 5 + i * 0.1));
-    const out = applyVarietyReranker(songs, { favoriteArtists: ["Beyonce"] });
-    expect(out.length).toBe(2);
-  });
 
   it("does not exclude a favorite from the AI gap brief until it hits the per-list cap", () => {
     const section = [track("Beyonce", "A"), track("Beyonce", "B")];
