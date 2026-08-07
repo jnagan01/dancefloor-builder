@@ -69,6 +69,13 @@ export function dedupeKey(artist: string, song: string): string {
 export const FAVORITE_ARTIST_CAP = 3;
 
 /**
+ * Absolute per-list cap for any single artist. Songs that came from the DJ's
+ * imported list are exempt (they must always be included); every other source
+ * (AI, library) is hard-capped at this number per list.
+ */
+export const HARD_ARTIST_CAP = 3;
+
+/**
  * Match a song's artist against the DJ's favorite-artist list. Favorites are
  * matched loosely (substring on normalized names) so "Beyonce" matches
  * "Beyoncé feat. Jay-Z".
