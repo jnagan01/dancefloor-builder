@@ -23,11 +23,16 @@ export function PreviewPlayer({
   target,
   onOpenChange,
   resolveLocalFile,
+  resolveLocalMatch,
 }: {
   target: PreviewTarget | null;
   onOpenChange: (open: boolean) => void;
   /** Returns a File for a given query when the user has connected their music folder. */
   resolveLocalFile?: (query: { artist?: string; title?: string; filePath?: string }) => File | undefined;
+  /** Same as resolveLocalFile but also reports match confidence. */
+  resolveLocalMatch?: (query: { artist?: string; title?: string; filePath?: string }) =>
+    | { file: File; score: number; versionMatch: boolean; exact: boolean }
+    | undefined;
 }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<ITunesResult[]>([]);
@@ -35,13 +40,17 @@ export function PreviewPlayer({
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const localFile = useMemo(
-    () =>
-      target && resolveLocalFile
-        ? resolveLocalFile({ artist: target.artist, title: target.song, filePath: target.filePath })
-        : undefined,
-    [target, resolveLocalFile]
-  );
+  const localMatch = useMemo(() => {
+    if (!target) return undefined;
+    const q = { artist: target.artist, title: target.song, filePath: target.filePath };
+    if (resolveLocalMatch) return resolveLocalMatch(q);
+    const f = resolveLocalFile?.(q);
+    return f ? { file: f, score: 1, versionMatch: true, exact: true } : undefined;
+  }, [target, resolveLocalFile, resolveLocalMatch]);
+
+  const localFile = localMatch?.file;
+  const lowConfidence = Boolean(localMatch && !localMatch.exact && localMatch.score < 0.82);
+  const versionDiffers = Boolean(localMatch && !localMatch.exact && !localMatch.versionMatch);
 
   const localUrl = useMemo(() => (localFile ? URL.createObjectURL(localFile) : null), [localFile]);
   useEffect(() => {
@@ -49,6 +58,7 @@ export function PreviewPlayer({
       if (localUrl) URL.revokeObjectURL(localUrl);
     };
   }, [localUrl]);
+
 
   // Only hit iTunes when we don't have a local file
   useEffect(() => {
