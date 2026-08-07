@@ -2091,15 +2091,14 @@ function Index() {
 
 
         {/* Results */}
-        {result && (
-          <Card id="results">
-            <CardHeader>
-              <CardTitle>Step 6 · Review and export</CardTitle>
-              <CardDescription>
-                Each CSV exports with exactly two columns: Artist, Song.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        {step === 5 && result && (
+          <StepPanel
+            eyebrow="Step 5"
+            title="Review & export"
+            description="Each CSV exports with exactly two columns: Artist, Song."
+          >
+            <div className="space-y-4">
+
               {summary && (
                 <>
                   <div className="rounded-lg border bg-muted/30 p-4">
