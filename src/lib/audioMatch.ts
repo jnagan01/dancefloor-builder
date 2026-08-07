@@ -33,7 +33,7 @@ export interface AudioIndex {
   /** basename without extension, lowercased */
   byBasenameNoExt: Map<string, File>;
   /** one entry per (file, name variant) */
-  entries: Array<{ file: File; subject: MatchSubject; path: string; size: number }>;
+  entries: Array<{ file: File; subject: MatchSubject; path: string; size: number; weight: number }>;
   tokens: TokenIndex;
 }
 
@@ -76,10 +76,12 @@ export function buildAudioIndex(rawFiles: File[], extraEntries: ExtraEntry[] = [
   const byBasenameNoExt = new Map<string, File>();
   const entries: AudioIndex["entries"] = [];
 
-  const push = (file: File, artist: string, title: string) => {
+  // weight < 1 marks a speculative variant (e.g. the reversed "Title - Artist"
+  // reading of a filename) so it cannot outrank a straightforward match.
+  const push = (file: File, artist: string, title: string, weight = 1) => {
     const subject = makeSubject(artist, title);
     if (!subject.title.base && !subject.artist) return;
-    entries.push({ file, subject, path: filePath(file), size: file.size || 0 });
+    entries.push({ file, subject, path: filePath(file), size: file.size || 0, weight });
   };
 
   for (const f of files) {
@@ -94,7 +96,7 @@ export function buildAudioIndex(rawFiles: File[], extraEntries: ExtraEntry[] = [
     if (parts) {
       // "Artist - Title" and the reversed convention "Title - Artist".
       push(f, parts.a, parts.b);
-      push(f, parts.b, parts.a);
+      push(f, parts.b, parts.a, 0.85);
     } else {
       // Unknown artist: title-only variant.
       push(f, "", noExt);
@@ -160,7 +162,7 @@ function rank(idx: AudioIndex, q: ResolveQuery): AudioResolution | undefined {
     const e = idx.entries[i];
     const parts = scorePair(subject, e.subject);
     const cand = {
-      score: parts.score,
+      score: parts.score * e.weight,
       versionMatch: parts.versionMatch,
       size: e.size,
       path: e.path,
