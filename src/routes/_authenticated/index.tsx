@@ -2295,14 +2295,57 @@ function Index() {
                   </TabsContent>
                 ))}
               </Tabs>
-            </CardContent>
-          </Card>
+            </div>
+          </StepPanel>
         )}
 
         <footer className="py-6 text-center text-xs text-muted-foreground">
           Files are processed in your browser. Nothing is uploaded or stored.
         </footer>
-      </main>
+        </main>
+      </div>
+
+      {/* Sticky action bar */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/90 backdrop-blur">
+        <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            disabled={step === 1}
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" /> Back
+          </Button>
+          <p className="min-w-0 truncate text-center text-xs text-muted-foreground">
+            {hoursNum > 0
+              ? `Target ${liveTargets.total} songs · ${liveTargets.perSection} per section (2× buffer)`
+              : "Set the dance floor length to see song targets"}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            {step < 4 && (
+              <Button size="sm" onClick={() => setStep((s) => Math.min(5, s + 1))}>
+                Continue <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            )}
+            {step === 4 && (
+              <Button size="sm" className="glow-gold" onClick={generate} disabled={isGenerating}>
+                {isGenerating ? "Generating with AI…" : "Generate dance floor lists"}
+              </Button>
+            )}
+            {step === 5 && (
+              <>
+                <Button size="sm" variant="outline" onClick={generate} disabled={isGenerating}>
+                  {isGenerating ? "Generating…" : "Regenerate"}
+                </Button>
+                <Button size="sm" className="glow-gold" onClick={exportAllZip}>
+                  <Download className="mr-1 h-4 w-4" /> Export all
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
 
       <Dialog open={!!searchOpen} onOpenChange={(o) => { if (!o) { setSearchOpen(null); setSearchQuery(""); } }}>
         <DialogContent className="max-w-2xl">
