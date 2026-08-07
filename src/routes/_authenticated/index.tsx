@@ -1602,15 +1602,13 @@ function Index() {
         </Card>
 
         {/* Step 2 */}
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-2 flex-wrap">
-            <div>
-              <CardTitle>Step 2 · Review imported songs</CardTitle>
-              <CardDescription>
-                {songs.length} song{songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
+        {step === 2 && (
+        <StepPanel
+          eyebrow="Step 2"
+          title="Review imported songs"
+          description={`${songs.length} song${songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows`}
+          actions={
+            <>
               {duplicateKeys.size > 0 && (
                 <Button variant="destructive" size="sm" onClick={removeDuplicates}>
                   <AlertTriangle className="mr-1 h-4 w-4" />
@@ -1621,9 +1619,10 @@ function Index() {
                 <Plus className="mr-1 h-4 w-4" />
                 Add row
               </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
+            </>
+          }
+        >
+
             {duplicateKeys.size > 0 && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
