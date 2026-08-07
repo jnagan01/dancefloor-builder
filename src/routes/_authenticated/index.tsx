@@ -535,8 +535,111 @@ function Index() {
 
 
         const failed: SectionKey[] = [];
+        const favoriteArtists = (prefs.artists ?? []).filter(Boolean);
+        // Shared mapper so the favorites pass and the general pass produce
+        // identical song records.
+        const toAiSong = (sug: {
+          artist: string;
+          song: string;
+          energy: number;
+          danceability: number;
+          popularity: number;
+          valence: number;
+          bpm?: number;
+          camelot?: string;
+          genre: string;
+          year?: number;
+          mood?: string;
+          explicit?: boolean;
+          reason: string;
+        }) => ({
+          artist: sug.artist,
+          song: sug.song,
+          fromUpload: false,
+          energy: sug.energy,
+          danceability: sug.danceability,
+          popularity: sug.popularity,
+          valence: sug.valence,
+          bpm: typeof sug.bpm === "number" ? sug.bpm : undefined,
+          camelot: toCamelot(sug.camelot),
+          genre: sug.genre,
+          year: typeof sug.year === "number" ? sug.year : undefined,
+          mood: sug.mood,
+          explicit:
+            typeof sug.explicit === "boolean" ? sug.explicit : detectExplicitFromTitle(sug.song),
+          metaSource: "AI" as const,
+          aiSuggestion: true,
+          aiReason: sug.reason,
+        });
         await Promise.all(
           sectionMap.map(async ({ key, label }) => {
+            // PASS 1 — favorite artists first. Fill this section with songs by
+            // the DJ's favorite artists (max 3 per artist per list) before we
+            // look anywhere else. The recommender is allowed to return fewer
+            // (or zero) when nothing by those artists fits the section.
+            if (favoriteArtists.length) {
+              const FAV_ATTEMPTS = 3;
+              for (let favAttempt = 0; favAttempt < FAV_ATTEMPTS; favAttempt++) {
+                if (r[key].length >= r.perSectionTarget) break;
+                // Artists still under the per-list cap for THIS section.
+                const counts = new Map<string, number>();
+                for (const s of r[key]) {
+                  const hit = favoriteArtists.find((f) => isFavoriteArtist(s.artist, [f]));
+                  if (hit) counts.set(hit, (counts.get(hit) ?? 0) + 1);
+                }
+                const eligible = favoriteArtists.filter(
+                  (f) => (counts.get(f) ?? 0) < FAVORITE_ARTIST_CAP,
+                );
+                if (!eligible.length) break;
+                const need = r.perSectionTarget - r[key].length;
+                const requestCount = Math.min(
+                  need,
+                  MAX_AI_RECOMMENDATION_BATCH_SIZE,
+                  eligible.length * FAVORITE_ARTIST_CAP,
+                );
+                if (requestCount <= 0) break;
+                try {
+                  const existingNow = buildRecommendExisting({
+                    warmUp: r.warmUp,
+                    transition: r.transition,
+                    peak: r.peak,
+                  });
+                  const res = await recommendFn({
+                    data: {
+                      section: label,
+                      count: requestCount,
+                      prefs,
+                      existing: existingNow,
+                      onlyArtists: eligible,
+                    },
+                  });
+                  if (!res.suggestions.length) break;
+                  const seen = new Set(
+                    [...r[key], ...existingNow].map((s) => dedupeKey(s.artist, s.song)),
+                  );
+                  let added = 0;
+                  for (const sug of res.suggestions) {
+                    if (r[key].length >= r.perSectionTarget) break;
+                    const k = dedupeKey(sug.artist, sug.song);
+                    if (seen.has(k)) continue;
+                    // Enforce the per-list cap client-side too.
+                    const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
+                    if (!owner) continue;
+                    if ((counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
+                    counts.set(owner, (counts.get(owner) ?? 0) + 1);
+                    seen.add(k);
+                    r[key].push(toAiSong(sug) as (typeof r)[typeof key][number]);
+                    added += 1;
+                  }
+                  if (added === 0) break;
+                } catch (err) {
+                  console.error("Favorite-artist recommend failed", err);
+                  break;
+                }
+              }
+            }
+
+            // PASS 2 — general gap-driven fill for whatever is still missing.
             // Retry loop: AI may return fewer items than requested (dedupes,
             // MAX_TOKENS truncation, over-cautious schema output). Keep asking
             // for the remaining shortfall until we either fill the section or
