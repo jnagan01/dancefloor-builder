@@ -1,6 +1,20 @@
 // VirtualDJ library parsing + matching utilities. All in-browser.
 import type { Song } from "./danceFloor";
 import { normalizeKey } from "./danceFloor";
+import {
+  makeSubject,
+  scorePair,
+  tieBreak,
+  buildTokenIndex,
+  candidatesFor,
+  normalizeText,
+  tokenize,
+  similarity,
+  STRONG_MATCH,
+  POSSIBLE_MATCH,
+  type MatchSubject,
+  type TokenIndex,
+} from "./matchCore";
 
 export interface VdjTrack {
   filePath: string;
