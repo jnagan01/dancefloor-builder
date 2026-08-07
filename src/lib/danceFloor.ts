@@ -966,7 +966,11 @@ function transitionCost(
  * to each song. Used after AI suggestions are merged in so uploads and AI
  * picks are interleaved into a single ascending energy ramp.
  */
-export function reorderForEnergyProgression(result: GenerationResult): GenerationResult {
+export function reorderForEnergyProgression(
+  result: GenerationResult,
+  opts: { favoriteArtists?: string[] } = {},
+): GenerationResult {
+  const favoriteArtists = opts.favoriteArtists ?? [];
   const target = result.perSectionTarget;
   const all: ResultSong[] = [
     ...result.warmUp.map((s) => ({ ...s })),
