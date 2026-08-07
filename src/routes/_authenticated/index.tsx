@@ -1881,13 +1881,14 @@ function Index() {
         </Card>
 
         {/* Step 4 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 4 · Song expansion</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start justify-between gap-4">
-              <div>
+        {step === 4 && (
+        <StepPanel
+          eyebrow="Step 4"
+          title="Song expansion"
+          description="Let the AI reach beyond the uploaded lists to fill each section."
+        >
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 rounded-lg border border-border/70 bg-surface/60 p-4">
+              <div className="min-w-0">
                 <p className="font-medium">Add additional songs based on artist, genre, and decade preferences</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   When turned off, the app will only use songs from the uploaded files.
@@ -1898,11 +1899,12 @@ function Index() {
                   </p>
                 )}
               </div>
-              <Switch checked={expand} onCheckedChange={setExpand} />
+              <Switch checked={expand} onCheckedChange={setExpand} className="shrink-0" />
             </div>
             {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
-              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
-                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
+
                 <div>
                   <p className="font-medium">Not enough uploaded songs to hit the 2× buffer.</p>
                   <p className="mt-1 text-xs">
