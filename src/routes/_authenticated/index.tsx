@@ -58,7 +58,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, Sparkles, Database, HardDrive, ChevronDown, ChevronUp } from "lucide-react";
+import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, Sparkles, Database, HardDrive, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { StepRail, type StepDef } from "@/components/builder/StepRail";
+import { StepPanel } from "@/components/builder/StepPanel";
+
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
@@ -1467,26 +1470,45 @@ function Index() {
   }, [debouncedSongs, debouncedHours, debouncedExpand]);
 
 
+  const [step, setStep] = useState(1);
+  useEffect(() => {
+    if (result) setStep(5);
+  }, [result]);
+
+  const stepDefs: StepDef[] = [
+    { id: 1, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
+    { id: 2, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
+    { id: 3, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: hoursNum > 0 },
+    { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: hoursNum > 0 },
+    { id: 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
+  ];
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
 
-      <header className="border-b bg-card">
-        <div className="mx-auto max-w-6xl px-6 py-10">
-          <div className="flex items-start gap-3 justify-between flex-wrap">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <Music className="h-5 w-5" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-                  Wedding Dance Floor List Builder
-                </h1>
-                <p className="text-sm text-muted-foreground md:text-base">
-                  Upload client playlists, choose the vibe, and export DJ-ready CSV files.
-                </p>
-              </div>
+      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur">
+        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/40 bg-primary/10 text-primary">
+              <Music className="h-5 w-5" />
             </div>
+            <div className="min-w-0">
+              <h1 className="display-title truncate text-xl leading-tight sm:text-2xl">
+                Wedding Dance Floor Builder
+              </h1>
+              <p className="truncate text-xs text-muted-foreground">
+                Upload the client list · shape the energy · export DJ-ready sets
+              </p>
+            </div>
+          </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            <Button variant="outline" size="sm" onClick={() => setMusicSetupOpen(true)}>
+              <FolderOpen className="mr-1 h-4 w-4" /> Music setup
+              {libraries.length > 0 && vdjDirHandle && (
+                <Check className="ml-1 h-3 w-3 text-success" />
+              )}
+            </Button>
             <DjAccountBar
               hasGeneratedLists={!!result}
               getSnapshot={(): WorkflowSnapshot => ({
@@ -1536,24 +1558,25 @@ function Index() {
               }}
               resetWorkflow={clearWorkflowState}
             />
-            <Button variant="outline" size="sm" onClick={() => setMusicSetupOpen(true)}>
-              <FolderOpen className="mr-1 h-4 w-4" /> Music setup
-              {libraries.length > 0 && vdjDirHandle && (
-                <Check className="ml-1 h-3 w-3 text-emerald-500" />
-              )}
-            </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl space-y-6 px-6 py-8">
+      <div className="mx-auto grid max-w-7xl gap-6 px-4 pb-32 pt-6 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+          <StepRail steps={stepDefs} current={step} onSelect={setStep} />
+        </aside>
+
+        <main className="min-w-0 space-y-6">
+
         {/* Step 1 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 1 · Upload song lists</CardTitle>
-            <CardDescription>Drop one or more CSV or TXT files. Processed in your browser.</CardDescription>
-          </CardHeader>
-          <CardContent>
+        {step === 1 && (
+        <StepPanel
+          eyebrow="Step 1"
+          title="Upload song lists"
+          description="Drop one or more CSV or TXT files. Processed in your browser."
+        >
+
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
@@ -1579,19 +1602,18 @@ function Index() {
                 onChange={(e) => e.target.files && handleFiles(e.target.files)}
               />
             </div>
-          </CardContent>
-        </Card>
+          </StepPanel>
+        )}
+
 
         {/* Step 2 */}
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-2 flex-wrap">
-            <div>
-              <CardTitle>Step 2 · Review imported songs</CardTitle>
-              <CardDescription>
-                {songs.length} song{songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
+        {step === 2 && (
+        <StepPanel
+          eyebrow="Step 2"
+          title="Review imported songs"
+          description={`${songs.length} song${songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows`}
+          actions={
+            <>
               {duplicateKeys.size > 0 && (
                 <Button variant="destructive" size="sm" onClick={removeDuplicates}>
                   <AlertTriangle className="mr-1 h-4 w-4" />
@@ -1602,9 +1624,10 @@ function Index() {
                 <Plus className="mr-1 h-4 w-4" />
                 Add row
               </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
+            </>
+          }
+        >
+
             {duplicateKeys.size > 0 && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -1676,16 +1699,19 @@ function Index() {
                 </Table>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </StepPanel>
+        )}
+
 
         {/* Step 3 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 3 · Dance floor details</CardTitle>
-            <CardDescription>Set the vibe and length of the open dance floor.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
+        {step === 3 && (
+        <StepPanel
+          eyebrow="Step 3"
+          title="Dance floor details"
+          description="Set the vibe and length of the open dance floor."
+        >
+          <div className="space-y-5">
+
             <div>
               <Label htmlFor="eventName">Couple / Event name (optional)</Label>
               <Input
@@ -1857,18 +1883,21 @@ function Index() {
                 </div>
               )}
             </div>
+            </div>
+          </StepPanel>
 
-          </CardContent>
-        </Card>
+        )}
+
 
         {/* Step 4 */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Step 4 · Song expansion</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-start justify-between gap-4">
-              <div>
+        {step === 4 && (
+        <StepPanel
+          eyebrow="Step 4"
+          title="Song expansion"
+          description="Let the AI reach beyond the uploaded lists to fill each section."
+        >
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 rounded-lg border border-border/70 bg-surface/60 p-4">
+              <div className="min-w-0">
                 <p className="font-medium">Add additional songs based on artist, genre, and decade preferences</p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   When turned off, the app will only use songs from the uploaded files.
@@ -1879,11 +1908,12 @@ function Index() {
                   </p>
                 )}
               </div>
-              <Switch checked={expand} onCheckedChange={setExpand} />
+              <Switch checked={expand} onCheckedChange={setExpand} className="shrink-0" />
             </div>
             {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
-              <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
-                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+              <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
+                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
+
                 <div>
                   <p className="font-medium">Not enough uploaded songs to hit the 2× buffer.</p>
                   <p className="mt-1 text-xs">
@@ -1897,8 +1927,9 @@ function Index() {
               </div>
             )}
 
-          </CardContent>
-        </Card>
+          </StepPanel>
+        )}
+
 
         {/* Music setup status (moved out of the linear flow — configured once per device from your profile menu) */}
         {(() => {
@@ -1955,12 +1986,8 @@ function Index() {
         })()}
 
 
-        {/* Generate */}
-        <div className="flex justify-center">
-          <Button size="lg" onClick={generate} disabled={isGenerating}>
-            {isGenerating ? "Generating with AI…" : "Generate Dance Floor Lists"}
-          </Button>
-        </div>
+
+
 
         {/* Music setup dialog (formerly Step 5) */}
         <Dialog open={musicSetupOpen} onOpenChange={setMusicSetupOpen}>
@@ -2072,15 +2099,14 @@ function Index() {
 
 
         {/* Results */}
-        {result && (
-          <Card id="results">
-            <CardHeader>
-              <CardTitle>Step 6 · Review and export</CardTitle>
-              <CardDescription>
-                Each CSV exports with exactly two columns: Artist, Song.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        {step === 5 && result && (
+          <StepPanel
+            eyebrow="Step 5"
+            title="Review & export"
+            description="Each CSV exports with exactly two columns: Artist, Song."
+          >
+            <div className="space-y-4">
+
               {summary && (
                 <>
                   <div className="rounded-lg border bg-muted/30 p-4">
@@ -2276,14 +2302,57 @@ function Index() {
                   </TabsContent>
                 ))}
               </Tabs>
-            </CardContent>
-          </Card>
+            </div>
+          </StepPanel>
         )}
 
         <footer className="py-6 text-center text-xs text-muted-foreground">
           Files are processed in your browser. Nothing is uploaded or stored.
         </footer>
-      </main>
+        </main>
+      </div>
+
+      {/* Sticky action bar */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/90 backdrop-blur">
+        <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-6">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            disabled={step === 1}
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" /> Back
+          </Button>
+          <p className="min-w-0 truncate text-center text-xs text-muted-foreground">
+            {hoursNum > 0
+              ? `Target ${liveTargets.total} songs · ${liveTargets.perSection} per section (2× buffer)`
+              : "Set the dance floor length to see song targets"}
+          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            {step < 4 && (
+              <Button size="sm" onClick={() => setStep((s) => Math.min(5, s + 1))}>
+                Continue <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
+            )}
+            {step === 4 && (
+              <Button size="sm" className="glow-gold" onClick={generate} disabled={isGenerating}>
+                {isGenerating ? "Generating with AI…" : "Generate dance floor lists"}
+              </Button>
+            )}
+            {step === 5 && (
+              <>
+                <Button size="sm" variant="outline" onClick={generate} disabled={isGenerating}>
+                  {isGenerating ? "Generating…" : "Regenerate"}
+                </Button>
+                <Button size="sm" className="glow-gold" onClick={exportAllZip}>
+                  <Download className="mr-1 h-4 w-4" /> Export all
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
 
       <Dialog open={!!searchOpen} onOpenChange={(o) => { if (!o) { setSearchOpen(null); setSearchQuery(""); } }}>
         <DialogContent className="max-w-2xl">
