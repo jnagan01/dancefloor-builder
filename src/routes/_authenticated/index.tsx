@@ -1876,7 +1876,9 @@ function Index() {
                 </div>
               )}
             </div>
+            </div>
           </StepPanel>
+
         )}
 
 
