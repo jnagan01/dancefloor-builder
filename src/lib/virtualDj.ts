@@ -461,13 +461,28 @@ export function supportsDirectoryWrite(): boolean {
   return typeof (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function";
 }
 
+/**
+ * Opens the folder picker. Returns null only when the user cancels.
+ * Any other failure (blocked system folder, permission denied) throws an
+ * Error with a friendly message so the UI can explain what happened.
+ */
 export async function pickDirectoryHandle(): Promise<DirHandle | null> {
-  const w = window as unknown as { showDirectoryPicker?: (opts?: { mode?: string }) => Promise<DirHandle> };
+  const w = window as unknown as { showDirectoryPicker?: (opts?: { mode?: string; id?: string }) => Promise<DirHandle> };
   if (!w.showDirectoryPicker) return null;
   try {
-    return await w.showDirectoryPicker({ mode: "readwrite" });
-  } catch {
-    return null;
+    return await w.showDirectoryPicker({ mode: "readwrite", id: "vdj-export" });
+  } catch (err) {
+    const e = err as { name?: string; message?: string };
+    if (e?.name === "AbortError" && !/system|blocked|sensitive/i.test(e.message ?? "")) return null;
+    if (e?.name === "SecurityError" || /system|blocked|sensitive/i.test(e?.message ?? "")) {
+      throw new Error(
+        "That folder is protected by macOS and can't be used. Pick a folder inside it instead — e.g. Documents › VirtualDJ › MyLists.",
+      );
+    }
+    if (e?.name === "NotAllowedError") {
+      throw new Error("Permission to write to that folder was denied. Try again and choose “Allow” / “Edit files”.");
+    }
+    throw new Error(`Couldn't open that folder${e?.message ? ` (${e.message})` : ""}.`);
   }
 }
 

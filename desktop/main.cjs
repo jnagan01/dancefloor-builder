@@ -56,11 +56,16 @@ function createWindow() {
   // The app reads local music folders and writes playlists back to VirtualDJ,
   // so grant the file-system / media permissions it asks for without prompting.
   const session = mainWindow.webContents.session;
-  session.setPermissionRequestHandler((_wc, permission, callback, details) => {
-    const from = details && details.requestingUrl ? details.requestingUrl : "";
-    callback(from.startsWith(APP_ORIGIN));
+  // Some requests (notably "fileSystem" from the folder picker) arrive without
+  // requestingUrl, so fall back to the page's own URL before deciding.
+  const isAppUrl = (u) => typeof u === "string" && u.startsWith(APP_ORIGIN);
+  session.setPermissionRequestHandler((wc, _permission, callback, details) => {
+    const from = (details && details.requestingUrl) || (wc && wc.getURL()) || "";
+    callback(isAppUrl(from));
   });
-  session.setPermissionCheckHandler((_wc, _permission, origin) => origin === APP_ORIGIN);
+  session.setPermissionCheckHandler((wc, _permission, origin) =>
+    isAppUrl(origin) || isAppUrl(wc && wc.getURL()),
+  );
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show();
