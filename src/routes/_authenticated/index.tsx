@@ -95,6 +95,14 @@ export const Route = createFileRoute("/_authenticated/")({
 
 const DECADES = ["1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
 
+interface UploadStatus {
+  id: string;
+  name: string;
+  state: "parsing" | "done" | "error";
+  count?: number;
+  message?: string;
+}
+
 function formatSavedAt(ts: number): string {
   const d = new Date(ts);
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -136,6 +144,7 @@ function Index() {
   const recommendFn = useServerFn(recommendSongsForSection);
   const enrichFn = useServerFn(enrichSongs);
   const [dragOver, setDragOver] = useState(false);
+  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const dnpFileRef = useRef<HTMLInputElement>(null);
   const [dnpDragOver, setDnpDragOver] = useState(false);
@@ -359,24 +368,64 @@ function Index() {
 
   async function handleFiles(files: FileList | File[]) {
     const arr = Array.from(files);
-    const valid = arr.filter((f) => /\.(csv|txt)$/i.test(f.name));
-    if (!valid.length) {
-      toast.error("Please upload .csv or .txt files");
-      return;
-    }
+    if (!arr.length) return;
+    const base = Date.now();
+    const entries: UploadStatus[] = arr.map((f, i) => ({
+      id: `${base}-${i}`,
+      name: f.name,
+      state: "parsing",
+    }));
+    setUploadStatuses((prev) => [...entries, ...prev].slice(0, 20));
+    const update = (id: string, patch: Partial<UploadStatus>) =>
+      setUploadStatuses((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+
     let added = 0;
-    let next = [...songs];
-    for (const f of valid) {
+    let okFiles = 0;
+    const collected: Song[] = [];
+    for (let i = 0; i < arr.length; i++) {
+      const f = arr[i];
+      const id = entries[i].id;
+      const ext = (f.name.split(".").pop() || "").toLowerCase();
+      if (!/\.(csv|txt)$/i.test(f.name)) {
+        const hint =
+          ext === "xlsx" || ext === "xls" || ext === "numbers"
+            ? "Spreadsheets aren't supported yet — use File › Save As › CSV, then drop it here."
+            : ext === "pdf" || ext === "docx" || ext === "doc"
+              ? "Documents can't be read — copy the song list into a .txt file (one \"Artist - Song\" per line)."
+              : ext === "xml"
+                ? "This looks like a VirtualDJ database — add it from Music setup instead."
+                : `.${ext || "unknown"} files aren't supported. Please use a .csv or .txt file.`;
+        update(id, { state: "error", message: hint });
+        continue;
+      }
+      if (f.size === 0) {
+        update(id, { state: "error", message: "This file is empty." });
+        continue;
+      }
+      if (f.size > 5 * 1024 * 1024) {
+        update(id, { state: "error", message: "File is larger than 5 MB — is this really a song list?" });
+        continue;
+      }
       try {
         const parsed = await parseFile(f);
+        if (!parsed.length) {
+          update(id, {
+            state: "error",
+            message: "No songs found. Use columns \"Artist\" and \"Song\", or one \"Artist - Song\" per line.",
+          });
+          continue;
+        }
         added += parsed.length;
-        next = [...next, ...parsed];
+        okFiles++;
+        collected.push(...parsed);
+        update(id, { state: "done", count: parsed.length });
       } catch {
-        toast.error(`Could not parse ${f.name}`);
+        update(id, { state: "error", message: "We couldn't read this file. Check that it's plain text or CSV." });
       }
     }
-    setSongs(next);
-    toast.success(`Imported ${added} songs from ${valid.length} file${valid.length > 1 ? "s" : ""}`);
+    if (collected.length) setSongs((prev) => [...prev, ...collected]);
+    if (okFiles) toast.success(`Imported ${added} songs from ${okFiles} file${okFiles > 1 ? "s" : ""}`);
+    else toast.error("No songs imported — see file details below the drop zone.");
   }
 
   const hoursNum = parseFloat(hours) || 0;
@@ -1590,18 +1639,57 @@ function Index() {
                 dragOver ? "border-primary bg-accent" : "border-border hover:bg-accent/50"
               }`}
             >
-              <Upload className="mb-3 h-8 w-8 text-muted-foreground" />
-              <p className="font-medium">Drop CSV or TXT files here, or click to browse</p>
-              <p className="mt-1 text-sm text-muted-foreground">Multiple files supported</p>
+              <Upload className={`mb-3 h-8 w-8 ${dragOver ? "text-primary" : "text-muted-foreground"}`} />
+              <p className="font-medium">
+                {dragOver ? "Release to upload" : "Drop CSV or TXT files here, or click to browse"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">Multiple files supported · max 5 MB each</p>
               <input
                 ref={fileRef}
                 type="file"
                 multiple
                 accept=".csv,.txt"
                 className="hidden"
-                onChange={(e) => e.target.files && handleFiles(e.target.files)}
+                onChange={(e) => {
+                  if (e.target.files) handleFiles(e.target.files);
+                  e.target.value = "";
+                }}
               />
             </div>
+            {uploadStatuses.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Files</p>
+                  <Button variant="ghost" size="sm" onClick={() => setUploadStatuses([])}>
+                    Clear
+                  </Button>
+                </div>
+                <ul className="space-y-2">
+                  {uploadStatuses.map((s) => (
+                    <li
+                      key={s.id}
+                      className={`rounded-md border px-3 py-2 text-sm ${
+                        s.state === "error"
+                          ? "border-destructive/50 bg-destructive/10"
+                          : s.state === "done"
+                            ? "border-primary/40 bg-primary/5"
+                            : "border-border"
+                      }`}
+                    >
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                        <span className="truncate font-medium">{s.name}</span>
+                        <span className="shrink-0 text-xs">
+                          {s.state === "parsing" && <span className="text-muted-foreground">Reading…</span>}
+                          {s.state === "done" && <span className="text-primary">✓ {s.count} songs</span>}
+                          {s.state === "error" && <span className="text-destructive">Not imported</span>}
+                        </span>
+                      </div>
+                      {s.message && <p className="mt-1 text-xs text-muted-foreground">{s.message}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </StepPanel>
         )}
 
