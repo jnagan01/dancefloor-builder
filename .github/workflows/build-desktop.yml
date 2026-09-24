@@ -12,12 +12,12 @@ jobs:
 
     steps:
       - name: Get the code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
 
       - name: Make the app icon
         working-directory: desktop
@@ -43,7 +43,7 @@ jobs:
         run: npx electron-builder --mac --arm64 --publish never
 
       - name: Save the installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: DancefloorBuilder-macOS-AppleSilicon
           path: desktop/release/*.dmg
