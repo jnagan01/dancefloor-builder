@@ -679,14 +679,13 @@ function Index() {
                   let added = 0;
                   for (const sug of res.suggestions) {
                     if (r[key].length >= r.perSectionTarget) break;
-                    const k = dedupeKey(sug.artist, sug.song);
-                    if (seen.has(k)) continue;
+                    if (seen.has(sug.artist, sug.song)) continue;
                     // Enforce the per-list cap client-side too.
                     const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
                     if (!owner) continue;
                     if ((counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
                     counts.set(owner, (counts.get(owner) ?? 0) + 1);
-                    seen.add(k);
+                    seen.add(sug.artist, sug.song);
                     r[key].push(toAiSong(sug) as (typeof r)[typeof key][number]);
                     added += 1;
                   }
@@ -754,9 +753,8 @@ function Index() {
                   break;
                 }
                 gotAny = true;
-                const seen = new Set(
-                  [...r[key], ...existingNow].map((s) => dedupeKey(s.artist, s.song)),
-                );
+                const seen = new SongKeySet();
+                for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                 let addedThisAttempt = 0;
                 for (const sug of res.suggestions) {
                   if (r[key].length >= r.perSectionTarget) break;
