@@ -77,6 +77,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
 import { toCamelot, parseBpm } from "@/lib/musicTheory";
 import type { ResultSong } from "@/lib/danceFloor";
+import { saveMusicLibrary, loadMusicLibrary, clearMusicLibrary } from "@/lib/libraryStore";
+import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
+import { UserCog } from "lucide-react";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
@@ -212,19 +215,26 @@ function Index() {
   // they hold is dropped — guarantees no cross-workflow leakage in the UI.
   const [workflowInstanceId, setWorkflowInstanceId] = useState(0);
   const [danceFloorConfirmed, setDanceFloorConfirmed] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  // Saved-library persistence (IndexedDB) bookkeeping.
+  const [librarySavedAt, setLibrarySavedAt] = useState<number | null>(null);
+  const libraryHydrated = useRef(false);
+  const librarySigRef = useRef("");
+  // Per-user defaults pulled from the profile; used for new/reset workflows.
+  const defaultsRef = useRef({ hours: "3", decades: ["2000s", "2010s", "2020s"] as string[], expand: false });
 
   // Resets every piece of state that belongs to a single workflow. Device-level
   // setup (connected music folders, VirtualDJ export folder) is intentionally
   // left alone — those represent the DJ's machine, not workflow content.
   function clearWorkflowState() {
     setSongs([]);
-    setHours("3");
+    setHours(defaultsRef.current.hours);
     setArtistsInput("");
     setGenresInput("");
-    setDecades(["2000s", "2010s", "2020s"]);
+    setDecades([...defaultsRef.current.decades]);
     setNotes("");
     setDoNotPlayInput("");
-    setExpand(false);
+    setExpand(defaultsRef.current.expand);
     setIncludeCombined(false);
     setEventName("");
     setResult(null);
@@ -244,7 +254,7 @@ function Index() {
   const [musicSetupCompleted, setMusicSetupCompleted] = useState<boolean | null>(null);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
 
-  // Load the user's "music setup completed" flag from their profile once.
+  // Load the user's profile settings (setup flag + saved defaults) once.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -252,13 +262,81 @@ function Index() {
       if (!user || cancelled) return;
       const { data } = await supabase
         .from("profiles")
-        .select("music_setup_completed")
+        .select("music_setup_completed, default_hours, default_decades, default_expand, favorite_artists")
         .eq("id", user.id)
         .maybeSingle();
-      if (!cancelled) setMusicSetupCompleted(!!data?.music_setup_completed);
+      if (cancelled || !data) return;
+      setMusicSetupCompleted(!!data.music_setup_completed);
+      defaultsRef.current = {
+        hours: data.default_hours || "3",
+        decades: data.default_decades?.length ? data.default_decades : ["2000s", "2010s", "2020s"],
+        expand: !!data.default_expand,
+      };
+      // Apply the saved defaults to the current (untouched) workflow.
+      setHours(defaultsRef.current.hours);
+      setDecades([...defaultsRef.current.decades]);
+      setExpand(defaultsRef.current.expand);
+      if (data.favorite_artists) {
+        setArtistsInput((prev) => (prev.trim() ? prev : data.favorite_artists));
+      }
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Restore the saved music library from this browser's storage on load, so the
+  // DJ never has to re-import their database after signing back in.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const saved = await loadMusicLibrary();
+      if (cancelled) { libraryHydrated.current = true; return; }
+      if (saved && saved.sources.length) {
+        const libs = saved.sources.map((s) => buildLibrary(s.tracks));
+        const labels = saved.sources.map((s) => s.label);
+        librarySigRef.current = saved.sources.map((s) => `${s.label}:${s.tracks.length}`).join("|");
+        setLibraries(libs);
+        setLibrarySources(labels);
+        setLibrarySavedAt(saved.savedAt);
+        const total = saved.sources.reduce((n, s) => n + s.tracks.length, 0);
+        toast.success(`Loaded your saved library · ${total.toLocaleString()} tracks`);
+      }
+      libraryHydrated.current = true;
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist the library whenever it changes, and mirror the summary onto the profile.
+  useEffect(() => {
+    if (!libraryHydrated.current) return;
+    const sources = libraries.map((lib, i) => ({
+      label: librarySources[i] ?? `Source ${i + 1}`,
+      tracks: lib.tracks,
+    }));
+    const sig = sources.map((s) => `${s.label}:${s.tracks.length}`).join("|");
+    if (sig === librarySigRef.current) return;
+    librarySigRef.current = sig;
+    (async () => {
+      const total = sources.reduce((n, s) => n + s.tracks.length, 0);
+      let savedAt: number | null = null;
+      if (sources.length) {
+        savedAt = await saveMusicLibrary(sources);
+        setLibrarySavedAt(savedAt);
+      } else {
+        await clearMusicLibrary();
+        setLibrarySavedAt(null);
+      }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      await supabase
+        .from("profiles")
+        .update({
+          library_name: sources[0]?.label ?? null,
+          library_track_count: total,
+          library_synced_at: savedAt ? new Date(savedAt).toISOString() : null,
+        })
+        .eq("id", user.id);
+    })();
+  }, [libraries, librarySources]);
 
   // Persist "setup completed" once the user has at least one library and an export folder configured on any device.
   useEffect(() => {
@@ -1564,6 +1642,9 @@ function Index() {
                 <Check className="ml-1 h-3 w-3 text-success" />
               )}
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setProfileOpen(true)}>
+              <UserCog className="mr-1 h-4 w-4" /> Profile
+            </Button>
             <DjAccountBar
               hasGeneratedLists={!!result}
               getSnapshot={(): WorkflowSnapshot => ({
@@ -2083,13 +2164,24 @@ function Index() {
 
 
 
+        {/* Profile & settings */}
+        <ProfileSettingsDialog
+          open={profileOpen}
+          onOpenChange={setProfileOpen}
+          savedTrackCount={mergedLibrary?.tracks.length ?? 0}
+          savedAt={librarySavedAt}
+          sourceLabels={librarySources}
+          onForgetLibrary={() => { clearLibraries(); }}
+          onUpdateLibrary={() => { setProfileOpen(false); setMusicSetupOpen(true); }}
+        />
+
         {/* Music setup dialog (formerly Step 5) */}
         <Dialog open={musicSetupOpen} onOpenChange={setMusicSetupOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Music setup</DialogTitle>
               <DialogDescription>
-                Connect your music folders and VirtualDJ export folder. This is stored in your browser on this device only — the app will remember it next time you visit.
+                Connect your music folders and VirtualDJ export folder. Your track list is saved and reloads automatically the next time you sign in on this computer.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
