@@ -1642,6 +1642,9 @@ function Index() {
                 <Check className="ml-1 h-3 w-3 text-success" />
               )}
             </Button>
+            <Button variant="outline" size="sm" onClick={() => setProfileOpen(true)}>
+              <UserCog className="mr-1 h-4 w-4" /> Profile
+            </Button>
             <DjAccountBar
               hasGeneratedLists={!!result}
               getSnapshot={(): WorkflowSnapshot => ({
