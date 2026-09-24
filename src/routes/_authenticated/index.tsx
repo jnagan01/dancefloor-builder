@@ -215,6 +215,13 @@ function Index() {
   // they hold is dropped — guarantees no cross-workflow leakage in the UI.
   const [workflowInstanceId, setWorkflowInstanceId] = useState(0);
   const [danceFloorConfirmed, setDanceFloorConfirmed] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  // Saved-library persistence (IndexedDB) bookkeeping.
+  const [librarySavedAt, setLibrarySavedAt] = useState<number | null>(null);
+  const libraryHydrated = useRef(false);
+  const librarySigRef = useRef("");
+  // Per-user defaults pulled from the profile; used for new/reset workflows.
+  const defaultsRef = useRef({ hours: "3", decades: ["2000s", "2010s", "2020s"] as string[], expand: false });
 
   // Resets every piece of state that belongs to a single workflow. Device-level
   // setup (connected music folders, VirtualDJ export folder) is intentionally
