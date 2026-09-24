@@ -2356,15 +2356,36 @@ function Index() {
 
               <Tabs defaultValue="warmUp">
                 <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
-                  <TabsTrigger value="warmUp" className="h-auto whitespace-normal text-left leading-tight">
-                    Warm Up ({result.warmUp.length}{result.finalShortfall && result.finalShortfall.warmUp > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.warmUp}` : ""})
-                  </TabsTrigger>
-                  <TabsTrigger value="transition" className="h-auto whitespace-normal text-left leading-tight">
-                    Transition ({result.transition.length}{result.finalShortfall && result.finalShortfall.transition > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.transition}` : ""})
-                  </TabsTrigger>
-                  <TabsTrigger value="peak" className="h-auto whitespace-normal text-left leading-tight">
-                    Peak ({result.peak.length}{result.finalShortfall && result.finalShortfall.peak > 0 ? ` / ${result.perSectionTarget}, -${result.finalShortfall.peak}` : ""})
-                  </TabsTrigger>
+                  {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
+                    const label = sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak";
+                    const ps = summary?.perSection[sec];
+                    const shortfall = result.finalShortfall?.[sec] ?? 0;
+                    return (
+                      <TabsTrigger key={sec} value={sec} className="h-auto whitespace-normal text-left leading-tight">
+                        <span className="flex flex-col gap-0.5">
+                          <span>
+                            {label} ({result[sec].length}{shortfall > 0 ? ` / ${result.perSectionTarget}, -${shortfall}` : ""})
+                          </span>
+                          {ps && (
+                            <span className="flex flex-wrap items-center gap-1 text-[10px] font-normal">
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-green-500/15 px-1.5 py-0.5 text-green-700 dark:text-green-300">
+                                <CheckCircle2 className="h-2.5 w-2.5" /> {ps.matched} matched
+                              </span>
+                              {ps.attention > 0 ? (
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
+                                  <AlertTriangle className="h-2.5 w-2.5" /> {ps.attention} need attention
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-green-500/15 px-1.5 py-0.5 text-green-700 dark:text-green-300">
+                                  all matched
+                                </span>
+                              )}
+                            </span>
+                          )}
+                        </span>
+                      </TabsTrigger>
+                    );
+                  })}
                 </TabsList>
 
                 {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => (
