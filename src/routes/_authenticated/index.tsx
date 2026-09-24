@@ -95,6 +95,14 @@ export const Route = createFileRoute("/_authenticated/")({
 
 const DECADES = ["1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
 
+interface UploadStatus {
+  id: string;
+  name: string;
+  state: "parsing" | "done" | "error";
+  count?: number;
+  message?: string;
+}
+
 function formatSavedAt(ts: number): string {
   const d = new Date(ts);
   return d.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
@@ -136,6 +144,7 @@ function Index() {
   const recommendFn = useServerFn(recommendSongsForSection);
   const enrichFn = useServerFn(enrichSongs);
   const [dragOver, setDragOver] = useState(false);
+  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const dnpFileRef = useRef<HTMLInputElement>(null);
   const [dnpDragOver, setDnpDragOver] = useState(false);
