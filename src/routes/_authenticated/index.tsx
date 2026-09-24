@@ -77,6 +77,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
 import { toCamelot, parseBpm } from "@/lib/musicTheory";
 import type { ResultSong } from "@/lib/danceFloor";
+import { saveMusicLibrary, loadMusicLibrary, clearMusicLibrary } from "@/lib/libraryStore";
+import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
+import { UserCog } from "lucide-react";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
