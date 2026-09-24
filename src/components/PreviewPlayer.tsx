@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Loader2, Music } from "lucide-react";
 
 export interface PreviewTarget {
@@ -8,6 +9,8 @@ export interface PreviewTarget {
   song: string;
   /** Optional VirtualDJ library filePath to play the actual local file when connected. */
   filePath?: string;
+  /** Confidence of the selected library match, from 0 to 1. */
+  matchConfidence?: number;
 }
 
 interface ITunesResult {
@@ -49,7 +52,9 @@ export function PreviewPlayer({
   }, [target, resolveLocalFile, resolveLocalMatch]);
 
   const localFile = localMatch?.file;
-  const lowConfidence = Boolean(localMatch && !localMatch.exact && localMatch.score < 0.82);
+  const confidence = target?.matchConfidence ?? localMatch?.score;
+  const confidencePercent = confidence == null ? null : Math.round(confidence * 100);
+  const lowConfidence = confidencePercent != null && confidencePercent < 82;
   const versionDiffers = Boolean(localMatch && !localMatch.exact && !localMatch.versionMatch);
 
   const localUrl = useMemo(() => (localFile ? URL.createObjectURL(localFile) : null), [localFile]);
@@ -114,7 +119,17 @@ export function PreviewPlayer({
         {localFile && localUrl ? (
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
-              <p className="truncate font-medium">{fileName}</p>
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <p className="truncate font-medium">{fileName}</p>
+                {confidencePercent != null && (
+                  <Badge
+                    variant="outline"
+                    className={lowConfidence ? "shrink-0 border-warning/50 bg-warning/10 text-warning" : "shrink-0 border-success/50 bg-success/10 text-success"}
+                  >
+                    {confidencePercent}% confidence
+                  </Badge>
+                )}
+              </div>
               <p className="truncate text-xs text-muted-foreground">{target?.filePath}</p>
               {(lowConfidence || versionDiffers) && (
                 <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
