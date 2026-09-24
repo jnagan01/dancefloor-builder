@@ -2164,6 +2164,17 @@ function Index() {
 
 
 
+        {/* Profile & settings */}
+        <ProfileSettingsDialog
+          open={profileOpen}
+          onOpenChange={setProfileOpen}
+          savedTrackCount={mergedLibrary?.tracks.length ?? 0}
+          savedAt={librarySavedAt}
+          sourceLabels={librarySources}
+          onForgetLibrary={() => { clearLibraries(); }}
+          onUpdateLibrary={() => { setProfileOpen(false); setMusicSetupOpen(true); }}
+        />
+
         {/* Music setup dialog (formerly Step 5) */}
         <Dialog open={musicSetupOpen} onOpenChange={setMusicSetupOpen}>
           <DialogContent className="max-w-2xl">
