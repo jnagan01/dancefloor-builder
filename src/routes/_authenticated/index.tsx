@@ -79,6 +79,7 @@ import { toCamelot, parseBpm } from "@/lib/musicTheory";
 import type { ResultSong } from "@/lib/danceFloor";
 import { saveMusicLibrary, loadMusicLibrary, clearMusicLibrary } from "@/lib/libraryStore";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
+import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
 import { UserCog } from "lucide-react";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -2535,8 +2536,11 @@ function Index() {
           </StepPanel>
         )}
 
-        <footer className="py-6 text-center text-xs text-muted-foreground">
-          Files are processed in your browser. Nothing is uploaded or stored.
+        <footer className="space-y-1 py-6 text-center text-xs text-muted-foreground">
+          <p>Files are processed in your browser. Nothing is uploaded or stored.</p>
+          <p className="text-[11px] opacity-80">
+            Dancefloor Builder v{APP_VERSION} · Updated {formatBuildDate()}
+          </p>
         </footer>
         </main>
       </div>
