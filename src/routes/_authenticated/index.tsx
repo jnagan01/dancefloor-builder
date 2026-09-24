@@ -2719,7 +2719,7 @@ interface SectionViewProps {
   onToggleExtra: (key: string, trackIndex: number) => void;
   onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
   onPickLocalFile?: (key: string, file: File) => void;
-  onPreview?: (target: { artist: string; song: string; filePath?: string }) => void;
+  onPreview?: (target: PreviewTarget) => void;
 }
 
 function SectionView(props: SectionViewProps) {
@@ -2923,7 +2923,7 @@ function InlineMatchSearch({
   extraTrackIndices: number[];
   onPick: (trackIndex: number) => void;
   onToggleExtra: (trackIndex: number) => void;
-  onPreview?: (target: { artist: string; song: string; filePath?: string }) => void;
+  onPreview?: (target: PreviewTarget) => void;
   onPickLocalFile?: (file: File) => void;
 }) {
   const localFileRef = useRef<HTMLInputElement>(null);
