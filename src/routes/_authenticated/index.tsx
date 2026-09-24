@@ -228,13 +228,13 @@ function Index() {
   // left alone — those represent the DJ's machine, not workflow content.
   function clearWorkflowState() {
     setSongs([]);
-    setHours("3");
+    setHours(defaultsRef.current.hours);
     setArtistsInput("");
     setGenresInput("");
-    setDecades(["2000s", "2010s", "2020s"]);
+    setDecades([...defaultsRef.current.decades]);
     setNotes("");
     setDoNotPlayInput("");
-    setExpand(false);
+    setExpand(defaultsRef.current.expand);
     setIncludeCombined(false);
     setEventName("");
     setResult(null);
