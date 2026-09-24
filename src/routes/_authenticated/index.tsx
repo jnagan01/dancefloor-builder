@@ -1533,7 +1533,7 @@ function Index() {
   const stepDefs: StepDef[] = [
     { id: 1, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
     { id: 2, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
-    { id: 3, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: danceFloorConfirmed && hoursNum > 0 },
+    { id: 3, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && hoursNum > 0) },
     { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result },
     { id: 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
   ];
