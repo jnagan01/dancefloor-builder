@@ -6,6 +6,7 @@ import {
   parseFile,
   dedupeSongs,
   dedupeKey,
+  SongKeySet,
   generateLists,
   reorderForEnergyProgression,
   topUpSectionsFromLibrary,
@@ -673,20 +674,18 @@ function Index() {
                     },
                   });
                   if (!res.suggestions.length) break;
-                  const seen = new Set(
-                    [...r[key], ...existingNow].map((s) => dedupeKey(s.artist, s.song)),
-                  );
+                  const seen = new SongKeySet();
+                  for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                   let added = 0;
                   for (const sug of res.suggestions) {
                     if (r[key].length >= r.perSectionTarget) break;
-                    const k = dedupeKey(sug.artist, sug.song);
-                    if (seen.has(k)) continue;
+                    if (seen.has(sug.artist, sug.song)) continue;
                     // Enforce the per-list cap client-side too.
                     const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
                     if (!owner) continue;
                     if ((counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
                     counts.set(owner, (counts.get(owner) ?? 0) + 1);
-                    seen.add(k);
+                    seen.add(sug.artist, sug.song);
                     r[key].push(toAiSong(sug) as (typeof r)[typeof key][number]);
                     added += 1;
                   }
@@ -754,15 +753,12 @@ function Index() {
                   break;
                 }
                 gotAny = true;
-                const seen = new Set(
-                  [...r[key], ...existingNow].map((s) => dedupeKey(s.artist, s.song)),
-                );
+                const seen = new SongKeySet();
+                for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                 let addedThisAttempt = 0;
                 for (const sug of res.suggestions) {
                   if (r[key].length >= r.perSectionTarget) break;
-                  const k = dedupeKey(sug.artist, sug.song);
-                  if (seen.has(k)) continue;
-                  seen.add(k);
+                  if (!seen.tryAdd(sug.artist, sug.song)) continue;
                   r[key].push({
                     artist: sug.artist,
                     song: sug.song,
@@ -817,15 +813,12 @@ function Index() {
           });
           // Track keys across ALL sections so a library song can't be added
           // to two different lists during the fallback pass.
-          const globalHave = new Set<string>(
-            [...r.warmUp, ...r.transition, ...r.peak].map((s) => dedupeKey(s.artist, s.song)),
-          );
+          const globalHave = new SongKeySet();
+          for (const s of [...r.warmUp, ...r.transition, ...r.peak]) globalHave.add(s.artist, s.song);
           for (const { key } of stillShort) {
             for (const s of fallback[key]) {
               if (r[key].length >= r.perSectionTarget) break;
-              const k = dedupeKey(s.artist, s.song);
-              if (globalHave.has(k)) continue;
-              globalHave.add(k);
+              if (!globalHave.tryAdd(s.artist, s.song)) continue;
               r[key].push({ ...s, metaSource: "Library" });
             }
           }
