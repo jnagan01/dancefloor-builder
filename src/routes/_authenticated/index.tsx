@@ -211,6 +211,7 @@ function Index() {
   // Used as a React `key` on workflow-scoped components so any internal state
   // they hold is dropped — guarantees no cross-workflow leakage in the UI.
   const [workflowInstanceId, setWorkflowInstanceId] = useState(0);
+  const [danceFloorConfirmed, setDanceFloorConfirmed] = useState(false);
 
   // Resets every piece of state that belongs to a single workflow. Device-level
   // setup (connected music folders, VirtualDJ export folder) is intentionally
@@ -232,6 +233,7 @@ function Index() {
     setSearchQuery("");
     setPreviewTarget(null);
     setIsGenerating(false);
+    setDanceFloorConfirmed(false);
     setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
 
@@ -1531,8 +1533,8 @@ function Index() {
   const stepDefs: StepDef[] = [
     { id: 1, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
     { id: 2, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
-    { id: 3, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: hoursNum > 0 },
-    { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: hoursNum > 0 },
+    { id: 3, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && hoursNum > 0) },
+    { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result },
     { id: 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
   ];
 
@@ -2443,7 +2445,13 @@ function Index() {
           </p>
           <div className="flex shrink-0 items-center gap-2">
             {step < 4 && (
-              <Button size="sm" onClick={() => setStep((s) => Math.min(5, s + 1))}>
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (step === 3 && hoursNum > 0) setDanceFloorConfirmed(true);
+                  setStep((s) => Math.min(5, s + 1));
+                }}
+              >
                 Continue <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             )}
