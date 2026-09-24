@@ -706,9 +706,8 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
     transition: result.transition.map((s) => ({ ...s })),
     peak: result.peak.map((s) => ({ ...s })),
   };
-  const allSeen = new Set(
-    ([...next.warmUp, ...next.transition, ...next.peak]).map((s) => dedupeKey(s.artist, s.song)),
-  );
+  const allSeen = new SongKeySet();
+  for (const s of [...next.warmUp, ...next.transition, ...next.peak]) allSeen.add(s.artist, s.song);
   const unblockedLibrary = SONG_LIBRARY.filter((l) => !isBlocked(l.artist, l.song, prefs.doNotPlay));
 
   for (const key of ["warmUp", "transition", "peak"] as SectionKey[]) {
@@ -741,35 +740,15 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
       artistCount.set(ak, (artistCount.get(ak) ?? 0) + 1);
     };
 
-    let reuseIndex = 0;
-    let guard = 0;
-    while (list.length < next.perSectionTarget && guard++ < next.perSectionTarget * 20) {
-      const uniqueCandidate = ranked.find(
-        ({ lib }) => !allSeen.has(dedupeKey(lib.artist, lib.song)) && underCap(lib.artist),
-      );
-      if (uniqueCandidate) {
-        const keyForSong = dedupeKey(uniqueCandidate.lib.artist, uniqueCandidate.lib.song);
-        allSeen.add(keyForSong);
-        bump(uniqueCandidate.lib.artist);
-        list.push(librarySongToResult(uniqueCandidate.lib, assignedSection));
-        continue;
-      }
-
-      // Reuse pass: prefer a candidate still under the artist cap; if every
-      // remaining option is capped, allow the reuse so the section still fills.
-      const startIndex = reuseIndex;
-      let reusedCandidate = ranked[reuseIndex % ranked.length].lib;
-      for (let i = 0; i < ranked.length; i++) {
-        const cand = ranked[(startIndex + i) % ranked.length].lib;
-        if (underCap(cand.artist)) {
-          reusedCandidate = cand;
-          reuseIndex = startIndex + i + 1;
-          break;
-        }
-        if (i === ranked.length - 1) reuseIndex = startIndex + 1;
-      }
-      bump(reusedCandidate.artist);
-      list.push(librarySongToResult(reusedCandidate, assignedSection, true));
+    // Only ever add songs that aren't already on ANY list. If the library
+    // runs out of unique fits, the section stays short (surfaced as a
+    // shortfall) rather than repeating songs.
+    for (const { lib } of ranked) {
+      if (list.length >= next.perSectionTarget) break;
+      if (!underCap(lib.artist) || allSeen.has(lib.artist, lib.song)) continue;
+      allSeen.add(lib.artist, lib.song);
+      bump(lib.artist);
+      list.push(librarySongToResult(lib, assignedSection));
     }
 
     next[key] = sortByIntensity(list);
@@ -1078,12 +1057,13 @@ export function reorderForEnergyProgression(
   // Cross-section dedupe: if the same artist+song landed in more than one
   // list (e.g. from the shortfall fallback or an AI retry race), keep only
   // the first occurrence before we re-bucket by intensity.
-  const seenAcross = new Set<string>();
+  // Uploads claim their identity first so an AI/library copy of the same
+  // song is the one dropped, never the client's own pick.
+  const seenAcross = new SongKeySet();
   const deduped: ResultSong[] = [];
-  for (const s of all) {
-    const k = dedupeKey(s.artist, s.song);
-    if (!k || seenAcross.has(k)) continue;
-    seenAcross.add(k);
+  const ordered = [...all.filter((s) => s.fromUpload), ...all.filter((s) => !s.fromUpload)];
+  for (const s of ordered) {
+    if (!normalizeKey(s.song) || !seenAcross.tryAdd(s.artist, s.song)) continue;
     deduped.push(s);
   }
   // Bucket by *effective* intensity so pre-1990 songs bias into Warm Up and
