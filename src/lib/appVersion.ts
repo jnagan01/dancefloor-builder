@@ -14,14 +14,17 @@ const buildTimeIso =
 
 export const APP_BUILD_TIME = buildTimeIso;
 
+// Fixed locale + UTC keeps the string identical on server and browser.
 export function formatBuildDate(iso: string = buildTimeIso): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
   });
 }
