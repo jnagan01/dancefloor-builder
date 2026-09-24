@@ -65,6 +65,55 @@ export function dedupeKey(artist: string, song: string): string {
   return `${normalizeKey(artist)}|${normalizeKey(song)}`;
 }
 
+function stripThe(s: string): string {
+  return s.replace(/^the\s+/, "");
+}
+
+/**
+ * Every individual credited artist, normalized. "Mark Ronson feat. Bruno Mars"
+ * and "Bruno Mars & Mark Ronson" both yield {mark ronson, bruno mars}, so the
+ * same recording is recognised regardless of credit order or formatting.
+ */
+export function artistParts(artist: string): string[] {
+  const raw = (artist || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .split(/\s*(?:,|;|\/|&|\+|\band\b|\bx\b|\bvs\.?|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/i);
+  const out = new Set<string>();
+  for (const p of raw) {
+    const n = stripThe(p.replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim());
+    if (n) out.add(n);
+  }
+  return [...out];
+}
+
+/** All identity keys for a song; two songs are the same if any key overlaps. */
+export function songKeys(artist: string, song: string): string[] {
+  const title = stripThe(normalizeKey(song));
+  if (!title) return [];
+  const keys = new Set<string>([`${stripThe(normalizeKey(artist))}|${title}`]);
+  for (const a of artistParts(artist)) keys.add(`${a}|${title}`);
+  return [...keys];
+}
+
+/** Duplicate detector tolerant of artist credit order / featured artists / "The". */
+export class SongKeySet {
+  private keys = new Set<string>();
+  has(artist: string, song: string): boolean {
+    return songKeys(artist, song).some((k) => this.keys.has(k));
+  }
+  add(artist: string, song: string): void {
+    for (const k of songKeys(artist, song)) this.keys.add(k);
+  }
+  /** Adds and returns true if the song was new. */
+  tryAdd(artist: string, song: string): boolean {
+    if (this.has(artist, song)) return false;
+    this.add(artist, song);
+    return true;
+  }
+}
+
 /** Max songs by a DJ-favorited artist allowed on any single list. */
 export const FAVORITE_ARTIST_CAP = 3;
 
@@ -151,12 +200,11 @@ function guessArtistSong(line: string): Song | null {
 }
 
 export function dedupeSongs<T extends Song>(songs: T[]): T[] {
-  const seen = new Set<string>();
+  const seen = new SongKeySet();
   const out: T[] = [];
   for (const s of songs) {
-    const k = dedupeKey(s.artist, s.song);
-    if (!k || seen.has(k)) continue;
-    seen.add(k);
+    if (!normalizeKey(s.song) || seen.has(s.artist, s.song)) continue;
+    seen.add(s.artist, s.song);
     out.push(s);
   }
   return out;
