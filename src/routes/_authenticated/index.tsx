@@ -1435,6 +1435,11 @@ function Index() {
       transition: { uploads: 0, ai: 0, library: 0 },
       peak: { uploads: 0, ai: 0, library: 0 },
     };
+    const perSection: Record<SectionKey, { total: number; matched: number; attention: number }> = {
+      warmUp: { total: 0, matched: 0, attention: 0 },
+      transition: { total: 0, matched: 0, attention: 0 },
+      peak: { total: 0, matched: 0, attention: 0 },
+    };
     sections.forEach((sec) => {
       result[sec].forEach((s, i) => {
         total += 1;
@@ -1446,9 +1451,11 @@ function Index() {
         } else {
           sourceCounts[sec].library += 1;
         }
+        perSection[sec].total += 1;
         const m = matches[songKey(sec, i, s)];
         if (!m) {
           missing += 1;
+          perSection[sec].attention += 1;
           return;
         }
         if (m.excludedFromVdj) excluded += 1;
@@ -1456,20 +1463,24 @@ function Index() {
           case "Matched":
           case "Manually Matched":
             matched += 1;
+            perSection[sec].matched += 1;
             break;
           case "Possible Match":
             possible += 1;
+            perSection[sec].attention += 1;
             break;
           case "Multiple Matches":
             multiple += 1;
+            perSection[sec].attention += 1;
             break;
           case "Missing From Library":
             missing += 1;
+            perSection[sec].attention += 1;
             break;
         }
       });
     });
-    return { total, matched, possible, multiple, missing, excluded, csvIncluded: total, sourceCounts };
+    return { total, matched, possible, multiple, missing, excluded, csvIncluded: total, sourceCounts, perSection };
   }, [result, matches]);
 
   const searchResults = useMemo(() => {
