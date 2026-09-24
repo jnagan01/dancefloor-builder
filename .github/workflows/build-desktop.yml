@@ -43,7 +43,7 @@ jobs:
         run: npx electron-builder --mac --arm64 --publish never
 
       - name: Save the installer
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: DancefloorBuilder-macOS-AppleSilicon
           path: desktop/release/*.dmg
