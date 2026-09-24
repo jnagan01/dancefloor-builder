@@ -18,24 +18,48 @@ export type Database = {
         Row: {
           approved: boolean
           created_at: string
+          default_decades: string[]
+          default_expand: boolean
+          default_hours: string
           display_name: string | null
+          dj_alias: string | null
+          favorite_artists: string
           id: string
+          library_name: string | null
+          library_synced_at: string | null
+          library_track_count: number
           music_setup_completed: boolean
           updated_at: string
         }
         Insert: {
           approved?: boolean
           created_at?: string
+          default_decades?: string[]
+          default_expand?: boolean
+          default_hours?: string
           display_name?: string | null
+          dj_alias?: string | null
+          favorite_artists?: string
           id: string
+          library_name?: string | null
+          library_synced_at?: string | null
+          library_track_count?: number
           music_setup_completed?: boolean
           updated_at?: string
         }
         Update: {
           approved?: boolean
           created_at?: string
+          default_decades?: string[]
+          default_expand?: boolean
+          default_hours?: string
           display_name?: string | null
+          dj_alias?: string | null
+          favorite_artists?: string
           id?: string
+          library_name?: string | null
+          library_synced_at?: string | null
+          library_track_count?: number
           music_setup_completed?: boolean
           updated_at?: string
         }
