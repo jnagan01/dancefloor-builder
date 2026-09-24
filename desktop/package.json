@@ -27,7 +27,7 @@
       "target": [{ "target": "dmg", "arch": ["arm64"] }],
       "icon": "build/icon.icns",
       "darkModeSupport": true,
-      "identity": null
+      "identity": "-"
     },
     "dmg": {
       "title": "Dancefloor Builder",
