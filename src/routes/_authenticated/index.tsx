@@ -2181,7 +2181,7 @@ function Index() {
             <DialogHeader>
               <DialogTitle>Music setup</DialogTitle>
               <DialogDescription>
-                Connect your music folders and VirtualDJ export folder. This is stored in your browser on this device only — the app will remember it next time you visit.
+                Connect your music folders and VirtualDJ export folder. Your track list is saved and reloads automatically the next time you sign in on this computer.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
