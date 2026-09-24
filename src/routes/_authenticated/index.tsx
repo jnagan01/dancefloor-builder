@@ -2808,7 +2808,12 @@ function SectionView(props: SectionViewProps) {
                         size="icon"
                         variant="ghost"
                         className="h-6 w-6 shrink-0"
-                        onClick={() => onPreview?.({ artist: s.artist, song: s.song, filePath: track?.filePath })}
+                        onClick={() => onPreview?.({
+                          artist: s.artist,
+                          song: s.song,
+                          filePath: track?.filePath,
+                          matchConfidence: track && m ? m.confidence : undefined,
+                        })}
                         title="Preview song"
                       >
                         <Play className="h-3.5 w-3.5" />
