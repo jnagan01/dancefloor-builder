@@ -1106,16 +1106,28 @@ function Index() {
       toast.error("Direct folder writing not supported in this browser");
       return;
     }
-    const handle = await pickDirectoryHandle();
+    let handle: DirHandleLike | null = null;
+    try {
+      handle = await pickDirectoryHandle();
+    } catch (err) {
+      toast.error((err as Error).message);
+      return;
+    }
     if (handle) {
-      setVdjDirHandle(handle);
       const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
-      setVdjDirName(name);
       const now = Date.now();
+      setVdjDirHandle(handle);
+      setVdjDirName(name);
       setVdjDirSavedAt(now);
-      await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
-      await saveDirHandleMeta(VDJ_DIR_KEY, { savedAt: now });
-      toast.success(`VirtualDJ folder saved · ${name}`);
+      try {
+        await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
+        await saveDirHandleMeta(VDJ_DIR_KEY, { savedAt: now });
+        toast.success(`VirtualDJ folder saved · ${name}`);
+      } catch {
+        toast.warning(`Folder linked for this session · ${name}`, {
+          description: "It couldn't be remembered for next time — you may need to pick it again after restarting.",
+        });
+      }
     }
   }
 
@@ -1136,16 +1148,26 @@ function Index() {
       if (ok) return vdjDirHandle;
     }
     if (!supportsDirectoryWrite()) return null;
-    const handle = await pickDirectoryHandle();
+    let handle: DirHandleLike | null = null;
+    try {
+      handle = await pickDirectoryHandle();
+    } catch (err) {
+      toast.error((err as Error).message);
+      return null;
+    }
     if (!handle) return null;
     setVdjDirHandle(handle);
     const name = (handle as DirHandleLike & { name?: string }).name ?? "VirtualDJ folder";
     setVdjDirName(name);
     const now = Date.now();
     setVdjDirSavedAt(now);
-    await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
-    await saveDirHandleMeta(VDJ_DIR_KEY, { savedAt: now });
-    toast.success(`VirtualDJ folder saved · ${name}`);
+    try {
+      await saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
+      await saveDirHandleMeta(VDJ_DIR_KEY, { savedAt: now });
+      toast.success(`VirtualDJ folder saved · ${name}`);
+    } catch {
+      toast.warning(`Folder linked for this session · ${name}`);
+    }
     return handle;
   }
 
