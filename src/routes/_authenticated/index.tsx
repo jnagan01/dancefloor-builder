@@ -1672,7 +1672,9 @@ function Index() {
               hasGeneratedLists={!!result}
               getSnapshot={(): WorkflowSnapshot => ({
                 inputs: {
-                  songs,
+                  // Blank "Add song" rows (or rows with only one field filled)
+                  // would fail history validation, so drop them from the snapshot.
+                  songs: songs.filter((s) => s.artist.trim() !== "" && s.song.trim() !== ""),
                   hours,
                   artistsInput,
                   genresInput,
