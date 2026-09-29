@@ -137,6 +137,8 @@ function Index() {
   const getEventFn = useServerFn(getWorkflow);
   const [savedEventId, setSavedEventId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
+  const saveRevision = useRef(0);
+  const restoredEvent = useRef(false);
   const [buffer, setBuffer] = useState(2);
   const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
   const [spotifyLink, setSpotifyLink] = useState("");
@@ -267,6 +269,9 @@ function Index() {
     setBuffer(2);
     setActiveSection("warmUp");
     setSpotifyLink("");
+    restoredEvent.current = false;
+    savedSelectionsRef.current = null;
+    saveRevision.current += 1;
     setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
 
@@ -499,25 +504,25 @@ function Index() {
   useEffect(() => {
     if(!openedEventId) return;
     let cancelled=false;
+    restoredEvent.current = false;
     getEventFn({data:{id:openedEventId}}).then(row=>{
       if(cancelled)return;
       const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
       const lists=row.lists as unknown as WorkflowSnapshot["lists"];
       if(!inputs || !lists)return;
       setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
-      const per=Math.max(lists.warmUp.length,lists.transition.length,lists.peak.length);
-      setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),shortfall:{warmUp:0,transition:0,peak:0,total:0},duplicatesRemoved:0,blockedCount:0});
+      const per=Math.ceil((Math.max(0,Number(inputs.hours) || 0)*15/3)*(inputs.buffer??2));
+      const shortfall={warmUp:Math.max(0,per-lists.warmUp.length),transition:Math.max(0,per-lists.transition.length),peak:Math.max(0,per-lists.peak.length),total:0};
+      shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
+      setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
+      savedSelectionsRef.current=lists.selections??null;
+      restoredEvent.current=true;
+      saveRevision.current+=1;
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
     }).catch(()=>toast.error("Could not open this event"));
     return ()=>{cancelled=true};
   },[openedEventId]);
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean}>|null>(null);
-  useEffect(()=>{
-    if(!openedEventId)return;
-    let cancelled=false;
-    getEventFn({data:{id:openedEventId}}).then(row=>{if(!cancelled)savedSelectionsRef.current=(row.lists as unknown as WorkflowSnapshot["lists"])?.selections??null});
-    return ()=>{cancelled=true};
-  },[openedEventId]);
   useEffect(()=>{
     if(!result || !mergedLibrary || !savedSelectionsRef.current)return;
     const selections=savedSelectionsRef.current;savedSelectionsRef.current=null;
@@ -527,11 +532,13 @@ function Index() {
     }return next});
   },[result,mergedLibrary]);
   useEffect(()=>{
-    if(!result || !savedEventId || saveState==="error")return;
+    if(!result || !savedEventId || saveState==="error" || !restoredEvent.current && !!openedEventId)return;
+    const revision=++saveRevision.current;
     const timer=setTimeout(async()=>{
-      setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});setSaveState("saved")}catch{setSaveState("error");toast.error("Could not save event changes")}
+      if(revision!==saveRevision.current)return;
+      setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
     },1000);
-    return ()=>clearTimeout(timer);
+    return ()=>{clearTimeout(timer);saveRevision.current+=1};
   },[result,matches,songs,hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer,savedEventId]);
 
   async function generate() {
@@ -932,6 +939,7 @@ function Index() {
 
     setResult(r);
     setActiveSection("warmUp");
+    const existingEventId = savedEventId;
     setSavedEventId(null);
     setSaveState("saving");
     setMatches({});
@@ -950,7 +958,7 @@ function Index() {
     }
     try {
       const snapshot = eventSnapshot(r, matchesRef.current);
-      const saved = await saveEventFn({data:snapshot});
+      const saved = existingEventId ? await updateEventFn({data:{id:existingEventId,...snapshot}}) : await saveEventFn({data:snapshot});
       if(genTokenRef.current === myToken){setSavedEventId(saved.id);setSaveState("saved");}
     }catch{if(genTokenRef.current === myToken){setSaveState("error");toast.error("Lists generated, but the event could not be saved. Try regenerating.");}}
     const fs = r.finalShortfall;
@@ -2070,7 +2078,7 @@ function Index() {
       </div>
 
       {/* Sticky action bar */}
-      <div className="fixed inset-x-0 bottom-0 z-30 lg:left-60 border-t border-border/70 bg-background/90 backdrop-blur">
+      <div className={`fixed inset-x-0 ${previewTarget ? "bottom-24" : "bottom-0"} z-30 lg:left-60 border-t border-border/70 bg-background/90 backdrop-blur`}>
         <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-6">
           <Button
             variant="ghost"
@@ -2120,7 +2128,7 @@ function Index() {
       <Dialog open={!!searchOpen} onOpenChange={(o) => { if (!o) { setSearchOpen(null); setSearchQuery(""); } }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Search VirtualDJ library</DialogTitle>
+            <DialogTitle>Search music folders</DialogTitle>
             <DialogDescription>Pick a track to manually match.</DialogDescription>
           </DialogHeader>
           <Input
