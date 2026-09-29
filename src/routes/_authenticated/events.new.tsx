@@ -970,84 +970,6 @@ function Index() {
     toast.success(`Removed ${removed} duplicate song${removed === 1 ? "" : "s"}`);
   }
 
-  // --- VirtualDJ library loading ---
-
-  async function loadXmlFiles(files: File[], sourceLabel: string) {
-    if (!files.length) return;
-    const xmlFiles = files.filter((f) => /database\.xml$|\.xml$/i.test(f.name));
-    if (!xmlFiles.length) {
-      toast.error("No database.xml files found in selection");
-      return;
-    }
-    let totalTracks = 0;
-    const newLibs: VdjLibrary[] = [];
-    const newSources: string[] = [];
-    const emptyFiles: string[] = [];
-    for (const f of xmlFiles) {
-      try {
-        const text = await f.text();
-        const tracks = parseVdjDatabaseXml(text);
-        if (tracks.length) {
-          newLibs.push(buildLibrary(tracks));
-          newSources.push(`${sourceLabel}: ${f.webkitRelativePath || f.name} (${tracks.length} tracks)`);
-          totalTracks += tracks.length;
-        } else {
-          emptyFiles.push(f.name);
-        }
-      } catch {
-        toast.error(`Could not parse ${f.name}`);
-      }
-    }
-    if (!newLibs.length) {
-      toast.error(
-        emptyFiles.length
-          ? `No song entries found in ${emptyFiles.join(", ")} — this doesn't look like a VirtualDJ database.xml. You can also just connect your music folder instead.`
-          : "No tracks parsed from VirtualDJ database",
-      );
-      return;
-    }
-
-    const updated = [...libraries, ...newLibs];
-    setLibraries(updated);
-    setLibrarySources([...librarySources, ...newSources]);
-    toast.success(`Indexed ${totalTracks} VirtualDJ tracks`);
-    // Re-match if results exist
-    if (result) {
-      const merged = mergeLibraries(updated);
-      const m: Record<string, SongMatch> = {};
-      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-        result[section].forEach((s, i) => {
-          m[songKey(section, i, s)] = matchSong(s, merged);
-        });
-      });
-      setMatches(m);
-    }
-  }
-
-  async function selectDatabaseXml() {
-    const files = await pickXmlFiles();
-    await loadXmlFiles(files, "database.xml");
-  }
-
-  async function selectFolder(label: string) {
-    const files = await pickDirectoryFiles();
-    const xmls = files.filter((f) => /database\.xml$/i.test(f.name));
-    if (!xmls.length) {
-      toast.error(`No database.xml found in ${label}`);
-      return;
-    }
-    await loadXmlFiles(xmls, label);
-  }
-
-  function clearLibraries() {
-    setLibraries([]);
-    setLibrarySources([]);
-    setAudioSources([]);
-    setMatches({});
-    toast.success("Libraries cleared");
-  }
-
-
   // Restore a previously chosen export folder from IndexedDB on mount.
   useEffect(() => {
     let cancelled = false;
@@ -1210,64 +1132,9 @@ function Index() {
       toast.error("Unsupported audio file type");
       return;
     }
-    const MANUAL_NAME = "Manually picked files";
-    const existing = audioSources.find((s) => s.name === MANUAL_NAME);
-    let newLibs: VdjLibrary[];
-    let newSources: AudioSource[];
-    let newSrcLabels: string[];
-    if (existing) {
-      // Skip if already present
-      if (existing.files.some((f) => f.name === file.name && f.size === file.size)) {
-        // still re-pick it
-      }
-      const manualFiles = existing.files.some((f) => f.name === file.name && f.size === file.size)
-        ? existing.files
-        : [...existing.files, file];
-      const tracks = tracksFromAudioFiles(manualFiles);
-      const manualLib = buildLibrary(tracks);
-      const manualIdx = existing.libraryIndex;
-      newLibs = libraries.map((l, i) => (i === manualIdx ? manualLib : l));
-      newSrcLabels = librarySources.map((s, i) =>
-        i === manualIdx ? `${MANUAL_NAME} (${tracks.length} files)` : s,
-      );
-      newSources = audioSources.map((s) =>
-        s.id === existing.id ? { ...s, files: manualFiles } : s,
-      );
-    } else {
-      const manualFiles = [file];
-      const tracks = tracksFromAudioFiles(manualFiles);
-      const manualLib = buildLibrary(tracks);
-      const manualIdx = libraries.length;
-      newLibs = [...libraries, manualLib];
-      newSrcLabels = [...librarySources, `${MANUAL_NAME} (${tracks.length} files)`];
-      newSources = [
-        ...audioSources,
-        {
-          id: `manual-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          kind: "folder",
-          name: MANUAL_NAME,
-          files: manualFiles,
-          libraryIndex: manualIdx,
-        },
-      ];
-    }
-    setLibraries(newLibs);
-    setLibrarySources(newSrcLabels);
-    setAudioSources(newSources);
-    const merged = mergeLibraries(newLibs);
-    const newIdx = merged.tracks.findIndex((t) => t.filePath === file.name);
-    if (newIdx === -1) {
-      toast.error("Could not add file to library");
-      return;
-    }
-    updateMatch(key, {
-      status: "Manually Matched",
-      confidence: 1,
-      trackIndex: newIdx,
-      alternatives: [],
-      extraTrackIndices: [],
-    });
-    toast.success(`Matched → ${file.name}`);
+    pendingFilePick.current = {key, path: file.name};
+    workspace.addFile(file);
+    toast.success(`Added ${file.name} to search results`);
   }
 
   // --- Export helpers ---
@@ -2062,7 +1929,7 @@ function Index() {
                 <Button
                   variant="secondary"
                   onClick={exportAllToVdj}
-                  disabled={!canDirWrite}
+                  disabled={!canDirWrite || software !== "VirtualDJ"}
                   title={
                     canDirWrite
                       ? vdjDirName
