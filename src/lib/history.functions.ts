@@ -6,7 +6,13 @@ const songSchema = z.object({
   artist: z.string().min(1).max(300),
   song: z.string().min(1).max(300),
   fromUpload: z.boolean().optional(),
-}).passthrough();
+  energy: z.number().optional(), danceability: z.number().optional(), popularity: z.number().optional(), valence: z.number().optional(),
+  bpm: z.number().optional(), camelot: z.string().optional(), genre: z.string().optional(), year: z.number().optional(),
+  mood: z.string().optional(), explicit: z.boolean().optional(), metaSource: z.string().optional(),
+  stretched: z.boolean().optional(), naturalSection: z.string().optional(), reused: z.boolean().optional(),
+  waveRole: z.string().optional(), placementReason: z.string().optional(), aiSuggestion: z.boolean().optional(),
+  aiReason: z.string().optional(), fromLibrary: z.boolean().optional(),
+});
 
 const inputsSchema = z.object({
   songs: z.array(songSchema).max(2000),
