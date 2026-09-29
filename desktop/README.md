@@ -16,12 +16,11 @@ the `.dmg` to that GitHub release.
 
 ## First launch
 
-The app is not signed with a paid Apple Developer certificate, so the first
-time you open it macOS will say it can't verify the developer.
-Right-click the app → **Open** → **Open**. You only do this once.
+The app is signed with a Developer ID certificate and notarized by Apple,
+so it opens like any other Mac app — no warnings, no Terminal commands.
 
-To remove that step, join the Apple Developer Program and add your signing
-certificate to the workflow.
+Signing requires these repository secrets (Settings → Secrets and variables → Actions):
+`CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
 
 ## What the app does
 
