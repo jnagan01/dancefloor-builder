@@ -1075,6 +1075,11 @@ function Index() {
   // Ensure we have a writable folder handle, prompting the user if needed.
   // Returns the handle or null if the user cancelled / permission denied.
   async function ensureExportFolder(): Promise<DirHandleLike | null> {
+    // Always follow the VirtualDJ folder configured in Settings, so a stale
+    // cached folder can never receive the export.
+    if (configuredExportPath) {
+      return makeNativeDirHandle(configuredExportPath) as unknown as DirHandleLike;
+    }
     if (vdjDirHandle) {
       const ok = await verifyReadWrite(vdjDirHandle as unknown as Parameters<typeof verifyReadWrite>[0]);
       if (ok) return vdjDirHandle;
