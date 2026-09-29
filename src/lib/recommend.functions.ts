@@ -52,6 +52,8 @@ const InputSchema = z.object({
   onlyArtists: z.array(z.string().max(150)).max(50).default([]),
   /** Preferred artists context for the general pass (bias, not restriction). */
   favoriteArtists: z.array(z.string().max(150)).max(50).default([]),
+  /** Music-Map style sonic neighbors of the client's requested artists. */
+  neighborArtists: z.array(z.string().max(150)).max(120).default([]),
 });
 
 
