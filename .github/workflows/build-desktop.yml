@@ -41,6 +41,20 @@ jobs:
         working-directory: desktop
         run: npm install
 
+      - name: Stamp the build with its release tag
+        id: stamp
+        working-directory: desktop
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          fi
+          printf '{"repository":"%s","tag":"%s"}\n' "${GITHUB_REPOSITORY}" "$TAG" > build-info.json
+          cat build-info.json
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Check signing secrets are present
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
