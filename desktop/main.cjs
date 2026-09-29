@@ -2,6 +2,7 @@
 const { app, BrowserWindow, shell, Menu, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const { checkForUpdates } = require("./updater.cjs");
 
 const APP_URL = process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app";
 const APP_ORIGIN = new URL(APP_URL).origin;
@@ -121,6 +122,11 @@ function buildMenu() {
       label: app.name,
       submenu: [
         { role: "about" },
+        { type: "separator" },
+        {
+          label: "Check for Updates…",
+          click: () => checkForUpdates({ silent: false }),
+        },
         { type: "separator" },
         { role: "services" },
         { type: "separator" },
@@ -366,6 +372,11 @@ if (!gotLock) {
     buildMenu();
     registerVirtualDjHandlers();
     createWindow();
+
+    // Quietly look for a newer Mac build shortly after launch.
+    setTimeout(() => {
+      checkForUpdates({ silent: true }).catch(() => {});
+    }, 4000);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();

@@ -24,6 +24,8 @@
     "files": [
       "main.cjs",
       "preload.cjs",
+      "updater.cjs",
+      "build-info.json",
       "package.json"
     ],
     "mac": {

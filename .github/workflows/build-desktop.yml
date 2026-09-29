@@ -11,6 +11,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   build-mac:
     runs-on: macos-14 # Apple Silicon runner
@@ -40,6 +43,20 @@ jobs:
       - name: Install build tools
         working-directory: desktop
         run: npm install
+
+      - name: Stamp the build with its release tag
+        id: stamp
+        working-directory: desktop
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          else
+            TAG="v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          fi
+          printf '{"repository":"%s","tag":"%s"}\n' "${GITHUB_REPOSITORY}" "$TAG" > build-info.json
+          cat build-info.json
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Check signing secrets are present
         env:
@@ -81,10 +98,12 @@ jobs:
           path: desktop/release/*.dmg
           if-no-files-found: error
 
-      - name: Attach to release
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.stamp.outputs.tag }}
+          name: Dancefloor Builder ${{ steps.stamp.outputs.tag }}
           files: desktop/release/*.dmg
+          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
