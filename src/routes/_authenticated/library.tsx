@@ -15,12 +15,17 @@ type Field = typeof fields[number];
 function LibraryPage() {
   const { sources, library, files, addFolder, rescan, editTrack } = useWorkspace();
   const [query, setQuery] = useState("");
-  const [columns, setColumns] = useState<Field[]>(["Title", "Artist", "BPM", "Year", "Genre", "Key", "File path"]);
+  const [columns, setColumns] = useState<Field[]>(["Title", "Artist", "BPM", "Year", "Genre", "Key", "Plays", "File path"]);
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [editing, setEditing] = useState<{source:number;index:number}|null>(null);
   const [playing, setPlaying] = useState<{artist:string; song:string; filePath:string}|null>(null);
-  const rows = useMemo(() => sources.flatMap((s, si) => s.tracks.map((t, ti) => ({t, si, ti})))
-    .filter(({t}) => `${t.artist} ${t.title} ${t.filePath}`.toLowerCase().includes(query.toLowerCase())).slice(0, 300), [sources, query]);
+  const [sortPlays, setSortPlays] = useState(false);
+  const rows = useMemo(() => {
+    const all = sources.flatMap((s, si) => s.tracks.map((t, ti) => ({t, si, ti})))
+      .filter(({t}) => `${t.artist} ${t.title} ${t.filePath}`.toLowerCase().includes(query.toLowerCase()));
+    if (sortPlays) all.sort((a, b) => (b.t.playCount ?? -1) - (a.t.playCount ?? -1));
+    return all.slice(0, 300);
+  }, [sources, query, sortPlays]);
   const current = editing ? sources[editing.source]?.tracks[editing.index] : null;
   const resolveFile = (q:{filePath?:string}) => files.find(f => (f.webkitRelativePath || f.name) === q.filePath || f.name === q.filePath?.split("/").pop());
   return <div className="space-y-5 pb-20">
