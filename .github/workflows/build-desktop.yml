@@ -99,11 +99,12 @@ jobs:
           if-no-files-found: error
 
       - name: Publish the release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.stamp.outputs.tag }}
-          name: Dancefloor Builder ${{ steps.stamp.outputs.tag }}
-          files: desktop/release/*.dmg
-          make_latest: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.stamp.outputs.tag }}" desktop/release/*.dmg \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Dancefloor Builder ${{ steps.stamp.outputs.tag }}" \
+            --latest \
+            --notes "Automated build ${{ steps.stamp.outputs.tag }}"
+
