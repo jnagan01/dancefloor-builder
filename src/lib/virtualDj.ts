@@ -27,6 +27,8 @@ export interface VdjTrack {
   year?: string;
   decade?: string;
   remix?: string;
+  playCount?: number;
+  lastPlayTime?: string;
 }
 
 export type MatchStatus =
