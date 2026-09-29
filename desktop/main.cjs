@@ -1,5 +1,5 @@
 /* Dancefloor Builder — macOS desktop shell (Electron main process) */
-const { app, BrowserWindow, shell, Menu, dialog } = require("electron");
+const { app, BrowserWindow, shell, Menu, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
