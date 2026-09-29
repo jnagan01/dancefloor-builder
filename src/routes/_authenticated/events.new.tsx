@@ -2621,6 +2621,17 @@ function SectionView(props: SectionViewProps) {
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Artist</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="break-words text-sm leading-tight">{s.artist}</p>
+                      {s.artist?.trim() && (
+                        <a
+                          href={`https://www.music-map.com/${encodeURIComponent(s.artist.trim().toLowerCase().replace(/\s+/g, "+"))}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`See artists similar to ${s.artist} on Music-Map`}
+                          className="text-muted-foreground transition-colors hover:text-primary"
+                        >
+                          <Map className="size-3.5" />
+                        </a>
+                      )}
                       <SourceBadge song={meta} />
                       <FallbackBadges song={meta} />
                     </div>
