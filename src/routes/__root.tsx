@@ -8,6 +8,8 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 
+import * as React from "react";
+
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {

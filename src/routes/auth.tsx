@@ -55,6 +55,8 @@ function AuthPage() {
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      {/* Drag strip so the desktop window can be moved from the sign-in screen. */}
+      <div className="app-drag fixed inset-x-0 top-0 h-10" />
       <Toaster />
       <Card className="w-full max-w-md">
         <CardHeader>

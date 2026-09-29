@@ -1643,8 +1643,8 @@ function Index() {
     <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
 
-      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur">
-        <div className="mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 sm:px-6">
+      <header className="app-drag sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur">
+        <div className="desktop-titlebar-pad mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/40 bg-primary/10 text-primary">
               <Music className="h-5 w-5" />
