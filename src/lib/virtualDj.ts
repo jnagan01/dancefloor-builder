@@ -113,6 +113,10 @@ function trackFromNode(node: Element): VdjTrack | null {
   const bpm = attr(scan, "Bpm") || attr(tags, "Bpm");
   const key = attr(scan, "Key") || attr(tags, "Key");
   const remixTag = attr(tags, "Remix");
+  const infos = childByName(node, "Infos");
+  const rawPlays = attr(infos, "PlayCount", "Playcount", "playcount");
+  const playCount = rawPlays && /^\d+$/.test(rawPlays.trim()) ? Number(rawPlays.trim()) : undefined;
+  const lastPlayTime = attr(infos, "LastPlayTime", "Lastplaytime");
 
   // Fallback: derive from filename
   if (!artist || !title) {
