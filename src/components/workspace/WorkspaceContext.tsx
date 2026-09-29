@@ -163,6 +163,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
   }
   const autoScanned = useRef(false);
+  /** relative path / filename → full on-disk path, from native scans. */
+  const nativePaths = useRef(new Map<string, string>());
+  function indexNativeFiles(scanned: ReadonlyArray<{ name: string; path: string; relativePath: string }>) {
+    for (const f of scanned) {
+      nativePaths.current.set(f.relativePath.toLowerCase(), f.path);
+      nativePaths.current.set(f.name.toLowerCase(), f.path);
+    }
+  }
   useEffect(() => {
     let active = true;
     supabase.auth.getUser().then(async ({ data }) => {
