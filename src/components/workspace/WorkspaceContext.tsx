@@ -212,6 +212,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       }
       const label = result.label ?? root.split("/").filter(Boolean).pop() ?? "Music";
       setFolderRoot(label, result.root ?? root);
+      indexNativeFiles(result.files);
       setSources(prev => [...prev.filter(s => s.label !== label), { label, tracks: tracksFromAudioFiles(asFileLike(result.files ?? [])) }]);
       toast.success(`${result.files.length} tracks indexed from ${label}`);
       return;
