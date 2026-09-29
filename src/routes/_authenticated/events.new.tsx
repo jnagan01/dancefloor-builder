@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import JSZip from "jszip";
@@ -80,22 +80,18 @@ import type { ResultSong } from "@/lib/danceFloor";
 import { saveMusicLibrary, loadMusicLibrary, clearMusicLibrary } from "@/lib/libraryStore";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
+import { useWorkspace } from "@/components/workspace/WorkspaceContext";
+import { saveWorkflow, updateWorkflow, getWorkflow } from "@/lib/history.functions";
+import { pageHead } from "@/lib/pageHead";
+import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
 import { UserCog } from "lucide-react";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
 export const Route = createFileRoute("/_authenticated/events/new")({
+  validateSearch: (search: Record<string, unknown>) => ({ eventId: typeof search.eventId === "string" ? search.eventId : undefined }),
   component: Index,
-  head: () => ({
-    meta: [
-      { title: "Wedding Dance Floor List Builder" },
-      {
-        name: "description",
-        content:
-          "Upload client playlists, choose the vibe, and export DJ-ready CSVs for Warm Up, Transition, and Peak.",
-      },
-    ],
-  }),
+  head: () => pageHead("New event", "Build and review three dance floor playlists from your client song list."),
 });
 
 const DECADES = ["1960s", "1970s", "1980s", "1990s", "2000s", "2010s", "2020s"];
@@ -134,6 +130,21 @@ interface DirHandleLike {
 }
 
 function Index() {
+  const navigate = useNavigate();
+  const { eventId: openedEventId } = Route.useSearch();
+  const workspace = useWorkspace();
+  const saveEventFn = useServerFn(saveWorkflow);
+  const updateEventFn = useServerFn(updateWorkflow);
+  const getEventFn = useServerFn(getWorkflow);
+  const [savedEventId, setSavedEventId] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
+  const [buffer, setBuffer] = useState(2);
+  const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
+  const [spotifyLink, setSpotifyLink] = useState("");
+  const [matchLimit, setMatchLimit] = useState(10);
+  const [matcherOn, setMatcherOn] = useState(true);
+  const [software, setSoftware] = useState("VirtualDJ");
+  useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
   const [songs, setSongs] = useState<Song[]>([]);
   const [hours, setHours] = useState<string>("3");
   const [artistsInput, setArtistsInput] = useState("");
@@ -245,6 +256,11 @@ function Index() {
     setPreviewTarget(null);
     setIsGenerating(false);
     setDanceFloorConfirmed(false);
+    setSavedEventId(null);
+    setSaveState("idle");
+    setBuffer(2);
+    setActiveSection("warmUp");
+    setSpotifyLink("");
     setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
 
@@ -289,7 +305,8 @@ function Index() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const saved = await loadMusicLibrary();
+      const { data: { user } } = await supabase.auth.getUser();
+      const saved = user ? await loadMusicLibrary(user.id) : null;
       if (cancelled) { libraryHydrated.current = true; return; }
       if (saved && saved.sources.length) {
         const libs = saved.sources.map((s) => buildLibrary(s.tracks));
@@ -320,10 +337,12 @@ function Index() {
       const total = sources.reduce((n, s) => n + s.tracks.length, 0);
       let savedAt: number | null = null;
       if (sources.length) {
-        savedAt = await saveMusicLibrary(sources);
+        const { data: { user } } = await supabase.auth.getUser();
+        savedAt = user ? await saveMusicLibrary(sources, user.id) : null;
         setLibrarySavedAt(savedAt);
       } else {
-        await clearMusicLibrary();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) await clearMusicLibrary(user.id);
         setLibrarySavedAt(null);
       }
       const { data: { user } } = await supabase.auth.getUser();
@@ -354,73 +373,12 @@ function Index() {
   const audioIndex = useMemo<AudioIndex>(() => {
     const allFiles: File[] = [];
     for (const s of audioSources) allFiles.push(...s.files);
+    allFiles.push(...workspace.files);
     return buildAudioIndex(allFiles, []);
-  }, [audioSources]);
+  }, [audioSources, workspace.files]);
 
-  async function addAudioFolder() {
-    const files = await pickDirectoryFiles();
-    const audio = files.filter((f) => /\.(mp3|m4a|wav|flac|ogg|aac|aif{1,2}|wma|opus|alac)$/i.test(f.name));
-    if (!audio.length) {
-      toast.error("No audio files found in selected folder");
-      return;
-    }
-    const rel = (audio[0] as File & { webkitRelativePath?: string }).webkitRelativePath || "";
-    const name = rel.split("/")[0] || `Folder ${audioSources.length + 1}`;
-    const tracks = tracksFromAudioFiles(audio);
-    const folderLib = buildLibrary(tracks);
-    const sourceLabel = `Folder: ${name} (${tracks.length} files)`;
-    const newLibIndex = libraries.length;
-    const updatedLibs = [...libraries, folderLib];
-    setLibraries(updatedLibs);
-    setLibrarySources([...librarySources, sourceLabel]);
-    setAudioSources((prev) => [
-      ...prev,
-      { id: `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, kind: "folder", name, files: audio, libraryIndex: newLibIndex },
-    ]);
-    // Re-match if results exist
-    if (result) {
-      const merged = mergeLibraries(updatedLibs);
-      const m: Record<string, SongMatch> = {};
-      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-        result[section].forEach((s, i) => {
-          m[songKey(section, i, s)] = matchSong(s, merged);
-        });
-      });
-      setMatches(m);
-    }
-    toast.success(`Added folder "${name}" · ${audio.length} audio file${audio.length === 1 ? "" : "s"}`);
-  }
-
-  function removeAudioSource(id: string) {
-    const target = audioSources.find((s) => s.id === id);
-    if (!target) return;
-    // Drop the synthesized library too and remap remaining indices.
-    const removedIdx = target.libraryIndex;
-    const newLibs = libraries.filter((_, i) => i !== removedIdx);
-    const newSrcLabels = librarySources.filter((_, i) => i !== removedIdx);
-    setLibraries(newLibs);
-    setLibrarySources(newSrcLabels);
-    setAudioSources((prev) =>
-      prev
-        .filter((s) => s.id !== id)
-        .map((s) =>
-          s.libraryIndex > removedIdx ? { ...s, libraryIndex: s.libraryIndex - 1 } : s,
-        ),
-    );
-    // Re-match against the reduced library set
-    if (result) {
-      const merged = newLibs.length ? mergeLibraries(newLibs) : null;
-      const m: Record<string, SongMatch> = {};
-      if (merged) {
-        (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-          result[section].forEach((s, i) => {
-            m[songKey(section, i, s)] = matchSong(s, merged);
-          });
-        });
-      }
-      setMatches(m);
-    }
-  }
+  async function addAudioFolder() { await workspace.addFolder(); }
+  function removeAudioSource(id: string) { const i = workspace.sources.findIndex(s => s.label === id); if(i>=0) workspace.removeSource(i); }
 
   const resolveLocalFile = useMemo(
     () => (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioFile(audioIndex, q),
@@ -434,10 +392,20 @@ function Index() {
 
 
 
-  const mergedLibrary = useMemo<VdjLibrary | null>(() => {
-    if (!libraries.length) return null;
-    return mergeLibraries(libraries);
-  }, [libraries]);
+  const mergedLibrary = workspace.library;
+
+  useEffect(() => {
+    if (!result || !mergedLibrary) return;
+    setMatches(prev => {
+      const next = { ...prev };
+      for (const sec of ["warmUp","transition","peak"] as SectionKey[]) result[sec].forEach((song,i) => {
+        const key = songKey(sec,i,song);
+        const prevPath = prev[key]?.trackIndex != null ? mergedLibrary.tracks[prev[key].trackIndex]?.filePath : undefined;
+        if (!prev[key] || (prev[key].trackIndex != null && !prevPath)) next[key] = matchSong(song,mergedLibrary);
+      });
+      return next;
+    });
+  }, [mergedLibrary, result]);
 
   const duplicateKeys = useMemo(() => {
     const counts = new Map<string, number>();
@@ -563,6 +531,56 @@ function Index() {
 
 
 
+  function eventSnapshot(nextResult: GenerationResult, nextMatches: Record<string,SongMatch>) {
+    const selections: Record<string,{paths:string[];excluded?:boolean}> = {};
+    for (const sec of ["warmUp","transition","peak"] as SectionKey[]) nextResult[sec].forEach((song,i) => {
+      const key = songKey(sec,i,song), match = nextMatches[key];
+      if (!match || !mergedLibrary) return;
+      const paths = [match.trackIndex,...(match.extraTrackIndices??[])].filter((v):v is number=>typeof v==="number").map(v=>mergedLibrary.tracks[v]?.filePath).filter((v):v is string=>!!v);
+      if(paths.length || match.excludedFromVdj) selections[key]={paths,excluded:match.excludedFromVdj};
+    });
+    return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
+      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer},
+      lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
+  }
+  useEffect(() => {
+    if(!openedEventId) return;
+    let cancelled=false;
+    getEventFn({data:{id:openedEventId}}).then(row=>{
+      if(cancelled)return;
+      const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
+      const lists=row.lists as unknown as WorkflowSnapshot["lists"];
+      if(!inputs || !lists)return;
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
+      const per=Math.max(lists.warmUp.length,lists.transition.length,lists.peak.length);
+      setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),shortfall:{warmUp:0,transition:0,peak:0,total:0},duplicatesRemoved:0,blockedCount:0});
+      setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
+    }).catch(()=>toast.error("Could not open this event"));
+    return ()=>{cancelled=true};
+  },[openedEventId]);
+  const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean}>|null>(null);
+  useEffect(()=>{
+    if(!openedEventId)return;
+    let cancelled=false;
+    getEventFn({data:{id:openedEventId}}).then(row=>{if(!cancelled)savedSelectionsRef.current=(row.lists as unknown as WorkflowSnapshot["lists"])?.selections??null});
+    return ()=>{cancelled=true};
+  },[openedEventId]);
+  useEffect(()=>{
+    if(!result || !mergedLibrary || !savedSelectionsRef.current)return;
+    const selections=savedSelectionsRef.current;savedSelectionsRef.current=null;
+    setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(selections)){
+      const indices=value.paths.map(path=>mergedLibrary.tracks.findIndex(t=>t.filePath===path)).filter(i=>i>=0);
+      next[key]={...(next[key]??{status:"Missing From Library",confidence:0,alternatives:[]}),...(indices.length?{status:"Manually Matched" as const,confidence:1,trackIndex:indices[0],extraTrackIndices:indices.slice(1)}:{}),excludedFromVdj:value.excluded};
+    }return next});
+  },[result,mergedLibrary]);
+  useEffect(()=>{
+    if(!result || !savedEventId || saveState==="error")return;
+    const timer=setTimeout(async()=>{
+      setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});setSaveState("saved")}catch{setSaveState("error");toast.error("Could not save event changes")}
+    },1000);
+    return ()=>clearTimeout(timer);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer,savedEventId]);
+
   async function generate() {
     if (!songs.length) {
       toast.error("Upload at least one song first");
@@ -583,6 +601,7 @@ function Index() {
       uploaded: uniqueSongs,
       hours: hoursNum,
       expand: false,
+      buffer,
       prefs,
     });
 
@@ -783,7 +802,7 @@ function Index() {
             // MAX_TOKENS truncation, over-cautious schema output). Keep asking
             // for the remaining shortfall until we either fill the section or
             // hit the attempt cap. Without this a single short response leaves
-            // the playlist under the 2× buffer target.
+            // the playlist under the ${buffer}× buffer target.
             // The server recommender accepts at most 40 songs per call. Long
             // dance floors can need more than that for a single section, so
             // chunk the shortfall into multiple AI calls instead of sending an
@@ -890,6 +909,7 @@ function Index() {
             uploaded: uniqueSongs,
             hours: hoursNum,
             expand: true,
+            buffer,
             prefs,
           });
           // Track keys across ALL sections so a library song can't be added
@@ -958,6 +978,9 @@ function Index() {
     if (genTokenRef.current !== myToken) return;
 
     setResult(r);
+    setActiveSection("warmUp");
+    setSavedEventId(null);
+    setSaveState("saving");
     setMatches({});
     if (mergedLibrary) {
       // fresh matching
@@ -972,6 +995,11 @@ function Index() {
     } else {
       matchesRef.current = {};
     }
+    try {
+      const snapshot = eventSnapshot(r, matchesRef.current);
+      const saved = await saveEventFn({data:snapshot});
+      if(genTokenRef.current === myToken){setSavedEventId(saved.id);setSaveState("saved");}
+    }catch{if(genTokenRef.current === myToken){setSaveState("error");toast.error("Lists generated, but the event could not be saved. Try regenerating.");}}
     const fs = r.finalShortfall;
     if (fs && fs.total > 0) {
       const parts: string[] = [];
@@ -1189,6 +1217,7 @@ function Index() {
   function chooseAlternative(key: string, trackIndex: number) {
     const m = matches[key];
     if (!m) return;
+    if(trackIndex === -1){updateMatch(key,{status:"Missing From Library",confidence:0,trackIndex:undefined,alternatives:[],extraTrackIndices:m.extraTrackIndices??[]});return;}
     const others = [m.trackIndex, ...m.alternatives].filter((i): i is number => i != null && i !== trackIndex);
     const extras = (m.extraTrackIndices ?? []).filter((i) => i !== trackIndex);
     updateMatch(key, { status: "Manually Matched", confidence: 1, trackIndex, alternatives: others, extraTrackIndices: extras });
@@ -1603,6 +1632,7 @@ function Index() {
       uploaded: songsArg,
       hours: safeHours,
       expand: false,
+      buffer,
       prefs: { artists: [], genres: [], decades: [], notes: "" },
     });
     return {
@@ -1623,7 +1653,7 @@ function Index() {
     });
     // debouncedExpand is intentionally part of deps for visual pending state only
     void debouncedExpand;
-  }, [debouncedSongs, debouncedHours, debouncedExpand]);
+  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer]);
 
 
   const [step, setStep] = useState(1);
@@ -1632,9 +1662,9 @@ function Index() {
   }, [result]);
 
   const stepDefs: StepDef[] = [
-    { id: 1, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
-    { id: 2, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
-    { id: 3, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && hoursNum > 0) },
+    { id: 1, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && hoursNum > 0) },
+    { id: 2, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
+    { id: 3, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
     { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result },
     { id: 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
   ];
@@ -1643,88 +1673,12 @@ function Index() {
     <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
 
-      <header className="app-drag sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur">
-        <div className="desktop-titlebar-pad mx-auto grid max-w-7xl grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-primary/40 bg-primary/10 text-primary">
-              <Music className="h-5 w-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="display-title truncate text-xl leading-tight sm:text-2xl">
-                Wedding Dance Floor Builder
-              </h1>
-              <p className="truncate text-xs text-muted-foreground">
-                Upload the client list · shape the energy · export DJ-ready sets
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setMusicSetupOpen(true)}>
-              <FolderOpen className="mr-1 h-4 w-4" /> Music setup
-              {libraries.length > 0 && vdjDirHandle && (
-                <Check className="ml-1 h-3 w-3 text-success" />
-              )}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setProfileOpen(true)}>
-              <UserCog className="mr-1 h-4 w-4" /> Profile
-            </Button>
-            <DjAccountBar
-              hasGeneratedLists={!!result}
-              getSnapshot={(): WorkflowSnapshot => ({
-                inputs: {
-                  // Blank "Add song" rows (or rows with only one field filled)
-                  // would fail history validation, so drop them from the snapshot.
-                  songs: songs.filter((s) => s.artist.trim() !== "" && s.song.trim() !== ""),
-                  hours,
-                  artistsInput,
-                  genresInput,
-                  decades,
-                  notes,
-                  doNotPlayInput,
-                  expand,
-                  eventName,
-                },
-                lists: result ? { warmUp: result.warmUp, transition: result.transition, peak: result.peak } : { warmUp: [], transition: [], peak: [] },
-              })}
-              applySnapshot={(s) => {
-                // Start from a fully clean workflow so matches, open search
-                // panels, preview player state, etc. from the previous
-                // workflow cannot bleed into the loaded one.
-                clearWorkflowState();
-                setSongs(s.inputs.songs ?? []);
-                setHours(s.inputs.hours ?? "3");
-                setArtistsInput(s.inputs.artistsInput ?? "");
-                setGenresInput(s.inputs.genresInput ?? "");
-                setDecades(s.inputs.decades ?? []);
-                setNotes(s.inputs.notes ?? "");
-                setDoNotPlayInput(s.inputs.doNotPlayInput ?? "");
-                setExpand(!!s.inputs.expand);
-                setEventName(s.inputs.eventName ?? "");
-                if (s.lists && (s.lists.warmUp.length || s.lists.transition.length || s.lists.peak.length)) {
-                  const per = Math.max(s.lists.warmUp.length, s.lists.transition.length, s.lists.peak.length);
-                  setResult({
-                    warmUp: s.lists.warmUp,
-                    transition: s.lists.transition,
-                    peak: s.lists.peak,
-                    targetTotal: per * 3,
-                    perSectionTarget: per,
-                    perSectionBase: per,
-                    shortfall: { warmUp: 0, transition: 0, peak: 0, total: 0 },
-                    duplicatesRemoved: 0,
-                    blockedCount: 0,
-                  });
-                } else {
-                  setResult(null);
-                }
-              }}
-              resetWorkflow={clearWorkflowState}
-            />
-          </div>
-        </div>
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-6">
+        <div><p className="text-xs font-semibold uppercase text-primary">Events / Builder</p><h1 className="mt-2 font-display text-4xl">{eventName||"New event"}</h1></div>
+        <div className="text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}</div>
       </header>
-
-      <div className="mx-auto grid max-w-7xl gap-6 px-4 pb-32 pt-6 sm:px-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
-        <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
+      <div className="grid gap-6 pb-32 pt-6 xl:grid-cols-[12rem_minmax(0,1fr)]">
+        <aside className="min-w-0 xl:sticky xl:top-6 lg:self-start">
           <StepRail steps={stepDefs} current={step} onSelect={setStep} />
         </aside>
 
@@ -1734,179 +1688,6 @@ function Index() {
         {step === 1 && (
         <StepPanel
           eyebrow="Step 1"
-          title="Upload song lists"
-          description="Drop one or more CSV or TXT files. Processed in your browser."
-        >
-
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
-              }}
-              onClick={() => fileRef.current?.click()}
-              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 text-center transition-colors ${
-                dragOver ? "border-primary bg-accent" : "border-border hover:bg-accent/50"
-              }`}
-            >
-              <Upload className={`mb-3 h-8 w-8 ${dragOver ? "text-primary" : "text-muted-foreground"}`} />
-              <p className="font-medium">
-                {dragOver ? "Release to upload" : "Drop CSV or TXT files here, or click to browse"}
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">Multiple files supported · max 5 MB each</p>
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                accept=".csv,.txt"
-                className="hidden"
-                onChange={(e) => {
-                  if (e.target.files) handleFiles(e.target.files);
-                  e.target.value = "";
-                }}
-              />
-            </div>
-            {uploadStatuses.length > 0 && (
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Files</p>
-                  <Button variant="ghost" size="sm" onClick={() => setUploadStatuses([])}>
-                    Clear
-                  </Button>
-                </div>
-                <ul className="space-y-2">
-                  {uploadStatuses.map((s) => (
-                    <li
-                      key={s.id}
-                      className={`rounded-md border px-3 py-2 text-sm ${
-                        s.state === "error"
-                          ? "border-destructive/50 bg-destructive/10"
-                          : s.state === "done"
-                            ? "border-primary/40 bg-primary/5"
-                            : "border-border"
-                      }`}
-                    >
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
-                        <span className="truncate font-medium">{s.name}</span>
-                        <span className="shrink-0 text-xs">
-                          {s.state === "parsing" && <span className="text-muted-foreground">Reading…</span>}
-                          {s.state === "done" && <span className="text-primary">✓ {s.count} songs</span>}
-                          {s.state === "error" && <span className="text-destructive">Not imported</span>}
-                        </span>
-                      </div>
-                      {s.message && <p className="mt-1 text-xs text-muted-foreground">{s.message}</p>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </StepPanel>
-        )}
-
-
-        {/* Step 2 */}
-        {step === 2 && (
-        <StepPanel
-          eyebrow="Step 2"
-          title="Review imported songs"
-          description={`${songs.length} song${songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows`}
-          actions={
-            <>
-              {duplicateKeys.size > 0 && (
-                <Button variant="destructive" size="sm" onClick={removeDuplicates}>
-                  <AlertTriangle className="mr-1 h-4 w-4" />
-                  Remove {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""}
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => setSongs([...songs, { artist: "", song: "" }])}>
-                <Plus className="mr-1 h-4 w-4" />
-                Add row
-              </Button>
-            </>
-          }
-        >
-
-            {duplicateKeys.size > 0 && (
-              <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                <span className="flex-1">
-                  {duplicateKeys.size} unique duplicate{duplicateKeys.size > 1 ? "s" : ""} detected.
-                </span>
-              </div>
-            )}
-            {songs.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">No songs imported yet</p>
-            ) : (
-              <div className="max-h-96 overflow-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Artist</TableHead>
-                      <TableHead>Song</TableHead>
-                      <TableHead className="w-12"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {songs.map((s, i) => {
-                      const isDup = duplicateKeys.has(dedupeKey(s.artist, s.song));
-                      return (
-                        <TableRow key={i} className={isDup ? "bg-destructive/10 border-destructive/30" : ""}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {isDup && (
-                                <span title="Duplicate song" className="shrink-0">
-                                  <AlertTriangle className="h-4 w-4 text-destructive" />
-                                </span>
-                              )}
-                              <Input
-                                value={s.artist}
-                                onChange={(e) => {
-                                  const next = [...songs];
-                                  next[i] = { ...next[i], artist: e.target.value };
-                                  setSongs(next);
-                                }}
-                                className={isDup ? "border-destructive/50" : ""}
-                              />
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              value={s.song}
-                              onChange={(e) => {
-                                const next = [...songs];
-                                next[i] = { ...next[i], song: e.target.value };
-                                setSongs(next);
-                              }}
-                              className={isDup ? "border-destructive/50" : ""}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              aria-label="Remove song"
-                              onClick={() => setSongs(songs.filter((_, j) => j !== i))}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </StepPanel>
-        )}
-
-
-        {/* Step 3 */}
-        {step === 3 && (
-        <StepPanel
-          eyebrow="Step 3"
           title="Dance floor details"
           description="Set the vibe and length of the open dance floor."
         >
@@ -1941,7 +1722,7 @@ function Index() {
                 />
                 {hoursNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
-                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs (<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section, 2× buffer)
+                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs (<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section, {buffer}× buffer)
                   </p>
                 )}
               </div>
@@ -1962,7 +1743,7 @@ function Index() {
                 </div>
                 {hoursNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
-                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (2× buffer)
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section ({buffer}× buffer)
 
                   </p>
                 )}
@@ -2089,6 +1870,180 @@ function Index() {
         )}
 
 
+        {/* Step 2 */}
+        {step === 2 && (
+        <StepPanel
+          eyebrow="Step 2"
+          title="Upload song lists"
+          description="Drop one or more CSV or TXT files. Processed in your browser."
+        >
+
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+              }}
+              onClick={() => fileRef.current?.click()}
+              className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-10 text-center transition-colors ${
+                dragOver ? "border-primary bg-accent" : "border-border hover:bg-accent/50"
+              }`}
+            >
+              <Upload className={`mb-3 h-8 w-8 ${dragOver ? "text-primary" : "text-muted-foreground"}`} />
+              <p className="font-medium">
+                {dragOver ? "Release to upload" : "Drop CSV or TXT files here, or click to browse"}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">Multiple files supported · max 5 MB each</p>
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                accept=".csv,.txt"
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files) handleFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </div>
+            <div className="mt-6 border-t border-border pt-5"><Label htmlFor="spotify-url">Spotify playlist link (optional)</Label><div className="mt-2 flex flex-wrap gap-2"><Input id="spotify-url" type="url" value={spotifyLink} onChange={e=>setSpotifyLink(e.target.value)} placeholder="https://open.spotify.com/playlist/…" className="min-w-52 flex-1"/><Button variant="outline" onClick={()=>toast.info("Spotify does not provide track lists from public links without account access. Export that playlist as CSV or TXT and upload it above.")}>Import link</Button></div><p className="mt-2 text-xs text-muted-foreground">Public links may require Spotify access. CSV or TXT always works without connecting an account.</p></div>
+            {uploadStatuses.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Files</p>
+                  <Button variant="ghost" size="sm" onClick={() => setUploadStatuses([])}>
+                    Clear
+                  </Button>
+                </div>
+                <ul className="space-y-2">
+                  {uploadStatuses.map((s) => (
+                    <li
+                      key={s.id}
+                      className={`rounded-md border px-3 py-2 text-sm ${
+                        s.state === "error"
+                          ? "border-destructive/50 bg-destructive/10"
+                          : s.state === "done"
+                            ? "border-primary/40 bg-primary/5"
+                            : "border-border"
+                      }`}
+                    >
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+                        <span className="truncate font-medium">{s.name}</span>
+                        <span className="shrink-0 text-xs">
+                          {s.state === "parsing" && <span className="text-muted-foreground">Reading…</span>}
+                          {s.state === "done" && <span className="text-primary">✓ {s.count} songs</span>}
+                          {s.state === "error" && <span className="text-destructive">Not imported</span>}
+                        </span>
+                      </div>
+                      {s.message && <p className="mt-1 text-xs text-muted-foreground">{s.message}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </StepPanel>
+        )}
+
+
+        {/* Step 3 */}
+        {step === 3 && (
+        <StepPanel
+          eyebrow="Step 3"
+          title="Review imported songs"
+          description={`${songs.length} song${songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows`}
+          actions={
+            <>
+              {duplicateKeys.size > 0 && (
+                <Button variant="destructive" size="sm" onClick={removeDuplicates}>
+                  <AlertTriangle className="mr-1 h-4 w-4" />
+                  Remove {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""}
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => setSongs([...songs, { artist: "", song: "" }])}>
+                <Plus className="mr-1 h-4 w-4" />
+                Add row
+              </Button>
+            </>
+          }
+        >
+
+            {duplicateKeys.size > 0 && (
+              <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <span className="flex-1">
+                  {duplicateKeys.size} unique duplicate{duplicateKeys.size > 1 ? "s" : ""} detected.
+                </span>
+              </div>
+            )}
+            {songs.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">No songs imported yet</p>
+            ) : (
+              <div className="max-h-96 overflow-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Artist</TableHead>
+                      <TableHead>Song</TableHead>
+                      <TableHead className="w-12"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {songs.map((s, i) => {
+                      const isDup = duplicateKeys.has(dedupeKey(s.artist, s.song));
+                      return (
+                        <TableRow key={i} className={isDup ? "bg-destructive/10 border-destructive/30" : ""}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {isDup && (
+                                <span title="Duplicate song" className="shrink-0">
+                                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                                </span>
+                              )}
+                              <Input
+                                value={s.artist}
+                                onChange={(e) => {
+                                  const next = [...songs];
+                                  next[i] = { ...next[i], artist: e.target.value };
+                                  setSongs(next);
+                                }}
+                                className={isDup ? "border-destructive/50" : ""}
+                              />
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={s.song}
+                              onChange={(e) => {
+                                const next = [...songs];
+                                next[i] = { ...next[i], song: e.target.value };
+                                setSongs(next);
+                              }}
+                              className={isDup ? "border-destructive/50" : ""}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Remove song"
+                              onClick={() => setSongs(songs.filter((_, j) => j !== i))}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </StepPanel>
+        )}
+
+
         {/* Step 4 */}
         {step === 4 && (
         <StepPanel
@@ -2104,18 +2059,19 @@ function Index() {
                 </p>
                 {hoursNum > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground transition-opacity duration-150">
-                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section (2× buffer)
+                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section ({buffer}× buffer)
                   </p>
                 )}
               </div>
               <Switch checked={expand} onCheckedChange={setExpand} className="shrink-0" />
             </div>
+            <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Song buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer} onChange={e=>setBuffer(Number(e.target.value))}>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
             {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
               <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
 
                 <div>
-                  <p className="font-medium">Not enough uploaded songs to hit the 2× buffer.</p>
+                  <p className="font-medium">Not enough uploaded songs to hit the {buffer}× buffer.</p>
                   <p className="mt-1 text-xs">
                     Short by <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.warmUp}</span> in Warm Up,
                     {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.transition}</span> in Transition,
@@ -2131,184 +2087,6 @@ function Index() {
         )}
 
 
-        {/* Music setup status (moved out of the linear flow — configured once per device from your profile menu) */}
-        {(() => {
-          const folderCount = audioSources.length;
-          const fileCount = audioSources.reduce((n, s) => n + s.files.length, 0);
-          const hasLibrary = libraries.length > 0;
-          const hasExport = !!vdjDirHandle;
-          if (hasLibrary && hasExport) return null;
-          const isNewUser = musicSetupCompleted === false && !hasLibrary && !hasExport;
-
-          // Only the export folder is missing — music is connected, so don't claim otherwise.
-          if (hasLibrary && !hasExport) {
-            return (
-              <div className="flex flex-wrap items-center gap-3 rounded-md border border-border bg-muted/40 p-3 text-sm text-muted-foreground">
-                <FolderOpen className="h-4 w-4 flex-shrink-0" />
-                <div className="flex-1 min-w-[200px]">
-                  <p className="font-medium text-foreground">
-                    Music connected{folderCount > 0 ? ` — ${folderCount} folder${folderCount === 1 ? "" : "s"}, ${fileCount.toLocaleString()} file${fileCount === 1 ? "" : "s"}` : ""}.
-                  </p>
-                  <p className="text-xs">
-                    VirtualDJ export folder isn't linked yet. Pick one to export playlists directly instead of downloading files.
-                  </p>
-                </div>
-                <Button size="sm" variant="outline" onClick={() => setMusicSetupOpen(true)}>
-                  <FolderOpen className="mr-1 h-4 w-4" /> Choose export folder
-                </Button>
-              </div>
-            );
-          }
-
-          return (
-            <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
-              <AlertTriangle className="h-4 w-4 flex-shrink-0 text-amber-600" />
-              <div className="flex-1 min-w-[200px]">
-                {isNewUser ? (
-                  <>
-                    <p className="font-medium">First time here? Connect your music folders.</p>
-                    <p className="text-xs">One-time setup on this device — add your music folder and pick your VirtualDJ export folder.</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="font-medium">No music folder is connected on this device.</p>
-                    <p className="text-xs">
-                      {hasExport ? "Export folder is linked." : "Export folder isn't linked either."} Add a music folder to enable playback matching and direct exports.
-                    </p>
-                  </>
-                )}
-              </div>
-              <Button size="sm" onClick={() => setMusicSetupOpen(true)}>
-                <FolderOpen className="mr-1 h-4 w-4" /> {isNewUser ? "Set up music folders" : "Open music setup"}
-              </Button>
-            </div>
-          );
-        })()}
-
-
-
-
-
-        {/* Profile & settings */}
-        <ProfileSettingsDialog
-          open={profileOpen}
-          onOpenChange={setProfileOpen}
-          savedTrackCount={mergedLibrary?.tracks.length ?? 0}
-          savedAt={librarySavedAt}
-          sourceLabels={librarySources}
-          onForgetLibrary={() => { clearLibraries(); }}
-          onUpdateLibrary={() => { setProfileOpen(false); setMusicSetupOpen(true); }}
-        />
-
-        {/* Music setup dialog (formerly Step 5) */}
-        <Dialog open={musicSetupOpen} onOpenChange={setMusicSetupOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Music setup</DialogTitle>
-              <DialogDescription>
-                Connect your music folders and VirtualDJ export folder. Your track list is saved and reloads automatically the next time you sign in on this computer.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                <Button variant="default" size="sm" onClick={addAudioFolder}>
-                  <Plus className="mr-1 h-4 w-4" /> Add music folder
-                </Button>
-                <Button variant="outline" size="sm" onClick={selectDatabaseXml}>
-                  <FolderOpen className="mr-1 h-4 w-4" /> Add VirtualDJ database.xml (optional)
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => selectFolder("VirtualDJ Folder")}>
-                  <FolderOpen className="mr-1 h-4 w-4" /> Scan VirtualDJ folder
-                </Button>
-                {libraries.length > 0 && (
-                  <Button variant="ghost" size="sm" onClick={clearLibraries}>
-                    <X className="mr-1 h-4 w-4" /> Clear libraries
-                  </Button>
-                )}
-              </div>
-              {mergedLibrary ? (
-                <div className="rounded-md border bg-muted/30 p-3 text-sm">
-                  <p className="font-medium">
-                    Indexed {mergedLibrary.tracks.length} tracks from {libraries.length} source{libraries.length > 1 ? "s" : ""}
-                  </p>
-                  <ul className="mt-1 space-y-1 pl-0 text-xs text-muted-foreground">
-                    {librarySources.map((s, i) => {
-                      const folderSource = audioSources.find((a) => a.libraryIndex === i);
-                      return (
-                        <li key={i} className="flex items-center gap-2">
-                          <span className="flex-1 truncate">• {s}</span>
-                          {folderSource && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-6 px-2"
-                              onClick={() => removeAudioSource(folderSource.id)}
-                              title="Remove folder"
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {audioIndex.files.length > 0 && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {audioIndex.files.length.toLocaleString()} audio file{audioIndex.files.length === 1 ? "" : "s"} indexed for in-app playback
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Add a music folder (also used as the playback source) or a VirtualDJ <code>database.xml</code> to match the generated set and enable exports.
-                </p>
-              )}
-              <div className="flex flex-col gap-2 rounded-md border bg-muted/30 p-3 sm:flex-row sm:flex-wrap sm:items-center">
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    VirtualDJ export folder
-                  </span>
-                  {vdjDirHandle ? (
-                    <span className="flex flex-wrap items-center gap-2 text-sm">
-                      <Check className="h-4 w-4 text-emerald-500" />
-                      <span className="font-medium truncate">{vdjDirName}</span>
-                      {vdjDirSavedAt ? (
-                        <span className="text-xs text-muted-foreground">· Saved {formatSavedAt(vdjDirSavedAt)}</span>
-                      ) : null}
-                      <Badge variant="secondary" className="text-xs">remembered on this device</Badge>
-                    </span>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      Not set — exports will download as files until you pick a folder.
-                    </span>
-                  )}
-                </div>
-                {!vdjDirHandle ? (
-                  <Button variant="default" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
-                    <FolderOpen className="mr-1 h-4 w-4" />
-                    Choose export folder
-                  </Button>
-                ) : (
-                  <>
-                    <Button variant="outline" size="sm" onClick={chooseMyListsFolder} disabled={!canDirWrite}>
-                      <FolderOpen className="mr-1 h-4 w-4" /> Change
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={clearMyListsFolder}>
-                      <X className="mr-1 h-4 w-4" /> Forget
-                    </Button>
-                  </>
-                )}
-                {!canDirWrite && (
-                  <span className="w-full text-xs text-muted-foreground">
-                    Direct saving unsupported in this browser — files will download instead.
-                  </span>
-                )}
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-
         {/* Results */}
         {step === 5 && result && (
           <StepPanel
@@ -2318,105 +2096,7 @@ function Index() {
           >
             <div className="space-y-4">
 
-              {summary && (
-                <>
-                  <div className="rounded-lg border bg-muted/30 p-4">
-                    <h3 className="mb-2 font-medium">Match summary</h3>
-                    <div className="grid grid-cols-2 gap-2 text-sm sm:grid-cols-3 md:grid-cols-6">
-                      <Stat label="Total" value={summary.total} />
-                      <Stat label="Matched" value={summary.matched} tone="success" />
-                      <Stat label="Possible" value={summary.possible} tone="warning" />
-                      <Stat label="Multiple" value={summary.multiple} tone="warning" />
-                      <Stat label="Missing" value={summary.missing} tone="destructive" />
-                      <Stat label="Excluded from VDJ" value={summary.excluded} />
-                    </div>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {summary.csvIncluded} songs included in CSV reference exports.
-                    </p>
-                    {(result.duplicatesRemoved > 0 || result.blockedCount > 0) && (
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                        {result.duplicatesRemoved > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-2 py-1 text-amber-900 dark:text-amber-200">
-                            <AlertTriangle className="h-3 w-3 text-amber-600" />
-                            {result.duplicatesRemoved} duplicate{result.duplicatesRemoved === 1 ? "" : "s"} removed from uploads
-                          </span>
-                        )}
-                        {result.blockedCount > 0 && (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-red-500/10 px-2 py-1 text-red-900 dark:text-red-200">
-                            <X className="h-3 w-3 text-red-600" />
-                            {result.blockedCount} blocked by Do Not Play list
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded-lg border bg-muted/30 p-4">
-                    <div className="mb-2 flex items-center gap-2">
-                      <h3 className="font-medium">Song source summary</h3>
-                      {isPendingLive && (
-                        <span className="inline-flex items-center rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary animate-pulse">
-                          recalculating…
-                        </span>
-                      )}
-                    </div>
-                    <p className="mb-3 text-xs text-muted-foreground transition-opacity duration-150">
-                      Target total <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · target per section <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> (2× buffer over <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSectionBase}</span> needed)
-                    </p>
-                    {!expand && liveTargets.shortfall.total > 0 && (
-                      <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200">
-                        <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
-                        <div>
-                          <p className="font-medium">Uploads fall short of the 2× buffer.</p>
-                          <p className="mt-1">
-                            Short by <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.warmUp}</span> in Warm Up,
-                            {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.transition}</span> in Transition,
-                            {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.peak}</span> in Peak.
-                            Enable “Add additional songs” in Step 4 to fill the gap.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
-                      {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
-                        const label = sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak";
-                        const c = summary.sourceCounts[sec];
-                        return (
-                          <div key={sec} className="rounded-md border bg-background p-3">
-                            <p className="mb-1 font-medium">{label}</p>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="inline-flex items-center gap-1 text-muted-foreground">
-                                <Upload className="h-3 w-3" /> From uploads
-                              </span>
-                              <span className="font-semibold">{c.uploads}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="inline-flex items-center gap-1 text-muted-foreground">
-                                <Sparkles className="h-3 w-3" /> AI suggestion
-                              </span>
-                              <span className="font-semibold">{c.ai}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="inline-flex items-center gap-1 text-muted-foreground">
-                                <Database className="h-3 w-3" /> Built-in library
-                              </span>
-                              <span className="font-semibold">{c.library}</span>
-                            </div>
-                            <div className="mt-1 border-t pt-1 flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">Total</span>
-                              <span className="font-semibold">{c.uploads + c.ai + c.library}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-muted-foreground">Target</span>
-                              <span className="font-semibold">{liveTargets.perSection}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </>
-              )}
+              {summary && <div className="grid gap-4 sm:grid-cols-2"><div className="border-y border-border py-4"><h3 className="font-semibold">Match summary · {activeSection === "warmUp" ? "Warm Up" : activeSection === "transition" ? "Transition" : "Peak"}</h3><div className="mt-3 flex gap-5 text-sm"><span>{summary.perSection[activeSection].matched} matched</span><span className="text-warning">{summary.perSection[activeSection].attention} need attention</span><span>{summary.perSection[activeSection].total} total</span></div></div><div className="border-y border-border py-4"><h3 className="font-semibold">Song sources</h3><div className="mt-3 flex gap-5 text-sm"><span>{summary.sourceCounts[activeSection].uploads} Upload</span><span>{summary.sourceCounts[activeSection].ai} AI</span><span>{summary.sourceCounts[activeSection].library} Library</span></div></div></div>}
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button onClick={exportAllZip}>
@@ -2473,7 +2153,7 @@ function Index() {
                 </div>
               ) : null}
 
-              <Tabs defaultValue="warmUp">
+              <Tabs value={activeSection} onValueChange={v=>setActiveSection(v as SectionKey)}>
                 <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
                   {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
                     const label = sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak";
@@ -2487,15 +2167,15 @@ function Index() {
                           </span>
                           {ps && (
                             <span className="flex flex-wrap items-center gap-1 text-[10px] font-normal">
-                              <span className="inline-flex items-center gap-0.5 rounded-full bg-green-500/15 px-1.5 py-0.5 text-green-700 dark:text-green-300">
+                              <span className="inline-flex items-center gap-0.5 rounded-full bg-success/15 px-1.5 py-0.5 text-success">
                                 <CheckCircle2 className="h-2.5 w-2.5" /> {ps.matched} matched
                               </span>
                               {ps.attention > 0 ? (
-                                <span className="inline-flex items-center gap-0.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-warning">
                                   <AlertTriangle className="h-2.5 w-2.5" /> {ps.attention} need attention
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-0.5 rounded-full bg-green-500/15 px-1.5 py-0.5 text-green-700 dark:text-green-300">
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-success/15 px-1.5 py-0.5 text-success">
                                   all matched
                                 </span>
                               )}
@@ -2526,7 +2206,10 @@ function Index() {
                       onChoose={chooseAlternative}
                       onMarkUnresolved={markUnresolved}
                       onToggleExclude={toggleExclude}
-                      onToggleExtra={toggleExtraPick}
+                       onToggleExtra={toggleExtraPick}
+                       matchLimit={matchLimit}
+                       matcherOn={matcherOn}
+                       software={software}
                      onOpenSearch={openSearch}
                      onPickLocalFile={pickLocalFileForMatch}
                       onPreview={(t) => setPreviewTarget(t)}
@@ -2539,7 +2222,7 @@ function Index() {
         )}
 
         <footer className="space-y-1 py-6 text-center text-xs text-muted-foreground">
-          <p>Files are processed in your browser. Nothing is uploaded or stored.</p>
+          <p>Audio files stay on your computer. Event lists and your library index are saved for your account.</p>
           <p className="text-[11px] opacity-80">
             Dancefloor Builder v{APP_VERSION} · Updated {formatBuildDate()}
           </p>
@@ -2548,7 +2231,7 @@ function Index() {
       </div>
 
       {/* Sticky action bar */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/70 bg-background/90 backdrop-blur">
+      <div className="fixed inset-x-0 bottom-0 z-30 lg:left-60 border-t border-border/70 bg-background/90 backdrop-blur">
         <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 sm:px-6">
           <Button
             variant="ghost"
@@ -2560,7 +2243,7 @@ function Index() {
           </Button>
           <p className="min-w-0 truncate text-center text-xs text-muted-foreground">
             {hoursNum > 0
-              ? `Target ${liveTargets.total} songs · ${liveTargets.perSection} per section (2× buffer)`
+              ? `Target ${liveTargets.total} songs · ${liveTargets.perSection} per section (${buffer}× buffer)`
               : "Set the dance floor length to see song targets"}
           </p>
           <div className="flex shrink-0 items-center gap-2">
@@ -2568,7 +2251,7 @@ function Index() {
               <Button
                 size="sm"
                 onClick={() => {
-                  if (step === 3 && hoursNum > 0) setDanceFloorConfirmed(true);
+                  if (step === 1 && hoursNum > 0) setDanceFloorConfirmed(true);
                   setStep((s) => Math.min(5, s + 1));
                 }}
               >
@@ -2840,12 +2523,14 @@ interface SectionViewProps {
   onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
   onPickLocalFile?: (key: string, file: File) => void;
   onPreview?: (target: PreviewTarget) => void;
+  matchLimit: number; matcherOn: boolean; software: string;
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile, matchLimit, matcherOn, software } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [filter,setFilter] = useState("all");
   const toggleExpanded = (key: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -2860,7 +2545,7 @@ function SectionView(props: SectionViewProps) {
       ? "Choose a folder, then write directly to it"
       : "Direct folder export requires a Chromium-based browser";
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       <div className="flex flex-wrap justify-end gap-2">
         <Button size="sm" variant="outline" onClick={onExportCsv}>
           <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} CSV
@@ -2890,7 +2575,8 @@ function SectionView(props: SectionViewProps) {
           <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} M3U → VirtualDJ
         </Button>
       </div>
-      <div className="max-h-[32rem] overflow-auto rounded-md border">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4"><div className="flex gap-1 overflow-x-auto">{[["all","All songs"],["matched","Matched"],["unmatched","Unmatched"],["review","Review needed"]].map(([value,label])=><Button key={value} size="sm" variant={filter===value?"secondary":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>)}</div><div className="text-xs text-muted-foreground">{songs.length} songs · {software}</div></div>
+      <div className="overflow-x-auto border-y border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -2919,6 +2605,8 @@ function SectionView(props: SectionViewProps) {
               const key = songKey(section, i, s);
               const m = matches[key];
               const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
+              const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
+              if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && (isMatched || !m)) return null;
               return (
                 <Fragment key={key}>
                 <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
@@ -3012,7 +2700,9 @@ function SectionView(props: SectionViewProps) {
                         onPick={(ti) => onChoose(key, ti)}
                         onToggleExtra={(ti) => onToggleExtra(key, ti)}
                         onPreview={onPreview}
-                        onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
+                         onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
+                         matchLimit={matchLimit}
+                         matcherOn={matcherOn}
                       />
                     </TableCell>
                   </TableRow>
@@ -3035,7 +2725,7 @@ function InlineMatchSearch({
   onPick,
   onToggleExtra,
   onPreview,
-  onPickLocalFile,
+  onPickLocalFile, matchLimit, matcherOn,
 }: {
   song: Song;
   library: VdjLibrary;
@@ -3045,6 +2735,7 @@ function InlineMatchSearch({
   onToggleExtra: (trackIndex: number) => void;
   onPreview?: (target: PreviewTarget) => void;
   onPickLocalFile?: (file: File) => void;
+  matchLimit: number; matcherOn: boolean;
 }) {
   const localFileRef = useRef<HTMLInputElement>(null);
   const defaultQuery = `${song.artist} ${song.song}`.trim();
@@ -3060,14 +2751,14 @@ function InlineMatchSearch({
     setShowAll(false);
   }
   const debounced = useDebounce(query, 150);
-  const limit = showAll ? 200 : 10;
+  const limit = showAll ? 200 : matchLimit;
   const allResults = useMemo(() => {
     const q = debounced.trim();
     if (!q) return [];
     return searchLibrary(q, library, limit);
   }, [debounced, library, limit]);
   const results = allResults;
-  const hasMore = !showAll && results.length >= 10;
+  const hasMore = !showAll && results.length >= matchLimit;
   const extraSet = new Set(extraTrackIndices);
   const totalSelected = (currentTrackIndex != null ? 1 : 0) + extraTrackIndices.length;
 
@@ -3117,40 +2808,22 @@ function InlineMatchSearch({
           </span>
         )}
       </div>
-      {results.length === 0 ? (
+      {!matcherOn ? <p className="text-xs text-muted-foreground">Automatic matches are turned off in Settings.</p> : results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Browse local file to pick one from your computer" : ""}.
         </p>
       ) : (
         <>
-          <ul className={`space-y-0.5 ${showAll ? "max-h-72 overflow-auto rounded border" : ""}`}>
+          <ul className="space-y-1">
             {results.map((ti) => {
               const t = library.tracks[ti];
               const isCurrent = ti === currentTrackIndex;
               const isExtra = extraSet.has(ti);
+              const selected = isCurrent || isExtra;
               return (
                 <li key={ti} className="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
-                  <Button
-                    size="sm"
-                    variant={isCurrent ? "default" : "outline"}
-                    className="h-6 shrink-0 px-2 text-xs"
-                    onClick={() => onPick(ti)}
-                    disabled={isCurrent}
-                    title="Set as primary match"
-                  >
-                    {isCurrent ? <Check className="h-3 w-3" /> : "Pick"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={isExtra ? "secondary" : "ghost"}
-                    className="h-6 shrink-0 px-2 text-xs"
-                    onClick={() => onToggleExtra(ti)}
-                    disabled={isCurrent}
-                    title={isExtra ? "Remove additional pick" : "Also include this track in the export"}
-                  >
-                    {isExtra ? "✓ Also" : "+ Also"}
-                  </Button>
-                  {onPreview && (
+                   <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="mt-1 shrink-0"/>
+{onPreview && (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -3161,10 +2834,7 @@ function InlineMatchSearch({
                       <Play className="h-3 w-3" />
                     </Button>
                   )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium">{t.artist} — {t.title}</p>
-                    <p className="truncate text-[11px] text-muted-foreground" title={t.filePath}>{t.filePath}</p>
-                  </div>
+                   <div className="min-w-0 flex-1"><p className="break-words font-medium">{t.artist} — {t.title}</p><p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p></div><div className="shrink-0 text-right text-[11px] text-muted-foreground"><p>Plays —</p><p>{t.key||"—"} · {t.bpm||"—"} BPM</p></div>
                 </li>
               );
             })}
@@ -3181,7 +2851,7 @@ function InlineMatchSearch({
                 className="h-6 px-2 text-xs"
                 onClick={() => setShowAll((v) => !v)}
               >
-                {showAll ? "Show top 10" : "Search full library"}
+                {showAll ? `Show top ${matchLimit}` : "Search full library"}
               </Button>
             )}
           </div>
