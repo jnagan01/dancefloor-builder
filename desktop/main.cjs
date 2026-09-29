@@ -2,6 +2,7 @@
 const { app, BrowserWindow, shell, Menu, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+const { checkForUpdates } = require("./updater.cjs");
 
 const APP_URL = process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app";
 const APP_ORIGIN = new URL(APP_URL).origin;
