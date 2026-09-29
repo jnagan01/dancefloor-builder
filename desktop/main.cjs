@@ -228,6 +228,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     buildMenu();
+    registerVirtualDjHandlers();
     createWindow();
 
     app.on("activate", () => {
