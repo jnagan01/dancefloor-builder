@@ -1,9 +1,9 @@
 {
   "name": "dancefloor-builder-desktop",
   "productName": "Dancefloor Builder",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
-  "description": "Dancefloor Builder — playlist builder for DJs",
+  "description": "Dancefloor Builder \u2014 playlist builder for DJs",
   "author": "Exceptional Entertainment",
   "main": "main.cjs",
   "scripts": {
@@ -21,10 +21,21 @@
       "output": "release",
       "buildResources": "build"
     },
-    "files": ["main.cjs", "package.json"],
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "package.json"
+    ],
     "mac": {
       "category": "public.app-category.music",
-      "target": [{ "target": "dmg", "arch": ["arm64"] }],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "icon": "build/icon.icns",
       "darkModeSupport": true,
       "hardenedRuntime": true,
@@ -33,8 +44,17 @@
     "dmg": {
       "title": "Dancefloor Builder",
       "contents": [
-        { "x": 140, "y": 200, "type": "file" },
-        { "x": 400, "y": 200, "type": "link", "path": "/Applications" }
+        {
+          "x": 140,
+          "y": 200,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
       ]
     }
   }
