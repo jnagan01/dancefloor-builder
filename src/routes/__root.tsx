@@ -123,6 +123,14 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // The macOS desktop shell hides the title bar, so mark the app as running
+  // inside Electron and give the header room for the traffic-light buttons.
+  React.useEffect(() => {
+    if (typeof navigator !== "undefined" && /Electron/i.test(navigator.userAgent)) {
+      document.documentElement.classList.add("is-desktop-shell");
+    }
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
