@@ -2432,8 +2432,23 @@ function SectionView(props: SectionViewProps) {
           <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} M3U → VirtualDJ
         </Button>
       </div>
-       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3"><div className="flex max-w-full gap-1 overflow-x-auto">{[["all","All songs"],["matched","Matched"],["unmatched","Unmatched"],["review","Review needed"]].map(([value,label])=><Button key={value} size="sm" className="shrink-0" variant={filter===value?"secondary":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>)}</div><div className="text-xs text-muted-foreground">{songs.length} songs · {software}</div></div>
-      {library && <div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Track matcher</span>{([ ["first","First result"],["most","Most played"],["all","Select all"],["none","Unselect all"] ] as const).map(([mode,label])=><Button key={mode} size="sm" variant={reviewMode===mode?"secondary":"ghost"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>)}{reviewMode === "most" && <span className="text-warning">Play counts unavailable for folder-only sources; first result is used.</span>}</div>}
+       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border border-border bg-card px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Track matcher options</span>
+        {library && ([["first","Select first"],["most","Select most played"],["all","Select all"],["none","Unselect all"]] as const).map(([mode,label])=>(
+          <Button key={mode} size="sm" className="h-7 px-2 text-xs" variant={reviewMode===mode?"secondary":"outline"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>
+        ))}
+        <span className="text-xs tabular-nums text-muted-foreground">
+          <strong className="text-foreground">{matchedCount}</strong> / {songs.length} matched
+          {reviewCount > 0 && <> · <span className="text-warning">{reviewCount} review</span></>}
+        </span>
+        <div className="ml-auto flex flex-wrap gap-1">
+          {[["all","All"],["matched","Matched"],["unmatched","Unmatched"],["review","Review"]].map(([value,label])=>(
+            <Button key={value} size="sm" className={`h-7 rounded-full px-3 text-xs ${filter===value?"":"text-muted-foreground"}`} variant={filter===value?"default":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>
+          ))}
+        </div>
+        {reviewMode === "most" && <p className="w-full text-xs text-warning">Play counts unavailable for folder-only sources; first result is used.</p>}
+      </div>
+
        <div className="space-y-3">
         {songs.length === 0 ? (
           <p className="border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">No songs in this section</p>
