@@ -2,6 +2,8 @@
 // using IndexedDB (handles are structured-cloneable). Browser-only; all
 // methods no-op safely when `indexedDB` is unavailable.
 
+import { isNativeDirHandle, makeNativeDirHandle, supportsNativeFolders } from "./desktopBridge";
+
 const DB_NAME = "dancefloor-store";
 const STORE = "handles";
 const DB_VERSION = 1;
