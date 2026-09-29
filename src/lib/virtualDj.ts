@@ -145,6 +145,8 @@ function trackFromNode(node: Element): VdjTrack | null {
     year,
     decade,
     remix: remixTag || remix,
+    playCount,
+    lastPlayTime,
   };
 }
 
