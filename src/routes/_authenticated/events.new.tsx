@@ -499,7 +499,7 @@ function Index() {
       if (!match || !mergedLibrary) return;
       const paths = [match.trackIndex,...(match.extraTrackIndices??[])].filter((v):v is number=>typeof v==="number").map(v=>mergedLibrary.tracks[v]?.filePath).filter((v):v is string=>!!v);
       if(paths.length || match.excludedFromVdj) selections[key]={paths,excluded:match.excludedFromVdj};
-      else if (!savedSelectionsRef.current?.[key]) delete selections[key];
+      else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
       inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer},
@@ -528,13 +528,13 @@ function Index() {
   },[openedEventId]);
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean}>|null>(null);
   useEffect(()=>{
-    if(!result || !mergedLibrary || !savedSelectionsRef.current)return;
-    const selections=savedSelectionsRef.current;savedSelectionsRef.current=null;
+    if(!result || !workspace.library || !savedSelectionsRef.current)return;
+    const selections=savedSelectionsRef.current;
     setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(selections)){
       const indices=value.paths.map(path=>mergedLibrary.tracks.findIndex(t=>t.filePath===path)).filter(i=>i>=0);
       next[key]={...(next[key]??{status:"Missing From Library",confidence:0,alternatives:[]}),...(indices.length?{status:"Manually Matched" as const,confidence:1,trackIndex:indices[0],extraTrackIndices:indices.slice(1)}:{}),excludedFromVdj:value.excluded};
     }return next});
-  },[result,mergedLibrary]);
+  },[result,workspace.library]);
   useEffect(()=>{
     if(!result || !savedEventId || saveState==="error" || (!restoredEvent.current && !!openedEventId))return;
     const revision=++saveRevision.current;
