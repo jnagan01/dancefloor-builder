@@ -34,6 +34,8 @@ import {
   mergeLibraries,
   matchSong,
   searchLibrary,
+  searchLibraryScored,
+
   buildVirtualDjXml,
   buildM3u,
   pickDirectoryFiles,
