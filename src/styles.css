@@ -4,14 +4,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design system — "Noir & Gold".
- *
- * Dark, editorial wedding-luxe booth aesthetic: near-black surfaces,
- * champagne gold accents, serif display type over a clean grotesque body.
- *
- * All colors MUST use oklch and be referenced through semantic tokens.
- */
+/* Noir-champagne DJ workbench. All color roles use semantic oklch tokens. */
 
 @theme inline {
   --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
@@ -135,7 +128,7 @@
   --gradient-gold: linear-gradient(120deg, var(--gold-soft), var(--gold));
 }
 
-/* Light mode: warm ivory paper with the same gold accent. */
+/* Light mode keeps the same semantic roles and contrast. */
 .light {
   --background: oklch(0.985 0.006 90);
   --foreground: oklch(0.2 0.008 90);
@@ -217,7 +210,7 @@
   .workspace-main table tbody tr { transition: none; }
 }
 
-/* Gold hairline framing for feature surfaces. */
+/* Legacy gold utilities remain for existing dialogs and form states. */
 @utility panel-gold {
   border: 1px solid color-mix(in oklab, var(--gold) 26%, transparent);
   background: linear-gradient(
@@ -234,7 +227,7 @@
 @utility eyebrow {
   font-size: 0.6875rem;
   line-height: 1;
-  letter-spacing: 0.18em;
+   letter-spacing: 0;
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
@@ -242,7 +235,7 @@
 @utility display-title {
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: -0.015em;
+   letter-spacing: 0;
 }
 
 /* macOS desktop shell: let the top bar drag the window, keep controls clickable. */
