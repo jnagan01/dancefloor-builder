@@ -47,6 +47,9 @@ assert(xml.includes("<VirtualFolder"), "buildVirtualDjXml emits VirtualFolder");
 
 const m3u = mod.buildM3u([item], merged);
 assert(m3u.includes("/music/"), `buildM3u emits path: ${m3u}`);
+assert(m3u.includes("#EXTVDJ:<filesize>1234</filesize><artist>Artist</artist><title>Song</title>"), `EXTVDJ line: ${m3u}`);
+const txt = mod.buildTxtPlaylist([item, { song: { artist: "Nobody", song: "Missing" } } as never], merged);
+assert(txt.includes("1. Artist - Song") && txt.includes("2. Nobody - Missing (not in library)"), `txt: ${txt}`);
 
 // 1b. Building a library from raw audio files (no XML) must work and match.
 const folderTracks = mod.tracksFromAudioFiles([

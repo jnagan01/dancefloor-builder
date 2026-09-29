@@ -36,7 +36,7 @@ import {
   searchLibrary,
   searchLibraryScored,
 
-  buildVirtualDjXml,
+  buildTxtPlaylist,
   buildM3u,
   pickDirectoryFiles,
   pickDirectoryHandle,
@@ -1230,7 +1230,7 @@ function Index() {
     const unmatched = unmatchedCountForResult(exportResult, section);
     if (unmatched === 0) return true;
     return window.confirm(
-      `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ XML/M3U playlist unless matched. Continue?`,
+      `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ M3U playlist unless matched. Continue?`,
     );
   }
 
@@ -1243,11 +1243,11 @@ function Index() {
     if (!exportResult) return;
     if (!confirmUnmatched(exportResult, section)) return;
     const refs = getSectionRefsForResult(exportResult, section);
-    const xml = buildVirtualDjXml(refs, mergedLibrary);
+    const xml = buildTxtPlaylist(refs, mergedLibrary);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
-      new Blob([xml], { type: "application/xml" }),
-      `${prefix}${SECTION_FILES[section]}.xml`,
+      new Blob([xml], { type: "text/plain" }),
+      `${prefix}${SECTION_FILES[section]}.txt`,
     );
   }
 
@@ -1283,15 +1283,15 @@ function Index() {
       return;
     }
     const refs = getSectionRefsForResult(exportResult, section);
-    const xml = buildVirtualDjXml(refs, mergedLibrary);
+    const xml = buildTxtPlaylist(refs, mergedLibrary);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    const fname = `${prefix}${SECTION_FILES[section]}.xml`;
+    const fname = `${prefix}${SECTION_FILES[section]}.txt`;
     try {
       await writeFileToDir(dir, fname, xml);
       toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
     } catch {
       toast.error("Could not write to VirtualDJ folder, downloading instead");
-      downloadBlob(new Blob([xml], { type: "application/xml" }), fname);
+      downloadBlob(new Blob([xml], { type: "text/plain" }), fname);
     }
   }
 
@@ -1340,7 +1340,7 @@ function Index() {
       ];
       if (mergedLibrary) {
         const refs = getSectionRefsForResult(exportResult, section);
-        files.push({ name: `${prefix}${SECTION_FILES[section]}.xml`, data: buildVirtualDjXml(refs, mergedLibrary) });
+        files.push({ name: `${prefix}${SECTION_FILES[section]}.txt`, data: buildTxtPlaylist(refs, mergedLibrary) });
         files.push({ name: `${prefix}${SECTION_FILES[section]}.m3u`, data: buildM3u(refs, mergedLibrary) });
       }
       for (const f of files) {
@@ -1376,7 +1376,7 @@ function Index() {
       zip.file(`${prefix}${SECTION_FILES[section]}.csv`, songsToCsv(exportResult[section]));
       if (mergedLibrary) {
         const refs = getSectionRefsForResult(exportResult, section);
-        zip.file(`${prefix}${SECTION_FILES[section]}.xml`, buildVirtualDjXml(refs, mergedLibrary));
+        zip.file(`${prefix}${SECTION_FILES[section]}.txt`, buildTxtPlaylist(refs, mergedLibrary));
         zip.file(`${prefix}${SECTION_FILES[section]}.m3u`, buildM3u(refs, mergedLibrary));
       }
     });
@@ -2411,7 +2411,7 @@ function SectionView(props: SectionViewProps) {
           <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} CSV
         </Button>
         <Button size="sm" variant="outline" onClick={onExportXml} disabled={!library || software !== "VirtualDJ"}>
-          <Download className="mr-1 h-4 w-4" /> Download VirtualDJ {sectionLabel} XML
+          <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} song list (.txt)
         </Button>
         <Button size="sm" variant="outline" onClick={onExportM3u} disabled={!library}>
           <Download className="mr-1 h-4 w-4" /> Download M3U {sectionLabel} Playlist
@@ -2423,7 +2423,7 @@ function SectionView(props: SectionViewProps) {
           disabled={!library || !canWriteToVdj || software !== "VirtualDJ"}
           title={vdjTitle}
         >
-          <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} XML → VirtualDJ
+          <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} .txt → VirtualDJ
         </Button>
         <Button
           size="sm"

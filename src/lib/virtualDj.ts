@@ -418,6 +418,12 @@ export function buildVirtualDjXml(items: ExportSongRef[], lib?: VdjLibrary): str
   return lines.join("\n");
 }
 
+function vdjTag(name: string, value?: string): string {
+  const v = (value ?? "").toString().trim();
+  return v ? `<${name}>${xmlEscape(v)}</${name}>` : "";
+}
+
+/** VirtualDJ-native .m3u: #EXTVDJ metadata line + standard #EXTINF + path. */
 export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary): string {
   const lines: string[] = ["#EXTM3U"];
   for (const item of items) {
@@ -427,11 +433,42 @@ export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary): string {
     for (const ti of indices) {
       const t = lib.tracks[ti];
       if (!t) continue;
-      lines.push(`#EXTINF:-1,${t.artist} - ${t.title}`);
+      const vdj =
+        vdjTag("filesize", t.fileSize) +
+        vdjTag("artist", t.artist) +
+        vdjTag("title", t.title) +
+        vdjTag("remix", t.remix) +
+        vdjTag("bpm", t.bpm) +
+        vdjTag("key", t.key);
+      lines.push(`#EXTVDJ:${vdj}`);
+      lines.push(`#EXTINF:-1,${t.artist ? `${t.artist} - ` : ""}${t.title}`);
       lines.push(t.filePath);
     }
   }
-  return lines.join("\n");
+  return lines.join("\r\n") + "\r\n";
+}
+
+/** Plain-text set list: numbered "Artist - Title", extras indented, unmatched flagged. */
+export function buildTxtPlaylist(items: ExportSongRef[], lib?: VdjLibrary): string {
+  const lines: string[] = [];
+  let n = 0;
+  for (const item of items) {
+    if (item.match?.excludedFromVdj) continue;
+    n += 1;
+    const label = `${item.song.artist ? `${item.song.artist} - ` : ""}${item.song.song}`;
+    const ti = item.match?.trackIndex;
+    const main = ti != null && lib ? lib.tracks[ti] : undefined;
+    if (!main) {
+      lines.push(`${n}. ${label} (not in library)`);
+      continue;
+    }
+    lines.push(`${n}. ${main.artist ? `${main.artist} - ` : ""}${main.title}`);
+    for (const ei of item.match?.extraTrackIndices ?? []) {
+      const t = lib?.tracks[ei];
+      if (t) lines.push(`   + ${t.artist ? `${t.artist} - ` : ""}${t.title}`);
+    }
+  }
+  return lines.join("\r\n") + "\r\n";
 }
 
 // --- File System Access helpers ---
