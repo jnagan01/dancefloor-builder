@@ -2,8 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Play, Pause, X } from "lucide-react";
 import type { PreviewTarget } from "@/components/PreviewPlayer";
+import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 export function WaveformPlayer({target,resolve,onClose}:{target:PreviewTarget|null;resolve:(q:{artist?:string;title?:string;filePath?:string})=>File|undefined;onClose:()=>void}){
- const file=useMemo(()=>target?resolve({artist:target.artist,title:target.song,filePath:target.filePath}):undefined,[target,resolve]);
+ const { ensureLocalFile } = useWorkspace();
+ const resolved=useMemo(()=>target?resolve({artist:target.artist,title:target.song,filePath:target.filePath}):undefined,[target,resolve]);
+ const [diskFile,setDiskFile]=useState<File|null>(null);
+ // Desktop app: read the remembered file straight off disk when it isn't loaded.
+ useEffect(()=>{let active=true;setDiskFile(null);if(!target||resolved)return;void ensureLocalFile(target.filePath).then(f=>{if(active)setDiskFile(f)});return()=>{active=false}},[target,resolved,ensureLocalFile]);
+ const file=resolved??diskFile??undefined;
   const [url,setUrl]=useState<string|null>(null),[playing,setPlaying]=useState(false),[progress,setProgress]=useState(0),[duration,setDuration]=useState(0),[bars,setBars]=useState<number[]>([]);
  const audio=useRef<HTMLAudioElement>(null);
  useEffect(()=>{if(!file){setUrl(null);setBars([]);return}const next=URL.createObjectURL(file);setUrl(next);setPlaying(false);setProgress(0);return()=>URL.revokeObjectURL(next)},[file]);
