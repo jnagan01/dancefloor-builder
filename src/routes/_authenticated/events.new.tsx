@@ -341,11 +341,14 @@ function Index() {
 
 
 
-  const mergedLibrary = workspace.library;
+  // An empty index still renders inline search, so a DJ can browse a local file
+  // before connecting an entire folder.
+  const emptyLibrary = useMemo(() => buildLibrary([]), []);
+  const mergedLibrary = workspace.library ?? emptyLibrary;
 
   useEffect(() => {
     const picked = pendingFilePick.current;
-    if (!picked || !mergedLibrary) return;
+    if (!picked) return;
     const index = mergedLibrary.tracks.findIndex(t => t.filePath === picked.path);
     if (index < 0) return;
     pendingFilePick.current = null;
@@ -353,7 +356,7 @@ function Index() {
   }, [mergedLibrary]);
 
   useEffect(() => {
-    if (!result || !mergedLibrary) return;
+    if (!result || !matcherOn || !mergedLibrary.tracks.length) return;
     setMatches(prev => {
       const next = { ...prev };
       for (const sec of ["warmUp","transition","peak"] as SectionKey[]) result[sec].forEach((song,i) => {
