@@ -38,6 +38,7 @@ import {
 
   buildTxtPlaylist,
   buildM3u,
+  countUnresolvedPaths,
   pickDirectoryFiles,
   pickDirectoryHandle,
   writeFileToDir,
@@ -1260,6 +1261,7 @@ function Index() {
     if (!exportResult) return;
     const refs = getSectionRefsForResult(exportResult, section);
     const m3u = buildM3u(refs, mergedLibrary);
+    warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
       new Blob([m3u], { type: "audio/x-mpegurl" }),
@@ -1309,6 +1311,7 @@ function Index() {
     }
     const refs = getSectionRefsForResult(exportResult, section);
     const m3u = buildM3u(refs, mergedLibrary);
+    warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
     try {
@@ -1317,6 +1320,14 @@ function Index() {
     } catch {
       toast.error("Could not write to VirtualDJ folder, downloading instead");
       downloadBlob(new Blob([m3u], { type: "audio/x-mpegurl" }), fname);
+    }
+  }
+
+  function warnUnresolvedPaths(count: number) {
+    if (count > 0) {
+      toast.warning(
+        `${count} song${count === 1 ? "" : "s"} may not be found by VirtualDJ — set the full folder location in Settings › DJ software & folders.`,
+      );
     }
   }
 
@@ -1331,6 +1342,7 @@ function Index() {
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const sections: SectionKey[] = ["warmUp", "transition", "peak"];
     let written = 0;
+    let unresolvedTotal = 0;
     let failed = 0;
     for (const section of sections) {
       const list = exportResult[section];
@@ -1342,6 +1354,7 @@ function Index() {
         const refs = getSectionRefsForResult(exportResult, section);
         files.push({ name: `${prefix}${SECTION_FILES[section]}.txt`, data: buildTxtPlaylist(refs, mergedLibrary) });
         files.push({ name: `${prefix}${SECTION_FILES[section]}.m3u`, data: buildM3u(refs, mergedLibrary) });
+        unresolvedTotal += countUnresolvedPaths(refs, mergedLibrary);
       }
       for (const f of files) {
         try {
@@ -1360,6 +1373,7 @@ function Index() {
         failed += 1;
       }
     }
+    warnUnresolvedPaths(unresolvedTotal);
     if (failed === 0) {
       toast.success(`Saved ${written} file${written === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}`);
     } else {

@@ -53,6 +53,7 @@ interface ElectronFiles {
   isAvailable: true;
   chooseFolder(): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
   writeFile(dirPath: string, name: string, contents: string): Promise<{ ok: boolean; error?: string }>;
+  getPathForFile?(file: File): string;
 }
 
 function filesBridge(): ElectronFiles | null {
@@ -116,4 +117,13 @@ export async function chooseNativeFolder(): Promise<NativeDirHandle | null> {
   const result = await api.chooseFolder();
   if (!result.ok || !result.path) return null;
   return makeNativeDirHandle(result.path);
+}
+
+/** Full on-disk path of a picked file (desktop app only), or "" when unknown. */
+export function getNativeFilePath(file: File): string {
+  try {
+    return filesBridge()?.getPathForFile?.(file) ?? "";
+  } catch {
+    return "";
+  }
 }

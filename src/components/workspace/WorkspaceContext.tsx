@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
+import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
 import { loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
-import { readVdjDatabase, isDesktopApp } from "@/lib/desktopBridge";
+import { readVdjDatabase, isDesktopApp, getNativeFilePath } from "@/lib/desktopBridge";
 import { toast } from "sonner";
 
 type Source = { label: string; tracks: VdjTrack[] };
@@ -94,6 +94,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const audio = picked.filter(f => /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus|alac)$/i.test(f.name));
     if (!audio.length) { toast.error("No audio files found in that folder"); return; }
     const label = (audio[0].webkitRelativePath || audio[0].name).split("/")[0];
+    // Desktop app: learn the folder's full location so exports use full paths.
+    const abs = getNativeFilePath(audio[0]);
+    const rel = audio[0].webkitRelativePath || audio[0].name;
+    if (abs && abs.replace(/\\/g, "/").endsWith(rel)) setFolderRoot(label, abs.slice(0, abs.length - rel.length) + label);
     setSources(prev => [...prev.filter(s => s.label !== label), { label, tracks: tracksFromAudioFiles(audio) }]);
     setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name).split("/")[0] !== label), ...audio]);
     toast.success(`${audio.length} tracks indexed from ${label}`);

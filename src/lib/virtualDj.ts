@@ -423,8 +423,60 @@ function vdjTag(name: string, value?: string): string {
   return v ? `<${name}>${xmlEscape(v)}</${name}>` : "";
 }
 
+// --- Full folder locations for scanned music folders ---
+export const FOLDER_ROOTS_KEY = "dancefloor:musicFolderRoots";
+
+export function getFolderRoots(): Record<string, string> {
+  if (typeof localStorage === "undefined") return {};
+  try {
+    return JSON.parse(localStorage.getItem(FOLDER_ROOTS_KEY) || "{}") as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+export function setFolderRoot(label: string, root: string): void {
+  if (typeof localStorage === "undefined") return;
+  const roots = getFolderRoots();
+  const clean = root.trim().replace(/[\\/]+$/, "");
+  if (clean) roots[label] = clean;
+  else delete roots[label];
+  localStorage.setItem(FOLDER_ROOTS_KEY, JSON.stringify(roots));
+}
+
+export const isAbsolutePath = (p: string) => /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(p);
+
+/**
+ * Turns a folder-relative path like "!! MY MUSIC !!/Song.mp3" into a full
+ * path using the saved location of that folder. Returns null when unknown.
+ */
+export function resolveExportPath(filePath: string, roots: Record<string, string> = getFolderRoots()): string | null {
+  if (!filePath || isAbsolutePath(filePath)) return filePath || null;
+  const parts = filePath.split(/[\\/]/);
+  const root = roots[parts[0]];
+  if (!root) return null;
+  const sep = /^[A-Za-z]:\\/.test(root) ? "\\" : "/";
+  const cleanRoot = root.replace(/[\\/]+$/, "");
+  const rootName = cleanRoot.split(/[\\/]/).pop();
+  const rest = rootName === parts[0] ? parts.slice(1) : parts;
+  return [cleanRoot, ...rest].join(sep);
+}
+
+/** Number of exported tracks whose full location isn't known. */
+export function countUnresolvedPaths(items: ExportSongRef[], lib?: VdjLibrary, roots = getFolderRoots()): number {
+  let n = 0;
+  for (const item of items) {
+    if (item.match?.excludedFromVdj || item.match?.trackIndex == null || !lib) continue;
+    for (const ti of [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])]) {
+      const t = lib.tracks[ti];
+      if (t && resolveExportPath(t.filePath, roots) == null) n += 1;
+    }
+  }
+  return n;
+}
+
 /** VirtualDJ-native .m3u: #EXTVDJ metadata line + standard #EXTINF + path. */
-export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary): string {
+export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary, roots: Record<string, string> = getFolderRoots()): string {
   const lines: string[] = ["#EXTM3U"];
   for (const item of items) {
     if (item.match?.excludedFromVdj) continue;
@@ -442,7 +494,7 @@ export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary): string {
         vdjTag("key", t.key);
       lines.push(`#EXTVDJ:${vdj}`);
       lines.push(`#EXTINF:-1,${t.artist ? `${t.artist} - ` : ""}${t.title}`);
-      lines.push(t.filePath);
+      lines.push(resolveExportPath(t.filePath, roots) ?? t.filePath);
     }
   }
   return lines.join("\r\n") + "\r\n";
