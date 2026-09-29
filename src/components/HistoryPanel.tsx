@@ -37,12 +37,14 @@ export interface WorkflowSnapshot {
     notes: string;
     doNotPlayInput: string;
     expand: boolean;
+    buffer?: number;
     eventName: string;
   };
   lists: {
     warmUp: Array<Song & { fromUpload?: boolean }>;
     transition: Array<Song & { fromUpload?: boolean }>;
     peak: Array<Song & { fromUpload?: boolean }>;
+    selections?: Record<string, { paths: string[]; excluded?: boolean }>;
   };
 }
 
