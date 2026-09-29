@@ -81,6 +81,7 @@ import type { ResultSong } from "@/lib/danceFloor";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
+import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktopBridge";
 import { saveWorkflow, updateWorkflow, getWorkflow } from "@/lib/history.functions";
 import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
