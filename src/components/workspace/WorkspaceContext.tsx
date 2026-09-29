@@ -1,8 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
+import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
 import { loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
-import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle } from "@/lib/desktopBridge";
+import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle, supportsNativeScan, scanNativeFolder, chooseNativeMusicFolder, readNativeAudioFile } from "@/lib/desktopBridge";
 import { pickDirectoryHandle } from "@/lib/virtualDj";
 import { saveDirHandle, saveDirHandleMeta, loadDirHandle, verifyReadWrite, type AnyHandle } from "@/lib/dirHandleStore";
 import { toast } from "sonner";
@@ -12,6 +12,8 @@ type Workspace = {
   sources: Source[]; files: File[]; library: VdjLibrary | null; loading: boolean;
   addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => void;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
+  /** Loads a remembered file from disk (desktop app) so it can be played. */
+  ensureLocalFile: (filePath?: string) => Promise<File | null>;
   vdjSyncedAt: number | null; vdjPath: string | null; vdjSyncing: boolean;
   syncVirtualDj: (customPath?: string | null) => Promise<boolean>;
   vdjRoot: string | null; vdjTrackCount: number | null;
@@ -28,6 +30,9 @@ type BrowserDir = AnyHandle & {
 export const VDJ_PATH_KEY = "dancefloor:vdjDatabasePath";
 export const VDJ_SYNC_KEY = "dancefloor:vdjSyncedAt";
 const basename = (p: string) => (p.split(/[\\/]/).pop() ?? p).toLowerCase();
+/** Native scan entries → the shape the track indexer expects. */
+const asFileLike = (files: ReadonlyArray<{ name: string; size?: number; relativePath: string }>) =>
+  files.map(f => ({ name: f.name, size: f.size, webkitRelativePath: f.relativePath }));
 const Context = createContext<Workspace | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [sources, setSources] = useState<Source[]>([]);
@@ -157,6 +162,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return true;
     }
   }
+  const autoScanned = useRef(false);
+  /** relative path / filename → full on-disk path, from native scans. */
+  const nativePaths = useRef(new Map<string, string>());
+  function indexNativeFiles(scanned: ReadonlyArray<{ name: string; path: string; relativePath: string }>) {
+    for (const f of scanned) {
+      nativePaths.current.set(f.relativePath.toLowerCase(), f.path);
+      nativePaths.current.set(f.name.toLowerCase(), f.path);
+    }
+  }
   useEffect(() => {
     let active = true;
     supabase.auth.getUser().then(async ({ data }) => {
@@ -174,8 +188,35 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (userId && !loading) void saveMusicLibrary(sources, userId);
   }, [sources, userId, loading]);
+  // Desktop app: silently re-read remembered music folders from disk on launch
+  // so nothing has to be reconnected.
+  useEffect(() => {
+    if (loading || autoScanned.current || !supportsNativeScan()) return;
+    const roots = getFolderRoots();
+    if (!sources.some(s => roots[s.label])) return;
+    autoScanned.current = true;
+    void rescanNative(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, sources]);
   const library = useMemo(() => sources.length ? mergeLibraries(sources.map(s => buildLibrary(s.tracks))) : null, [sources]);
   async function addFolder() {
+    // Desktop app: use the native picker so we learn the folder's real
+    // location and can re-read it later without asking again.
+    if (supportsNativeScan()) {
+      const root = await chooseNativeMusicFolder();
+      if (!root) return;
+      const result = await scanNativeFolder(root);
+      if (!result.ok || !result.files?.length) {
+        toast.error(result.error ?? "No audio files found in that folder");
+        return;
+      }
+      const label = result.label ?? root.split("/").filter(Boolean).pop() ?? "Music";
+      setFolderRoot(label, result.root ?? root);
+      indexNativeFiles(result.files);
+      setSources(prev => [...prev.filter(s => s.label !== label), { label, tracks: tracksFromAudioFiles(asFileLike(result.files ?? [])) }]);
+      toast.success(`${result.files.length} tracks indexed from ${label}`);
+      return;
+    }
     const picked = await pickDirectoryFiles();
     const audio = picked.filter(f => /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus|alac)$/i.test(f.name));
     if (!audio.length) { toast.error("No audio files found in that folder"); return; }
@@ -188,8 +229,30 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name).split("/")[0] !== label), ...audio]);
     toast.success(`${audio.length} tracks indexed from ${label}`);
   }
+  /** Re-reads every remembered folder from disk (desktop app only). */
+  async function rescanNative(silent = false): Promise<boolean> {
+    const roots = getFolderRoots();
+    const targets = sources.filter(s => roots[s.label]);
+    if (!targets.length) return false;
+    const updates = new Map<string, VdjTrack[]>();
+    const problems: string[] = [];
+    for (const source of targets) {
+      const result = await scanNativeFolder(roots[source.label]);
+      if (!result.ok || !result.files) { problems.push(`${source.label}: ${result.error ?? "couldn't be read"}`); continue; }
+      indexNativeFiles(result.files);
+      updates.set(source.label, tracksFromAudioFiles(asFileLike(result.files)));
+    }
+    if (updates.size) {
+      setSources(prev => prev.map(s => updates.has(s.label) ? { label: s.label, tracks: updates.get(s.label) ?? s.tracks } : s));
+      const total = [...updates.values()].reduce((n, t) => n + t.length, 0);
+      if (!silent) toast.success(`${total.toLocaleString()} tracks re-read from your saved folders`);
+    }
+    if (problems.length && !silent) toast.error(problems[0]);
+    return updates.size > 0;
+  }
   async function rescan() {
     if (!sources.length) { await addFolder(); return; }
+    if (supportsNativeScan() && (await rescanNative())) return;
     if (!files.length) { toast.info("Reconnect a music folder to rescan it."); await addFolder(); return; }
     const available = new Map<string, File[]>();
     for (const file of files) {
@@ -198,6 +261,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
     setSources(prev => prev.map(source => available.has(source.label) ? { label: source.label, tracks: tracksFromAudioFiles(available.get(source.label) ?? []) } : source));
     toast.success("Connected music folders rescanned. Reconnect any other folders to scan them again.");
+  }
+  /**
+   * Desktop app: pull a remembered track off disk on demand so it plays
+   * without the folder having to be reconnected.
+   */
+  async function ensureLocalFile(filePath?: string): Promise<File | null> {
+    if (!filePath) return null;
+    const existing = files.find(f => (f.webkitRelativePath || f.name) === filePath || f.name === filePath.split(/[\\/]/).pop());
+    if (existing) return existing;
+    const full = nativePaths.current.get(filePath.toLowerCase()) ?? nativePaths.current.get(basename(filePath));
+    if (!full) return null;
+    const file = await readNativeAudioFile(full, filePath);
+    if (file) setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name) !== filePath), file]);
+    return file;
   }
   function addFile(file: File) {
     setSources(prev => {
@@ -209,7 +286,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
     setFiles(prev => [...prev.filter(f => f.name !== file.name), file]);
   }
-  return <Context.Provider value={{ sources, files, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ sources, files, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);

@@ -236,6 +236,86 @@ function registerVirtualDjHandlers() {
     return { ok: true, path: result.filePaths[0] };
   });
 
+  // Pick a music folder (separate default from the export/VirtualDJ picker).
+  ipcMain.handle("fs:choose-music-folder", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Choose your music folder",
+      defaultPath: app.getPath("music"),
+      buttonLabel: "Use this folder",
+      properties: ["openDirectory"],
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    return { ok: true, path: result.filePaths[0] };
+  });
+
+  // Re-read a remembered music folder straight from disk, so the app never has
+  // to ask the user to reconnect it after a restart.
+  const AUDIO_RE = /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus|alac)$/i;
+  ipcMain.handle("fs:scan-folder", async (_event, dirPath) => {
+    if (typeof dirPath !== "string" || !dirPath.trim()) {
+      return { ok: false, error: "No folder location saved." };
+    }
+    const root = dirPath.replace(/[\\/]+$/, "");
+    const rootName = path.basename(root);
+    const files = [];
+    const MAX_FILES = 200000;
+    async function walk(dir) {
+      let entries;
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (files.length >= MAX_FILES) return;
+        if (entry.name.startsWith(".")) continue;
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          await walk(full);
+        } else if (entry.isFile() && AUDIO_RE.test(entry.name)) {
+          let size;
+          try {
+            size = (await fs.promises.stat(full)).size;
+          } catch {
+            size = undefined;
+          }
+          files.push({
+            name: entry.name,
+            path: full,
+            relativePath: path.join(rootName, path.relative(root, full)),
+            size,
+          });
+        }
+      }
+    }
+    try {
+      if (!fs.existsSync(root)) return { ok: false, error: "That folder no longer exists on this Mac." };
+      await walk(root);
+      return { ok: true, root, label: rootName, files };
+    } catch (error) {
+      const code = error && error.code;
+      return {
+        ok: false,
+        error:
+          code === "EPERM" || code === "EACCES"
+            ? "macOS blocked access to that folder. Allow file access for Dancefloor Builder in System Settings › Privacy & Security › Files and Folders."
+            : `Couldn't read that folder (${String(code || error)}).`,
+      };
+    }
+  });
+
+  // Read one audio file from disk so it can be played inside the app without
+  // reconnecting the folder.
+  ipcMain.handle("fs:read-audio", async (_event, filePath) => {
+    if (typeof filePath !== "string" || !filePath.trim()) return { ok: false, error: "No file path." };
+    try {
+      const data = await fs.promises.readFile(filePath);
+      return { ok: true, data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) };
+    } catch (error) {
+      return { ok: false, error: `Couldn't read that file (${String((error && error.code) || error)}).` };
+    }
+  });
+
   ipcMain.handle("fs:write-file", async (_event, payload) => {
     const dirPath = payload && payload.dirPath;
     const name = payload && payload.name;

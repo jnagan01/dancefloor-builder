@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld("electronVirtualDJ", {
 contextBridge.exposeInMainWorld("electronFiles", {
   isAvailable: true,
   chooseFolder: () => ipcRenderer.invoke("fs:choose-folder"),
+  chooseMusicFolder: () => ipcRenderer.invoke("fs:choose-music-folder"),
+  scanFolder: (dirPath) => ipcRenderer.invoke("fs:scan-folder", dirPath),
+  readAudio: (filePath) => ipcRenderer.invoke("fs:read-audio", filePath),
   getPathForFile: (file) => {
     try { return webUtils.getPathForFile(file) || ""; } catch { return ""; }
   },
