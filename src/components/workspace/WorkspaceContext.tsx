@@ -252,6 +252,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSources(prev => prev.map(source => available.has(source.label) ? { label: source.label, tracks: tracksFromAudioFiles(available.get(source.label) ?? []) } : source));
     toast.success("Connected music folders rescanned. Reconnect any other folders to scan them again.");
   }
+  /**
+   * Desktop app: pull a remembered track off disk on demand so it plays
+   * without the folder having to be reconnected.
+   */
+  async function ensureLocalFile(filePath?: string): Promise<File | null> {
+    if (!filePath) return null;
+    const existing = files.find(f => (f.webkitRelativePath || f.name) === filePath || f.name === filePath.split(/[\\/]/).pop());
+    if (existing) return existing;
+    const full = nativePaths.current.get(filePath.toLowerCase()) ?? nativePaths.current.get(basename(filePath));
+    if (!full) return null;
+    const file = await readNativeAudioFile(full, filePath);
+    if (file) setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name) !== filePath), file]);
+    return file;
+  }
   function addFile(file: File) {
     setSources(prev => {
       const label = "Manually picked files";
