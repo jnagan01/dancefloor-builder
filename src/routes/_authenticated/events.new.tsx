@@ -144,6 +144,17 @@ function Index() {
   const [matcherOn, setMatcherOn] = useState(true);
   const [software, setSoftware] = useState("VirtualDJ");
   const [reviewMode, setReviewMode] = useState<"first" | "most" | "all" | "none">("first");
+  function applyReviewMode(mode: "first" | "most" | "all" | "none", section: SectionKey) {
+    setReviewMode(mode);
+    if (!result || !mergedLibrary) return;
+    result[section].forEach((song, index) => {
+      const key = songKey(section, index, song);
+      if (mode === "none") { markUnresolved(key); return; }
+      const found = searchLibrary(`${song.artist} ${song.song}`, mergedLibrary, mode === "all" ? matchLimit : 1);
+      if (!found.length) return;
+      updateMatch(key, { status: "Manually Matched", confidence: 1, trackIndex: found[0], alternatives: [], extraTrackIndices: mode === "all" ? found.slice(1) : [] });
+    });
+  }
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
   const [songs, setSongs] = useState<Song[]>([]);
   const [hours, setHours] = useState<string>("3");
@@ -2036,7 +2047,7 @@ function Index() {
                        matcherOn={matcherOn}
                        software={software}
                        reviewMode={reviewMode}
-                       onReviewModeChange={setReviewMode}
+                       onReviewModeChange={mode => applyReviewMode(mode, sec)}
                      onOpenSearch={openSearch}
                      onPickLocalFile={pickLocalFileForMatch}
                       onPreview={(t) => setPreviewTarget(t)}
@@ -2535,7 +2546,6 @@ function SectionView(props: SectionViewProps) {
                          onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
                          matchLimit={matchLimit}
                          matcherOn={matcherOn}
-                        reviewMode={reviewMode}
                       />
                     </TableCell>
                   </TableRow>
@@ -2558,7 +2568,7 @@ function InlineMatchSearch({
   onPick,
   onToggleExtra,
   onPreview,
-  onPickLocalFile, matchLimit, matcherOn, reviewMode,
+  onPickLocalFile, matchLimit, matcherOn,
 }: {
   song: Song;
   library: VdjLibrary;
@@ -2569,7 +2579,6 @@ function InlineMatchSearch({
   onPreview?: (target: PreviewTarget) => void;
   onPickLocalFile?: (file: File) => void;
   matchLimit: number; matcherOn: boolean;
-  reviewMode: "first" | "most" | "all" | "none";
 }) {
   const localFileRef = useRef<HTMLInputElement>(null);
   const defaultQuery = `${song.artist} ${song.song}`.trim();
@@ -2653,7 +2662,7 @@ function InlineMatchSearch({
               const t = library.tracks[ti];
               const isCurrent = ti === currentTrackIndex;
               const isExtra = extraSet.has(ti);
-              const selected = reviewMode === "all" ? true : reviewMode === "none" ? false : isCurrent || isExtra;
+              const selected = isCurrent || isExtra;
               return (
                 <li key={ti} className="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
                    <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="mt-1 shrink-0"/>

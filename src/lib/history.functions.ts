@@ -6,7 +6,7 @@ const songSchema = z.object({
   artist: z.string().min(1).max(300),
   song: z.string().min(1).max(300),
   fromUpload: z.boolean().optional(),
-});
+}).passthrough();
 
 const inputsSchema = z.object({
   songs: z.array(songSchema).max(2000),
