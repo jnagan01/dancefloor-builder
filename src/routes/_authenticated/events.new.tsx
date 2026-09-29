@@ -2432,146 +2432,129 @@ function SectionView(props: SectionViewProps) {
       </div>
        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3"><div className="flex max-w-full gap-1 overflow-x-auto">{[["all","All songs"],["matched","Matched"],["unmatched","Unmatched"],["review","Review needed"]].map(([value,label])=><Button key={value} size="sm" className="shrink-0" variant={filter===value?"secondary":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>)}</div><div className="text-xs text-muted-foreground">{songs.length} songs · {software}</div></div>
       {library && <div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Track matcher</span>{([ ["first","First result"],["most","Most played"],["all","Select all"],["none","Unselect all"] ] as const).map(([mode,label])=><Button key={mode} size="sm" variant={reviewMode===mode?"secondary":"ghost"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>)}{reviewMode === "most" && <span className="text-warning">Play counts unavailable for folder-only sources; first result is used.</span>}</div>}
-       <div className="overflow-x-auto border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Artist</TableHead>
-              <TableHead>Song</TableHead>
-              {library && (
-                <>
-                  <TableHead>Match</TableHead>
-                  <TableHead>Conf.</TableHead>
-                  <TableHead>VDJ BPM</TableHead>
-                  <TableHead>VDJ Key</TableHead>
-                  <TableHead>File Path / Alternatives</TableHead>
-                  <TableHead className="w-44">Actions</TableHead>
-                </>
-              )}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {songs.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={library ? 8 : 2} className="text-center text-sm text-muted-foreground">
-                  No songs in this section
-                </TableCell>
-              </TableRow>
-            ) : songs.map((s, i) => {
-              const key = songKey(section, i, s);
-              const m = matches[key];
-              const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
-              const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
-              if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && (isMatched || !m)) return null;
-              return (
-                <Fragment key={key}>
-                 <TableRow className={`bg-card ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
-                  <TableCell className="align-top">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 shrink-0"
-                        onClick={() => onPreview?.({
-                          artist: s.artist,
-                          song: s.song,
-                          filePath: track?.filePath,
-                          matchConfidence: track && m ? m.confidence : undefined,
-                        })}
-                        title="Preview song"
-                      >
-                        <Play className="h-3.5 w-3.5" />
-                      </Button>
-                      <span className="break-words">{s.artist}</span>
-                      <SourceBadge song={s as BadgeSong} />
-                      <FallbackBadges song={s as BadgeSong} />
+       <div className="space-y-3">
+        {songs.length === 0 ? (
+          <p className="border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">No songs in this section</p>
+        ) : songs.map((s, i) => {
+          const key = songKey(section, i, s);
+          const m = matches[key];
+          const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
+          const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
+          if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && (isMatched || !m)) return null;
+          const meta = s as BadgeSong;
+          const needsAttention = !isMatched;
+          const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
+          return (
+            <div key={key} className={`border border-border bg-card ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
+              {/* Track header */}
+              <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-stretch gap-3 border-b border-border p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]">
+                <div className="flex w-8 flex-col items-center justify-center gap-1">
+                  <span className="text-sm font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+                  {needsAttention && <AlertTriangle className="size-3.5 text-warning" />}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onPreview?.({ artist: s.artist, song: s.song, filePath: track?.filePath, matchConfidence: track && m ? m.confidence : undefined })}
+                  title="Preview song"
+                  className="flex size-14 shrink-0 items-center justify-center border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary"
+                >
+                  <Music className="size-6" />
+                </button>
+                <div className="min-w-0 divide-y divide-border border border-border">
+                  <div className="px-3 py-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Title</p>
+                    <p className="break-words font-display text-base leading-tight">{s.song}</p>
+                  </div>
+                  <div className="px-3 py-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Artist</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="break-words text-sm leading-tight">{s.artist}</p>
+                      <SourceBadge song={meta} />
+                      <FallbackBadges song={meta} />
                     </div>
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 shrink-0"
-                        onClick={() => toggleExpanded(key)}
-                        title={expanded.has(key) ? "Collapse metrics" : "Expand metrics"}
-                      >
-                        {expanded.has(key) ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                      </Button>
-                      <span className="break-words">{s.song}</span>
-                    </div>
-                  </TableCell>
+                  </div>
+                </div>
+                <div className="col-span-3 flex flex-wrap items-center gap-2 sm:col-span-1 sm:justify-end">
+                  <Hud label="Energy" value={meta.energy != null ? Math.round(meta.energy) : "—"} />
+                  <Hud label="Dance" value={meta.danceability != null ? Math.round(meta.danceability) : "—"} />
+                  <Hud label="Mood" value={meta.valence != null ? Math.round(meta.valence) : "—"} />
+                  <Hud label="Key" value={track?.key || meta.camelot || "—"} />
+                  <Hud label="BPM" value={track?.bpm || (meta.bpm != null ? Math.round(meta.bpm) : "—")} />
+                </div>
+              </div>
 
-                  {library && (
-                    <>
-                      <TableCell>{m ? statusBadge(m.status) : statusBadge("Missing From Library")}</TableCell>
-                      <TableCell className="text-xs">{m ? `${Math.round(m.confidence * 100)}%` : "—"}</TableCell>
-                      <TableCell className="text-xs">{track?.bpm || "—"}</TableCell>
-                      <TableCell className="text-xs">{track?.key || "—"}</TableCell>
-                      <TableCell className="max-w-xs">
-                        {track ? (
-                          <p className="truncate text-xs" title={track.filePath}>{track.filePath}</p>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">No file</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                         <div className="flex flex-wrap gap-1">
-                          {m?.status === "Possible Match" && (
-                            <Button size="sm" variant="outline" onClick={() => onConfirm(key)}>
-                              <Check className="h-3 w-3" />
-                            </Button>
-                          )}
-                          <Button size="sm" variant="ghost" onClick={() => onMarkUnresolved(key)} title="Mark unresolved">
-                            <X className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={m?.excludedFromVdj ? "default" : "ghost"}
-                            onClick={() => onToggleExclude(key)}
-                            title="Exclude from VirtualDJ export"
-                          >
-                            VDJ
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </>
-                  )}
-                </TableRow>
-                {expanded.has(key) && (
-                  <TableRow className="bg-muted/20 hover:bg-muted/20">
-                    <TableCell colSpan={library ? 8 : 2} className="py-2">
-                      <MetricsDetail song={s as BadgeSong} />
-                    </TableCell>
-                  </TableRow>
+              {/* Action bar */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+                {library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
+                {m && track && <span className="text-[11px] text-muted-foreground">{Math.round(m.confidence * 100)}% confidence</span>}
+                {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected</span>}
+                <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
+                {library && m?.status === "Possible Match" && (
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
+                    <Check className="mr-1 h-3 w-3" /> Confirm
+                  </Button>
                 )}
                 {library && (
-                   <TableRow className="bg-muted/20 hover:bg-muted/20">
-                    <TableCell colSpan={8} className="py-2">
-                      <InlineMatchSearch
-                        song={s}
-                        library={library}
-                        currentTrackIndex={m?.trackIndex}
-                        extraTrackIndices={m?.extraTrackIndices ?? []}
-                        onPick={(ti) => onChoose(key, ti)}
-                        onToggleExtra={(ti) => onToggleExtra(key, ti)}
-                        onPreview={onPreview}
-                         onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
-                         matchLimit={matchLimit}
-                         matcherOn={matcherOn}
-                      />
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => onMarkUnresolved(key)} title="Mark unresolved">
+                      <X className="mr-1 h-3 w-3" /> Unresolved
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={m?.excludedFromVdj ? "default" : "ghost"}
+                      className="h-7 px-2 text-xs"
+                      onClick={() => onToggleExclude(key)}
+                      title="Exclude from VirtualDJ export"
+                    >
+                      VDJ
+                    </Button>
+                  </>
                 )}
-                </Fragment>
-              );
-            })}
-          </TableBody>
-        </Table>
+                <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" onClick={() => toggleExpanded(key)}>
+                  {expanded.has(key) ? <ChevronUp className="mr-1 h-3 w-3" /> : <ChevronDown className="mr-1 h-3 w-3" />}
+                  Details
+                </Button>
+              </div>
+
+              {expanded.has(key) && (
+                <div className="border-b border-border bg-muted/20 px-3 py-2">
+                  <MetricsDetail song={meta} />
+                </div>
+              )}
+
+              {library && (
+                <div className="px-3 py-3">
+                  <InlineMatchSearch
+                    song={s}
+                    library={library}
+                    currentTrackIndex={m?.trackIndex}
+                    extraTrackIndices={m?.extraTrackIndices ?? []}
+                    onPick={(ti) => onChoose(key, ti)}
+                    onToggleExtra={(ti) => onToggleExtra(key, ti)}
+                    onPreview={onPreview}
+                    onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
+                    matchLimit={matchLimit}
+                    matcherOn={matcherOn}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
+
+function Hud({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center gap-2 border border-border px-2 py-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="min-w-6 text-center text-sm font-semibold tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 
 function InlineMatchSearch({
   song,
