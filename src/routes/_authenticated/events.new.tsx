@@ -83,6 +83,8 @@ import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { saveWorkflow, updateWorkflow, getWorkflow } from "@/lib/history.functions";
 import { pageHead } from "@/lib/pageHead";
+import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
+import { jsPDF } from "jspdf";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
 import { UserCog } from "lucide-react";
 
@@ -144,6 +146,7 @@ function Index() {
   const [matchLimit, setMatchLimit] = useState(10);
   const [matcherOn, setMatcherOn] = useState(true);
   const [software, setSoftware] = useState("VirtualDJ");
+  const [reviewMode, setReviewMode] = useState<"first" | "most" | "all" | "none">("first");
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
   const [songs, setSongs] = useState<Song[]>([]);
   const [hours, setHours] = useState<string>("3");
@@ -1551,6 +1554,22 @@ function Index() {
     downloadBlob(blob, `${prefix}dance-floor-lists.zip`);
   }
 
+  function exportSectionPdf(section: SectionKey) {
+    if (!result) return;
+    const pdf = new jsPDF();
+    const name = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
+    pdf.setFontSize(18); pdf.text(`${eventName || "Event"} — ${name}`, 15, 20);
+    pdf.setFontSize(10);
+    let y = 32;
+    result[section].forEach((song, i) => {
+      const line = `${i + 1}. ${song.artist} — ${song.song}`;
+      const lines = pdf.splitTextToSize(line, 175) as string[];
+      if (y + lines.length * 6 > 280) { pdf.addPage(); y = 20; }
+      pdf.text(lines, 15, y); y += lines.length * 6 + 2;
+    });
+    pdf.save(`${eventName ? `${toKebabCase(eventName)}-` : ""}${SECTION_FILES[section]}.pdf`);
+  }
+
   // --- Summary ---
 
   const summary = useMemo(() => {
@@ -2196,6 +2215,7 @@ function Index() {
                       library={mergedLibrary}
                       songKey={songKey}
                       onExportCsv={() => exportSectionCsv(sec)}
+                       onExportPdf={() => exportSectionPdf(sec)}
                       onExportXml={() => exportSectionXml(sec)}
                       onExportM3u={() => exportSectionM3u(sec)}
                       onExportXmlToVdj={() => exportSectionXmlToVdj(sec)}
@@ -2210,6 +2230,8 @@ function Index() {
                        matchLimit={matchLimit}
                        matcherOn={matcherOn}
                        software={software}
+                       reviewMode={reviewMode}
+                       onReviewModeChange={setReviewMode}
                      onOpenSearch={openSearch}
                      onPickLocalFile={pickLocalFileForMatch}
                       onPreview={(t) => setPreviewTarget(t)}
@@ -2330,7 +2352,7 @@ function Index() {
           </div>
         </DialogContent>
       </Dialog>
-      <PreviewPlayer key={`preview-${workflowInstanceId}`} target={previewTarget} onOpenChange={(o) => { if (!o) setPreviewTarget(null); }} resolveLocalFile={resolveLocalFile} resolveLocalMatch={resolveLocalMatch} />
+      <WaveformPlayer key={`preview-${workflowInstanceId}`} target={previewTarget} onClose={() => setPreviewTarget(null)} resolve={resolveLocalFile} />
     </div>
   );
 }
@@ -2509,6 +2531,7 @@ interface SectionViewProps {
   library: VdjLibrary | null;
   songKey: (section: SectionKey, idx: number, s: Song) => string;
   onExportCsv: () => void;
+  onExportPdf: () => void;
   onExportXml: () => void;
   onExportM3u: () => void;
   onExportXmlToVdj: () => void;
@@ -2524,10 +2547,12 @@ interface SectionViewProps {
   onPickLocalFile?: (key: string, file: File) => void;
   onPreview?: (target: PreviewTarget) => void;
   matchLimit: number; matcherOn: boolean; software: string;
+  reviewMode: "first" | "most" | "all" | "none";
+  onReviewModeChange: (mode: "first" | "most" | "all" | "none") => void;
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportXml, onExportM3u, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile, matchLimit, matcherOn, software } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportPdf, onExportXml, onExportM3u, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile, matchLimit, matcherOn, software, reviewMode, onReviewModeChange } = props;
   const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter,setFilter] = useState("all");
@@ -2547,10 +2572,11 @@ function SectionView(props: SectionViewProps) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap justify-end gap-2">
+        <Button size="sm" variant="outline" onClick={onExportPdf}><Download className="mr-1 size-4"/> PDF</Button>
         <Button size="sm" variant="outline" onClick={onExportCsv}>
           <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} CSV
         </Button>
-        <Button size="sm" variant="outline" onClick={onExportXml} disabled={!library}>
+        <Button size="sm" variant="outline" onClick={onExportXml} disabled={!library || software !== "VirtualDJ"}>
           <Download className="mr-1 h-4 w-4" /> Download VirtualDJ {sectionLabel} XML
         </Button>
         <Button size="sm" variant="outline" onClick={onExportM3u} disabled={!library}>
@@ -2560,7 +2586,7 @@ function SectionView(props: SectionViewProps) {
           size="sm"
           variant="secondary"
           onClick={onExportXmlToVdj}
-          disabled={!library || !canWriteToVdj}
+          disabled={!library || !canWriteToVdj || software !== "VirtualDJ"}
           title={vdjTitle}
         >
           <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} XML → VirtualDJ
@@ -2569,13 +2595,14 @@ function SectionView(props: SectionViewProps) {
           size="sm"
           variant="secondary"
           onClick={onExportM3uToVdj}
-          disabled={!library || !canWriteToVdj}
+          disabled={!library || !canWriteToVdj || software !== "VirtualDJ"}
           title={vdjTitle}
         >
           <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} M3U → VirtualDJ
         </Button>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4"><div className="flex gap-1 overflow-x-auto">{[["all","All songs"],["matched","Matched"],["unmatched","Unmatched"],["review","Review needed"]].map(([value,label])=><Button key={value} size="sm" variant={filter===value?"secondary":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>)}</div><div className="text-xs text-muted-foreground">{songs.length} songs · {software}</div></div>
+      {library && <div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Track matcher</span>{([ ["first","First result"],["most","Most played"],["all","Select all"],["none","Unselect all"] ] as const).map(([mode,label])=><Button key={mode} size="sm" variant={reviewMode===mode?"secondary":"ghost"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>)}{reviewMode === "most" && <span className="text-warning">Play counts unavailable for folder-only sources; first result is used.</span>}</div>}
       <div className="overflow-x-auto border-y border-border">
         <Table>
           <TableHeader>
@@ -2703,6 +2730,7 @@ function SectionView(props: SectionViewProps) {
                          onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
                          matchLimit={matchLimit}
                          matcherOn={matcherOn}
+                        reviewMode={reviewMode}
                       />
                     </TableCell>
                   </TableRow>
@@ -2725,7 +2753,7 @@ function InlineMatchSearch({
   onPick,
   onToggleExtra,
   onPreview,
-  onPickLocalFile, matchLimit, matcherOn,
+  onPickLocalFile, matchLimit, matcherOn, reviewMode,
 }: {
   song: Song;
   library: VdjLibrary;
@@ -2736,6 +2764,7 @@ function InlineMatchSearch({
   onPreview?: (target: PreviewTarget) => void;
   onPickLocalFile?: (file: File) => void;
   matchLimit: number; matcherOn: boolean;
+  reviewMode: "first" | "most" | "all" | "none";
 }) {
   const localFileRef = useRef<HTMLInputElement>(null);
   const defaultQuery = `${song.artist} ${song.song}`.trim();
@@ -2819,7 +2848,7 @@ function InlineMatchSearch({
               const t = library.tracks[ti];
               const isCurrent = ti === currentTrackIndex;
               const isExtra = extraSet.has(ti);
-              const selected = isCurrent || isExtra;
+              const selected = reviewMode === "all" ? true : reviewMode === "none" ? false : isCurrent || isExtra;
               return (
                 <li key={ti} className="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
                    <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="mt-1 shrink-0"/>
