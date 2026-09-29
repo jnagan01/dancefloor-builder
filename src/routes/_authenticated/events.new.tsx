@@ -1323,6 +1323,14 @@ function Index() {
     }
   }
 
+  function warnUnresolvedPaths(count: number) {
+    if (count > 0) {
+      toast.warning(
+        `${count} song${count === 1 ? "" : "s"} may not be found by VirtualDJ — set the full folder location in Settings › DJ software & folders.`,
+      );
+    }
+  }
+
   async function exportAllToVdj() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
@@ -1334,6 +1342,7 @@ function Index() {
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const sections: SectionKey[] = ["warmUp", "transition", "peak"];
     let written = 0;
+    let unresolvedTotal = 0;
     let failed = 0;
     for (const section of sections) {
       const list = exportResult[section];
@@ -1364,6 +1373,7 @@ function Index() {
         failed += 1;
       }
     }
+    warnUnresolvedPaths(unresolvedTotal);
     if (failed === 0) {
       toast.success(`Saved ${written} file${written === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}`);
     } else {
