@@ -410,6 +410,7 @@ export interface GenerationInput {
   prefs: Preferences;
   hours: number;
   expand: boolean;
+  buffer?: number;
 }
 
 export interface ResultSong extends Song {
@@ -790,7 +791,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
 
   const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
   const perSectionBase = Math.ceil(totalSongsNeeded / 3);
-  const perSectionTarget = Math.ceil(perSectionBase * SECTION_BUFFER);
+  const perSectionTarget = Math.ceil(perSectionBase * (input.buffer ?? SECTION_BUFFER));
 
   // Shortfall is computed from uploads only (before expansion fills the gap),
   // so the UI can warn when expansion is OFF.

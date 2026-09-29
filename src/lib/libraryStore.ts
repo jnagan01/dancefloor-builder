@@ -12,6 +12,7 @@ const DB_NAME = "dancefloor-store";
 const STORE = "handles";
 const DB_VERSION = 1;
 const LIBRARY_KEY = "savedMusicLibrary";
+const keyFor = (userId: string) => `${LIBRARY_KEY}:${userId}`;
 
 export interface SavedLibrarySource {
   label: string;
@@ -37,7 +38,7 @@ function openDb(): Promise<IDBDatabase | null> {
   });
 }
 
-export async function saveMusicLibrary(sources: SavedLibrarySource[]): Promise<number | null> {
+export async function saveMusicLibrary(sources: SavedLibrarySource[], userId: string): Promise<number | null> {
   const db = await openDb();
   if (!db) return null;
   const savedAt = Date.now();
@@ -45,7 +46,7 @@ export async function saveMusicLibrary(sources: SavedLibrarySource[]): Promise<n
   const ok = await new Promise<boolean>((resolve) => {
     try {
       const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(payload, LIBRARY_KEY);
+      tx.objectStore(STORE).put(payload, keyFor(userId));
       tx.oncomplete = () => resolve(true);
       tx.onerror = () => resolve(false);
       tx.onabort = () => resolve(false);
@@ -57,13 +58,13 @@ export async function saveMusicLibrary(sources: SavedLibrarySource[]): Promise<n
   return ok ? savedAt : null;
 }
 
-export async function loadMusicLibrary(): Promise<SavedLibraryPayload | null> {
+export async function loadMusicLibrary(userId: string): Promise<SavedLibraryPayload | null> {
   const db = await openDb();
   if (!db) return null;
   const result = await new Promise<SavedLibraryPayload | null>((resolve) => {
     try {
       const tx = db.transaction(STORE, "readonly");
-      const req = tx.objectStore(STORE).get(LIBRARY_KEY);
+      const req = tx.objectStore(STORE).get(keyFor(userId));
       req.onsuccess = () => {
         const val = req.result as SavedLibraryPayload | undefined;
         if (!val || val.version !== 1 || !Array.isArray(val.sources)) return resolve(null);
@@ -78,13 +79,13 @@ export async function loadMusicLibrary(): Promise<SavedLibraryPayload | null> {
   return result;
 }
 
-export async function clearMusicLibrary(): Promise<void> {
+export async function clearMusicLibrary(userId: string): Promise<void> {
   const db = await openDb();
   if (!db) return;
   await new Promise<void>((resolve) => {
     try {
       const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).delete(LIBRARY_KEY);
+      tx.objectStore(STORE).delete(keyFor(userId));
       tx.oncomplete = () => resolve();
       tx.onerror = () => resolve();
       tx.onabort = () => resolve();

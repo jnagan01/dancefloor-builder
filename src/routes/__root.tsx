@@ -11,6 +11,7 @@ import {
 import * as React from "react";
 
 import appCss from "../styles.css?url";
+import { APP_BUILD_TIME } from "@/lib/appVersion";
 
 function NotFoundComponent() {
   return (
@@ -82,11 +83,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: "Wedding DJ Assistant helps DJs upload client song lists and generate categorized dance floor playlists." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "app-build-time", content: APP_BUILD_TIME },
       { name: "twitter:title", content: "Wedding Dance Floor Builder" },
       { name: "twitter:description", content: "Wedding DJ Assistant helps DJs upload client song lists and generate categorized dance floor playlists." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9671841f-6175-4e93-8717-898da27b8a45/id-preview-ae06d1c8--7afbfd53-f801-46a5-b9fd-99f89f38b576.lovable.app-1778784263460.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/9671841f-6175-4e93-8717-898da27b8a45/id-preview-ae06d1c8--7afbfd53-f801-46a5-b9fd-99f89f38b576.lovable.app-1778784263460.png" },
     ],
     links: [
       { rel: "preconnect", href: "https://fonts.googleapis.com" },

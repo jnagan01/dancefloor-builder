@@ -6,6 +6,12 @@ const songSchema = z.object({
   artist: z.string().min(1).max(300),
   song: z.string().min(1).max(300),
   fromUpload: z.boolean().optional(),
+  energy: z.number().optional(), danceability: z.number().optional(), popularity: z.number().optional(), valence: z.number().optional(),
+  bpm: z.number().optional(), camelot: z.string().optional(), genre: z.string().optional(), year: z.number().optional(),
+  mood: z.string().optional(), explicit: z.boolean().optional(), metaSource: z.string().optional(),
+  stretched: z.boolean().optional(), naturalSection: z.string().optional(), reused: z.boolean().optional(),
+  waveRole: z.string().optional(), placementReason: z.string().optional(), aiSuggestion: z.boolean().optional(),
+  aiReason: z.string().optional(), fromLibrary: z.boolean().optional(),
 });
 
 const inputsSchema = z.object({
@@ -17,6 +23,7 @@ const inputsSchema = z.object({
   notes: z.string().max(5000),
   doNotPlayInput: z.string().max(20000),
   expand: z.boolean(),
+  buffer: z.number().int().min(2).max(4).optional(),
   eventName: z.string().max(200),
 });
 
@@ -24,6 +31,7 @@ const listsSchema = z.object({
   warmUp: z.array(songSchema).max(2000),
   transition: z.array(songSchema).max(2000),
   peak: z.array(songSchema).max(2000),
+  selections: z.record(z.string(), z.object({ paths: z.array(z.string().max(2000)).max(100), excluded: z.boolean().optional() })).optional(),
 });
 
 function dbError(op: string, error: { message: string; code?: string }): Error {
@@ -95,6 +103,20 @@ export const saveWorkflow = createServerFn({ method: "POST" })
       .single();
     if (error) throw dbError("saveWorkflow", error);
     return { id: row.id as string };
+  });
+
+export const updateWorkflow = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { id: string; name: string; inputs: unknown; lists: unknown }) => z.object({
+    id: z.string().uuid(), name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
+  }).parse(data))
+  .handler(async ({ data, context }) => {
+    const { data: row, error } = await context.supabase.from("workflow_history")
+      .update({ name: data.name, inputs: data.inputs, lists: data.lists, updated_at: new Date().toISOString() })
+      .eq("id", data.id).eq("user_id", context.userId).select("id").maybeSingle();
+    if (error) throw dbError("updateWorkflow", error);
+    if (!row) throw new Error("Event not found.");
+    return { id: row.id };
   });
 
 export const renameWorkflow = createServerFn({ method: "POST" })
