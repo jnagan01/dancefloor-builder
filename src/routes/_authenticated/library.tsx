@@ -10,7 +10,7 @@ import { Plus, RefreshCw, Search, Columns3, Play, Pencil } from "lucide-react";
 import { pageHead } from "@/lib/pageHead";
 
 export const Route = createFileRoute("/_authenticated/library")({ component: LibraryPage, head: () => pageHead("Library", "Search, play, and edit the tracks in your connected music folders.") });
-const fields = ["Title", "Artist", "Album", "BPM", "Year", "Genre", "Key", "File path"] as const;
+const fields = ["Title", "Artist", "Album", "BPM", "Year", "Genre", "Key", "Plays", "File path"] as const;
 type Field = typeof fields[number];
 function LibraryPage() {
   const { sources, library, files, addFolder, rescan, editTrack } = useWorkspace();
