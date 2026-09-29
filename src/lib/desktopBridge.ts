@@ -46,3 +46,74 @@ export async function chooseVdjDatabase(): Promise<string | null> {
   const result = await api.chooseDatabase();
   return result.ok && result.path ? result.path : null;
 }
+
+// --- Native folder picking / writing (desktop app only) ---
+
+interface ElectronFiles {
+  isAvailable: true;
+  chooseFolder(): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
+  writeFile(dirPath: string, name: string, contents: string): Promise<{ ok: boolean; error?: string }>;
+}
+
+function filesBridge(): ElectronFiles | null {
+  if (typeof window === "undefined") return null;
+  const api = (window as unknown as { electronFiles?: ElectronFiles }).electronFiles;
+  return api?.isAvailable ? api : null;
+}
+
+export const supportsNativeFolders = () => filesBridge() !== null;
+
+/**
+ * A folder handle backed by the macOS shell. It mimics just enough of the
+ * File System Access API (`getFileHandle` → `createWritable`) that the rest
+ * of the app can treat native and browser folders identically.
+ */
+export interface NativeDirHandle {
+  __nativePath: string;
+  name: string;
+  queryPermission(): Promise<PermissionState>;
+  requestPermission(): Promise<PermissionState>;
+  getFileHandle(
+    fileName: string,
+    options?: { create?: boolean },
+  ): Promise<{ createWritable(): Promise<{ write(data: string): void; close(): Promise<void> }> }>;
+}
+
+export function isNativeDirHandle(handle: unknown): handle is NativeDirHandle {
+  return typeof (handle as NativeDirHandle | null)?.__nativePath === "string";
+}
+
+export function makeNativeDirHandle(dirPath: string): NativeDirHandle {
+  const name = dirPath.split("/").filter(Boolean).pop() || dirPath;
+  return {
+    __nativePath: dirPath,
+    name,
+    queryPermission: async () => "granted" as PermissionState,
+    requestPermission: async () => "granted" as PermissionState,
+    getFileHandle: async (fileName: string) => ({
+      createWritable: async () => {
+        let buffer = "";
+        return {
+          write(data: string) {
+            buffer += data;
+          },
+          async close() {
+            const api = filesBridge();
+            if (!api) throw new Error("The desktop app is no longer available.");
+            const res = await api.writeFile(dirPath, fileName, buffer);
+            if (!res.ok) throw new Error(res.error || "Couldn't write the file.");
+          },
+        };
+      },
+    }),
+  };
+}
+
+/** Opens the native macOS folder picker. Returns null when cancelled. */
+export async function chooseNativeFolder(): Promise<NativeDirHandle | null> {
+  const api = filesBridge();
+  if (!api) return null;
+  const result = await api.chooseFolder();
+  if (!result.ok || !result.path) return null;
+  return makeNativeDirHandle(result.path);
+}

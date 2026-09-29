@@ -2,6 +2,8 @@
 // using IndexedDB (handles are structured-cloneable). Browser-only; all
 // methods no-op safely when `indexedDB` is unavailable.
 
+import { isNativeDirHandle, makeNativeDirHandle, supportsNativeFolders } from "./desktopBridge";
+
 const DB_NAME = "dancefloor-store";
 const STORE = "handles";
 const DB_VERSION = 1;
@@ -29,9 +31,14 @@ function openDb(): Promise<IDBDatabase | null> {
 export async function saveDirHandle(key: string, handle: AnyHandle): Promise<void> {
   const db = await openDb();
   if (!db) return;
+  // Native (desktop) handles carry functions and can't be cloned into
+  // IndexedDB — store just the folder path and rebuild the handle on load.
+  const value = isNativeDirHandle(handle)
+    ? { __nativePath: handle.__nativePath, name: handle.name }
+    : handle;
   await new Promise<void>((resolve) => {
     const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(handle, key);
+    tx.objectStore(STORE).put(value, key);
     tx.oncomplete = () => resolve();
     tx.onerror = () => resolve();
     tx.onabort = () => resolve();
@@ -49,6 +56,10 @@ export async function loadDirHandle(key: string): Promise<AnyHandle | null> {
     req.onerror = () => resolve(null);
   });
   db.close();
+  if (isNativeDirHandle(result)) {
+    if (!supportsNativeFolders()) return null;
+    return makeNativeDirHandle(result.__nativePath) as unknown as AnyHandle;
+  }
   return result;
 }
 

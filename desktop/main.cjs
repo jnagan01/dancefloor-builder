@@ -203,6 +203,42 @@ function registerVirtualDjHandlers() {
     }
   });
 
+  // Native folder picking / writing. The browser File System Access API is
+  // unreliable inside Electron, so the desktop shell does this natively.
+  ipcMain.handle("fs:choose-folder", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Choose export folder",
+      defaultPath: path.join(app.getPath("documents"), "VirtualDJ"),
+      buttonLabel: "Use this folder",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    return { ok: true, path: result.filePaths[0] };
+  });
+
+  ipcMain.handle("fs:write-file", async (_event, payload) => {
+    const dirPath = payload && payload.dirPath;
+    const name = payload && payload.name;
+    const contents = (payload && payload.contents) ?? "";
+    if (typeof dirPath !== "string" || typeof name !== "string") {
+      return { ok: false, error: "Missing folder or file name." };
+    }
+    try {
+      await fs.promises.mkdir(dirPath, { recursive: true });
+      await fs.promises.writeFile(path.join(dirPath, path.basename(name)), contents, "utf8");
+      return { ok: true };
+    } catch (error) {
+      const code = error && error.code;
+      return {
+        ok: false,
+        error:
+          code === "EPERM" || code === "EACCES"
+            ? "macOS blocked writing to that folder. Allow file access for Dancefloor Builder in System Settings › Privacy & Security › Files and Folders."
+            : `Couldn't write to that folder (${String(code || error)}).`,
+      };
+    }
+  });
+
   ipcMain.handle("vdj:choose-database", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: "Choose your VirtualDJ database",
