@@ -39,6 +39,7 @@ import {
   buildTxtPlaylist,
   buildM3u,
   countUnresolvedPaths,
+  resolveExportPath,
   pickDirectoryFiles,
   pickDirectoryHandle,
   writeFileToDir,
@@ -2289,7 +2290,7 @@ function Index() {
                       <TableRow key={i}>
                         <TableCell>
                           <p className="font-medium">{t.artist} — {t.title}</p>
-                          <p className="truncate text-xs text-muted-foreground">{t.filePath}</p>
+                          <p className="break-all text-xs text-muted-foreground">{resolveExportPath(t.filePath) ?? t.filePath}</p>
                         </TableCell>
                         <TableCell className="w-32">
                           <div className="flex gap-1">
@@ -2851,7 +2852,7 @@ function InlineMatchSearch({
                    <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${pct >= 82 ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{pct}%</span>
                    <div className="min-w-0">
                      <p className="break-words font-medium">{t.title} — {t.artist}</p>
-                     <p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p>
+                      <p className="break-all text-[11px] text-muted-foreground">{resolveExportPath(t.filePath) ?? t.filePath}</p>
                    </div>
                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
                      {mostPlayed && <span className="bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-success">Most played</span>}
