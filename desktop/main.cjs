@@ -179,12 +179,32 @@ function buildMenu() {
 }
 
 // ---- VirtualDJ database (native disk access) ----
+function defaultVdjRoot() {
+  const lib = path.join(app.getPath("home"), "Library", "Application Support", "VirtualDJ");
+  if (fs.existsSync(path.join(lib, "database.xml"))) return lib;
+  const docs = path.join(app.getPath("documents"), "VirtualDJ");
+  if (fs.existsSync(path.join(docs, "database.xml"))) return docs;
+  return fs.existsSync(lib) ? lib : docs;
+}
 function defaultVdjPath() {
-  return path.join(app.getPath("documents"), "VirtualDJ", "database.xml");
+  return path.join(defaultVdjRoot(), "database.xml");
 }
 
 function registerVirtualDjHandlers() {
   ipcMain.handle("vdj:default-path", () => defaultVdjPath());
+  ipcMain.handle("vdj:default-root", () => defaultVdjRoot());
+  ipcMain.handle("vdj:choose-root", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Choose your VirtualDJ folder",
+      defaultPath: defaultVdjRoot(),
+      buttonLabel: "Use this folder",
+      properties: ["openDirectory", "showHiddenFiles"],
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    const root = result.filePaths[0];
+    const hasDatabase = fs.existsSync(path.join(root, "database.xml"));
+    return { ok: true, path: root, hasDatabase };
+  });
 
   ipcMain.handle("vdj:read-database", async (_event, customPath) => {
     const target = typeof customPath === "string" && customPath.trim() ? customPath : defaultVdjPath();
