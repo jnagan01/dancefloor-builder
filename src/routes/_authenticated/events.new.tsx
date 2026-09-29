@@ -490,12 +490,13 @@ function Index() {
 
 
   function eventSnapshot(nextResult: GenerationResult, nextMatches: Record<string,SongMatch>) {
-    const selections: Record<string,{paths:string[];excluded?:boolean}> = {};
+    const selections: Record<string,{paths:string[];excluded?:boolean}> = { ...savedSelectionsRef.current };
     for (const sec of ["warmUp","transition","peak"] as SectionKey[]) nextResult[sec].forEach((song,i) => {
       const key = songKey(sec,i,song), match = nextMatches[key];
       if (!match || !mergedLibrary) return;
       const paths = [match.trackIndex,...(match.extraTrackIndices??[])].filter((v):v is number=>typeof v==="number").map(v=>mergedLibrary.tracks[v]?.filePath).filter((v):v is string=>!!v);
       if(paths.length || match.excludedFromVdj) selections[key]={paths,excluded:match.excludedFromVdj};
+      else if (!savedSelectionsRef.current?.[key]) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
       inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer},
@@ -532,7 +533,7 @@ function Index() {
     }return next});
   },[result,mergedLibrary]);
   useEffect(()=>{
-    if(!result || !savedEventId || saveState==="error" || !restoredEvent.current && !!openedEventId)return;
+    if(!result || !savedEventId || saveState==="error" || (!restoredEvent.current && !!openedEventId))return;
     const revision=++saveRevision.current;
     const timer=setTimeout(async()=>{
       if(revision!==saveRevision.current)return;
@@ -948,7 +949,7 @@ function Index() {
       const m: Record<string, SongMatch> = {};
       (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
         r[section].forEach((s, i) => {
-          m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
+          if (matcherOn) m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
         });
       });
       matchesRef.current = m;
@@ -2660,7 +2661,8 @@ function InlineMatchSearch({
           </span>
         )}
       </div>
-      {!matcherOn ? <p className="text-xs text-muted-foreground">Automatic matches are turned off in Settings.</p> : results.length === 0 ? (
+      {!matcherOn && <p className="text-xs text-muted-foreground">Automatic selection is off; you can still choose files here.</p>}
+      {results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
           No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Browse local file to pick one from your computer" : ""}.
         </p>
