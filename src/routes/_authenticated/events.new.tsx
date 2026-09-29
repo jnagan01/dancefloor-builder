@@ -2400,6 +2400,9 @@ function SectionView(props: SectionViewProps) {
     : canWriteToVdj
       ? "Choose a folder, then write directly to it"
       : "Direct folder export requires a Chromium-based browser";
+  const statuses = songs.map((s, i) => matches[songKey(section, i, s)]?.status);
+  const matchedCount = statuses.filter((st) => st === "Matched" || st === "Manually Matched").length;
+  const reviewCount = statuses.filter((st) => st === "Possible Match" || st === "Multiple Matches").length;
   return (
     <div className="space-y-5">
        <div className="flex flex-wrap justify-start gap-2 border-b border-border pb-4">
