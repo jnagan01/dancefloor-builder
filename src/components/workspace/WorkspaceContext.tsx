@@ -225,7 +225,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     for (const source of targets) {
       const result = await scanNativeFolder(roots[source.label]);
       if (!result.ok || !result.files) { problems.push(`${source.label}: ${result.error ?? "couldn't be read"}`); continue; }
-      updates.set(source.label, tracksFromAudioFiles(result.files));
+      updates.set(source.label, tracksFromAudioFiles(asFileLike(result.files)));
     }
     if (updates.size) {
       setSources(prev => prev.map(s => updates.has(s.label) ? { label: s.label, tracks: updates.get(s.label) ?? s.tracks } : s));
