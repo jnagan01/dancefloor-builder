@@ -123,6 +123,11 @@ function buildMenu() {
       submenu: [
         { role: "about" },
         { type: "separator" },
+        {
+          label: "Check for Updates…",
+          click: () => checkForUpdates({ silent: false }),
+        },
+        { type: "separator" },
         { role: "services" },
         { type: "separator" },
         { role: "hide" },
@@ -367,6 +372,11 @@ if (!gotLock) {
     buildMenu();
     registerVirtualDjHandlers();
     createWindow();
+
+    // Quietly look for a newer Mac build shortly after launch.
+    setTimeout(() => {
+      checkForUpdates({ silent: true }).catch(() => {});
+    }, 4000);
 
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
