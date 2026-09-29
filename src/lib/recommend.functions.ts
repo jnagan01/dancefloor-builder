@@ -253,6 +253,16 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
       ? `\nGAP BRIEF (highest priority — these picks must fill the holes below):\n${gapLines.join("\n")}\n`
       : "";
 
+    const safeNeighbors = sanitizeList(data.neighborArtists, 120, 150);
+    const neighborBrief = safeNeighbors.length
+      ? `
+NEIGHBOR MAP (strong bias — this is a music-map style similarity cluster built from the client's own requested artists):
+- Prefer songs by these adjacent artists before reaching for anything else: <neighbor_artists>${safeNeighbors.join(", ")}</neighbor_artists>
+- At least half of your suggestions should come from this neighbor list when songs by them fit the section targets.
+- Still respect the section targets, variety rules and the do-not-play list — a neighbor artist is never a reason to break them.
+`
+      : "";
+
     const safeOnly = sanitizeList(data.onlyArtists, 50, 150);
     const safeFavorites = sanitizeList(data.favoriteArtists, 50, 150);
     const onlyBrief = safeOnly.length
