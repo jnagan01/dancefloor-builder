@@ -7,7 +7,7 @@ import { toast } from "sonner";
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
   sources: Source[]; files: File[]; library: VdjLibrary | null; loading: boolean;
-  addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void;
+  addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => void;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
 };
 const Context = createContext<Workspace | null>(null);
@@ -43,7 +43,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name).split("/")[0] !== label), ...audio]);
     toast.success(`${audio.length} tracks indexed from ${label}`);
   }
-  return <Context.Provider value={{ sources, files, library, loading, addFolder, rescan: addFolder, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
+  function addFile(file: File) {
+    setSources(prev => {
+      const label = "Manually picked files";
+      const track = tracksFromAudioFiles([file])[0];
+      if (!track) return prev;
+      const source = prev.find(s => s.label === label);
+      return [...prev.filter(s => s.label !== label), { label, tracks: [...(source?.tracks ?? []).filter(t => t.filePath !== track.filePath), track] }];
+    });
+    setFiles(prev => [...prev.filter(f => f.name !== file.name), file]);
+  }
+  return <Context.Provider value={{ sources, files, library, loading, addFolder, rescan: addFolder, addFile, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);
