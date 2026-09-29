@@ -60,7 +60,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, CheckCircle2, Sparkles, Database, HardDrive, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, CheckCircle2, Sparkles, Database, HardDrive, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Map as MapIcon } from "lucide-react";
 import { StepRail, type StepDef } from "@/components/builder/StepRail";
 import { StepPanel } from "@/components/builder/StepPanel";
 
@@ -69,6 +69,7 @@ import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
+import { getArtistNeighbors } from "@/lib/neighbors.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
 import { type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
@@ -176,6 +177,7 @@ function Index() {
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const recommendFn = useServerFn(recommendSongsForSection);
+  const neighborsFn = useServerFn(getArtistNeighbors);
   const enrichFn = useServerFn(enrichSongs);
   const [dragOver, setDragOver] = useState(false);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
@@ -699,6 +701,102 @@ function Index() {
           aiSuggestion: true,
           aiReason: sug.reason,
         });
+
+        // ---- MUSIC-MAP NEIGHBOR GRAPH -------------------------------------
+        // Build a similarity cluster around the artists the client actually
+        // asked for, then look through the DJ's own library for songs by those
+        // neighbours BEFORE the AI invents anything.
+        let neighborArtists: string[] = [];
+        try {
+          const seedCounts = new Map<string, number>();
+          for (const s of uniqueSongs) {
+            const a = (s.artist ?? "").trim();
+            if (!a) continue;
+            seedCounts.set(a, (seedCounts.get(a) ?? 0) + 1);
+          }
+          const seeds = [
+            ...favoriteArtists,
+            ...[...seedCounts.entries()].sort((a, b) => b[1] - a[1]).map(([a]) => a),
+          ];
+          const seenSeed = new Set<string>();
+          const uniqueSeeds = seeds.filter((a) => {
+            const k = normalizeKey(a);
+            if (!k || seenSeed.has(k)) return false;
+            seenSeed.add(k);
+            return true;
+          }).slice(0, 20);
+          if (uniqueSeeds.length) {
+            const res = await neighborsFn({
+              data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
+            });
+            const seedKeys = new Set(uniqueSeeds.map((a) => normalizeKey(a)));
+            const seenNeighbor = new Set<string>();
+            const ordered: Array<{ name: string; seed: string }> = [];
+            for (const c of res.clusters) {
+              for (const n of c.neighbors) {
+                const k = normalizeKey(n);
+                if (!k || seedKeys.has(k) || seenNeighbor.has(k)) continue;
+                seenNeighbor.add(k);
+                ordered.push({ name: n, seed: c.artist });
+              }
+            }
+            neighborArtists = ordered.map((n) => n.name).slice(0, 100);
+
+            // ---- YOUR CRATES FIRST ----------------------------------------
+            if (mergedLibrary?.tracks.length && ordered.length) {
+              const have = new SongKeySet();
+              for (const s of [...r.warmUp, ...r.transition, ...r.peak]) have.add(s.artist, s.song);
+              const perArtistCap = 2;
+              const crateFinds: ResultSong[] = [];
+              for (const { name, seed } of ordered) {
+                let taken = 0;
+                for (const idx of searchLibrary(name, mergedLibrary, 6)) {
+                  if (taken >= perArtistCap) break;
+                  const t = mergedLibrary.tracks[idx];
+                  if (!t?.artist || !t.title) continue;
+                  if (normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
+                  if (!have.tryAdd(t.artist, t.title)) continue;
+                  const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
+                  crateFinds.push({
+                    artist: t.artist,
+                    song: t.title,
+                    fromUpload: false,
+                    bpm: parseBpm(t.bpm),
+                    camelot: toCamelot(t.key),
+                    genre: t.genre,
+                    year: yearNum,
+                    explicit: detectExplicitFromTitle(t.title),
+                    metaSource: "Library",
+                    aiReason: `In your library — close musical neighbour of ${seed}.`,
+                  } as ResultSong);
+                  taken += 1;
+                }
+              }
+              if (crateFinds.length) {
+                // Spread them across the sections that still have room; the
+                // energy re-bucketing later puts each one where it belongs.
+                const quota = Math.max(1, Math.round(r.perSectionTarget * 0.35));
+                let cursor = 0;
+                for (const { key } of sectionMap) {
+                  let placed = 0;
+                  while (
+                    cursor < crateFinds.length &&
+                    placed < quota &&
+                    r[key].length < r.perSectionTarget
+                  ) {
+                    const pick = crateFinds[cursor++];
+                    if (!pick) break;
+                    r[key].push(pick as (typeof r)[typeof key][number]);
+                    placed += 1;
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Neighbor map unavailable — continuing without it", err);
+        }
+
         await Promise.all(
           sectionMap.map(async ({ key, label }) => {
             // PASS 1 — favorite artists first. Fill this section with songs by
@@ -739,6 +837,7 @@ function Index() {
                       prefs,
                       existing: existingNow,
                       onlyArtists: eligible,
+                      neighborArtists,
                     },
                   });
                   if (!res.suggestions.length) break;
@@ -812,6 +911,7 @@ function Index() {
                     existing: existingNow,
                     gaps,
                     favoriteArtists,
+                    neighborArtists,
                   },
                 });
 
@@ -2521,6 +2621,17 @@ function SectionView(props: SectionViewProps) {
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Artist</p>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="break-words text-sm leading-tight">{s.artist}</p>
+                      {s.artist?.trim() && (
+                        <a
+                          href={`https://www.music-map.com/${encodeURIComponent(s.artist.trim().toLowerCase().replace(/\s+/g, "+"))}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={`See artists similar to ${s.artist} on Music-Map`}
+                          className="text-muted-foreground transition-colors hover:text-primary"
+                        >
+                          <MapIcon className="size-3.5" />
+                        </a>
+                      )}
                       <SourceBadge song={meta} />
                       <FallbackBadges song={meta} />
                     </div>

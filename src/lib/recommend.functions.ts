@@ -52,6 +52,8 @@ const InputSchema = z.object({
   onlyArtists: z.array(z.string().max(150)).max(50).default([]),
   /** Preferred artists context for the general pass (bias, not restriction). */
   favoriteArtists: z.array(z.string().max(150)).max(50).default([]),
+  /** Music-Map style sonic neighbors of the client's requested artists. */
+  neighborArtists: z.array(z.string().max(150)).max(120).default([]),
 });
 
 
@@ -251,6 +253,16 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
       ? `\nGAP BRIEF (highest priority — these picks must fill the holes below):\n${gapLines.join("\n")}\n`
       : "";
 
+    const safeNeighbors = sanitizeList(data.neighborArtists, 120, 150);
+    const neighborBrief = safeNeighbors.length
+      ? `
+NEIGHBOR MAP (strong bias — this is a music-map style similarity cluster built from the client's own requested artists):
+- Prefer songs by these adjacent artists before reaching for anything else: <neighbor_artists>${safeNeighbors.join(", ")}</neighbor_artists>
+- At least half of your suggestions should come from this neighbor list when songs by them fit the section targets.
+- Still respect the section targets, variety rules and the do-not-play list — a neighbor artist is never a reason to break them.
+`
+      : "";
+
     const safeOnly = sanitizeList(data.onlyArtists, 50, 150);
     const safeFavorites = sanitizeList(data.favoriteArtists, 50, 150);
     const onlyBrief = safeOnly.length
@@ -269,7 +281,7 @@ The DJ's favorite artists (${safeFavorites.join(", ")}) have already been mined 
     const prompt = `You are an expert wedding/party DJ. Suggest ${data.count} real released songs for the "${data.section}" portion of a dance floor set.
 
 Section targets: ${sectionGuide[data.section]}
-${onlyBrief}${gapBrief}
+${onlyBrief}${neighborBrief}${gapBrief}
 
 
 
