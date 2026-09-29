@@ -152,7 +152,8 @@ function Index() {
       if (mode === "none") { markUnresolved(key); return; }
       const found = searchLibrary(`${song.artist} ${song.song}`, mergedLibrary, mode === "all" ? matchLimit : 1);
       if (!found.length) return;
-      updateMatch(key, { status: "Manually Matched", confidence: 1, trackIndex: found[0], alternatives: [], extraTrackIndices: mode === "all" ? found.slice(1) : [] });
+      const automatic = matchSong(song, mergedLibrary);
+      updateMatch(key, { status: "Manually Matched", confidence: automatic.confidence, trackIndex: found[0], alternatives: [], extraTrackIndices: mode === "all" ? found.slice(1) : [] });
     });
   }
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
