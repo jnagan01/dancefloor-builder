@@ -60,7 +60,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, CheckCircle2, Sparkles, Database, HardDrive, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Map } from "lucide-react";
+import { Trash2, Upload, Plus, Download, Music, AlertTriangle, FolderOpen, Search, X, Check, CheckCircle2, Sparkles, Database, HardDrive, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Map as MapIcon } from "lucide-react";
 import { StepRail, type StepDef } from "@/components/builder/StepRail";
 import { StepPanel } from "@/components/builder/StepPanel";
 
@@ -2629,7 +2629,7 @@ function SectionView(props: SectionViewProps) {
                           title={`See artists similar to ${s.artist} on Music-Map`}
                           className="text-muted-foreground transition-colors hover:text-primary"
                         >
-                          <Map className="size-3.5" />
+                          <MapIcon className="size-3.5" />
                         </a>
                       )}
                       <SourceBadge song={meta} />
