@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
+import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
 import { loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
+import { readVdjDatabase, isDesktopApp } from "@/lib/desktopBridge";
 import { toast } from "sonner";
 
 type Source = { label: string; tracks: VdjTrack[] };
@@ -9,13 +10,67 @@ type Workspace = {
   sources: Source[]; files: File[]; library: VdjLibrary | null; loading: boolean;
   addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => void;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
+  vdjSyncedAt: number | null; vdjPath: string | null; vdjSyncing: boolean;
+  syncVirtualDj: (customPath?: string | null) => Promise<boolean>;
 };
+export const VDJ_PATH_KEY = "dancefloor:vdjDatabasePath";
+export const VDJ_SYNC_KEY = "dancefloor:vdjSyncedAt";
+const basename = (p: string) => (p.split(/[\\/]/).pop() ?? p).toLowerCase();
 const Context = createContext<Workspace | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [sources, setSources] = useState<Source[]>([]);
   const [files, setFiles] = useState<File[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [vdjSyncedAt, setVdjSyncedAt] = useState<number | null>(null);
+  const [vdjPath, setVdjPath] = useState<string | null>(null);
+  const [vdjSyncing, setVdjSyncing] = useState(false);
+  useEffect(() => {
+    const saved = Number(localStorage.getItem(VDJ_SYNC_KEY));
+    if (saved) setVdjSyncedAt(saved);
+    setVdjPath(localStorage.getItem(VDJ_PATH_KEY));
+  }, []);
+  async function syncVirtualDj(customPath?: string | null) {
+    if (!isDesktopApp()) { toast.error("Open the desktop app to link your VirtualDJ database."); return false; }
+    setVdjSyncing(true);
+    try {
+      const result = await readVdjDatabase(customPath ?? vdjPath);
+      if (!result.ok || !result.xml) { toast.error(result.error ?? "Couldn't read the VirtualDJ database."); return false; }
+      const tracks = parseVdjDatabaseXml(result.xml);
+      if (!tracks.length) { toast.error("No tracks found in that VirtualDJ database."); return false; }
+      const byName = new Map<string, VdjTrack>();
+      for (const t of tracks) byName.set(basename(t.filePath), t);
+      let matched = 0;
+      setSources(prev => prev.map(source => ({
+        ...source,
+        tracks: source.tracks.map(track => {
+          const info = byName.get(basename(track.filePath));
+          if (!info) return track;
+          matched += 1;
+          return {
+            ...track,
+            playCount: info.playCount ?? track.playCount,
+            lastPlayTime: info.lastPlayTime ?? track.lastPlayTime,
+            key: info.key || track.key,
+            bpm: info.bpm || track.bpm,
+            genre: info.genre || track.genre,
+            year: info.year || track.year,
+          };
+        }),
+      })));
+      const at = Date.now();
+      setVdjSyncedAt(at);
+      localStorage.setItem(VDJ_SYNC_KEY, String(at));
+      if (result.path) { setVdjPath(result.path); localStorage.setItem(VDJ_PATH_KEY, result.path); }
+      toast.success(`Synced ${tracks.length.toLocaleString()} VirtualDJ tracks · ${matched.toLocaleString()} matched in your folders`);
+      return true;
+    } catch (e) {
+      toast.error((e as Error).message);
+      return false;
+    } finally {
+      setVdjSyncing(false);
+    }
+  }
   useEffect(() => {
     let active = true;
     supabase.auth.getUser().then(async ({ data }) => {
@@ -64,7 +119,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
     setFiles(prev => [...prev.filter(f => f.name !== file.name), file]);
   }
-  return <Context.Provider value={{ sources, files, library, loading, addFolder, rescan, addFile, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ sources, files, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, addFolder, rescan, addFile, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);

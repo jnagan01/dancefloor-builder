@@ -1,5 +1,5 @@
 /* Dancefloor Builder — macOS desktop shell (Electron main process) */
-const { app, BrowserWindow, shell, Menu, dialog } = require("electron");
+const { app, BrowserWindow, shell, Menu, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -50,6 +50,7 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false,
+      preload: path.join(__dirname, "preload.cjs"),
     },
   });
 
@@ -177,6 +178,43 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// ---- VirtualDJ database (native disk access) ----
+function defaultVdjPath() {
+  return path.join(app.getPath("documents"), "VirtualDJ", "database.xml");
+}
+
+function registerVirtualDjHandlers() {
+  ipcMain.handle("vdj:default-path", () => defaultVdjPath());
+
+  ipcMain.handle("vdj:read-database", async (_event, customPath) => {
+    const target = typeof customPath === "string" && customPath.trim() ? customPath : defaultVdjPath();
+    try {
+      const xml = await fs.promises.readFile(target, "utf8");
+      return { ok: true, path: target, xml };
+    } catch (error) {
+      const code = error && error.code;
+      const message =
+        code === "ENOENT"
+          ? "No VirtualDJ database found at that location."
+          : code === "EPERM" || code === "EACCES"
+            ? "macOS blocked access to that folder. Allow file access for Dancefloor Builder in System Settings › Privacy & Security › Files and Folders."
+            : `Couldn't read the VirtualDJ database (${String(code || error)}).`;
+      return { ok: false, path: target, error: message };
+    }
+  });
+
+  ipcMain.handle("vdj:choose-database", async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: "Choose your VirtualDJ database",
+      defaultPath: defaultVdjPath(),
+      properties: ["openFile"],
+      filters: [{ name: "VirtualDJ database", extensions: ["xml"] }],
+    });
+    if (result.canceled || !result.filePaths[0]) return { ok: false, canceled: true };
+    return { ok: true, path: result.filePaths[0] };
+  });
+}
+
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
@@ -190,6 +228,7 @@ if (!gotLock) {
 
   app.whenReady().then(() => {
     buildMenu();
+    registerVirtualDjHandlers();
     createWindow();
 
     app.on("activate", () => {

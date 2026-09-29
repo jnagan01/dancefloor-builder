@@ -2691,7 +2691,7 @@ function InlineMatchSearch({
                       <Play className="h-3 w-3" />
                     </Button>
                   )}
-                    <div className="min-w-0 flex-1"><p className="break-words font-medium">{t.artist} — {t.title}</p><p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p></div><div className="w-20 shrink-0 text-right text-[11px] text-muted-foreground sm:w-28"><p>Plays —</p><p>{t.key||"—"} · {t.bpm||"—"} BPM</p></div>
+                    <div className="min-w-0 flex-1"><p className="break-words font-medium">{t.artist} — {t.title}</p><p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p></div><div className="w-20 shrink-0 text-right text-[11px] text-muted-foreground sm:w-28"><p>{t.playCount!=null?`${t.playCount.toLocaleString()} plays`:"Plays —"}</p><p>{t.key||"—"} · {t.bpm||"—"} BPM</p></div>
                 </li>
               );
             })}
