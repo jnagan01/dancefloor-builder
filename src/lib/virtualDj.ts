@@ -337,7 +337,7 @@ export function matchSong(song: Song, lib: VdjLibrary): SongMatch {
   };
 }
 
-export function searchLibrary(query: string, lib: VdjLibrary, limit = 25): number[] {
+export function searchLibraryScored(query: string, lib: VdjLibrary, limit = 25): Array<{ i: number; s: number }> {
   const q = normalizeText(query);
   if (!q) return [];
   const subject = makeSubject("", query);
@@ -367,8 +367,13 @@ export function searchLibrary(query: string, lib: VdjLibrary, limit = 25): numbe
     if (sim >= 0.55) scored.push({ i, s: sim });
   }
   scored.sort((a, b) => b.s - a.s || a.i - b.i);
-  return scored.slice(0, limit).map((x) => x.i);
+  return scored.slice(0, limit);
 }
+
+export function searchLibrary(query: string, lib: VdjLibrary, limit = 25): number[] {
+  return searchLibraryScored(query, lib, limit).map((x) => x.i);
+}
+
 
 // --- Exports ---
 
