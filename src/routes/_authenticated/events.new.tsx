@@ -81,6 +81,7 @@ import type { ResultSong } from "@/lib/danceFloor";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
+import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktopBridge";
 import { saveWorkflow, updateWorkflow, getWorkflow } from "@/lib/history.functions";
 import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
@@ -997,28 +998,40 @@ function Index() {
     toast.success(`Removed ${removed} duplicate song${removed === 1 ? "" : "s"}`);
   }
 
-  // Restore a previously chosen export folder from IndexedDB on mount.
+  // The configured VirtualDJ folder in Settings is the single source of truth
+  // for where playlists are written (desktop app only — browsers can't build a
+  // folder handle from a path). Any older cached export folder is replaced.
+  const configuredExportPath =
+    isDesktopApp() && workspace.vdjRoot ? vdjPlaylistsIn(workspace.vdjRoot) : null;
+
+  useEffect(() => {
+    if (!configuredExportPath) return;
+    const handle = makeNativeDirHandle(configuredExportPath);
+    setVdjDirHandle(handle as unknown as DirHandleLike);
+    setVdjDirName(configuredExportPath);
+    const now = Date.now();
+    setVdjDirSavedAt(now);
+    void saveDirHandle(VDJ_DIR_KEY, handle as unknown as Parameters<typeof saveDirHandle>[1]);
+    void saveDirHandleMeta(VDJ_DIR_KEY, { savedAt: now });
+  }, [configuredExportPath]);
+
+  // Otherwise restore a previously chosen export folder from IndexedDB on mount.
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      if (configuredExportPath) return;
       const handle = await loadDirHandle(VDJ_DIR_KEY);
       const meta = await loadDirHandleMeta(VDJ_DIR_KEY);
       if (cancelled || !handle) return;
       if (meta) setVdjDirSavedAt(meta.savedAt);
-      const ok = await verifyReadWrite(handle);
+      await verifyReadWrite(handle);
       if (cancelled) return;
-      if (ok) {
-        setVdjDirHandle(handle as unknown as DirHandleLike);
-        setVdjDirName(handle.name ?? "VirtualDJ folder");
-      } else {
-        // Permission lapsed; keep the saved handle so the user can re-grant
-        // via a single click without re-picking the folder.
-        setVdjDirHandle(handle as unknown as DirHandleLike);
-        setVdjDirName(handle.name ?? "VirtualDJ folder");
-      }
+      setVdjDirHandle(handle as unknown as DirHandleLike);
+      setVdjDirName(handle.name ?? "VirtualDJ folder");
     })();
     return () => { cancelled = true; };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configuredExportPath]);
 
   async function chooseMyListsFolder() {
     if (!supportsDirectoryWrite()) {
@@ -1062,6 +1075,11 @@ function Index() {
   // Ensure we have a writable folder handle, prompting the user if needed.
   // Returns the handle or null if the user cancelled / permission denied.
   async function ensureExportFolder(): Promise<DirHandleLike | null> {
+    // Always follow the VirtualDJ folder configured in Settings, so a stale
+    // cached folder can never receive the export.
+    if (configuredExportPath) {
+      return makeNativeDirHandle(configuredExportPath) as unknown as DirHandleLike;
+    }
     if (vdjDirHandle) {
       const ok = await verifyReadWrite(vdjDirHandle as unknown as Parameters<typeof verifyReadWrite>[0]);
       if (ok) return vdjDirHandle;
