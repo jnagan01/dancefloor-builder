@@ -44,7 +44,7 @@ function bigArtwork(url?: string): string | undefined {
 
 async function fetchApple(): Promise<ChartEntry[]> {
   const json = (await getJson(
-    "https://rss.applemarketingtools.com/api/v2/us/music/most-played/50/songs.json",
+    "https://rss.marketingtools.apple.com/api/v2/us/music/most-played/50/songs.json",
   )) as { feed?: { results?: Array<Record<string, unknown>> } };
   const results = json.feed?.results ?? [];
   return results.slice(0, 50).map((r, i) => ({
