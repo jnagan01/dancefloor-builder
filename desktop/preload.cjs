@@ -7,3 +7,9 @@ contextBridge.exposeInMainWorld("electronVirtualDJ", {
   readDatabase: (customPath) => ipcRenderer.invoke("vdj:read-database", customPath ?? null),
   chooseDatabase: () => ipcRenderer.invoke("vdj:choose-database"),
 });
+
+contextBridge.exposeInMainWorld("electronFiles", {
+  isAvailable: true,
+  chooseFolder: () => ipcRenderer.invoke("fs:choose-folder"),
+  writeFile: (dirPath, name, contents) => ipcRenderer.invoke("fs:write-file", { dirPath, name, contents }),
+});
