@@ -43,6 +43,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name).split("/")[0] !== label), ...audio]);
     toast.success(`${audio.length} tracks indexed from ${label}`);
   }
+  async function rescan() {
+    if (!sources.length) { await addFolder(); return; }
+    if (!files.length) { toast.info("Reconnect a music folder to rescan it."); await addFolder(); return; }
+    const available = new Map<string, File[]>();
+    for (const file of files) {
+      const label = (file.webkitRelativePath || file.name).split("/")[0];
+      available.set(label, [...(available.get(label) ?? []), file]);
+    }
+    setSources(prev => prev.map(source => available.has(source.label) ? { label: source.label, tracks: tracksFromAudioFiles(available.get(source.label) ?? []) } : source));
+    toast.success("Connected music folders rescanned. Reconnect any other folders to scan them again.");
+  }
   function addFile(file: File) {
     setSources(prev => {
       const label = "Manually picked files";
@@ -53,7 +64,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
     setFiles(prev => [...prev.filter(f => f.name !== file.name), file]);
   }
-  return <Context.Provider value={{ sources, files, library, loading, addFolder, rescan: addFolder, addFile, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ sources, files, library, loading, addFolder, rescan, addFile, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);
