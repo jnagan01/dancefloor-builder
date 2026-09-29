@@ -141,3 +141,35 @@ export const deleteWorkflow = createServerFn({ method: "POST" })
     if (error) throw dbError("deleteWorkflow", error);
     return { ok: true };
   });
+
+/** Songs that recur most across the signed-in user's saved event lists. */
+export const listMostRequested = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase
+      .from("workflow_history")
+      .select("id, inputs, lists")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) throw dbError("listMostRequested", error);
+
+    const tally = new Map<string, { artist: string; song: string; events: number }>();
+    for (const row of data ?? []) {
+      const inputs = (row.inputs ?? {}) as { songs?: Array<{ artist?: string; song?: string }> };
+      const seen = new Set<string>();
+      for (const s of Array.isArray(inputs.songs) ? inputs.songs : []) {
+        const artist = String(s?.artist ?? "").trim();
+        const song = String(s?.song ?? "").trim();
+        if (!artist || !song) continue;
+        const key = `${artist.toLowerCase()}|${song.toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const prev = tally.get(key);
+        if (prev) prev.events += 1;
+        else tally.set(key, { artist, song, events: 1 });
+      }
+    }
+    return [...tally.values()]
+      .sort((a, b) => b.events - a.events || a.song.localeCompare(b.song))
+      .slice(0, 10);
+  });
