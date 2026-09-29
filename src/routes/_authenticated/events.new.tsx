@@ -34,6 +34,8 @@ import {
   mergeLibraries,
   matchSong,
   searchLibrary,
+  searchLibraryScored,
+
   buildVirtualDjXml,
   buildM3u,
   pickDirectoryFiles,
@@ -2398,6 +2400,9 @@ function SectionView(props: SectionViewProps) {
     : canWriteToVdj
       ? "Choose a folder, then write directly to it"
       : "Direct folder export requires a Chromium-based browser";
+  const statuses = songs.map((s, i) => matches[songKey(section, i, s)]?.status);
+  const matchedCount = statuses.filter((st) => st === "Matched" || st === "Manually Matched").length;
+  const reviewCount = statuses.filter((st) => st === "Possible Match" || st === "Multiple Matches").length;
   return (
     <div className="space-y-5">
        <div className="flex flex-wrap justify-start gap-2 border-b border-border pb-4">
@@ -2430,148 +2435,146 @@ function SectionView(props: SectionViewProps) {
           <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} M3U → VirtualDJ
         </Button>
       </div>
-       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3"><div className="flex max-w-full gap-1 overflow-x-auto">{[["all","All songs"],["matched","Matched"],["unmatched","Unmatched"],["review","Review needed"]].map(([value,label])=><Button key={value} size="sm" className="shrink-0" variant={filter===value?"secondary":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>)}</div><div className="text-xs text-muted-foreground">{songs.length} songs · {software}</div></div>
-      {library && <div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Track matcher</span>{([ ["first","First result"],["most","Most played"],["all","Select all"],["none","Unselect all"] ] as const).map(([mode,label])=><Button key={mode} size="sm" variant={reviewMode===mode?"secondary":"ghost"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>)}{reviewMode === "most" && <span className="text-warning">Play counts unavailable for folder-only sources; first result is used.</span>}</div>}
-       <div className="overflow-x-auto border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Artist</TableHead>
-              <TableHead>Song</TableHead>
-              {library && (
-                <>
-                  <TableHead>Match</TableHead>
-                  <TableHead>Conf.</TableHead>
-                  <TableHead>VDJ BPM</TableHead>
-                  <TableHead>VDJ Key</TableHead>
-                  <TableHead>File Path / Alternatives</TableHead>
-                  <TableHead className="w-44">Actions</TableHead>
-                </>
-              )}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {songs.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={library ? 8 : 2} className="text-center text-sm text-muted-foreground">
-                  No songs in this section
-                </TableCell>
-              </TableRow>
-            ) : songs.map((s, i) => {
-              const key = songKey(section, i, s);
-              const m = matches[key];
-              const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
-              const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
-              if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && (isMatched || !m)) return null;
-              return (
-                <Fragment key={key}>
-                 <TableRow className={`bg-card ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
-                  <TableCell className="align-top">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 shrink-0"
-                        onClick={() => onPreview?.({
-                          artist: s.artist,
-                          song: s.song,
-                          filePath: track?.filePath,
-                          matchConfidence: track && m ? m.confidence : undefined,
-                        })}
-                        title="Preview song"
-                      >
-                        <Play className="h-3.5 w-3.5" />
-                      </Button>
-                      <span className="break-words">{s.artist}</span>
-                      <SourceBadge song={s as BadgeSong} />
-                      <FallbackBadges song={s as BadgeSong} />
-                    </div>
-                  </TableCell>
-                  <TableCell className="align-top">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-6 w-6 shrink-0"
-                        onClick={() => toggleExpanded(key)}
-                        title={expanded.has(key) ? "Collapse metrics" : "Expand metrics"}
-                      >
-                        {expanded.has(key) ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                      </Button>
-                      <span className="break-words">{s.song}</span>
-                    </div>
-                  </TableCell>
+       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border border-border bg-card px-3 py-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Track matcher options</span>
+        {library && ([["first","Select first"],["most","Select most played"],["all","Select all"],["none","Unselect all"]] as const).map(([mode,label])=>(
+          <Button key={mode} size="sm" className="h-7 px-2 text-xs" variant={reviewMode===mode?"secondary":"outline"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>
+        ))}
+        <span className="text-xs tabular-nums text-muted-foreground">
+          <strong className="text-foreground">{matchedCount}</strong> / {songs.length} matched
+          {reviewCount > 0 && <> · <span className="text-warning">{reviewCount} review</span></>}
+        </span>
+        <div className="ml-auto flex flex-wrap gap-1">
+          {[["all","All"],["matched","Matched"],["unmatched","Unmatched"],["review","Review"]].map(([value,label])=>(
+            <Button key={value} size="sm" className={`h-7 rounded-full px-3 text-xs ${filter===value?"":"text-muted-foreground"}`} variant={filter===value?"default":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>
+          ))}
+        </div>
+        {reviewMode === "most" && <p className="w-full text-xs text-warning">Play counts unavailable for folder-only sources; first result is used.</p>}
+      </div>
 
-                  {library && (
-                    <>
-                      <TableCell>{m ? statusBadge(m.status) : statusBadge("Missing From Library")}</TableCell>
-                      <TableCell className="text-xs">{m ? `${Math.round(m.confidence * 100)}%` : "—"}</TableCell>
-                      <TableCell className="text-xs">{track?.bpm || "—"}</TableCell>
-                      <TableCell className="text-xs">{track?.key || "—"}</TableCell>
-                      <TableCell className="max-w-xs">
-                        {track ? (
-                          <p className="truncate text-xs" title={track.filePath}>{track.filePath}</p>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">No file</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                         <div className="flex flex-wrap gap-1">
-                          {m?.status === "Possible Match" && (
-                            <Button size="sm" variant="outline" onClick={() => onConfirm(key)}>
-                              <Check className="h-3 w-3" />
-                            </Button>
-                          )}
-                          <Button size="sm" variant="ghost" onClick={() => onMarkUnresolved(key)} title="Mark unresolved">
-                            <X className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant={m?.excludedFromVdj ? "default" : "ghost"}
-                            onClick={() => onToggleExclude(key)}
-                            title="Exclude from VirtualDJ export"
-                          >
-                            VDJ
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </>
-                  )}
-                </TableRow>
-                {expanded.has(key) && (
-                  <TableRow className="bg-muted/20 hover:bg-muted/20">
-                    <TableCell colSpan={library ? 8 : 2} className="py-2">
-                      <MetricsDetail song={s as BadgeSong} />
-                    </TableCell>
-                  </TableRow>
+       <div className="space-y-3">
+        {songs.length === 0 ? (
+          <p className="border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">No songs in this section</p>
+        ) : songs.map((s, i) => {
+          const key = songKey(section, i, s);
+          const m = matches[key];
+          const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
+          const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
+          if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && (isMatched || !m)) return null;
+          const meta = s as BadgeSong;
+          const needsAttention = !isMatched;
+          const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
+          return (
+            <div key={key} className={`border border-border bg-card ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
+              {/* Track header */}
+              <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-stretch gap-3 border-b border-border p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]">
+                <div className="flex w-8 flex-col items-center justify-center gap-1">
+                  <span className="text-sm font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
+                  {needsAttention && <AlertTriangle className="size-3.5 text-warning" />}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onPreview?.({ artist: s.artist, song: s.song, filePath: track?.filePath, matchConfidence: track && m ? m.confidence : undefined })}
+                  title="Preview song"
+                  className="flex size-14 shrink-0 items-center justify-center border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary"
+                >
+                  <Music className="size-6" />
+                </button>
+                <div className="min-w-0 divide-y divide-border border border-border">
+                  <div className="px-3 py-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Title</p>
+                    <p className="break-words font-display text-base leading-tight">{s.song}</p>
+                  </div>
+                  <div className="px-3 py-1.5">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Artist</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="break-words text-sm leading-tight">{s.artist}</p>
+                      <SourceBadge song={meta} />
+                      <FallbackBadges song={meta} />
+                    </div>
+                  </div>
+                </div>
+                <div className="col-span-3 flex flex-wrap items-center gap-2 sm:col-span-1 sm:justify-end">
+                  <Hud label="Energy" value={meta.energy != null ? Math.round(meta.energy) : "—"} />
+                  <Hud label="Dance" value={meta.danceability != null ? Math.round(meta.danceability) : "—"} />
+                  <Hud label="Mood" value={meta.valence != null ? Math.round(meta.valence) : "—"} />
+                  <Hud label="Key" value={track?.key || meta.camelot || "—"} />
+                  <Hud label="BPM" value={track?.bpm || (meta.bpm != null ? Math.round(meta.bpm) : "—")} />
+                </div>
+              </div>
+
+              {/* Action bar */}
+              <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+                {library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
+                {m && track && <span className="text-[11px] text-muted-foreground">{Math.round(m.confidence * 100)}% confidence</span>}
+                {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected</span>}
+                <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
+                {library && m?.status === "Possible Match" && (
+                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
+                    <Check className="mr-1 h-3 w-3" /> Confirm
+                  </Button>
                 )}
                 {library && (
-                   <TableRow className="bg-muted/20 hover:bg-muted/20">
-                    <TableCell colSpan={8} className="py-2">
-                      <InlineMatchSearch
-                        song={s}
-                        library={library}
-                        currentTrackIndex={m?.trackIndex}
-                        extraTrackIndices={m?.extraTrackIndices ?? []}
-                        onPick={(ti) => onChoose(key, ti)}
-                        onToggleExtra={(ti) => onToggleExtra(key, ti)}
-                        onPreview={onPreview}
-                         onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
-                         matchLimit={matchLimit}
-                         matcherOn={matcherOn}
-                      />
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => onMarkUnresolved(key)} title="Mark unresolved">
+                      <X className="mr-1 h-3 w-3" /> Unresolved
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={m?.excludedFromVdj ? "default" : "ghost"}
+                      className="h-7 px-2 text-xs"
+                      onClick={() => onToggleExclude(key)}
+                      title="Exclude from VirtualDJ export"
+                    >
+                      VDJ
+                    </Button>
+                  </>
                 )}
-                </Fragment>
-              );
-            })}
-          </TableBody>
-        </Table>
+                <Button size="sm" variant="ghost" className="ml-auto h-7 px-2 text-xs" onClick={() => toggleExpanded(key)}>
+                  {expanded.has(key) ? <ChevronUp className="mr-1 h-3 w-3" /> : <ChevronDown className="mr-1 h-3 w-3" />}
+                  Details
+                </Button>
+              </div>
+
+              {expanded.has(key) && (
+                <div className="border-b border-border bg-muted/20 px-3 py-2">
+                  <MetricsDetail song={meta} />
+                </div>
+              )}
+
+              {library && (
+                <div className="px-3 py-3">
+                  <InlineMatchSearch
+                    song={s}
+                    library={library}
+                    currentTrackIndex={m?.trackIndex}
+                    extraTrackIndices={m?.extraTrackIndices ?? []}
+                    onPick={(ti) => onChoose(key, ti)}
+                    onToggleExtra={(ti) => onToggleExtra(key, ti)}
+                    onPreview={onPreview}
+                    onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
+                    matchLimit={matchLimit}
+                    matcherOn={matcherOn}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
+
+function Hud({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center gap-2 border border-border px-2 py-1">
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
+      <span className="min-w-6 text-center text-sm font-semibold tabular-nums">{value}</span>
+    </div>
+  );
+}
+
 
 function InlineMatchSearch({
   song,
@@ -2611,28 +2614,20 @@ function InlineMatchSearch({
   const allResults = useMemo(() => {
     const q = debounced.trim();
     if (!q) return [];
-    return searchLibrary(q, library, limit);
+    return searchLibraryScored(q, library, limit);
   }, [debounced, library, limit]);
   const results = allResults;
   const hasMore = !showAll && results.length >= matchLimit;
   const extraSet = new Set(extraTrackIndices);
   const totalSelected = (currentTrackIndex != null ? 1 : 0) + extraTrackIndices.length;
+  const bestPlays = Math.max(0, ...results.map((r) => library.tracks[r.i]?.playCount ?? 0));
 
   return (
-     <div className="space-y-2 pl-1 sm:pl-3">
+     <div className="space-y-2">
        <div className="flex flex-wrap items-center gap-2">
-        <Search className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search library by artist or title…"
-           className="h-8 min-w-36 flex-1 text-xs"
-        />
-        {query !== defaultQuery && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setQuery(defaultQuery)}>
-            Reset
-          </Button>
-        )}
+        <span className="border border-primary/50 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+          Files ({results.length})
+        </span>
         {onPickLocalFile && (
           <>
             <input
@@ -2654,44 +2649,73 @@ function InlineMatchSearch({
               title="Pick an audio file from your computer"
             >
               <FolderOpen className="mr-1 h-3 w-3" />
-              Browse local file
+              Add local file
             </Button>
           </>
         )}
         {totalSelected > 1 && (
-          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+          <span className="shrink-0 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
             {totalSelected} selected
           </span>
         )}
+        {query !== defaultQuery && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setQuery(defaultQuery)}>
+            Reset search
+          </Button>
+        )}
+      </div>
+      <div className="flex items-center gap-2 border border-border bg-muted/20 px-2">
+        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search local files…"
+          className="h-9 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0"
+        />
       </div>
       {!matcherOn && <p className="text-xs text-muted-foreground">Automatic selection is off; you can still choose files here.</p>}
       {results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Browse local file to pick one from your computer" : ""}.
+          No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Add local file to pick one from your computer" : ""}.
         </p>
       ) : (
         <>
-           <ul className="divide-y divide-border">
-            {results.map((ti) => {
+           <ul className="divide-y divide-border border border-border">
+            {results.map(({ i: ti, s: score }) => {
               const t = library.tracks[ti];
               const isCurrent = ti === currentTrackIndex;
               const isExtra = extraSet.has(ti);
               const selected = isCurrent || isExtra;
+              const pct = Math.round(score * 100);
+              const mostPlayed = bestPlays > 0 && (t.playCount ?? 0) === bestPlays;
               return (
-                 <li key={ti} className="flex items-start gap-2 px-1 py-2 text-xs hover:bg-muted">
-                   <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="mt-1 shrink-0"/>
-{onPreview && (
+                 <li
+                   key={ti}
+                   className={`grid grid-cols-[auto_auto_auto_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2 text-xs hover:bg-muted/50 ${selected ? "border-l-2 border-l-success bg-success/5" : "border-l-2 border-l-transparent"}`}
+                 >
+                   {onPreview ? (
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 w-6 shrink-0 p-0"
+                      className="h-7 w-7 shrink-0 p-0 text-primary"
                       onClick={() => onPreview({ artist: t.artist, song: t.title, filePath: t.filePath })}
                       title="Preview / play this file"
                     >
-                      <Play className="h-3 w-3" />
+                      <Play className="h-3.5 w-3.5 fill-current" />
                     </Button>
-                  )}
-                    <div className="min-w-0 flex-1"><p className="break-words font-medium">{t.artist} — {t.title}</p><p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p></div><div className="w-20 shrink-0 text-right text-[11px] text-muted-foreground sm:w-28"><p>{t.playCount!=null?`${t.playCount.toLocaleString()} plays`:"Plays —"}</p><p>{t.key||"—"} · {t.bpm||"—"} BPM</p></div>
+                   ) : <span />}
+                   <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="shrink-0"/>
+                   <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${pct >= 82 ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{pct}%</span>
+                   <div className="min-w-0">
+                     <p className="break-words font-medium">{t.title} — {t.artist}</p>
+                     <p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p>
+                   </div>
+                   <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                     {mostPlayed && <span className="bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-success">Most played</span>}
+                     {t.playCount != null && <span className="tabular-nums">Plays {t.playCount.toLocaleString()}</span>}
+                     <span className="border border-border px-1.5 py-0.5 font-semibold text-foreground">{t.key || "—"}</span>
+                     <span className="tabular-nums">BPM <strong className="text-foreground">{t.bpm || "—"}</strong></span>
+                   </div>
                 </li>
               );
             })}
@@ -2715,5 +2739,6 @@ function InlineMatchSearch({
         </>
       )}
     </div>
+
   );
 }
