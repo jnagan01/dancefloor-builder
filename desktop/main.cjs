@@ -228,7 +228,7 @@ function registerVirtualDjHandlers() {
   ipcMain.handle("fs:choose-folder", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: "Choose export folder",
-      defaultPath: path.join(app.getPath("documents"), "VirtualDJ"),
+      defaultPath: path.join(defaultVdjRoot(), "Playlists"),
       buttonLabel: "Use this folder",
       properties: ["openDirectory", "createDirectory"],
     });
