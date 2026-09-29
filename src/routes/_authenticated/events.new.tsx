@@ -1684,9 +1684,9 @@ function Index() {
                         const dupKey = `${normalizeKey(entry.artist)}|${normalizeKey(entry.song || "")}`;
                         const isDup = dnpDuplicateKeys.has(dupKey);
                         return (
-                          <TableRow key={`${entry.artist}-${entry.song || ""}-${i}`} className={isDup ? "bg-amber-50/70 dark:bg-amber-950/20" : undefined}>
+                          <TableRow key={`${entry.artist}-${entry.song || ""}-${i}`} className={isDup ? "bg-warning/10" : undefined}>
                             <TableCell className="py-2">
-                              <span className={isDup ? "font-medium text-amber-700 dark:text-amber-300" : undefined}>
+                               <span className={isDup ? "font-medium text-warning" : undefined}>
                                 {entry.artist}
                               </span>
                             </TableCell>
@@ -2300,7 +2300,7 @@ function FallbackBadges({ song }: { song: BadgeSong }) {
       {isExplicit && (
         <Badge
           variant="secondary"
-          className="gap-1 text-[10px] bg-rose-100 text-rose-800 border-rose-200 hover:bg-rose-100"
+           className="gap-1 border-destructive/30 bg-destructive/10 text-[10px] text-destructive"
           title="Explicit / aggressive lyrics — biased toward Transition / Peak"
         >
           Explicit
@@ -2309,7 +2309,7 @@ function FallbackBadges({ song }: { song: BadgeSong }) {
       {song.stretched && (
         <Badge
           variant="secondary"
-          className="gap-1 text-[10px] bg-amber-100 text-amber-800 border-amber-200 hover:bg-amber-100"
+           className="gap-1 border-warning/30 bg-warning/10 text-[10px] text-warning"
           title={song.naturalSection ? `Natural fit: ${song.naturalSection} — stretched to fill the ramp` : "Stretched to fill the ramp"}
         >
           Stretched{song.naturalSection ? ` ← ${song.naturalSection}` : ""}
@@ -2318,7 +2318,7 @@ function FallbackBadges({ song }: { song: BadgeSong }) {
       {song.reused && (
         <Badge
           variant="secondary"
-          className="gap-1 text-[10px] bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-100"
+           className="gap-1 border-warning/30 bg-warning/10 text-[10px] text-warning"
           title="Reused across sections to plug a shortfall"
         >
           Reused
@@ -2331,8 +2331,8 @@ function FallbackBadges({ song }: { song: BadgeSong }) {
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "success" | "warning" | "destructive" }) {
   const toneCls =
-    tone === "success" ? "text-emerald-600" :
-    tone === "warning" ? "text-amber-600" :
+     tone === "success" ? "text-success" :
+     tone === "warning" ? "text-warning" :
     tone === "destructive" ? "text-destructive" : "text-foreground";
   return (
     <div className="rounded-md border bg-background p-2">
@@ -2344,11 +2344,11 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "su
 
 function statusBadge(status: MatchStatus) {
   const map: Record<MatchStatus, string> = {
-    "Matched": "bg-emerald-100 text-emerald-800 border-emerald-200",
-    "Manually Matched": "bg-emerald-100 text-emerald-800 border-emerald-200",
-    "Possible Match": "bg-amber-100 text-amber-900 border-amber-200",
-    "Multiple Matches": "bg-amber-100 text-amber-900 border-amber-200",
-    "Missing From Library": "bg-red-100 text-red-800 border-red-200",
+     "Matched": "bg-success/10 text-success border-success/30",
+     "Manually Matched": "bg-success/10 text-success border-success/30",
+     "Possible Match": "bg-warning/10 text-warning border-warning/30",
+     "Multiple Matches": "bg-warning/10 text-warning border-warning/30",
+     "Missing From Library": "bg-destructive/10 text-destructive border-destructive/30",
   };
   return <Badge variant="outline" className={map[status]}>{status}</Badge>;
 }
