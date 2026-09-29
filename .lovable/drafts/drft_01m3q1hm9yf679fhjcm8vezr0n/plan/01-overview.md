@@ -1,0 +1,5 @@
+# Workspace refinement: noir champagne
+
+Refine the current Dancefloor Builder workspace using the newly supplied DJ-software screenshots **alongside** the earlier references. Follow the selected **Noir champagne workspace** direction: a narrow, persistent left navigation; an understated top line for page identity and actions; full-width, dense music and event tables; and a compact waveform strip while a local file plays. Keep Dancefloor Builder’s own name and content rather than copying the reference app’s branding or example data.
+
+The selected palette is near-black **#131313**, raised charcoal **#252322**, champagne **#c9a84c**, and warm white **#f0e9dc**, with **Sora** headings and **Manrope** body text. The page should feel like a precise DJ work surface rather than a decorative dashboard.
