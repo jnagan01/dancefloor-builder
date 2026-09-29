@@ -4,18 +4,11 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
- * Design system — "Noir & Gold".
- *
- * Dark, editorial wedding-luxe booth aesthetic: near-black surfaces,
- * champagne gold accents, serif display type over a clean grotesque body.
- *
- * All colors MUST use oklch and be referenced through semantic tokens.
- */
+/* Noir-champagne DJ workbench. All color roles use semantic oklch tokens. */
 
 @theme inline {
-  --font-display: "Cormorant Garamond", ui-serif, Georgia, serif;
-  --font-sans: "Karla", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -79,13 +72,13 @@
 :root {
   --radius: 0.5rem;
 
-  --background: oklch(0.16 0.004 90);
-  --foreground: oklch(0.95 0.008 90);
-  --surface: oklch(0.21 0.005 90);
+  --background: oklch(0.19 0 0);
+  --foreground: oklch(0.93 0.018 82);
+  --surface: oklch(0.245 0.008 55);
   --surface-foreground: oklch(0.95 0.008 90);
-  --card: oklch(0.205 0.005 90);
+  --card: oklch(0.225 0.006 55);
   --card-foreground: oklch(0.95 0.008 90);
-  --popover: oklch(0.205 0.005 90);
+  --popover: oklch(0.225 0.006 55);
   --popover-foreground: oklch(0.95 0.008 90);
 
   --gold: oklch(0.76 0.114 87);
@@ -94,11 +87,11 @@
 
   --primary: oklch(0.76 0.114 87);
   --primary-foreground: oklch(0.17 0.01 90);
-  --secondary: oklch(0.26 0.006 90);
+  --secondary: oklch(0.27 0.008 55);
   --secondary-foreground: oklch(0.94 0.008 90);
-  --muted: oklch(0.25 0.006 90);
+  --muted: oklch(0.26 0.008 55);
   --muted-foreground: oklch(0.71 0.014 90);
-  --accent: oklch(0.29 0.02 88);
+  --accent: oklch(0.3 0.025 82);
   --accent-foreground: oklch(0.93 0.03 90);
   --destructive: oklch(0.62 0.2 22);
   --destructive-foreground: oklch(0.97 0.01 90);
@@ -112,8 +105,8 @@
   --ai: oklch(0.72 0.13 305);
   --ai-foreground: oklch(0.16 0.01 90);
 
-  --border: oklch(0.83 0.07 90 / 16%);
-  --input: oklch(0.83 0.07 90 / 22%);
+  --border: oklch(0.83 0.04 88 / 14%);
+  --input: oklch(0.83 0.04 88 / 20%);
   --ring: oklch(0.76 0.114 87 / 60%);
 
   --chart-1: oklch(0.76 0.114 87);
@@ -122,11 +115,11 @@
   --chart-4: oklch(0.72 0.13 305);
   --chart-5: oklch(0.66 0.19 30);
 
-  --sidebar: oklch(0.185 0.005 90);
+  --sidebar: oklch(0.16 0.003 55);
   --sidebar-foreground: oklch(0.93 0.008 90);
   --sidebar-primary: oklch(0.76 0.114 87);
   --sidebar-primary-foreground: oklch(0.17 0.01 90);
-  --sidebar-accent: oklch(0.26 0.01 88);
+  --sidebar-accent: oklch(0.27 0.018 78);
   --sidebar-accent-foreground: oklch(0.94 0.02 90);
   --sidebar-border: oklch(0.83 0.07 90 / 14%);
   --sidebar-ring: oklch(0.76 0.114 87 / 55%);
@@ -135,7 +128,7 @@
   --gradient-gold: linear-gradient(120deg, var(--gold-soft), var(--gold));
 }
 
-/* Light mode: warm ivory paper with the same gold accent. */
+/* Light mode keeps the same semantic roles and contrast. */
 .light {
   --background: oklch(0.985 0.006 90);
   --foreground: oklch(0.2 0.008 90);
@@ -195,19 +188,29 @@
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
-    background-image:
-      radial-gradient(60rem 40rem at 15% -10%, oklch(0.76 0.114 87 / 8%), transparent 60%),
-      radial-gradient(50rem 34rem at 95% 0%, oklch(0.76 0.114 87 / 5%), transparent 55%);
-    background-attachment: fixed;
+    background-image: none;
   }
 
   h1, h2, h3 {
     font-family: var(--font-display);
-    letter-spacing: -0.01em;
+    letter-spacing: 0;
   }
 }
 
-/* Gold hairline framing for feature surfaces. */
+/* Dense authenticated DJ workspace. */
+.workspace-main header h1 { font-weight: 600; }
+.workspace-main table thead { background: color-mix(in oklab, var(--surface) 72%, var(--background)); }
+.workspace-main table th { height: 2.5rem; padding: 0.65rem 0.75rem; font-size: 0.6875rem; text-transform: uppercase; color: var(--muted-foreground); }
+.workspace-main table td { padding: 0.65rem 0.75rem; }
+.workspace-main table tbody tr { transition: background-color 140ms ease; }
+.workspace-main table tbody tr:hover { background: color-mix(in oklab, var(--gold) 4%, transparent); }
+.workspace-main input, .workspace-main select, .workspace-main textarea { background-color: color-mix(in oklab, var(--surface) 58%, var(--background)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-main table tbody tr { transition: none; }
+}
+
+/* Legacy gold utilities remain for existing dialogs and form states. */
 @utility panel-gold {
   border: 1px solid color-mix(in oklab, var(--gold) 26%, transparent);
   background: linear-gradient(
@@ -224,7 +227,7 @@
 @utility eyebrow {
   font-size: 0.6875rem;
   line-height: 1;
-  letter-spacing: 0.18em;
+   letter-spacing: 0;
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
@@ -232,7 +235,7 @@
 @utility display-title {
   font-family: var(--font-display);
   font-weight: 600;
-  letter-spacing: -0.015em;
+   letter-spacing: 0;
 }
 
 /* macOS desktop shell: let the top bar drag the window, keep controls clickable. */
