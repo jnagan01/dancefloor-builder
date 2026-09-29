@@ -38,6 +38,7 @@ import {
 
   buildTxtPlaylist,
   buildM3u,
+  countUnresolvedPaths,
   pickDirectoryFiles,
   pickDirectoryHandle,
   writeFileToDir,
@@ -1260,6 +1261,7 @@ function Index() {
     if (!exportResult) return;
     const refs = getSectionRefsForResult(exportResult, section);
     const m3u = buildM3u(refs, mergedLibrary);
+    warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
       new Blob([m3u], { type: "audio/x-mpegurl" }),
@@ -1309,6 +1311,7 @@ function Index() {
     }
     const refs = getSectionRefsForResult(exportResult, section);
     const m3u = buildM3u(refs, mergedLibrary);
+    warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
     try {
@@ -1342,6 +1345,7 @@ function Index() {
         const refs = getSectionRefsForResult(exportResult, section);
         files.push({ name: `${prefix}${SECTION_FILES[section]}.txt`, data: buildTxtPlaylist(refs, mergedLibrary) });
         files.push({ name: `${prefix}${SECTION_FILES[section]}.m3u`, data: buildM3u(refs, mergedLibrary) });
+        unresolvedTotal += countUnresolvedPaths(refs, mergedLibrary);
       }
       for (const f of files) {
         try {

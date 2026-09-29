@@ -1,5 +1,5 @@
 /* Secure bridge between the macOS shell and the web app. */
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 
 contextBridge.exposeInMainWorld("electronVirtualDJ", {
   isAvailable: true,
@@ -11,5 +11,8 @@ contextBridge.exposeInMainWorld("electronVirtualDJ", {
 contextBridge.exposeInMainWorld("electronFiles", {
   isAvailable: true,
   chooseFolder: () => ipcRenderer.invoke("fs:choose-folder"),
+  getPathForFile: (file) => {
+    try { return webUtils.getPathForFile(file) || ""; } catch { return ""; }
+  },
   writeFile: (dirPath, name, contents) => ipcRenderer.invoke("fs:write-file", { dirPath, name, contents }),
 });
