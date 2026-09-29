@@ -69,7 +69,7 @@ import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
-import { PreviewPlayer, type PreviewTarget } from "@/components/PreviewPlayer";
+import { type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
@@ -91,7 +91,7 @@ import { UserCog } from "lucide-react";
 const VDJ_DIR_KEY = "vdjExportFolder";
 
 export const Route = createFileRoute("/_authenticated/events/new")({
-  validateSearch: (search: Record<string, unknown>) => ({ eventId: typeof search.eventId === "string" ? search.eventId : undefined }),
+  validateSearch: (search: Record<string, unknown>): { eventId?: string } => ({ eventId: typeof search.eventId === "string" ? search.eventId : undefined }),
   component: Index,
   head: () => pageHead("New event", "Build and review three dance floor playlists from your client song list."),
 });
