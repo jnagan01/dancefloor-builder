@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("electronVirtualDJ", {
   getDefaultPath: () => ipcRenderer.invoke("vdj:default-path"),
   readDatabase: (customPath) => ipcRenderer.invoke("vdj:read-database", customPath ?? null),
   chooseDatabase: () => ipcRenderer.invoke("vdj:choose-database"),
+  getDefaultRoot: () => ipcRenderer.invoke("vdj:default-root"),
+  chooseRoot: () => ipcRenderer.invoke("vdj:choose-root"),
 });
 
 contextBridge.exposeInMainWorld("electronFiles", {

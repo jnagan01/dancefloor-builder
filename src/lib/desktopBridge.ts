@@ -14,6 +14,8 @@ interface ElectronVirtualDJ {
   getDefaultPath(): Promise<string>;
   readDatabase(customPath?: string | null): Promise<VdjReadResult>;
   chooseDatabase(): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
+  getDefaultRoot?(): Promise<string>;
+  chooseRoot?(): Promise<{ ok: boolean; path?: string; hasDatabase?: boolean; canceled?: boolean }>;
 }
 
 function bridge(): ElectronVirtualDJ | null {
@@ -126,4 +128,36 @@ export function getNativeFilePath(file: File): string {
   } catch {
     return "";
   }
+}
+
+const joinPath = (root: string, name: string) => `${root.replace(/[\\/]+$/, "")}/${name}`;
+export const vdjDatabaseIn = (root: string) => joinPath(root, "database.xml");
+export const vdjPlaylistsIn = (root: string) => joinPath(root, "Playlists");
+
+/** Default VirtualDJ folder on this Mac (desktop app only). */
+export async function getDefaultVdjRoot(): Promise<string | null> {
+  const api = bridge();
+  if (!api) return null;
+  try {
+    if (api.getDefaultRoot) return await api.getDefaultRoot();
+    const db = await api.getDefaultPath();
+    return db.replace(/[\\/]database\.xml$/i, "");
+  } catch {
+    return null;
+  }
+}
+
+/** Native picker for the main VirtualDJ folder. Null when cancelled. */
+export async function chooseVdjRoot(): Promise<{ path: string; hasDatabase: boolean } | null> {
+  const api = bridge();
+  if (!api) return null;
+  if (api.chooseRoot) {
+    const r = await api.chooseRoot();
+    return r.ok && r.path ? { path: r.path, hasDatabase: r.hasDatabase !== false } : null;
+  }
+  // Older installer: fall back to the generic folder picker.
+  const files = filesBridge();
+  if (!files) return null;
+  const r = await files.chooseFolder();
+  return r.ok && r.path ? { path: r.path, hasDatabase: true } : null;
 }
