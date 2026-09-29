@@ -471,19 +471,34 @@ export interface DirHandle {
 
 export function supportsDirectoryWrite(): boolean {
   if (typeof window === "undefined") return false;
+  if (supportsNativeFolders()) return true;
   return typeof (window as unknown as { showDirectoryPicker?: unknown }).showDirectoryPicker === "function";
+}
+
+interface PickerHandle extends DirHandle {
+  requestPermission?: (opts: { mode: "readwrite" }) => Promise<PermissionState>;
+  queryPermission?: (opts: { mode: "readwrite" }) => Promise<PermissionState>;
 }
 
 /**
  * Opens the folder picker. Returns null only when the user cancels.
  * Any other failure (blocked system folder, permission denied) throws an
  * Error with a friendly message so the UI can explain what happened.
+ *
+ * In the desktop app this uses the native macOS folder dialog; the browser
+ * File System Access API is blocked there. In a browser the picker opens
+ * without asking for write access upfront, then write permission is
+ * requested for the folder the user actually picked.
  */
 export async function pickDirectoryHandle(): Promise<DirHandle | null> {
-  const w = window as unknown as { showDirectoryPicker?: (opts?: { mode?: string; id?: string }) => Promise<DirHandle> };
+  if (supportsNativeFolders()) {
+    return (await chooseNativeFolder()) as unknown as DirHandle | null;
+  }
+  const w = window as unknown as { showDirectoryPicker?: (opts?: { mode?: string; id?: string }) => Promise<PickerHandle> };
   if (!w.showDirectoryPicker) return null;
+  let handle: PickerHandle;
   try {
-    return await w.showDirectoryPicker({ mode: "readwrite", id: "vdj-export" });
+    handle = await w.showDirectoryPicker({ id: "vdj-export" });
   } catch (err) {
     const e = err as { name?: string; message?: string };
     if (e?.name === "AbortError" && !/system|blocked|sensitive/i.test(e.message ?? "")) return null;
@@ -493,10 +508,24 @@ export async function pickDirectoryHandle(): Promise<DirHandle | null> {
       );
     }
     if (e?.name === "NotAllowedError") {
-      throw new Error("Permission to write to that folder was denied. Try again and choose “Allow” / “Edit files”.");
+      throw new Error("The folder picker was blocked. Check your browser's site permissions and try again.");
     }
     throw new Error(`Couldn't open that folder${e?.message ? ` (${e.message})` : ""}.`);
   }
+  // Ask for write access only after a folder has been chosen.
+  try {
+    let state: PermissionState = (await handle.queryPermission?.({ mode: "readwrite" })) ?? "granted";
+    if (state !== "granted") state = (await handle.requestPermission?.({ mode: "readwrite" })) ?? "denied";
+    if (state !== "granted") {
+      throw new Error(
+        "Permission to save files in that folder was denied. Pick it again and choose “Edit files” / “Save changes”.",
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Permission to save")) throw err;
+    throw new Error("Couldn't get permission to save files in that folder. Try picking a folder inside Documents.");
+  }
+  return handle;
 }
 
 export async function writeFileToDir(dir: DirHandle, name: string, contents: string): Promise<void> {
