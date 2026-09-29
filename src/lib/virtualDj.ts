@@ -1,6 +1,7 @@
 // VirtualDJ library parsing + matching utilities. All in-browser.
 import type { Song } from "./danceFloor";
 import { normalizeKey } from "./danceFloor";
+import { supportsNativeFolders, chooseNativeFolder } from "./desktopBridge";
 import {
   makeSubject,
   scorePair,
