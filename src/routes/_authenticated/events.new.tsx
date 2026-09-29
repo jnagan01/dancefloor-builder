@@ -911,6 +911,7 @@ function Index() {
                     existing: existingNow,
                     gaps,
                     favoriteArtists,
+                    neighborArtists,
                   },
                 });
 
