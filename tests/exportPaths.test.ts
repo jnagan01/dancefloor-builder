@@ -4,6 +4,7 @@ describe("resolveExportPath", () => {
   const roots = { "!! MY MUSIC !!": "/Users/joenagan/Music/!! MY MUSIC !!/" };
   it("joins folder location without duplicating the folder name", () => {
     expect(rep("!! MY MUSIC !!/House/Song.mp3", roots)).toBe("/Users/joenagan/Music/!! MY MUSIC !!/House/Song.mp3");
+    expect(rep("!! MY MUSIC !!/song name.mp3", roots)).toBe("/Users/joenagan/Music/!! MY MUSIC !!/song name.mp3");
   });
   it("keeps absolute paths and returns null when unknown", () => {
     expect(rep("/a/b.mp3", roots)).toBe("/a/b.mp3");
