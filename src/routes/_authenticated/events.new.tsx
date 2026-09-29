@@ -29,7 +29,6 @@ import {
 } from "@/lib/danceFloor";
 
 import {
-  parseVdjDatabaseXml,
   buildLibrary,
   tracksFromAudioFiles,
   mergeLibraries,
@@ -37,7 +36,6 @@ import {
   searchLibrary,
   buildVirtualDjXml,
   buildM3u,
-  pickXmlFiles,
   pickDirectoryFiles,
   pickDirectoryHandle,
   writeFileToDir,
@@ -77,7 +75,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
 import { toCamelot, parseBpm } from "@/lib/musicTheory";
 import type { ResultSong } from "@/lib/danceFloor";
-import { saveMusicLibrary, loadMusicLibrary, clearMusicLibrary } from "@/lib/libraryStore";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
@@ -209,8 +206,6 @@ function Index() {
   }
 
   // VirtualDJ state
-  const [libraries, setLibraries] = useState<VdjLibrary[]>([]);
-  const [librarySources, setLibrarySources] = useState<string[]>([]);
   const [matches, setMatches] = useState<Record<string, SongMatch>>({});
   // Mirror of `matches` readable synchronously inside export handlers, which
   // may add match entries and consume them in the same tick (before React
@@ -231,10 +226,6 @@ function Index() {
   const [workflowInstanceId, setWorkflowInstanceId] = useState(0);
   const [danceFloorConfirmed, setDanceFloorConfirmed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  // Saved-library persistence (IndexedDB) bookkeeping.
-  const [librarySavedAt, setLibrarySavedAt] = useState<number | null>(null);
-  const libraryHydrated = useRef(false);
-  const librarySigRef = useRef("");
   // Per-user defaults pulled from the profile; used for new/reset workflows.
   const defaultsRef = useRef({ hours: "3", decades: ["2000s", "2010s", "2020s"] as string[], expand: false });
 
@@ -267,8 +258,7 @@ function Index() {
     setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
 
-  type AudioSource = { id: string; kind: "folder"; name: string; files: File[]; libraryIndex: number };
-  const [audioSources, setAudioSources] = useState<AudioSource[]>([]);
+  const pendingFilePick = useRef<{key:string;path:string}|null>(null);
   const [canDirWrite, setCanDirWrite] = useState(false);
   const [musicSetupOpen, setMusicSetupOpen] = useState(false);
   const [musicSetupCompleted, setMusicSetupCompleted] = useState<boolean | null>(null);
@@ -303,67 +293,9 @@ function Index() {
     return () => { cancelled = true; };
   }, []);
 
-  // Restore the saved music library from this browser's storage on load, so the
-  // DJ never has to re-import their database after signing back in.
+  // Persist "setup completed" once music and an export folder are configured.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const saved = user ? await loadMusicLibrary(user.id) : null;
-      if (cancelled) { libraryHydrated.current = true; return; }
-      if (saved && saved.sources.length) {
-        const libs = saved.sources.map((s) => buildLibrary(s.tracks));
-        const labels = saved.sources.map((s) => s.label);
-        librarySigRef.current = saved.sources.map((s) => `${s.label}:${s.tracks.length}`).join("|");
-        setLibraries(libs);
-        setLibrarySources(labels);
-        setLibrarySavedAt(saved.savedAt);
-        const total = saved.sources.reduce((n, s) => n + s.tracks.length, 0);
-        toast.success(`Loaded your saved library · ${total.toLocaleString()} tracks`);
-      }
-      libraryHydrated.current = true;
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  // Persist the library whenever it changes, and mirror the summary onto the profile.
-  useEffect(() => {
-    if (!libraryHydrated.current) return;
-    const sources = libraries.map((lib, i) => ({
-      label: librarySources[i] ?? `Source ${i + 1}`,
-      tracks: lib.tracks,
-    }));
-    const sig = sources.map((s) => `${s.label}:${s.tracks.length}`).join("|");
-    if (sig === librarySigRef.current) return;
-    librarySigRef.current = sig;
-    (async () => {
-      const total = sources.reduce((n, s) => n + s.tracks.length, 0);
-      let savedAt: number | null = null;
-      if (sources.length) {
-        const { data: { user } } = await supabase.auth.getUser();
-        savedAt = user ? await saveMusicLibrary(sources, user.id) : null;
-        setLibrarySavedAt(savedAt);
-      } else {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) await clearMusicLibrary(user.id);
-        setLibrarySavedAt(null);
-      }
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      await supabase
-        .from("profiles")
-        .update({
-          library_name: sources[0]?.label ?? null,
-          library_track_count: total,
-          library_synced_at: savedAt ? new Date(savedAt).toISOString() : null,
-        })
-        .eq("id", user.id);
-    })();
-  }, [libraries, librarySources]);
-
-  // Persist "setup completed" once the user has at least one library and an export folder configured on any device.
-  useEffect(() => {
-    if (musicSetupCompleted === false && libraries.length > 0 && vdjDirHandle) {
+    if (musicSetupCompleted === false && workspace.sources.length > 0 && vdjDirHandle) {
       (async () => {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
@@ -371,14 +303,11 @@ function Index() {
         setMusicSetupCompleted(true);
       })();
     }
-  }, [libraries.length, vdjDirHandle, musicSetupCompleted]);
+  }, [workspace.sources.length, vdjDirHandle, musicSetupCompleted]);
 
   const audioIndex = useMemo<AudioIndex>(() => {
-    const allFiles: File[] = [];
-    for (const s of audioSources) allFiles.push(...s.files);
-    allFiles.push(...workspace.files);
-    return buildAudioIndex(allFiles, []);
-  }, [audioSources, workspace.files]);
+    return buildAudioIndex(workspace.files, []);
+  }, [workspace.files]);
 
   async function addAudioFolder() { await workspace.addFolder(); }
   function removeAudioSource(id: string) { const i = workspace.sources.findIndex(s => s.label === id); if(i>=0) workspace.removeSource(i); }
@@ -396,6 +325,15 @@ function Index() {
 
 
   const mergedLibrary = workspace.library;
+
+  useEffect(() => {
+    const picked = pendingFilePick.current;
+    if (!picked || !mergedLibrary) return;
+    const index = mergedLibrary.tracks.findIndex(t => t.filePath === picked.path);
+    if (index < 0) return;
+    pendingFilePick.current = null;
+    updateMatch(picked.key, {status:"Manually Matched",confidence:1,trackIndex:index,alternatives:[],extraTrackIndices:[]});
+  }, [mergedLibrary]);
 
   useEffect(() => {
     if (!result || !mergedLibrary) return;
