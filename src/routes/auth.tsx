@@ -8,10 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Toaster } from "@/components/ui/sonner";
+import { pageHead } from "@/lib/pageHead";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
-  head: () => ({ meta: [{ title: "Sign in — Dance Floor Builder" }] }),
+  head: () => pageHead("Sign in", "Sign in to manage your Dancefloor Builder events and music library."),
 });
 
 function AuthPage() {
