@@ -234,3 +234,29 @@
   font-weight: 600;
   letter-spacing: -0.015em;
 }
+
+/* macOS desktop shell: let the top bar drag the window, keep controls clickable. */
+@utility app-drag {
+  -webkit-app-region: drag;
+
+  & button,
+  & a,
+  & input,
+  & select,
+  & textarea,
+  & label,
+  & [role="button"],
+  & [role="tab"],
+  & [data-no-drag] {
+    -webkit-app-region: no-drag;
+  }
+}
+
+@utility app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Keep content clear of the macOS traffic-light buttons in the desktop app. */
+.is-desktop-shell .desktop-titlebar-pad {
+  padding-left: 5.5rem;
+}
