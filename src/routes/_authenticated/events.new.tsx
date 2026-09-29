@@ -1521,11 +1521,11 @@ function Index() {
     <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
 
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-6">
-        <div><p className="text-xs font-semibold uppercase text-primary">Events / Builder</p><h1 className="mt-2 font-display text-4xl">{eventName||"New event"}</h1></div>
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border pb-5">
+        <div className="min-w-0"><p className="text-xs font-semibold uppercase text-primary">Events / Builder</p><h1 className="mt-2 break-words font-display text-2xl sm:text-3xl">{eventName||"New event"}</h1></div>
         <div className="text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}</div>
       </header>
-      <div className="grid gap-6 pb-32 pt-6 xl:grid-cols-[12rem_minmax(0,1fr)]">
+      <div className="grid gap-5 pb-32 pt-5 xl:grid-cols-[11rem_minmax(0,1fr)]">
         <aside className="min-w-0 xl:sticky xl:top-6 lg:self-start">
           <StepRail steps={stepDefs} current={step} onSelect={setStep} />
         </aside>
@@ -1944,7 +1944,7 @@ function Index() {
           >
             <div className="space-y-4">
 
-              {summary && <div className="grid gap-4 sm:grid-cols-2"><div className="border-y border-border py-4"><h3 className="font-semibold">Match summary · {activeSection === "warmUp" ? "Warm Up" : activeSection === "transition" ? "Transition" : "Peak"}</h3><div className="mt-3 flex gap-5 text-sm"><span>{summary.perSection[activeSection].matched} matched</span><span className="text-warning">{summary.perSection[activeSection].attention} need attention</span><span>{summary.perSection[activeSection].total} total</span></div></div><div className="border-y border-border py-4"><h3 className="font-semibold">Song sources</h3><div className="mt-3 flex gap-5 text-sm"><span>{summary.sourceCounts[activeSection].uploads} Upload</span><span>{summary.sourceCounts[activeSection].ai} AI</span><span>{summary.sourceCounts[activeSection].library} Library</span></div></div></div>}
+              {summary && <div className="grid gap-4 sm:grid-cols-2"><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Match summary · {activeSection === "warmUp" ? "Warm Up" : activeSection === "transition" ? "Transition" : "Peak"}</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.perSection[activeSection].matched} matched</span><span className="text-warning">{summary.perSection[activeSection].attention} need attention</span><span>{summary.perSection[activeSection].total} total</span></div></div><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Song sources</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.sourceCounts[activeSection].uploads} Upload</span><span>{summary.sourceCounts[activeSection].ai} AI</span><span>{summary.sourceCounts[activeSection].library} Library</span></div></div></div>}
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button onClick={exportAllZip}>
@@ -1972,25 +1972,25 @@ function Index() {
               </div>
 
               {result.finalShortfall && result.finalShortfall.total > 0 ? (
-                <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900 dark:text-amber-200">
+                 <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="w-full">
                     <div className="font-medium">Not enough songs to fully fill every section</div>
                     <div className="mt-1.5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
-                      <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-center">
+                       <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Warm Up</div>
                         <div>{result.warmUp.length} / {result.perSectionTarget}</div>
-                        <div className="text-amber-700 dark:text-amber-300">-{result.finalShortfall.warmUp} short</div>
+                         <div className="text-warning">-{result.finalShortfall.warmUp} short</div>
                       </div>
-                      <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-center">
+                       <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Transition</div>
                         <div>{result.transition.length} / {result.perSectionTarget}</div>
-                        <div className="text-amber-700 dark:text-amber-300">-{result.finalShortfall.transition} short</div>
+                         <div className="text-warning">-{result.finalShortfall.transition} short</div>
                       </div>
-                      <div className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-center">
+                       <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Peak</div>
                         <div>{result.peak.length} / {result.perSectionTarget}</div>
-                        <div className="text-amber-700 dark:text-amber-300">-{result.finalShortfall.peak} short</div>
+                         <div className="text-warning">-{result.finalShortfall.peak} short</div>
                       </div>
                     </div>
 
@@ -2002,13 +2002,13 @@ function Index() {
               ) : null}
 
               <Tabs value={activeSection} onValueChange={v=>setActiveSection(v as SectionKey)}>
-                <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1">
+                 <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b border-border bg-transparent p-0">
                   {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
                     const label = sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak";
                     const ps = summary?.perSection[sec];
                     const shortfall = result.finalShortfall?.[sec] ?? 0;
                     return (
-                      <TabsTrigger key={sec} value={sec} className="h-auto whitespace-normal text-left leading-tight">
+                       <TabsTrigger key={sec} value={sec} className="h-auto min-w-0 whitespace-normal rounded-none border-b-2 border-transparent px-3 py-2 text-left leading-tight data-[state=active]:border-primary data-[state=active]:bg-sidebar-accent">
                         <span className="flex flex-col gap-0.5">
                           <span>
                             {label} ({result[sec].length}{shortfall > 0 ? ` / ${result.perSectionTarget}, -${shortfall}` : ""})
@@ -2400,7 +2400,7 @@ function SectionView(props: SectionViewProps) {
       : "Direct folder export requires a Chromium-based browser";
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap justify-end gap-2">
+       <div className="flex flex-wrap justify-start gap-2 border-b border-border pb-4">
         <Button size="sm" variant="outline" onClick={onExportPdf}><Download className="mr-1 size-4"/> PDF</Button>
         <Button size="sm" variant="outline" onClick={onExportCsv}>
           <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} CSV
@@ -2430,9 +2430,9 @@ function SectionView(props: SectionViewProps) {
           <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} M3U → VirtualDJ
         </Button>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4"><div className="flex gap-1 overflow-x-auto">{[["all","All songs"],["matched","Matched"],["unmatched","Unmatched"],["review","Review needed"]].map(([value,label])=><Button key={value} size="sm" variant={filter===value?"secondary":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>)}</div><div className="text-xs text-muted-foreground">{songs.length} songs · {software}</div></div>
+       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3"><div className="flex max-w-full gap-1 overflow-x-auto">{[["all","All songs"],["matched","Matched"],["unmatched","Unmatched"],["review","Review needed"]].map(([value,label])=><Button key={value} size="sm" className="shrink-0" variant={filter===value?"secondary":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>)}</div><div className="text-xs text-muted-foreground">{songs.length} songs · {software}</div></div>
       {library && <div className="flex flex-wrap items-center gap-2 text-xs"><span className="text-muted-foreground">Track matcher</span>{([ ["first","First result"],["most","Most played"],["all","Select all"],["none","Unselect all"] ] as const).map(([mode,label])=><Button key={mode} size="sm" variant={reviewMode===mode?"secondary":"ghost"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>)}{reviewMode === "most" && <span className="text-warning">Play counts unavailable for folder-only sources; first result is used.</span>}</div>}
-      <div className="overflow-x-auto border-y border-border">
+       <div className="overflow-x-auto border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -2465,7 +2465,7 @@ function SectionView(props: SectionViewProps) {
               if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && (isMatched || !m)) return null;
               return (
                 <Fragment key={key}>
-                <TableRow className={m?.excludedFromVdj ? "opacity-60" : ""}>
+                 <TableRow className={`bg-card ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
                   <TableCell className="align-top">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <Button
@@ -2516,7 +2516,7 @@ function SectionView(props: SectionViewProps) {
                         )}
                       </TableCell>
                       <TableCell>
-                        <div className="flex flex-wrap gap-1">
+                         <div className="flex flex-wrap gap-1">
                           {m?.status === "Possible Match" && (
                             <Button size="sm" variant="outline" onClick={() => onConfirm(key)}>
                               <Check className="h-3 w-3" />
@@ -2546,7 +2546,7 @@ function SectionView(props: SectionViewProps) {
                   </TableRow>
                 )}
                 {library && (
-                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                   <TableRow className="bg-muted/20 hover:bg-muted/20">
                     <TableCell colSpan={8} className="py-2">
                       <InlineMatchSearch
                         song={s}
@@ -2619,14 +2619,14 @@ function InlineMatchSearch({
   const totalSelected = (currentTrackIndex != null ? 1 : 0) + extraTrackIndices.length;
 
   return (
-    <div className="space-y-2 pl-2">
-      <div className="flex items-center gap-2">
+     <div className="space-y-2 pl-1 sm:pl-3">
+       <div className="flex flex-wrap items-center gap-2">
         <Search className="h-3 w-3 shrink-0 text-muted-foreground" />
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search library by artist or title…"
-          className="h-7 text-xs"
+           className="h-8 min-w-36 flex-1 text-xs"
         />
         {query !== defaultQuery && (
           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setQuery(defaultQuery)}>
@@ -2671,14 +2671,14 @@ function InlineMatchSearch({
         </p>
       ) : (
         <>
-          <ul className="space-y-1">
+           <ul className="divide-y divide-border">
             {results.map((ti) => {
               const t = library.tracks[ti];
               const isCurrent = ti === currentTrackIndex;
               const isExtra = extraSet.has(ti);
               const selected = isCurrent || isExtra;
               return (
-                <li key={ti} className="flex items-start gap-2 rounded px-1 py-0.5 text-xs hover:bg-muted">
+                 <li key={ti} className="flex items-start gap-2 px-1 py-2 text-xs hover:bg-muted">
                    <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="mt-1 shrink-0"/>
 {onPreview && (
                     <Button
@@ -2691,7 +2691,7 @@ function InlineMatchSearch({
                       <Play className="h-3 w-3" />
                     </Button>
                   )}
-                   <div className="min-w-0 flex-1"><p className="break-words font-medium">{t.artist} — {t.title}</p><p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p></div><div className="shrink-0 text-right text-[11px] text-muted-foreground"><p>Plays —</p><p>{t.key||"—"} · {t.bpm||"—"} BPM</p></div>
+                    <div className="min-w-0 flex-1"><p className="break-words font-medium">{t.artist} — {t.title}</p><p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p></div><div className="w-20 shrink-0 text-right text-[11px] text-muted-foreground sm:w-28"><p>Plays —</p><p>{t.key||"—"} · {t.bpm||"—"} BPM</p></div>
                 </li>
               );
             })}
