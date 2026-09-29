@@ -28,6 +28,9 @@ type BrowserDir = AnyHandle & {
 export const VDJ_PATH_KEY = "dancefloor:vdjDatabasePath";
 export const VDJ_SYNC_KEY = "dancefloor:vdjSyncedAt";
 const basename = (p: string) => (p.split(/[\\/]/).pop() ?? p).toLowerCase();
+/** Native scan entries → the shape the track indexer expects. */
+const asFileLike = (files: ReadonlyArray<{ name: string; size?: number; relativePath: string }>) =>
+  files.map(f => ({ name: f.name, size: f.size, webkitRelativePath: f.relativePath }));
 const Context = createContext<Workspace | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [sources, setSources] = useState<Source[]>([]);
