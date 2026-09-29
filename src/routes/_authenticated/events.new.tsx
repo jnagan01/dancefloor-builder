@@ -84,7 +84,7 @@ import { UserCog } from "lucide-react";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
-export const Route = createFileRoute("/_authenticated/")({
+export const Route = createFileRoute("/_authenticated/events/new")({
   component: Index,
   head: () => ({
     meta: [
