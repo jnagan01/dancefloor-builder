@@ -157,6 +157,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       return true;
     }
   }
+  const autoScanned = useRef(false);
   useEffect(() => {
     let active = true;
     supabase.auth.getUser().then(async ({ data }) => {
@@ -174,8 +175,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (userId && !loading) void saveMusicLibrary(sources, userId);
   }, [sources, userId, loading]);
+  // Desktop app: silently re-read remembered music folders from disk on launch
+  // so nothing has to be reconnected.
+  useEffect(() => {
+    if (loading || autoScanned.current || !supportsNativeScan()) return;
+    const roots = getFolderRoots();
+    if (!sources.some(s => roots[s.label])) return;
+    autoScanned.current = true;
+    void rescanNative(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, sources]);
   const library = useMemo(() => sources.length ? mergeLibraries(sources.map(s => buildLibrary(s.tracks))) : null, [sources]);
   async function addFolder() {
+    // Desktop app: use the native picker so we learn the folder's real
+    // location and can re-read it later without asking again.
+    if (supportsNativeScan()) {
+      const root = await chooseNativeMusicFolder();
+      if (!root) return;
+      const result = await scanNativeFolder(root);
+      if (!result.ok || !result.files?.length) {
+        toast.error(result.error ?? "No audio files found in that folder");
+        return;
+      }
+      const label = result.label ?? root.split("/").filter(Boolean).pop() ?? "Music";
+      setFolderRoot(label, result.root ?? root);
+      setSources(prev => [...prev.filter(s => s.label !== label), { label, tracks: tracksFromAudioFiles(result.files ?? []) }]);
+      toast.success(`${result.files.length} tracks indexed from ${label}`);
+      return;
+    }
     const picked = await pickDirectoryFiles();
     const audio = picked.filter(f => /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus|alac)$/i.test(f.name));
     if (!audio.length) { toast.error("No audio files found in that folder"); return; }
@@ -188,8 +215,29 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name).split("/")[0] !== label), ...audio]);
     toast.success(`${audio.length} tracks indexed from ${label}`);
   }
+  /** Re-reads every remembered folder from disk (desktop app only). */
+  async function rescanNative(silent = false): Promise<boolean> {
+    const roots = getFolderRoots();
+    const targets = sources.filter(s => roots[s.label]);
+    if (!targets.length) return false;
+    const updates = new Map<string, VdjTrack[]>();
+    const problems: string[] = [];
+    for (const source of targets) {
+      const result = await scanNativeFolder(roots[source.label]);
+      if (!result.ok || !result.files) { problems.push(`${source.label}: ${result.error ?? "couldn't be read"}`); continue; }
+      updates.set(source.label, tracksFromAudioFiles(result.files));
+    }
+    if (updates.size) {
+      setSources(prev => prev.map(s => updates.has(s.label) ? { label: s.label, tracks: updates.get(s.label) ?? s.tracks } : s));
+      const total = [...updates.values()].reduce((n, t) => n + t.length, 0);
+      if (!silent) toast.success(`${total.toLocaleString()} tracks re-read from your saved folders`);
+    }
+    if (problems.length && !silent) toast.error(problems[0]);
+    return updates.size > 0;
+  }
   async function rescan() {
     if (!sources.length) { await addFolder(); return; }
+    if (supportsNativeScan() && (await rescanNative())) return;
     if (!files.length) { toast.info("Reconnect a music folder to rescan it."); await addFolder(); return; }
     const available = new Map<string, File[]>();
     for (const file of files) {
