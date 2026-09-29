@@ -2594,28 +2594,20 @@ function InlineMatchSearch({
   const allResults = useMemo(() => {
     const q = debounced.trim();
     if (!q) return [];
-    return searchLibrary(q, library, limit);
+    return searchLibraryScored(q, library, limit);
   }, [debounced, library, limit]);
   const results = allResults;
   const hasMore = !showAll && results.length >= matchLimit;
   const extraSet = new Set(extraTrackIndices);
   const totalSelected = (currentTrackIndex != null ? 1 : 0) + extraTrackIndices.length;
+  const bestPlays = Math.max(0, ...results.map((r) => library.tracks[r.i]?.playCount ?? 0));
 
   return (
-     <div className="space-y-2 pl-1 sm:pl-3">
+     <div className="space-y-2">
        <div className="flex flex-wrap items-center gap-2">
-        <Search className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search library by artist or title…"
-           className="h-8 min-w-36 flex-1 text-xs"
-        />
-        {query !== defaultQuery && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setQuery(defaultQuery)}>
-            Reset
-          </Button>
-        )}
+        <span className="border border-primary/50 bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+          Files ({results.length})
+        </span>
         {onPickLocalFile && (
           <>
             <input
@@ -2637,44 +2629,73 @@ function InlineMatchSearch({
               title="Pick an audio file from your computer"
             >
               <FolderOpen className="mr-1 h-3 w-3" />
-              Browse local file
+              Add local file
             </Button>
           </>
         )}
         {totalSelected > 1 && (
-          <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
+          <span className="shrink-0 bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">
             {totalSelected} selected
           </span>
         )}
+        {query !== defaultQuery && (
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setQuery(defaultQuery)}>
+            Reset search
+          </Button>
+        )}
+      </div>
+      <div className="flex items-center gap-2 border border-border bg-muted/20 px-2">
+        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search local files…"
+          className="h-9 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0"
+        />
       </div>
       {!matcherOn && <p className="text-xs text-muted-foreground">Automatic selection is off; you can still choose files here.</p>}
       {results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Browse local file to pick one from your computer" : ""}.
+          No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Add local file to pick one from your computer" : ""}.
         </p>
       ) : (
         <>
-           <ul className="divide-y divide-border">
-            {results.map((ti) => {
+           <ul className="divide-y divide-border border border-border">
+            {results.map(({ i: ti, s: score }) => {
               const t = library.tracks[ti];
               const isCurrent = ti === currentTrackIndex;
               const isExtra = extraSet.has(ti);
               const selected = isCurrent || isExtra;
+              const pct = Math.round(score * 100);
+              const mostPlayed = bestPlays > 0 && (t.playCount ?? 0) === bestPlays;
               return (
-                 <li key={ti} className="flex items-start gap-2 px-1 py-2 text-xs hover:bg-muted">
-                   <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="mt-1 shrink-0"/>
-{onPreview && (
+                 <li
+                   key={ti}
+                   className={`grid grid-cols-[auto_auto_auto_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2 text-xs hover:bg-muted/50 ${selected ? "border-l-2 border-l-success bg-success/5" : "border-l-2 border-l-transparent"}`}
+                 >
+                   {onPreview ? (
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-6 w-6 shrink-0 p-0"
+                      className="h-7 w-7 shrink-0 p-0 text-primary"
                       onClick={() => onPreview({ artist: t.artist, song: t.title, filePath: t.filePath })}
                       title="Preview / play this file"
                     >
-                      <Play className="h-3 w-3" />
+                      <Play className="h-3.5 w-3.5 fill-current" />
                     </Button>
-                  )}
-                    <div className="min-w-0 flex-1"><p className="break-words font-medium">{t.artist} — {t.title}</p><p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p></div><div className="w-20 shrink-0 text-right text-[11px] text-muted-foreground sm:w-28"><p>{t.playCount!=null?`${t.playCount.toLocaleString()} plays`:"Plays —"}</p><p>{t.key||"—"} · {t.bpm||"—"} BPM</p></div>
+                   ) : <span />}
+                   <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="shrink-0"/>
+                   <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${pct >= 82 ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{pct}%</span>
+                   <div className="min-w-0">
+                     <p className="break-words font-medium">{t.title} — {t.artist}</p>
+                     <p className="break-all text-[11px] text-muted-foreground">{t.filePath}</p>
+                   </div>
+                   <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+                     {mostPlayed && <span className="bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-success">Most played</span>}
+                     {t.playCount != null && <span className="tabular-nums">Plays {t.playCount.toLocaleString()}</span>}
+                     <span className="border border-border px-1.5 py-0.5 font-semibold text-foreground">{t.key || "—"}</span>
+                     <span className="tabular-nums">BPM <strong className="text-foreground">{t.bpm || "—"}</strong></span>
+                   </div>
                 </li>
               );
             })}
@@ -2698,5 +2719,6 @@ function InlineMatchSearch({
         </>
       )}
     </div>
+
   );
 }
