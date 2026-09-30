@@ -1656,14 +1656,14 @@ function Index() {
     <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
 
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border pb-5">
-        <div className="min-w-0"><p className="text-xs font-semibold uppercase text-primary">Events / Builder</p><h1 className="mt-2 break-words font-display text-2xl sm:text-3xl">{eventName||"New event"}</h1></div>
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+        <div className="min-w-0"><p className="eyebrow">Events / Builder</p><h1 className="mt-2 break-words font-display text-3xl tracking-tight sm:text-4xl">{eventName||"New event"}</h1></div>
         <div className="text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}</div>
       </header>
-      <div className="grid gap-5 pb-32 pt-5 xl:grid-cols-[11rem_minmax(0,1fr)]">
-        <aside className="min-w-0 xl:sticky xl:top-6 lg:self-start">
+      <div className="space-y-6 pb-32 pt-6">
+        <div className="sticky top-3 z-30">
           <StepRail steps={stepDefs} current={step} onSelect={setStep} />
-        </aside>
+        </div>
 
         <main className="min-w-0 space-y-6">
 
