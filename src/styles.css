@@ -198,16 +198,41 @@
 }
 
 /* Dense authenticated DJ workspace. */
-.workspace-main header h1 { font-weight: 600; }
-.workspace-main table thead { background: color-mix(in oklab, var(--surface) 72%, var(--background)); }
-.workspace-main table th { height: 2.5rem; padding: 0.65rem 0.75rem; font-size: 0.6875rem; text-transform: uppercase; color: var(--muted-foreground); }
+.workspace-main header h1 { font-weight: 600; letter-spacing: -0.015em; }
+.workspace-main table thead { background: transparent; }
+.workspace-main table th { height: 2.5rem; padding: 0.65rem 0.75rem; font-size: 0.6875rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted-foreground); }
 .workspace-main table td { padding: 0.65rem 0.75rem; }
 .workspace-main table tbody tr { transition: background-color 140ms ease; }
 .workspace-main table tbody tr:hover { background: color-mix(in oklab, var(--gold) 4%, transparent); }
-.workspace-main input, .workspace-main select, .workspace-main textarea { background-color: color-mix(in oklab, var(--surface) 58%, var(--background)); }
+.workspace-main input, .workspace-main select, .workspace-main textarea { background-color: color-mix(in oklab, var(--surface) 42%, transparent); }
 
 @media (prefers-reduced-motion: reduce) {
   .workspace-main table tbody tr { transition: none; }
+}
+
+/* Modern Mac surfaces: hairline edges, soft ambient depth, no boxed grid cut-outs. */
+@utility panel {
+  border-radius: 1rem;
+  border: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
+  background: color-mix(in oklab, var(--card) 62%, transparent);
+  box-shadow: 0 1px 1px oklch(0 0 0 / 18%), 0 18px 40px -30px oklch(0 0 0 / 80%);
+}
+
+@utility panel-quiet {
+  border-radius: 0.875rem;
+  border: 1px solid color-mix(in oklab, var(--foreground) 5%, transparent);
+  background: color-mix(in oklab, var(--surface) 45%, transparent);
+}
+
+@utility glass {
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+@utility hairline-y {
+  & > * + * {
+    border-top: 1px solid color-mix(in oklab, var(--foreground) 6%, transparent);
+  }
 }
 
 /* Legacy gold utilities remain for existing dialogs and form states. */
