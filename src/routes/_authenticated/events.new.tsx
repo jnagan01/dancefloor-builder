@@ -94,6 +94,7 @@ import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
 import { UserCog, Music2 } from "lucide-react";
 import { SpotifyExportDialog, type SpotifyExportJob } from "@/components/SpotifyExportDialog";
+import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
@@ -2467,6 +2468,11 @@ function Index() {
                   </div>
                 </div>
               ) : null}
+
+              <EventEnergyRamp
+                sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []) as RampSong[] }))}
+                onSelect={(sec) => setActiveSection(sec)}
+              />
 
               <Tabs value={activeSection} onValueChange={v=>setActiveSection(v as SectionKey)}>
                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b border-border bg-transparent p-0">
