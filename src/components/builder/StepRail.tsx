@@ -17,74 +17,42 @@ export function StepRail({
   current: number;
   onSelect: (id: number) => void;
 }) {
+  const doneCount = steps.filter((s) => s.done).length;
+  const pct = steps.length ? Math.round((doneCount / steps.length) * 100) : 0;
+
   return (
-    <nav aria-label="Build steps">
-      {/* Mobile: horizontal chips */}
-      <ol className="flex gap-2 overflow-x-auto pb-2 lg:hidden">
+    <nav aria-label="Build steps" className="panel glass px-2 py-2">
+      <ol className="flex items-stretch gap-1 overflow-x-auto">
         {steps.map((s) => {
           const active = s.id === current;
           return (
-            <li key={s.id} className="shrink-0">
+            <li key={s.id} className="min-w-0 shrink-0 lg:flex-1">
               <button
                 type="button"
                 onClick={() => !s.disabled && onSelect(s.id)}
                 disabled={s.disabled}
                 aria-current={active ? "step" : undefined}
-                className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors disabled:opacity-40 ${
+                className={`flex w-full items-center gap-2 rounded-full px-3 py-2 text-left text-xs transition-colors disabled:opacity-40 ${
                   active
-                    ? "border-primary/60 bg-primary/15 text-foreground"
-                    : "border-border bg-card text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                <span className="font-mono tabular-nums">{s.id}</span>
-                <span className="whitespace-nowrap">{s.label}</span>
-                {s.done && <Check className="h-3 w-3 text-success" />}
-              </button>
-            </li>
-          );
-        })}
-      </ol>
-
-      {/* Desktop: vertical rail */}
-      <ol className="hidden lg:block">
-        {steps.map((s, i) => {
-          const active = s.id === current;
-          return (
-            <li key={s.id} className="relative">
-              {i < steps.length - 1 && (
-                <span
-                  aria-hidden
-                  className="absolute left-[1.0625rem] top-9 h-[calc(100%-1.5rem)] w-px bg-border"
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => !s.disabled && onSelect(s.id)}
-                disabled={s.disabled}
-                aria-current={active ? "step" : undefined}
-                className={`group grid w-full grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-lg px-2 py-2.5 text-left transition-colors disabled:opacity-40 ${
-                  active ? "bg-primary/10" : "hover:bg-accent/50"
+                    ? "bg-primary/15 text-foreground"
+                    : "text-muted-foreground hover:bg-accent/40 hover:text-foreground"
                 }`}
               >
                 <span
-                  className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full border text-xs font-semibold tabular-nums transition-colors ${
+                  className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-semibold tabular-nums ${
                     active
-                      ? "border-primary bg-primary text-primary-foreground"
+                      ? "bg-primary text-primary-foreground"
                       : s.done
-                        ? "border-success/50 bg-success/15 text-success"
-                        : "border-border bg-card text-muted-foreground"
+                        ? "bg-success/20 text-success"
+                        : "bg-muted/60 text-muted-foreground"
                   }`}
                 >
-                  {s.done && !active ? <Check className="h-3.5 w-3.5" /> : s.id}
+                  {s.done && !active ? <Check className="size-3" /> : s.id}
                 </span>
                 <span className="min-w-0">
-                  <span
-                    className={`block truncate text-sm ${active ? "font-semibold text-foreground" : "text-muted-foreground group-hover:text-foreground"}`}
-                  >
-                    {s.label}
-                  </span>
-                  {s.hint && (
-                    <span className="block truncate text-xs text-muted-foreground/80">{s.hint}</span>
+                  <span className={`block truncate ${active ? "font-semibold" : ""}`}>{s.label}</span>
+                  {s.hint && active && (
+                    <span className="block truncate text-[11px] text-muted-foreground">{s.hint}</span>
                   )}
                 </span>
               </button>
@@ -92,6 +60,9 @@ export function StepRail({
           );
         })}
       </ol>
+      <div className="mx-2 mt-2 h-px overflow-hidden rounded-full bg-border">
+        <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${pct}%` }} />
+      </div>
     </nav>
   );
 }

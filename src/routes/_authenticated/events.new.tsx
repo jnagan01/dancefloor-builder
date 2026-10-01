@@ -1656,14 +1656,14 @@ function Index() {
     <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
 
-      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-border pb-5">
-        <div className="min-w-0"><p className="text-xs font-semibold uppercase text-primary">Events / Builder</p><h1 className="mt-2 break-words font-display text-2xl sm:text-3xl">{eventName||"New event"}</h1></div>
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
+        <div className="min-w-0"><p className="eyebrow">Events / Builder</p><h1 className="mt-2 break-words font-display text-3xl tracking-tight sm:text-4xl">{eventName||"New event"}</h1></div>
         <div className="text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}</div>
       </header>
-      <div className="grid gap-5 pb-32 pt-5 xl:grid-cols-[11rem_minmax(0,1fr)]">
-        <aside className="min-w-0 xl:sticky xl:top-6 lg:self-start">
+      <div className="space-y-6 pb-32 pt-6">
+        <div className="sticky top-3 z-30">
           <StepRail steps={stepDefs} current={step} onSelect={setStep} />
-        </aside>
+        </div>
 
         <main className="min-w-0 space-y-6">
 
@@ -2568,7 +2568,7 @@ function SectionView(props: SectionViewProps) {
           <FolderOpen className="mr-1 h-4 w-4" /> {sectionLabel} M3U → VirtualDJ
         </Button>
       </div>
-       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border border-border bg-card px-3 py-2">
+       <div className="panel-quiet flex flex-wrap items-center gap-x-3 gap-y-2 px-3 py-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Track matcher options</span>
         {library && ([["first","Select first"],["most","Select most played"],["all","Select all"],["none","Unselect all"]] as const).map(([mode,label])=>(
           <Button key={mode} size="sm" className="h-7 px-2 text-xs" variant={reviewMode===mode?"secondary":"outline"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>
@@ -2587,7 +2587,7 @@ function SectionView(props: SectionViewProps) {
 
        <div className="space-y-3">
         {songs.length === 0 ? (
-          <p className="border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground">No songs in this section</p>
+          <p className="panel px-4 py-8 text-center text-sm text-muted-foreground">No songs in this section</p>
         ) : songs.map((s, i) => {
           const key = songKey(section, i, s);
           const m = matches[key];
@@ -2598,9 +2598,9 @@ function SectionView(props: SectionViewProps) {
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
           return (
-            <div key={key} className={`border border-border bg-card ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
+            <div key={key} className={`panel overflow-hidden ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
               {/* Track header */}
-              <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-stretch gap-3 border-b border-border p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]">
+              <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-stretch gap-3 p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]">
                 <div className="flex w-8 flex-col items-center justify-center gap-1">
                   <span className="text-sm font-semibold tabular-nums text-muted-foreground">{i + 1}</span>
                   {needsAttention && <AlertTriangle className="size-3.5 text-warning" />}
@@ -2609,11 +2609,11 @@ function SectionView(props: SectionViewProps) {
                   type="button"
                   onClick={() => onPreview?.({ artist: s.artist, song: s.song, filePath: track?.filePath, matchConfidence: track && m ? m.confidence : undefined })}
                   title="Preview song"
-                  className="flex size-14 shrink-0 items-center justify-center border border-border bg-muted/40 text-muted-foreground transition-colors hover:border-primary/60 hover:text-primary"
+                  className="flex size-14 shrink-0 items-center justify-center rounded-xl border border-border bg-muted/30 text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
                 >
                   <Music className="size-6" />
                 </button>
-                <div className="min-w-0 divide-y divide-border border border-border">
+                <div className="hairline-y min-w-0">
                   <div className="px-3 py-1.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Title</p>
                     <p className="break-words font-display text-base leading-tight">{s.song}</p>
@@ -2712,7 +2712,7 @@ function SectionView(props: SectionViewProps) {
 
 function Hud({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-center gap-2 border border-border px-2 py-1">
+    <div className="flex items-center gap-2 rounded-full bg-muted/30 px-2.5 py-1">
       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       <span className="min-w-6 text-center text-sm font-semibold tabular-nums">{value}</span>
     </div>
@@ -2808,7 +2808,7 @@ function InlineMatchSearch({
           </Button>
         )}
       </div>
-      <div className="flex items-center gap-2 border border-border bg-muted/20 px-2">
+      <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-2.5">
         <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <Input
           value={query}
@@ -2824,7 +2824,7 @@ function InlineMatchSearch({
         </p>
       ) : (
         <>
-           <ul className="divide-y divide-border border border-border">
+           <ul className="hairline-y overflow-hidden rounded-xl border border-border">
             {results.map(({ i: ti, s: score }) => {
               const t = library.tracks[ti];
               const isCurrent = ti === currentTrackIndex;
@@ -2849,15 +2849,15 @@ function InlineMatchSearch({
                     </Button>
                    ) : <span />}
                    <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="shrink-0"/>
-                   <span className={`shrink-0 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${pct >= 82 ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{pct}%</span>
+                   <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${pct >= 82 ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{pct}%</span>
                    <div className="min-w-0">
                      <p className="break-words font-medium">{t.title} — {t.artist}</p>
                       <p className="break-all text-[11px] text-muted-foreground">{resolveExportPath(t.filePath) ?? t.filePath}</p>
                    </div>
                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
-                     {mostPlayed && <span className="bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-success">Most played</span>}
+                     {mostPlayed && <span className="rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-success">Most played</span>}
                      {t.playCount != null && <span className="tabular-nums">Plays {t.playCount.toLocaleString()}</span>}
-                     <span className="border border-border px-1.5 py-0.5 font-semibold text-foreground">{t.key || "—"}</span>
+                     <span className="rounded-full bg-muted/40 px-1.5 py-0.5 font-semibold text-foreground">{t.key || "—"}</span>
                      <span className="tabular-nums">BPM <strong className="text-foreground">{t.bpm || "—"}</strong></span>
                    </div>
                 </li>
