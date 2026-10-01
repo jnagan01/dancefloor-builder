@@ -593,7 +593,15 @@ export const getTrendingCharts = createServerFn({ method: "GET" }).handler(
 
     const topTracks = buildConsensusTracks([apple, billboard, lastfm, shazam]);
     const topArtists = buildConsensusArtists(topTracks, lastfmArtists);
-    await backfillMeta(topTracks, topArtists, lfmKey);
+    // Enrichment mutates entries in place; cap how long the page waits on it so
+    // charts appear quickly and any lookups still running fill in later.
+    const deadline = Date.now() + 5000;
+    const withinBudget = (p: Promise<void>) =>
+      Promise.race([
+        p.catch(() => undefined),
+        new Promise<void>((r) => setTimeout(r, Math.max(0, deadline - Date.now()))),
+      ]);
+    await withinBudget(backfillMeta(topTracks, topArtists, lfmKey));
 
     // Give the per-platform lists the artwork and genre resolved for the merged view.
     const metaByKey = new Map<string, { artwork?: string; genre?: string }>();
@@ -608,7 +616,9 @@ export const getTrendingCharts = createServerFn({ method: "GET" }).handler(
         if (!e.artwork) e.artwork = m?.artwork;
         if (!e.genre) e.genre = m?.genre;
       }
-    await backfillEntries([apple, billboard, lastfm, shazam]);
+    await withinBudget(backfillEntries([apple, billboard, lastfm, shazam]));
+    for (const t of topTracks) if (!t.djGenre) t.djGenre = classifyGenre(t.genre);
+    for (const a of topArtists) if (!a.djGenre) a.djGenre = classifyGenre(a.genre);
     for (const feed of [apple, billboard, lastfm, shazam])
       for (const e of feed) e.djGenre = classifyGenre(e.genre);
     for (const a of lastfmArtists) a.djGenre = classifyGenre(a.genre);

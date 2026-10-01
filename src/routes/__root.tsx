@@ -137,7 +137,9 @@ function RootComponent() {
   // when major, an immediate alert. Nothing is shown to the user.
   React.useEffect(() => {
     let last = 0;
+    const NOISE = /ResizeObserver loop|AbortError|aborted|Load failed|Failed to fetch|NetworkError|Script error\.?$|play\(\) request was interrupted|The user aborted/i;
     const send = async (message: string, stack: string | undefined, kind: string) => {
+      if (NOISE.test(message)) return;
       const now = Date.now();
       if (now - last < 10_000) return;
       last = now;
@@ -145,7 +147,9 @@ function RootComponent() {
         const { reportAppError } = await import("@/lib/report.functions");
         await reportAppError({
           data: {
-            severity: "major",
+            // Browser-side glitches go to the weekly digest only; instant
+            // alerts are reserved for server-side failures.
+            severity: "minor",
             category: kind,
             message,
             stack,
@@ -162,6 +166,7 @@ function RootComponent() {
     };
     const onRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
+      if (reason instanceof Error && reason.name === "AbortError") return;
       void send(
         reason instanceof Error ? reason.message : String(reason),
         reason instanceof Error ? reason.stack : undefined,
