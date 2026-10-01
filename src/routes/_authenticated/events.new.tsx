@@ -93,7 +93,8 @@ import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { jsPDF } from "jspdf";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
-import { UserCog } from "lucide-react";
+import { UserCog, Music2 } from "lucide-react";
+import { SpotifyExportDialog, type SpotifyExportJob } from "@/components/SpotifyExportDialog";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
@@ -193,6 +194,7 @@ function Index() {
   const [expand, setExpand] = useState(false);
   const [includeCombined, setIncludeCombined] = useState(false);
   const [eventName, setEventName] = useState("");
+  const [spotifyJob, setSpotifyJob] = useState<SpotifyExportJob | null>(null);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const recommendFn = useServerFn(recommendSongsForSection);
@@ -1475,6 +1477,40 @@ function Index() {
     );
   }
 
+  /** Spotify matching uses the UPLOADED artist/title only, never file matches. */
+  function exportSectionToSpotify(section: SectionKey) {
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const list = exportResult[section];
+    if (!list.length) {
+      toast.error("No songs in this section");
+      return;
+    }
+    setSpotifyJob({
+      name: `${eventName || "Dancefloor Builder"} — ${sectionName(section)}`,
+      description: `${sectionName(section)} list created with Dancefloor Builder`,
+      songs: list.map((s) => ({ artist: s.artist, song: s.song })),
+    });
+  }
+
+  function exportAllToSpotify() {
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
+    const songs = sections.flatMap((sec) => exportResult[sec].map((s) => ({ artist: s.artist, song: s.song })));
+    if (!songs.length) {
+      toast.error("No songs to export");
+      return;
+    }
+    setSpotifyJob({
+      name: `${eventName || "Dancefloor Builder"} — ${background ? bgLabel : "Full event"}`,
+      description: "Created with Dancefloor Builder",
+      songs,
+    });
+  }
+
+
+
   function unmatchedCount(section: SectionKey): number {
     if (!result) return 0;
     return unmatchedCountForResult(result, section);
@@ -2311,6 +2347,9 @@ function Index() {
                   <FolderOpen className="mr-1 h-4 w-4" />
                   {vdjDirName ? `Export All to VirtualDJ (${vdjDirName})` : "Export All to VirtualDJ folder…"}
                 </Button>
+                <Button variant="secondary" onClick={exportAllToSpotify}>
+                  <Music2 className="mr-1 h-4 w-4" /> Export All to Spotify
+                </Button>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={includeCombined} onCheckedChange={(v) => setIncludeCombined(!!v)} />
                   {background ? "Include combined CSV" : "Include combined CSV (all three lists in play order)"}
@@ -2394,6 +2433,7 @@ function Index() {
                        onExportPdf={() => exportSectionPdf(sec)}
                       onExportXml={() => exportSectionXml(sec)}
                       onExportM3u={() => exportSectionM3u(sec)}
+                      onExportSpotify={() => exportSectionToSpotify(sec)}
                       onExportXmlToVdj={() => exportSectionXmlToVdj(sec)}
                       onExportM3uToVdj={() => exportSectionM3uToVdj(sec)}
                       canWriteToVdj={canDirWrite}
@@ -2482,6 +2522,8 @@ function Index() {
         </div>
       </div>
 
+
+      <SpotifyExportDialog job={spotifyJob} onClose={() => setSpotifyJob(null)} />
 
       <Dialog open={!!searchOpen} onOpenChange={(o) => { if (!o) { setSearchOpen(null); setSearchQuery(""); } }}>
         <DialogContent className="max-w-2xl">
@@ -2717,6 +2759,8 @@ interface SectionViewProps {
   onExportPdf: () => void;
   onExportXml: () => void;
   onExportM3u: () => void;
+  onExportSpotify: () => void;
+
   onExportXmlToVdj: () => void;
   onExportM3uToVdj: () => void;
   canWriteToVdj: boolean;
@@ -2736,7 +2780,7 @@ interface SectionViewProps {
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportPdf, onExportXml, onExportM3u, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile, matchLimit, matcherOn, software, reviewMode, onReviewModeChange } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportPdf, onExportXml, onExportM3u, onExportSpotify, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile, matchLimit, matcherOn, software, reviewMode, onReviewModeChange } = props;
   const sectionLabel = props.labelOverride ?? (section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter,setFilter] = useState("all");
@@ -2768,6 +2812,9 @@ function SectionView(props: SectionViewProps) {
         </Button>
         <Button size="sm" variant="outline" onClick={onExportM3u} disabled={!library}>
           <Download className="mr-1 h-4 w-4" /> Download M3U {sectionLabel} Playlist
+        </Button>
+        <Button size="sm" variant="secondary" onClick={onExportSpotify}>
+          <Music2 className="mr-1 h-4 w-4" /> Export {sectionLabel} to Spotify
         </Button>
         <Button
           size="sm"
