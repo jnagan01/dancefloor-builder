@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { CalendarDays, Library, Music2, ArrowRight, Play, TrendingUp, Check, AlertCircle, Flame } from "lucide-react";
 import { listWorkflows, listMostRequested } from "@/lib/history.functions";
-import { getTrendingCharts, type ChartEntry } from "@/lib/charts.functions";
+import { getTrendingCharts, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist } from "@/lib/charts.functions";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -19,7 +19,11 @@ const norm = (s: string) =>
   s.toLowerCase().normalize("NFKD").replace(/\(.*?\)|\[.*?\]/g, "").replace(/feat\.?.*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
 
 const DANCE_WORDS = ["dance", "pop", "hip-hop", "hip hop", "rap", "house", "electronic", "r&b", "soul", "latin", "reggae", "funk", "disco", "edm"];
-const isDanceable = (e: ChartEntry) => !e.genre || DANCE_WORDS.some(w => e.genre!.toLowerCase().includes(w));
+const isDanceable = (e: { genre?: string }) => !e.genre || DANCE_WORDS.some(w => e.genre!.toLowerCase().includes(w));
+
+const SOURCE_LABEL: Record<ChartSource, string> = { apple: "Apple", billboard: "Billboard", lastfm: "Last.fm", shazam: "Shazam" };
+const compact = (n?: number) => (n ? Intl.NumberFormat("en", { notation: "compact" }).format(n) : undefined);
+
 
 function HomePage() {
   const { library, sources, loading } = useWorkspace();
@@ -36,6 +40,8 @@ function HomePage() {
   const { data: mostRequested = [] } = useQuery({ queryKey: ["mostRequested"], queryFn: () => requested() });
 
   const [djOnly, setDjOnly] = useState(false);
+  const [platform, setPlatform] = useState("all");
+
 
   const libraryKeys = useMemo(() => {
     const set = new Set<string>();
@@ -46,16 +52,31 @@ function HomePage() {
     return set;
   }, [sources]);
 
-  const inLibrary = (e: ChartEntry) =>
+  const inLibrary = (e: { artist: string; title: string }) =>
     libraryKeys.has(`${norm(e.artist)}|${norm(e.title)}`) || libraryKeys.has(norm(e.title));
+
 
   const eventSongs = events.reduce((n, e) => n + e.counts.warmUp + e.counts.transition + e.counts.peak, 0);
   const topPlayed = sources.flatMap(s => s.tracks).filter(t => (t.playCount ?? 0) > 0)
     .sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0)).slice(0, 8);
 
-  const apple = chartData?.apple ?? [];
-  const billboard = chartData?.billboard ?? [];
-  const filter = (rows: ChartEntry[]) => (djOnly ? rows.filter(isDanceable) : rows);
+  const platforms = [
+    { id: "all", label: "All platforms" },
+    { id: "apple", label: "Apple Music" },
+    { id: "billboard", label: "Billboard" },
+    { id: "lastfm", label: "Last.fm" },
+    { id: "shazam", label: "Shazam" },
+  ] as const;
+
+  const perPlatform: Record<string, ChartEntry[]> = {
+    apple: chartData?.apple ?? [],
+    billboard: chartData?.billboard ?? [],
+    lastfm: chartData?.lastfm ?? [],
+    shazam: chartData?.shazam ?? [],
+  };
+
+  const filterTracks = (rows: ConsensusTrack[]) => (djOnly ? rows.filter(isDanceable) : rows);
+  const filterEntries = (rows: ChartEntry[]) => (djOnly ? rows.filter(isDanceable) : rows);
 
   return <div className="space-y-10">
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
@@ -79,20 +100,32 @@ function HomePage() {
           <Flame className="mr-2 size-4"/>{djOnly ? "DJ picks" : "All tracks"}
         </Button>
       </div>
-      <Tabs defaultValue="apple">
-        <TabsList className="rounded-full bg-muted/40">
-          <TabsTrigger value="apple" className="rounded-full">Apple Music</TabsTrigger>
-          <TabsTrigger value="billboard" className="rounded-full">Billboard Hot 100</TabsTrigger>
+      <Tabs value={platform} onValueChange={setPlatform}>
+        <TabsList className="flex-wrap rounded-full bg-muted/40">
+          {platforms.map(p => <TabsTrigger key={p.id} value={p.id} className="rounded-full">{p.label}</TabsTrigger>)}
         </TabsList>
-        <TabsContent value="apple" className="mt-4">
-          <ChartList rows={filter(apple)} loading={chartsLoading} error={chartData?.appleError} inLibrary={inLibrary}/>
+
+        <TabsContent value="all" className="mt-5">
+          <div className="grid gap-8 xl:grid-cols-2">
+            <div>
+              <h3 className="mb-3 font-display text-base tracking-tight">Top tracks</h3>
+              <ConsensusTrackList rows={filterTracks(chartData?.topTracks ?? [])} loading={chartsLoading} inLibrary={inLibrary}/>
+            </div>
+            <div>
+              <h3 className="mb-3 font-display text-base tracking-tight">Top artists</h3>
+              <ArtistList rows={chartData?.topArtists ?? []} loading={chartsLoading}/>
+            </div>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam.</p>
         </TabsContent>
-        <TabsContent value="billboard" className="mt-4">
-          <ChartList rows={filter(billboard)} loading={chartsLoading} error={chartData?.billboardError} inLibrary={inLibrary}/>
-        </TabsContent>
+
+        {platforms.filter(p => p.id !== "all").map(p => <TabsContent key={p.id} value={p.id} className="mt-5">
+          <ChartList rows={filterEntries(perPlatform[p.id] ?? [])} loading={chartsLoading} error={chartData?.errors?.[p.id as ChartSource]} inLibrary={inLibrary}/>
+        </TabsContent>)}
       </Tabs>
       {chartData ? <p className="mt-3 text-xs text-muted-foreground">Updated {new Date(chartData.fetchedAt).toLocaleString()}</p> : null}
     </section>
+
 
     <section className="grid gap-6 xl:grid-cols-2" aria-label="Your music">
       <div className="panel px-5 py-5 sm:px-6">
@@ -158,6 +191,94 @@ function ChartList({ rows, loading, error, inLibrary }: { rows: ChartEntry[]; lo
     })}
   </ol>;
 }
+
+function SourcePills({ sources }: { sources: { source: ChartSource; rank: number }[] }) {
+  return <span className="flex flex-wrap items-center gap-1">
+    {sources.map(s => <span key={s.source} className="rounded-full border border-border/50 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+      {SOURCE_LABEL[s.source]} #{s.rank}
+    </span>)}
+  </span>;
+}
+
+function ConsensusTrackList({ rows, loading, inLibrary }: { rows: ConsensusTrack[]; loading: boolean; inLibrary: (e: { artist: string; title: string }) => boolean }) {
+  if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest charts…</p>;
+  if (!rows.length) return <p className="py-8 text-sm text-muted-foreground">No tracks to show right now.</p>;
+  const [hero, ...rest] = rows;
+  return <div>
+    {hero ? <div className="relative mb-3 overflow-hidden rounded-2xl border border-border/40">
+      {hero.artwork ? <img src={hero.artwork} alt="" className="h-44 w-full object-cover"/> : <div className="h-44 w-full bg-muted/50"/>}
+      <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-4">
+        <span className="font-display text-3xl font-semibold leading-none text-white/90">1</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-display text-lg font-semibold text-white">{hero.title}</span>
+          <span className="block truncate text-sm text-white/70">{hero.artist}</span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-1">
+            {hero.sources.map(s => <span key={s.source} className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] text-white/85">{SOURCE_LABEL[s.source]} #{s.rank}</span>)}
+            {hero.sources.length >= 3 ? <span className="rounded-full bg-primary/85 px-2 py-0.5 text-[10px] font-medium text-primary-foreground">Cross-platform</span> : null}
+          </span>
+        </span>
+        <span className={`shrink-0 text-[11px] ${inLibrary(hero) ? "text-success" : "text-white/70"}`}>
+          {inLibrary(hero) ? "In library" : "Missing"}
+        </span>
+      </div>
+    </div> : null}
+    <ol className="grid gap-1">
+      {rest.slice(0, 14).map(t => {
+        const owned = inLibrary(t);
+        return <li key={`${t.rank}-${t.title}`} className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
+          <span className="w-5 text-right tabular-nums text-sm text-muted-foreground">{t.rank}</span>
+          {t.artwork
+            ? <img src={t.artwork} alt="" loading="lazy" className="size-11 rounded-lg object-cover"/>
+            : <span className="grid size-11 place-items-center rounded-lg bg-muted/60"><Music2 className="size-4 text-muted-foreground"/></span>}
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">{t.title}</span>
+            <span className="block truncate text-xs text-muted-foreground">{t.artist}</span>
+            <SourcePills sources={t.sources}/>
+          </span>
+          <span className={`flex shrink-0 items-center gap-1 text-[11px] ${owned ? "text-success" : "text-muted-foreground"}`}>
+            {owned ? <Check className="size-3.5"/> : <AlertCircle className="size-3.5"/>}
+          </span>
+        </li>;
+      })}
+    </ol>
+  </div>;
+}
+
+function ArtistList({ rows, loading }: { rows: ConsensusArtist[]; loading: boolean }) {
+  if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest charts…</p>;
+  if (!rows.length) return <p className="py-8 text-sm text-muted-foreground">No artists to show right now.</p>;
+  const [hero, ...rest] = rows;
+  const sub = (a: ConsensusArtist) => [
+    a.hits ? `${a.hits} charting ${a.hits === 1 ? "hit" : "hits"}` : null,
+    compact(a.listeners) ? `${compact(a.listeners)} listeners` : null,
+  ].filter(Boolean).join(" · ");
+  return <div>
+    {hero ? <div className="relative mb-3 overflow-hidden rounded-2xl border border-border/40">
+      {hero.artwork ? <img src={hero.artwork} alt="" className="h-44 w-full object-cover"/> : <div className="h-44 w-full bg-muted/50"/>}
+      <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-4">
+        <span className="font-display text-3xl font-semibold leading-none text-white/90">1</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-display text-lg font-semibold text-white">{hero.artist}</span>
+          <span className="block truncate text-sm text-white/70">{sub(hero) || "Trending now"}</span>
+          {hero.topTrack ? <span className="block truncate text-xs text-white/55">Top track: {hero.topTrack}</span> : null}
+        </span>
+      </div>
+    </div> : null}
+    <ol className="grid gap-1">
+      {rest.slice(0, 14).map(a => <li key={`${a.rank}-${a.artist}`} className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
+        <span className="w-5 text-right tabular-nums text-sm text-muted-foreground">{a.rank}</span>
+        {a.artwork
+          ? <img src={a.artwork} alt="" loading="lazy" className="size-11 rounded-full object-cover"/>
+          : <span className="grid size-11 place-items-center rounded-full bg-muted/60"><Music2 className="size-4 text-muted-foreground"/></span>}
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">{a.artist}</span>
+          <span className="block truncate text-xs text-muted-foreground">{sub(a) || a.topTrack || ""}</span>
+        </span>
+      </li>)}
+    </ol>
+  </div>;
+}
+
 
 function Metric({ icon: Icon, label, value }: { icon: typeof Library; label: string; value: string }) {
   return <div className="flex items-center gap-3">
