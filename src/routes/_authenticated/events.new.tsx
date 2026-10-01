@@ -473,7 +473,8 @@ function Index() {
     }
     setSpotifyBusy(true);
     const id = `spotify-${Date.now()}`;
-    setUploadStatuses((prev) => [{ id, name: "Spotify playlist", state: "parsing" }, ...prev].slice(0, 20));
+    const entry: UploadStatus = { id, name: "Spotify playlist", state: "parsing" };
+    setUploadStatuses((prev) => [entry, ...prev].slice(0, 20));
     const update = (patch: Partial<UploadStatus>) =>
       setUploadStatuses((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
     try {
