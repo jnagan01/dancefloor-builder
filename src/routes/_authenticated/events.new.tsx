@@ -2885,7 +2885,8 @@ function SectionView(props: SectionViewProps) {
           const m = matches[key];
           const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
           const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
-          if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && (isMatched || !m)) return null;
+          const inReview = m?.status === "Possible Match" || m?.status === "Multiple Matches";
+          if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
           const meta = s as BadgeSong;
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
