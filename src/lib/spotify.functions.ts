@@ -100,11 +100,6 @@ export const importSpotifyPlaylist = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => InputSchema.parse(d))
   .handler(async ({ data }): Promise<SpotifyImportResult> => {
-    const clientId = process.env["SPOTIFY_CLIENT_ID"];
-    const clientSecret = process.env["SPOTIFY_CLIENT_SECRET"];
-    if (!clientId || !clientSecret) {
-      return { songs: [], error: "Spotify isn't connected yet — the Spotify Client ID and Secret still need to be saved." };
-    }
     const ref = parseSpotifyUrl(data.url);
     if (!ref) {
       return {
@@ -112,75 +107,84 @@ export const importSpotifyPlaylist = createServerFn({ method: "POST" })
         error: "That doesn't look like a Spotify playlist or album link.",
       };
     }
-    const token = await getToken(clientId, clientSecret);
-    if (!token) return { songs: [], error: "Spotify rejected the saved credentials. Check the Client ID and Secret." };
 
-    const auth = { Authorization: `Bearer ${token}` };
-    let name: string | undefined;
-    try {
-      const metaRes = await fetch(
-        `https://api.spotify.com/v1/${ref.kind}s/${ref.id}?fields=${ref.kind === "playlist" ? "name" : ""}`,
-        { headers: auth },
-      );
-      if (metaRes.status === 404) {
-        return { songs: [], error: "That playlist is private or no longer exists. Make it public and try again." };
-      }
-      if (metaRes.ok) {
-        const meta = (await metaRes.json()) as { name?: string };
-        name = meta.name;
-      }
-    } catch {
-      /* name is optional */
-    }
+    const clientId = process.env["SPOTIFY_CLIENT_ID"];
+    const clientSecret = process.env["SPOTIFY_CLIENT_SECRET"];
 
     const songs: { artist: string; song: string }[] = [];
+    let name: string | undefined;
     let truncated = false;
-    let url: string | undefined =
-      ref.kind === "playlist"
-        ? `https://api.spotify.com/v1/playlists/${ref.id}/tracks?limit=100&fields=next,items(track(name,artists(name)))`
-        : `https://api.spotify.com/v1/albums/${ref.id}/tracks?limit=50`;
 
-    try {
-      while (url) {
-        const res: Response = await fetch(url, { headers: auth });
-        if (!res.ok) {
-          if (songs.length) break;
-          return {
-            songs: [],
-            error:
-              res.status === 404 || res.status === 403
-                ? "That playlist isn't publicly readable. Make it public and try again."
-                : "Spotify couldn't be reached right now. Try again in a moment.",
-          };
+    // 1) Official Web API (works for albums and any playlist the app token can read)
+    if (clientId && clientSecret) {
+      const token = await getToken(clientId, clientSecret);
+      if (token) {
+        const auth = { Authorization: `Bearer ${token}` };
+        try {
+          const metaRes = await fetch(`https://api.spotify.com/v1/${ref.kind}s/${ref.id}`, { headers: auth });
+          if (metaRes.ok) {
+            const meta = (await metaRes.json()) as { name?: string };
+            name = meta.name;
+          }
+        } catch {
+          /* name is optional */
         }
-        const page = (await res.json()) as {
-          next?: string | null;
-          items?: Array<
-            | { track?: { name?: string; artists?: { name?: string }[] } | null }
-            | { name?: string; artists?: { name?: string }[] }
-          >;
-        };
-        for (const item of page.items ?? []) {
-          const t =
-            ref.kind === "playlist"
-              ? (item as { track?: { name?: string; artists?: { name?: string }[] } | null }).track
-              : (item as { name?: string; artists?: { name?: string }[] });
-          const song = (t?.name || "").trim();
-          const artist = (t?.artists?.[0]?.name || "").trim();
-          if (!song || !artist) continue;
-          songs.push({ artist: artist.slice(0, 200), song: song.slice(0, 200) });
-          if (songs.length >= MAX_TRACKS) break;
+
+        let url: string | undefined =
+          ref.kind === "playlist"
+            ? `https://api.spotify.com/v1/playlists/${ref.id}/tracks?limit=100&fields=next,items(track(name,artists(name)))`
+            : `https://api.spotify.com/v1/albums/${ref.id}/tracks?limit=50`;
+
+        try {
+          while (url) {
+            const res: Response = await fetch(url, { headers: auth });
+            if (!res.ok) break;
+            const page = (await res.json()) as {
+              next?: string | null;
+              items?: Array<
+                | { track?: { name?: string; artists?: { name?: string }[] } | null }
+                | { name?: string; artists?: { name?: string }[] }
+              >;
+            };
+            for (const item of page.items ?? []) {
+              const t =
+                ref.kind === "playlist"
+                  ? (item as { track?: { name?: string; artists?: { name?: string }[] } | null }).track
+                  : (item as { name?: string; artists?: { name?: string }[] });
+              const song = (t?.name || "").trim();
+              const artist = (t?.artists?.[0]?.name || "").trim();
+              if (!song || !artist) continue;
+              songs.push({ artist: artist.slice(0, 200), song: song.slice(0, 200) });
+              if (songs.length >= MAX_TRACKS) break;
+            }
+            if (songs.length >= MAX_TRACKS) {
+              truncated = true;
+              break;
+            }
+            url = page.next || undefined;
+          }
+        } catch {
+          /* fall through to the embed reader */
         }
-        if (songs.length >= MAX_TRACKS) {
-          truncated = true;
-          break;
-        }
-        url = page.next || undefined;
       }
-    } catch {
-      if (!songs.length) return { songs: [], error: "Spotify couldn't be reached right now. Try again in a moment." };
     }
 
-    if (!songs.length) return { songs: [], error: "No songs found in that Spotify link." };
+    // 2) Public embed fallback — no credentials needed, covers the playlists
+    //    Spotify no longer serves to app-only tokens.
+    if (!songs.length) {
+      const embed = await fetchViaEmbed(ref);
+      if (embed.songs.length) {
+        songs.push(...embed.songs);
+        name = name || embed.name;
+        truncated = embed.songs.length >= MAX_TRACKS;
+      }
+    }
+
+    if (!songs.length) {
+      return {
+        songs: [],
+        error: "No songs could be read from that link. Make sure the playlist is public, then try again.",
+      };
+    }
     return { songs, name, truncated };
   });
