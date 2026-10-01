@@ -296,7 +296,9 @@ function ChartList({ rows, loading, error, inLibrary, onPlay }: { rows: ChartEnt
         </span>
       </li>;
     })}
-  </ol>;
+    </ol>
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-background to-transparent"/>
+  </div>;
 }
 
 
@@ -356,6 +358,8 @@ function ConsensusTrackList({ rows, loading, inLibrary, onPlay }: { rows: Consen
         </li>;
       })}
     </ol>
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-background to-transparent"/>
+    </div>
   </div>;
 }
 
