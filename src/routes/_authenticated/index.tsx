@@ -198,7 +198,10 @@ function HomePage() {
         </Link>)}
       </div> : <p className="py-8 text-sm text-muted-foreground">No events yet. Start with a client song list.</p>}
     </section>
+
+    <WaveformPlayer target={playing} resolve={resolveFile} onClose={() => setPlaying(null)}/>
   </div>;
+
 }
 
 function ChartList({ rows, loading, error, inLibrary }: { rows: ChartEntry[]; loading: boolean; error?: string; inLibrary: (e: ChartEntry) => boolean }) {
