@@ -326,7 +326,8 @@ function Index() {
         decades: data.default_decades?.length ? data.default_decades : ["2000s", "2010s", "2020s"],
         expand: !!data.default_expand,
       };
-      // Apply the saved defaults to the current (untouched) workflow.
+      // Apply the saved defaults only to a brand-new workflow — never over an opened event.
+      if (openedEventIdRef.current) return;
       setHours(defaultsRef.current.hours);
       setDecades([...defaultsRef.current.decades]);
       setExpand(defaultsRef.current.expand);
@@ -1388,9 +1389,17 @@ function Index() {
   }
 
   function chooseAlternative(key: string, trackIndex: number) {
-    const m = matches[key];
-    if (!m) return;
-    if(trackIndex === -1){updateMatch(key,{status:"Missing From Library",confidence:0,trackIndex:undefined,alternatives:[],extraTrackIndices:m.extraTrackIndices??[]});return;}
+    const m = matches[key] ?? { status: "Missing From Library" as const, confidence: 0, alternatives: [] };
+    if(trackIndex === -1){
+      // Unselecting the primary: promote the next selected file so the song stays matched.
+      const extras = m.extraTrackIndices ?? [];
+      if (extras.length) {
+        updateMatch(key,{status:"Manually Matched",confidence:1,trackIndex:extras[0],alternatives:m.alternatives,extraTrackIndices:extras.slice(1)});
+      } else {
+        updateMatch(key,{status:"Missing From Library",confidence:0,trackIndex:undefined,alternatives:m.alternatives??[],extraTrackIndices:[]});
+      }
+      return;
+    }
     const others = [m.trackIndex, ...m.alternatives].filter((i): i is number => i != null && i !== trackIndex);
     const extras = (m.extraTrackIndices ?? []).filter((i) => i !== trackIndex);
     updateMatch(key, { status: "Manually Matched", confidence: 1, trackIndex, alternatives: others, extraTrackIndices: extras });
@@ -1402,7 +1411,7 @@ function Index() {
 
   function toggleExtraPick(key: string, trackIndex: number) {
     const m = matches[key];
-    if (!m) return;
+    if (!m || m.trackIndex == null) { chooseAlternative(key, trackIndex); return; }
     if (m.trackIndex === trackIndex) return; // it's the primary, ignore
     const extras = m.extraTrackIndices ?? [];
     const next = extras.includes(trackIndex)
