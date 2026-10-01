@@ -279,8 +279,9 @@ function ChartList({ rows, loading, error, inLibrary, onPlay }: { rows: ChartEnt
   if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest chart…</p>;
   if (error) return <p className="py-8 text-sm text-muted-foreground">{error}</p>;
   if (!rows.length) return <p className="py-8 text-sm text-muted-foreground">No tracks to show right now.</p>;
-  return <ol className="grid gap-1 sm:grid-cols-2">
-    {rows.slice(0, 40).map(e => {
+  return <div className="relative">
+    <ol className="grid max-h-[460px] gap-1 overflow-y-auto pr-1 sm:grid-cols-2">
+    {rows.slice(0, 50).map(e => {
       const owned = inLibrary(e);
       return <li key={`${e.source}-${e.rank}-${e.title}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-accent/30">
         <span className="w-6 text-right tabular-nums text-sm text-muted-foreground">{e.rank}</span>
@@ -337,8 +338,9 @@ function ConsensusTrackList({ rows, loading, inLibrary, onPlay }: { rows: Consen
         </span>
       </div>
     </div> : null}
-    <ol className="grid gap-1">
-      {rest.slice(0, 14).map(t => {
+    <div className="relative">
+    <ol className="grid max-h-[1000px] gap-1 overflow-y-auto pr-1">
+      {rest.slice(0, 49).map(t => {
         const owned = inLibrary(t);
         return <li key={`${t.rank}-${t.title}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
           <span className="w-5 text-right tabular-nums text-sm text-muted-foreground">{t.rank}</span>
@@ -379,8 +381,9 @@ function ArtistList({ rows, loading, onPlay }: { rows: ConsensusArtist[]; loadin
         </span>
       </div>
     </div> : null}
-    <ol className="grid gap-1">
-      {rest.slice(0, 14).map(a => <li key={`${a.rank}-${a.artist}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
+    <div className="relative">
+    <ol className="grid max-h-[800px] gap-1 overflow-y-auto pr-1">
+      {rest.slice(0, 49).map(a => <li key={`${a.rank}-${a.artist}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
         <span className="w-5 text-right tabular-nums text-sm text-muted-foreground">{a.rank}</span>
         <Art src={a.artwork} round label={a.topTrack ?? a.artist} onPlay={() => onPlay(a.artist, a.topTrack ?? "")}/>
         <span className="min-w-0">
