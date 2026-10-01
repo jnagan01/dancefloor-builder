@@ -38,6 +38,8 @@ export interface WorkflowSnapshot {
     doNotPlayInput: string;
     expand: boolean;
     buffer?: number;
+    listType?: "dance" | "cocktail" | "dinner";
+    minutes?: string;
     eventName: string;
   };
   lists: {
