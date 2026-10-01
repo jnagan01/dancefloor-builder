@@ -2826,7 +2826,7 @@ function SectionView(props: SectionViewProps) {
         <Button size="sm" variant="outline" onClick={onExportCsv}>
           <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} CSV
         </Button>
-        <Button size="sm" variant="outline" onClick={onExportXml} disabled={!library || software !== "VirtualDJ"}>
+        <Button size="sm" variant="outline" onClick={onExportXml}>
           <Download className="mr-1 h-4 w-4" /> Download {sectionLabel} song list (.txt)
         </Button>
         <Button size="sm" variant="outline" onClick={onExportM3u} disabled={!library}>
