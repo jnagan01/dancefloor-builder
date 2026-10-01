@@ -3,6 +3,7 @@ const { app, BrowserWindow, shell, Menu, dialog, ipcMain } = require("electron")
 const path = require("node:path");
 const fs = require("node:fs");
 const { checkForUpdates } = require("./updater.cjs");
+const { createTagCache, writeTags } = require("./tags.cjs");
 
 const APP_URL = process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app";
 const APP_ORIGIN = new URL(APP_URL).origin;
@@ -257,6 +258,16 @@ function registerVirtualDjHandlers() {
   // Re-read a remembered music folder straight from disk, so the app never has
   // to ask the user to reconnect it after a restart.
   const AUDIO_RE = /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus|alac)$/i;
+  const tagCache = createTagCache(app.getPath("userData"));
+  // Save edited tags straight into the music file (a backup of the old values is kept).
+  ipcMain.handle("fs:write-tags", async (_event, payload) => {
+    const result = await writeTags(app.getPath("userData"), payload && payload.filePath, payload && payload.tags);
+    if (result.ok) {
+      tagCache.forget(payload.filePath);
+      await tagCache.flush();
+    }
+    return result;
+  });
   ipcMain.handle("fs:scan-folder", async (_event, dirPath) => {
     if (typeof dirPath !== "string" || !dirPath.trim()) {
       return { ok: false, error: "No folder location saved." };
@@ -280,8 +291,11 @@ function registerVirtualDjHandlers() {
           await walk(full);
         } else if (entry.isFile() && AUDIO_RE.test(entry.name)) {
           let size;
+          let tags = null;
           try {
-            size = (await fs.promises.stat(full)).size;
+            const stat = await fs.promises.stat(full);
+            size = stat.size;
+            tags = tagCache.get(full, stat);
           } catch {
             size = undefined;
           }
@@ -290,13 +304,16 @@ function registerVirtualDjHandlers() {
             path: full,
             relativePath: path.join(rootName, path.relative(root, full)),
             size,
+            tags,
           });
+          if (files.length % 200 === 0) await new Promise((r) => setImmediate(r));
         }
       }
     }
     try {
       if (!fs.existsSync(root)) return { ok: false, error: "That folder no longer exists on this Mac." };
       await walk(root);
+      await tagCache.flush();
       return { ok: true, root, label: rootName, files };
     } catch (error) {
       const code = error && error.code;

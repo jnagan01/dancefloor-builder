@@ -56,6 +56,7 @@ export interface ScannedNativeFile {
   path: string;
   relativePath: string;
   size?: number;
+  tags?: import("./virtualDj").AudioFileTags | null;
 }
 
 export interface NativeScanResult {
@@ -71,6 +72,7 @@ interface ElectronFiles {
   chooseFolder(): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
   chooseMusicFolder?(): Promise<{ ok: boolean; path?: string; canceled?: boolean }>;
   scanFolder?(dirPath: string): Promise<NativeScanResult>;
+  writeTags?(filePath: string, tags: Record<string, string>): Promise<{ ok: boolean; error?: string; tags?: import("./virtualDj").AudioFileTags | null }>;
   readAudio?(filePath: string): Promise<{ ok: boolean; data?: ArrayBuffer; error?: string }>;
   writeFile(dirPath: string, name: string, contents: string): Promise<{ ok: boolean; error?: string }>;
   getPathForFile?(file: File): string;
@@ -218,4 +220,18 @@ export async function chooseVdjRoot(): Promise<{ path: string; hasDatabase: bool
   if (!files) return null;
   const r = await files.chooseFolder();
   return r.ok && r.path ? { path: r.path, hasDatabase: true } : null;
+}
+
+/** True when the Mac app can save edited tags into music files. */
+export const supportsTagWriting = () => Boolean(filesBridge()?.writeTags);
+
+/** Saves edited tags straight into a music file on disk (desktop app only). */
+export async function writeNativeTags(filePath: string, tags: Record<string, string>) {
+  const api = filesBridge();
+  if (!api?.writeTags) return { ok: false as const, error: "Update the Mac app to edit song details." };
+  try {
+    return await api.writeTags(filePath, tags);
+  } catch (error) {
+    return { ok: false as const, error: (error as Error).message };
+  }
 }
