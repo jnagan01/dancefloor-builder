@@ -706,7 +706,8 @@ function Index() {
       const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
       return {
         ...s,
-        bpm: s.bpm ?? bpmNum,
+        // The music file's own BPM always beats online/AI estimates.
+        bpm: bpmNum ?? s.bpm,
         camelot: s.camelot ?? cam,
         genre: s.genre ?? t.genre,
         year: s.year ?? yearNum,
@@ -2524,7 +2525,12 @@ function Index() {
 
               <EventEnergyRamp
                 targets={targets}
-                sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []) as RampSong[] }))}
+                sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []).map((s, i) => {
+                  // Use the matched music file's real BPM when there is one.
+                  const ti = matches[songKey(sec, i, s)]?.trackIndex;
+                  const fileBpm = ti != null ? parseBpm(mergedLibrary?.tracks[ti]?.bpm) : undefined;
+                  return { ...s, bpm: fileBpm ?? s.bpm } as RampSong;
+                }) }))}
                 onSelect={(sec) => setActiveSection(sec)}
               />
 
