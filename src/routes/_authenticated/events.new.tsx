@@ -94,7 +94,8 @@ import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
 import { UserCog, Music2 } from "lucide-react";
 import { SpotifyExportDialog, type SpotifyExportJob } from "@/components/SpotifyExportDialog";
-import { VIBES, vibeNote } from "@/lib/vibes";
+import { VIBES, getVibe } from "@/lib/vibes";
+import { VibeBreakdown } from "@/components/builder/VibeBreakdown";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -158,6 +159,7 @@ function Index() {
   const restoredEvent = useRef(false);
   const [buffer, setBuffer] = useState(2);
   const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
+  const [showVibe, setShowVibe] = useState(false);
   const [spotifyLink, setSpotifyLink] = useState("");
   const [spotifyBusy, setSpotifyBusy] = useState(false);
   const spotifyImportFn = useServerFn(importSpotifyPlaylist);
@@ -517,7 +519,8 @@ function Index() {
       artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean),
       genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean),
       decades,
-      notes: [vibeNote(vibe), notes].filter(Boolean).join("\n"),
+      notes,
+      vibe: vibe || undefined,
       doNotPlay: parseDoNotPlay(doNotPlayInput),
     };
   }
@@ -914,6 +917,9 @@ function Index() {
                     const tg = (t.genre ?? "").toLowerCase();
                     if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) continue;
                   }
+                  const vb = getVibe(prefs.vibe);
+                  const tb = parseBpm(t.bpm);
+                  if (vb && tb && (tb < vb.bpm[0] - 15 || tb > vb.bpm[1] + 15)) continue;
                   crateFinds.push({
                     artist: t.artist,
                     song: t.title,
@@ -2490,7 +2496,7 @@ function Index() {
                 onSelect={(sec) => setActiveSection(sec)}
               />
 
-              <Tabs value={activeSection} onValueChange={v=>setActiveSection(v as SectionKey)}>
+              <Tabs value={showVibe && vibe ? "vibe" : activeSection} onValueChange={v=>{ if (v === "vibe") setShowVibe(true); else { setShowVibe(false); setActiveSection(v as SectionKey); } }}>
                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b border-border bg-transparent p-0">
                   {((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => {
                     const label = sectionName(sec);
@@ -2522,7 +2528,21 @@ function Index() {
                       </TabsTrigger>
                     );
                   })}
+                  {vibe && (
+                    <TabsTrigger value="vibe" className="h-auto rounded-none border-b-2 border-transparent px-3 py-2 text-left leading-tight data-[state=active]:border-primary data-[state=active]:bg-sidebar-accent">
+                      Vibe
+                    </TabsTrigger>
+                  )}
                 </TabsList>
+                {vibe && (
+                  <TabsContent value="vibe">
+                    <VibeBreakdown
+                      vibe={vibe}
+                      sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []) as RampSong[] }))}
+                      onJump={(sec) => { setShowVibe(false); setActiveSection(sec); }}
+                    />
+                  </TabsContent>
+                )}
 
                 {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => (
                   <TabsContent key={sec} value={sec}>

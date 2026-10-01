@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { getVibe } from "./vibes";
 import { SONG_LIBRARY, type LibrarySong, type Section } from "./songLibrary";
 
 export type { Section };
@@ -216,6 +217,7 @@ export interface Preferences {
   decades: string[];
   notes: string;
   doNotPlay?: DoNotPlayEntry[];
+  vibe?: string;
 }
 
 export interface DoNotPlayEntry {
@@ -660,6 +662,11 @@ function libraryPreferenceScore(lib: LibrarySong, prefs: Preferences): number {
   if (prefs.decades.includes(lib.decade)) score += 2;
   const notesLower = prefs.notes.toLowerCase();
   if (notesLower && (notesLower.includes(lib.genre.toLowerCase()) || notesLower.includes(lib.artist.toLowerCase()))) score += 1;
+  const v = getVibe(prefs.vibe);
+  if (v && typeof lib.energy === "number") {
+    if (lib.energy >= v.energy[0] - 1 && lib.energy <= v.energy[1] + 1) score += 4;
+    else if (lib.energy < v.energy[0] - 3 || lib.energy > v.energy[1] + 3) score -= 3;
+  }
   return score;
 }
 

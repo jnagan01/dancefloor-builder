@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { getVibe } from "@/lib/vibes";
+import { getVibe, vibeFit } from "@/lib/vibes";
 
 export type RampSong = {
   song: string;
@@ -80,10 +80,8 @@ export function EventEnergyRamp<K extends string>({
   });
 
   const v = getVibe(vibe);
-  const scored = flat.filter((f) => f.song.energy != null);
-  const fit = v && scored.length
-    ? Math.round((scored.filter((f) => f.song.energy! >= v.energy[0] - 0.5 && f.song.energy! <= v.energy[1] + 0.5).length / scored.length) * 100)
-    : null;
+  const fits = v ? flat.map((f) => vibeFit(f.song, v, f.sec as "warmUp")).filter((r) => r !== "unknown") : [];
+  const fit = v && fits.length ? Math.round((fits.filter((r) => r === "inside").length / fits.length) * 100) : null;
   if (n === 0) return null;
   const h = hover != null ? flat[hover] : null;
   const toggles = [
