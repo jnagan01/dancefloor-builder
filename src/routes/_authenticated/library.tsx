@@ -9,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Plus, RefreshCw, Search, Columns3, Play, Pencil } from "lucide-react";
 import { pageHead } from "@/lib/pageHead";
-import { resolveExportPath } from "@/lib/virtualDj";
+import { resolveExportPath, cleanBpm } from "@/lib/virtualDj";
 
 export const Route = createFileRoute("/_authenticated/library")({ component: LibraryPage, head: () => pageHead("Library", "Search, play, and edit the tracks in your connected music folders.") });
 const fields = ["Title", "Artist", "Album", "BPM", "Year", "Genre", "Key", "Comment", "Plays", "File path"] as const;
