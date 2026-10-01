@@ -22,6 +22,8 @@ export type ChartEntry = {
   source: ChartSource;
   artwork?: string;
   genre?: string;
+  djGenre?: DjGenre;
+
   url?: string;
   releaseDate?: string;
   listeners?: number;
