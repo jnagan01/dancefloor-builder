@@ -891,6 +891,18 @@ function Index() {
                   if (normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
                   if (!have.tryAdd(t.artist, t.title)) continue;
                   const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
+                  // Musical fit beats "already in library": a crate track must
+                  // match the client's decades and genres when we know them.
+                  const wantDecades = prefs.decades ?? [];
+                  if (wantDecades.length) {
+                    if (!yearNum) continue;
+                    if (!wantDecades.includes(`${Math.floor(yearNum / 10) * 10}s`)) continue;
+                  }
+                  const wantGenres = (prefs.genres ?? []).map((g) => g.toLowerCase());
+                  if (wantGenres.length) {
+                    const tg = (t.genre ?? "").toLowerCase();
+                    if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) continue;
+                  }
                   crateFinds.push({
                     artist: t.artist,
                     song: t.title,
@@ -909,7 +921,8 @@ function Index() {
               if (crateFinds.length) {
                 // Spread them across the sections that still have room; the
                 // energy re-bucketing later puts each one where it belongs.
-                const quota = Math.max(1, Math.round(r.perSectionTarget * 0.35));
+                // Small quota: library picks are a tiebreaker, not a forced share.
+                const quota = Math.max(1, Math.round(r.perSectionTarget * 0.15));
                 let cursor = 0;
                 for (const { key } of sectionMap) {
                   let placed = 0;
