@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("electronFiles", {
   chooseFolder: () => ipcRenderer.invoke("fs:choose-folder"),
   chooseMusicFolder: () => ipcRenderer.invoke("fs:choose-music-folder"),
   scanFolder: (dirPath) => ipcRenderer.invoke("fs:scan-folder", dirPath),
+  writeTags: (filePath, tags) => ipcRenderer.invoke("fs:write-tags", { filePath, tags }),
   readAudio: (filePath) => ipcRenderer.invoke("fs:read-audio", filePath),
   getPathForFile: (file) => {
     try { return webUtils.getPathForFile(file) || ""; } catch { return ""; }
