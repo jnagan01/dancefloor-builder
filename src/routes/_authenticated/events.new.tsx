@@ -2425,7 +2425,7 @@ function Index() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            onClick={() => setStep((s) => (background && s === 5 ? 3 : Math.max(1, s - 1)))}
             disabled={step === 1}
           >
             <ChevronLeft className="mr-1 h-4 w-4" /> Back
@@ -2438,7 +2438,7 @@ function Index() {
               : "Set the dance floor length to see song targets"}
           </p>
           <div className="flex shrink-0 items-center gap-2">
-            {step < 4 && (
+            {step < lastInputStep && (
               <Button
                 size="sm"
                 onClick={() => {
@@ -2449,11 +2449,16 @@ function Index() {
                 Continue <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             )}
-            {step === 4 && (
+            {step === lastInputStep && (
               <Button size="sm" className="glow-gold" onClick={generate} disabled={isGenerating}>
-                {isGenerating ? "Generating with AI…" : "Generate dance floor lists"}
+                {isGenerating
+                  ? "Generating with AI…"
+                  : background
+                    ? `Generate ${bgLabel.toLowerCase()} playlist`
+                    : "Generate dance floor lists"}
               </Button>
             )}
+
             {step === 5 && (
               <>
                 <Button size="sm" variant="outline" onClick={generate} disabled={isGenerating}>
