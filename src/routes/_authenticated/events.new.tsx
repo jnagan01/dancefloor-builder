@@ -465,6 +465,39 @@ function Index() {
     else toast.error("No songs imported — see file details below the drop zone.");
   }
 
+  async function handleSpotifyImport() {
+    const url = spotifyLink.trim();
+    if (!url) {
+      toast.error("Paste a Spotify playlist link first.");
+      return;
+    }
+    setSpotifyBusy(true);
+    const id = `spotify-${Date.now()}`;
+    setUploadStatuses((prev) => [{ id, name: "Spotify playlist", state: "parsing" }, ...prev].slice(0, 20));
+    const update = (patch: Partial<UploadStatus>) =>
+      setUploadStatuses((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    try {
+      const res = await spotifyImportFn({ data: { url } });
+      if (res.error || !res.songs.length) {
+        update({ state: "error", message: res.error || "No songs found in that link." });
+        toast.error(res.error || "No songs found in that link.");
+        return;
+      }
+      setSongs((prev) => [...prev, ...res.songs]);
+      update({ state: "done", count: res.songs.length, name: res.name ? `Spotify · ${res.name}` : "Spotify playlist" });
+      toast.success(
+        `Imported ${res.songs.length} songs from Spotify${res.truncated ? " (first 1,000)" : ""}`,
+      );
+      setSpotifyLink("");
+    } catch {
+      update({ state: "error", message: "We couldn't reach Spotify. Try again in a moment." });
+      toast.error("We couldn't reach Spotify. Try again in a moment.");
+    } finally {
+      setSpotifyBusy(false);
+    }
+  }
+
+
   const hoursNum = parseFloat(hours) || 0;
   const sectionMinutes = formatMinutes(hoursNum);
 
