@@ -209,7 +209,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, [loading, sources]);
   // Desktop app with a saved VirtualDJ folder but no scanned music folders.
   useEffect(() => {
-    if (loading || autoSynced.current || !isDesktopApp()) return;
+    if (loading || autoSynced.current || autoScanned.current || !isDesktopApp()) return;
     const root = localStorage.getItem(VDJ_ROOT_KEY);
     if (!root) return;
     autoSynced.current = true;
