@@ -174,11 +174,13 @@ function HomePage() {
       <div className="panel px-5 py-5 sm:px-6">
         <h2 className="mb-3 font-display text-lg tracking-tight">Most requested</h2>
         {mostRequested.length ? <ol className="hairline-y text-sm">
-          {mostRequested.map((r, i) => <li key={`${r.artist}-${r.song}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2.5">
+          {mostRequested.map((r, i) => <li key={`${r.artist}-${r.song}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 py-2.5">
             <span className="w-5 tabular-nums text-muted-foreground">{i + 1}</span>
+            <PlayButton label={r.song} onClick={() => play(r.artist, r.song)}/>
             <span className="min-w-0 truncate">{r.artist} — {r.song}</span>
             <span className="shrink-0 text-xs text-muted-foreground">{r.events} {r.events === 1 ? "list" : "lists"}</span>
           </li>)}
+
         </ol> : <p className="py-8 text-sm text-muted-foreground">Songs that repeat across your client lists will appear here.</p>}
         <p className="mt-3 text-xs text-muted-foreground">Counted from songs on your uploaded client lists — {eventSongs} songs saved across events.</p>
       </div>
