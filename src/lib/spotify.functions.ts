@@ -48,6 +48,54 @@ async function getToken(id: string, secret: string): Promise<string | undefined>
 
 const MAX_TRACKS = 1000;
 
+/**
+ * Fallback reader for PUBLIC playlists/albums.
+ *
+ * Spotify's Web API no longer serves most editorial/user playlists to
+ * client-credential (app-only) tokens, but the public embed page still
+ * exposes the full track list as JSON. No auth required.
+ */
+export function parseEmbedHtml(html: string): { songs: { artist: string; song: string }[]; name?: string } {
+  const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (!match) return { songs: [] };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(match[1]);
+  } catch {
+    return { songs: [] };
+  }
+  const entity = (
+    parsed as {
+      props?: { pageProps?: { state?: { data?: { entity?: unknown } } } };
+    }
+  )?.props?.pageProps?.state?.data?.entity as
+    | { name?: string; trackList?: Array<{ title?: string; subtitle?: string }> }
+    | undefined;
+  if (!entity?.trackList?.length) return { songs: [], name: entity?.name };
+  const songs: { artist: string; song: string }[] = [];
+  for (const t of entity.trackList) {
+    const song = (t?.title || "").trim();
+    // subtitle holds the credited artists, comma separated
+    const artist = (t?.subtitle || "").split(",")[0]?.trim() || "";
+    if (!song || !artist) continue;
+    songs.push({ artist: artist.slice(0, 200), song: song.slice(0, 200) });
+    if (songs.length >= MAX_TRACKS) break;
+  }
+  return { songs, name: entity.name };
+}
+
+async function fetchViaEmbed(ref: SpotifyRef): Promise<{ songs: { artist: string; song: string }[]; name?: string }> {
+  try {
+    const res = await fetch(`https://open.spotify.com/embed/${ref.kind}/${ref.id}`, {
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" },
+    });
+    if (!res.ok) return { songs: [] };
+    return parseEmbedHtml(await res.text());
+  } catch {
+    return { songs: [] };
+  }
+}
+
 export const importSpotifyPlaylist = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => InputSchema.parse(d))
