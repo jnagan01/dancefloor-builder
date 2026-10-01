@@ -55,7 +55,7 @@ export const importSpotifyPlaylist = createServerFn({ method: "POST" })
     const clientId = process.env["SPOTIFY_CLIENT_ID"];
     const clientSecret = process.env["SPOTIFY_CLIENT_SECRET"];
     if (!clientId || !clientSecret) {
-      return { songs: [], error: "Spotify is not connected yet. Add the Spotify credentials in settings." };
+      return { songs: [], error: "Spotify isn't connected yet — the Spotify Client ID and Secret still need to be saved." };
     }
     const ref = parseSpotifyUrl(data.url);
     if (!ref) {
