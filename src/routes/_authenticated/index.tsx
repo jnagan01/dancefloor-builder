@@ -52,6 +52,24 @@ function HomePage() {
 
   const [djOnly, setDjOnly] = useState(false);
   const [platform, setPlatform] = useState("all");
+  const [playing, setPlaying] = useState<PreviewTarget | null>(null);
+
+  /** Finds a connected local file so charts play the real song when owned. */
+  const resolveFile = (q: { artist?: string; title?: string; filePath?: string }) => {
+    if (q.filePath) {
+      const direct = files.find(f => (f.webkitRelativePath || f.name) === q.filePath || f.name === q.filePath!.split("/").pop());
+      if (direct) return direct;
+    }
+    if (!q.title) return undefined;
+    const want = norm(q.title);
+    const artist = q.artist ? norm(q.artist) : "";
+    return files.find(f => {
+      const name = norm(f.name.replace(/\.[a-z0-9]+$/i, ""));
+      return name.includes(want) && (!artist || name.includes(artist));
+    });
+  };
+  const play = (artist: string, song: string, filePath?: string) => setPlaying({ artist, song, filePath });
+
 
 
   const libraryKeys = useMemo(() => {
