@@ -2810,6 +2810,13 @@ function SectionView(props: SectionViewProps) {
   const statuses = songs.map((s, i) => matches[songKey(section, i, s)]?.status);
   const matchedCount = statuses.filter((st) => st === "Matched" || st === "Manually Matched").length;
   const reviewCount = statuses.filter((st) => st === "Possible Match" || st === "Multiple Matches").length;
+  const unmatchedCountLive = songs.filter((s, i) => matches[songKey(section, i, s)]?.trackIndex == null).length;
+  const filterCounts: Record<string, number> = {
+    all: songs.length,
+    matched: matchedCount,
+    unmatched: unmatchedCountLive,
+    review: reviewCount,
+  };
   return (
     <div className="space-y-5">
        <div className="flex flex-wrap justify-start gap-2 border-b border-border pb-4">
