@@ -106,8 +106,25 @@ function HomePage() {
     shazam: chartData?.shazam ?? [],
   };
 
-  const filterTracks = (rows: ConsensusTrack[]) => (djOnly ? rows.filter(isDanceable) : rows);
-  const filterEntries = (rows: ChartEntry[]) => (djOnly ? rows.filter(isDanceable) : rows);
+  const matchesGenre = (e: { djGenre?: DjGenre }) => genre === "all" || e.djGenre === genre;
+
+  const filterTracks = (rows: ConsensusTrack[]) =>
+    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre).map((t, i) => ({ ...t, rank: genre === "all" ? t.rank : i + 1 }));
+  const filterArtists = (rows: ConsensusArtist[]) =>
+    rows.filter(matchesGenre).map((a, i) => ({ ...a, rank: genre === "all" ? a.rank : i + 1 }));
+  const filterEntries = (rows: ChartEntry[]) =>
+    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre);
+
+  /** Only offer genre pills that actually have charting songs right now. */
+  const genreOptions = useMemo(() => {
+    const present = new Set<DjGenre>();
+    for (const t of chartData?.topTracks ?? []) if (t.djGenre) present.add(t.djGenre);
+    for (const a of chartData?.topArtists ?? []) if (a.djGenre) present.add(a.djGenre);
+    for (const key of ["apple", "billboard", "lastfm", "shazam"] as const)
+      for (const e of chartData?.[key] ?? []) if (e.djGenre) present.add(e.djGenre);
+    return DJ_GENRES.filter(g => present.has(g.id));
+  }, [chartData]);
+
 
   return <div className="space-y-10">
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
