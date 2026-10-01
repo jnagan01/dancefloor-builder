@@ -2769,8 +2769,9 @@ type BadgeSong = Song & {
 };
 
 
-function MetricsDetail({ song }: { song: BadgeSong }) {
+function MetricsDetail({ song, fileBpm }: { song: BadgeSong; fileBpm?: number }) {
   const hasAny =
+    fileBpm != null ||
     typeof song.energy === "number" ||
     typeof song.danceability === "number" ||
     typeof song.popularity === "number" ||
@@ -2791,7 +2792,11 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
     { label: "Popularity", value: fmt(song.popularity) },
     { label: "Valence", value: fmt(song.valence) },
     intensity ? { label: "Intensity (avg)", value: intensity } : null,
-    typeof song.bpm === "number" ? { label: "BPM", value: Math.round(song.bpm).toString() } : null,
+    fileBpm != null
+      ? { label: "BPM (from file)", value: String(Math.round(fileBpm)) }
+      : typeof song.bpm === "number"
+        ? { label: "BPM (estimate)", value: Math.round(song.bpm).toString() }
+        : null,
     song.camelot ? { label: "Key", value: song.camelot } : null,
     song.genre ? { label: "Genre", value: song.genre } : null,
     typeof song.year === "number" ? { label: "Year", value: String(song.year) } : null,
@@ -3170,9 +3175,9 @@ function SectionView(props: SectionViewProps) {
   );
 }
 
-function Hud({ label, value }: { label: string; value: string | number }) {
+function Hud({ label, value, title }: { label: string; value: string | number; title?: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-full bg-muted/30 px-2.5 py-1">
+    <div className="flex items-center gap-2 rounded-full bg-muted/30 px-2.5 py-1" title={title}>
       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       <span className="min-w-6 text-center text-sm font-semibold tabular-nums">{value}</span>
     </div>
