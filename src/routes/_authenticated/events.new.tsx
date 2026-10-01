@@ -577,12 +577,22 @@ function Index() {
       const lists=row.lists as unknown as WorkflowSnapshot["lists"];
       if(!inputs || !lists)return;
       setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
-      const lt:ListType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:"dance";setListType(lt);setMinutes(inputs.minutes??"60");
-      if(lt!=="dance"){const t=Math.ceil((parseFloat(inputs.minutes??"60")||0)/AVG_BACKGROUND_SONG_MIN);const miss=Math.max(0,t-lists.warmUp.length);const sf={warmUp:miss,transition:0,peak:0,total:miss};setResult({warmUp:lists.warmUp,transition:[],peak:[],targetTotal:t,perSectionTarget:t,perSectionBase:t,shortfall:sf,finalShortfall:sf,duplicatesRemoved:0,blockedCount:0});return;}
-      const per=Math.ceil((Math.max(0,Number(inputs.hours) || 0)*15/3)*(inputs.buffer??2));
-      const shortfall={warmUp:Math.max(0,per-lists.warmUp.length),transition:Math.max(0,per-lists.transition.length),peak:Math.max(0,per-lists.peak.length),total:0};
-      shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
-      setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
+      // A saved event with only a single list and no dance-floor sections is a
+      // cocktail/dinner list even if the stored snapshot predates listType.
+      const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
+      const looksBackground=lists.warmUp.length>0&&lists.transition.length===0&&lists.peak.length===0;
+      const lt:ListType=storedType??(looksBackground?"cocktail":"dance");
+      setListType(lt);setMinutes(inputs.minutes??"60");
+      if(lt!=="dance"){
+        const t=Math.ceil((parseFloat(inputs.minutes??"60")||0)/AVG_BACKGROUND_SONG_MIN);
+        const miss=Math.max(0,t-lists.warmUp.length);const sf={warmUp:miss,transition:0,peak:0,total:miss};
+        setResult({warmUp:lists.warmUp,transition:[],peak:[],targetTotal:t,perSectionTarget:t,perSectionBase:t,shortfall:sf,finalShortfall:sf,duplicatesRemoved:0,blockedCount:0});
+      } else {
+        const per=Math.ceil((Math.max(0,Number(inputs.hours) || 0)*15/3)*(inputs.buffer??2));
+        const shortfall={warmUp:Math.max(0,per-lists.warmUp.length),transition:Math.max(0,per-lists.transition.length),peak:Math.max(0,per-lists.peak.length),total:0};
+        shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
+        setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
+      }
       savedSelectionsRef.current=lists.selections??null;
       restoredEvent.current=true;
       saveRevision.current+=1;

@@ -25,6 +25,8 @@ const inputsSchema = z.object({
   expand: z.boolean(),
   buffer: z.number().int().min(2).max(4).optional(),
   eventName: z.string().max(200),
+  listType: z.enum(["dance", "cocktail", "dinner"]).optional(),
+  minutes: z.string().max(10).optional(),
 });
 
 const listsSchema = z.object({
@@ -46,20 +48,28 @@ export const listWorkflows = createServerFn({ method: "GET" })
     const { supabase } = context;
     const { data, error } = await supabase
       .from("workflow_history")
-      .select("id, name, created_at, updated_at, lists")
+      .select("id, name, created_at, updated_at, lists, inputs")
       .order("created_at", { ascending: false });
     if (error) throw dbError("listWorkflows", error);
     return (data ?? []).map((r) => {
       const lists = (r.lists ?? {}) as { warmUp?: unknown[]; transition?: unknown[]; peak?: unknown[] };
+      const inputs = (r.inputs ?? {}) as { listType?: string };
+      const warmUp = Array.isArray(lists.warmUp) ? lists.warmUp.length : 0;
+      const transition = Array.isArray(lists.transition) ? lists.transition.length : 0;
+      const peak = Array.isArray(lists.peak) ? lists.peak.length : 0;
+      const stored = inputs.listType;
+      const listType: "dance" | "cocktail" | "dinner" =
+        stored === "cocktail" || stored === "dinner" || stored === "dance"
+          ? stored
+          : warmUp > 0 && transition === 0 && peak === 0
+            ? "cocktail"
+            : "dance";
       return {
         id: r.id as string,
         name: r.name as string,
         created_at: r.created_at as string,
-        counts: {
-          warmUp: Array.isArray(lists.warmUp) ? lists.warmUp.length : 0,
-          transition: Array.isArray(lists.transition) ? lists.transition.length : 0,
-          peak: Array.isArray(lists.peak) ? lists.peak.length : 0,
-        },
+        listType,
+        counts: { warmUp, transition, peak },
       };
     });
   });
