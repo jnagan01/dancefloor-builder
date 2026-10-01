@@ -23,8 +23,9 @@ type Form = Record<Key, string>;
 
 const toForm = (t: VdjTrack): Form => ({
   title: t.title ?? "", artist: t.artist ?? "", album: t.album ?? "", genre: t.genre ?? "",
-  year: t.year ?? "", bpm: t.bpm ?? "", key: t.key ?? "", comment: t.comment ?? "",
+  year: t.year ?? "", bpm: cleanBpm(t.bpm) ?? "", key: t.key ?? "", comment: t.comment ?? "",
 });
+
 
 export function TrackTagEditor({ target, onClose }: { target: { source: number; index: number } | null; onClose: () => void }) {
   const { sources, saveTrackTags } = useWorkspace();
