@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { CalendarDays, Library, Music2, ArrowRight, Play, TrendingUp, Check, AlertCircle, Flame } from "lucide-react";
 import { listWorkflows, listMostRequested } from "@/lib/history.functions";
-import { getTrendingCharts, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist } from "@/lib/charts.functions";
+import { getTrendingCharts, DJ_GENRES, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist, type DjGenre } from "@/lib/charts.functions";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
