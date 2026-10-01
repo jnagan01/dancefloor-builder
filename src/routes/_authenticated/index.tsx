@@ -51,7 +51,9 @@ function HomePage() {
   const { data: mostRequested = [] } = useQuery({ queryKey: ["mostRequested"], queryFn: () => requested() });
 
   const [djOnly, setDjOnly] = useState(false);
+  const [genre, setGenre] = useState<DjGenre | "all">("all");
   const [platform, setPlatform] = useState("all");
+
   const [playing, setPlaying] = useState<PreviewTarget | null>(null);
 
   /** Finds a connected local file so charts play the real song when owned. */
