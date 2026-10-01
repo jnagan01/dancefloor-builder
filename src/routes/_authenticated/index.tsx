@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { CalendarDays, Library, Music2, ArrowRight, Play, TrendingUp, Check, AlertCircle, Flame } from "lucide-react";
 import { listWorkflows, listMostRequested } from "@/lib/history.functions";
-import { getTrendingCharts, type ChartEntry } from "@/lib/charts.functions";
+import { getTrendingCharts, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist } from "@/lib/charts.functions";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -19,7 +19,11 @@ const norm = (s: string) =>
   s.toLowerCase().normalize("NFKD").replace(/\(.*?\)|\[.*?\]/g, "").replace(/feat\.?.*$/, "").replace(/[^a-z0-9]+/g, " ").trim();
 
 const DANCE_WORDS = ["dance", "pop", "hip-hop", "hip hop", "rap", "house", "electronic", "r&b", "soul", "latin", "reggae", "funk", "disco", "edm"];
-const isDanceable = (e: ChartEntry) => !e.genre || DANCE_WORDS.some(w => e.genre!.toLowerCase().includes(w));
+const isDanceable = (e: { genre?: string }) => !e.genre || DANCE_WORDS.some(w => e.genre!.toLowerCase().includes(w));
+
+const SOURCE_LABEL: Record<ChartSource, string> = { apple: "Apple", billboard: "Billboard", lastfm: "Last.fm", shazam: "Shazam" };
+const compact = (n?: number) => (n ? Intl.NumberFormat("en", { notation: "compact" }).format(n) : undefined);
+
 
 function HomePage() {
   const { library, sources, loading } = useWorkspace();
@@ -36,6 +40,8 @@ function HomePage() {
   const { data: mostRequested = [] } = useQuery({ queryKey: ["mostRequested"], queryFn: () => requested() });
 
   const [djOnly, setDjOnly] = useState(false);
+  const [platform, setPlatform] = useState("all");
+
 
   const libraryKeys = useMemo(() => {
     const set = new Set<string>();
@@ -46,8 +52,9 @@ function HomePage() {
     return set;
   }, [sources]);
 
-  const inLibrary = (e: ChartEntry) =>
+  const inLibrary = (e: { artist: string; title: string }) =>
     libraryKeys.has(`${norm(e.artist)}|${norm(e.title)}`) || libraryKeys.has(norm(e.title));
+
 
   const eventSongs = events.reduce((n, e) => n + e.counts.warmUp + e.counts.transition + e.counts.peak, 0);
   const topPlayed = sources.flatMap(s => s.tracks).filter(t => (t.playCount ?? 0) > 0)
