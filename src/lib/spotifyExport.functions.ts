@@ -141,11 +141,8 @@ export const createSpotifyPlaylist = createServerFn({ method: "POST" })
     const { token, error } = await tokenForUser(context.userId);
     if (!token) return { error };
     const auth = { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
-    const meRes = await fetch("https://api.spotify.com/v1/me", { headers: auth });
-    if (!meRes.ok) return { error: "Spotify refused the request. Reconnect your account in Settings." };
-    const me = (await meRes.json()) as { id?: string };
-    if (!me.id) return { error: "Could not read your Spotify profile." };
-    const res = await fetch(`https://api.spotify.com/v1/users/${encodeURIComponent(me.id)}/playlists`, {
+    // Spotify no longer accepts POST /v1/users/{id}/playlists for app tokens — use /v1/me/playlists.
+    const res = await fetch("https://api.spotify.com/v1/me/playlists", {
       method: "POST",
       headers: auth,
       body: JSON.stringify({
