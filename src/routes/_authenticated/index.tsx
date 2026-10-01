@@ -231,6 +231,17 @@ function HomePage() {
 
 type PlayFn = (artist: string, song: string, filePath?: string) => void;
 
+/** Genre filter chip under the platform tabs. */
+function GenrePill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return <button type="button" aria-pressed={active} onClick={onClick}
+    className={`rounded-full border px-3 py-1 text-xs transition-colors ${active
+      ? "border-primary/60 bg-primary text-primary-foreground"
+      : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-accent/40 hover:text-foreground"}`}>
+    {label}
+  </button>;
+}
+
+
 /** Artwork thumbnail with a play overlay on hover. */
 function Art({ src, round, onPlay, label }: { src?: string; round?: boolean; onPlay: () => void; label: string }) {
   const shape = round ? "rounded-full" : "rounded-lg";
