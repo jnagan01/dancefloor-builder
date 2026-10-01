@@ -53,9 +53,23 @@ function HomePage() {
   const topPlayed = sources.flatMap(s => s.tracks).filter(t => (t.playCount ?? 0) > 0)
     .sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0)).slice(0, 8);
 
-  const apple = chartData?.apple ?? [];
-  const billboard = chartData?.billboard ?? [];
-  const filter = (rows: ChartEntry[]) => (djOnly ? rows.filter(isDanceable) : rows);
+  const platforms = [
+    { id: "all", label: "All platforms" },
+    { id: "apple", label: "Apple Music" },
+    { id: "billboard", label: "Billboard" },
+    { id: "lastfm", label: "Last.fm" },
+    { id: "shazam", label: "Shazam" },
+  ] as const;
+
+  const perPlatform: Record<string, ChartEntry[]> = {
+    apple: chartData?.apple ?? [],
+    billboard: chartData?.billboard ?? [],
+    lastfm: chartData?.lastfm ?? [],
+    shazam: chartData?.shazam ?? [],
+  };
+
+  const filterTracks = (rows: ConsensusTrack[]) => (djOnly ? rows.filter(isDanceable) : rows);
+  const filterEntries = (rows: ChartEntry[]) => (djOnly ? rows.filter(isDanceable) : rows);
 
   return <div className="space-y-10">
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
@@ -79,20 +93,32 @@ function HomePage() {
           <Flame className="mr-2 size-4"/>{djOnly ? "DJ picks" : "All tracks"}
         </Button>
       </div>
-      <Tabs defaultValue="apple">
-        <TabsList className="rounded-full bg-muted/40">
-          <TabsTrigger value="apple" className="rounded-full">Apple Music</TabsTrigger>
-          <TabsTrigger value="billboard" className="rounded-full">Billboard Hot 100</TabsTrigger>
+      <Tabs value={platform} onValueChange={setPlatform}>
+        <TabsList className="flex-wrap rounded-full bg-muted/40">
+          {platforms.map(p => <TabsTrigger key={p.id} value={p.id} className="rounded-full">{p.label}</TabsTrigger>)}
         </TabsList>
-        <TabsContent value="apple" className="mt-4">
-          <ChartList rows={filter(apple)} loading={chartsLoading} error={chartData?.appleError} inLibrary={inLibrary}/>
+
+        <TabsContent value="all" className="mt-5">
+          <div className="grid gap-8 xl:grid-cols-2">
+            <div>
+              <h3 className="mb-3 font-display text-base tracking-tight">Top tracks</h3>
+              <ConsensusTrackList rows={filterTracks(chartData?.topTracks ?? [])} loading={chartsLoading} inLibrary={inLibrary}/>
+            </div>
+            <div>
+              <h3 className="mb-3 font-display text-base tracking-tight">Top artists</h3>
+              <ArtistList rows={chartData?.topArtists ?? []} loading={chartsLoading}/>
+            </div>
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam.</p>
         </TabsContent>
-        <TabsContent value="billboard" className="mt-4">
-          <ChartList rows={filter(billboard)} loading={chartsLoading} error={chartData?.billboardError} inLibrary={inLibrary}/>
-        </TabsContent>
+
+        {platforms.filter(p => p.id !== "all").map(p => <TabsContent key={p.id} value={p.id} className="mt-5">
+          <ChartList rows={filterEntries(perPlatform[p.id] ?? [])} loading={chartsLoading} error={chartData?.errors?.[p.id as ChartSource]} inLibrary={inLibrary}/>
+        </TabsContent>)}
       </Tabs>
       {chartData ? <p className="mt-3 text-xs text-muted-foreground">Updated {new Date(chartData.fetchedAt).toLocaleString()}</p> : null}
     </section>
+
 
     <section className="grid gap-6 xl:grid-cols-2" aria-label="Your music">
       <div className="panel px-5 py-5 sm:px-6">
