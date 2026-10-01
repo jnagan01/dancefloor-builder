@@ -23,6 +23,20 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
+    build: {
+      rollupOptions: {
+        output: {
+          // Cache vendor UI code separately so app updates ship smaller downloads.
+          manualChunks(id: string) {
+            if (!id.includes("node_modules")) return undefined;
+            if (id.includes("@radix-ui")) return "vendor-radix";
+            if (id.includes("lucide-react")) return "vendor-icons";
+            if (id.includes("recharts") || id.includes("d3-")) return "vendor-charts";
+            return undefined;
+          },
+        },
+      },
+    },
     define: {
       __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
     },
