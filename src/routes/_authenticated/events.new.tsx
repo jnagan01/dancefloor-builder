@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
-import JSZip from "jszip";
 import {
   parseFile,
   dedupeSongs,
@@ -92,7 +91,6 @@ import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktop
 import { saveWorkflow, updateWorkflow, getWorkflow } from "@/lib/history.functions";
 import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
-import { jsPDF } from "jspdf";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
 import { UserCog, Music2 } from "lucide-react";
 import { SpotifyExportDialog, type SpotifyExportJob } from "@/components/SpotifyExportDialog";
