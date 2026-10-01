@@ -1326,12 +1326,12 @@ export function songsToCsv(songs: Song[]): string {
   );
 }
 
+/** Combined reference file — same two-column rule as the section CSVs, sections in play order. */
 export function combinedCsv(result: GenerationResult): string {
-  const rows: Array<{ Section: string; Artist: string; Song: string }> = [];
-  result.warmUp.forEach((s) => rows.push({ Section: "Warm Up", Artist: s.artist, Song: s.song }));
-  result.transition.forEach((s) => rows.push({ Section: "Transition", Artist: s.artist, Song: s.song }));
-  result.peak.forEach((s) => rows.push({ Section: "Peak", Artist: s.artist, Song: s.song }));
-  return Papa.unparse(rows, { columns: ["Section", "Artist", "Song"] });
+  return Papa.unparse(
+    [...result.warmUp, ...result.transition, ...result.peak].map((s) => ({ Artist: s.artist, Song: s.song })),
+    { columns: ["Artist", "Song"] },
+  );
 }
 
 export function downloadBlob(blob: Blob, filename: string) {
