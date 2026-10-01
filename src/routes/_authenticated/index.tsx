@@ -109,30 +109,34 @@ function HomePage() {
     { id: "shazam", label: "Shazam" },
   ] as const;
 
+  // With a genre selected, Apple and Last.fm serve that genre's own chart.
   const perPlatform: Record<string, ChartEntry[]> = {
-    apple: chartData?.apple ?? [],
+    apple: (dedicated ? genreData?.apple : chartData?.apple) ?? [],
     billboard: chartData?.billboard ?? [],
-    lastfm: chartData?.lastfm ?? [],
+    lastfm: (dedicated ? genreData?.lastfm : chartData?.lastfm) ?? [],
     shazam: chartData?.shazam ?? [],
   };
+  const dedicatedPlatform = (id: string) => dedicated && (id === "apple" || id === "lastfm");
 
   const matchesGenre = (e: { djGenre?: DjGenre }) => genre === "all" || e.djGenre === genre;
 
   const filterTracks = (rows: ConsensusTrack[]) =>
-    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre).map((t, i) => ({ ...t, rank: genre === "all" ? t.rank : i + 1 }));
+    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre).map((t, i) => ({ ...t, rank: i + 1 }));
   const filterArtists = (rows: ConsensusArtist[]) =>
-    rows.filter(matchesGenre).map((a, i) => ({ ...a, rank: genre === "all" ? a.rank : i + 1 }));
-  const filterEntries = (rows: ChartEntry[]) =>
-    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre);
+    rows.filter(matchesGenre).map((a, i) => ({ ...a, rank: i + 1 }));
+  const filterEntries = (rows: ChartEntry[], skipGenre = false) =>
+    (djOnly ? rows.filter(isDanceable) : rows).filter(e => skipGenre || matchesGenre(e));
 
-  /** Only offer genre pills that actually have charting songs right now. */
+  const trackRows = dedicated ? filterTracks(genreData?.topTracks ?? []) : filterTracks(chartData?.topTracks ?? []);
+  const artistRows = dedicated ? filterArtists(genreData?.topArtists ?? []) : filterArtists(chartData?.topArtists ?? []);
+  const listLoading = dedicated ? genreLoading : chartsLoading;
+
+  /** Every DJ genre has its own chart; "Other" only appears when it has songs. */
   const genreOptions = useMemo(() => {
     const present = new Set<DjGenre>();
     for (const t of chartData?.topTracks ?? []) if (t.djGenre) present.add(t.djGenre);
     for (const a of chartData?.topArtists ?? []) if (a.djGenre) present.add(a.djGenre);
-    for (const key of ["apple", "billboard", "lastfm", "shazam"] as const)
-      for (const e of chartData?.[key] ?? []) if (e.djGenre) present.add(e.djGenre);
-    return DJ_GENRES.filter(g => present.has(g.id));
+    return DJ_GENRES.filter(g => g.id !== "other" || present.has("other"));
   }, [chartData]);
 
 
