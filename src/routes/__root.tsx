@@ -133,6 +133,50 @@ function RootComponent() {
     }
   }, []);
 
+  // Quietly record unexpected problems so they reach the weekly summary and,
+  // when major, an immediate alert. Nothing is shown to the user.
+  React.useEffect(() => {
+    let last = 0;
+    const send = async (message: string, stack: string | undefined, kind: string) => {
+      const now = Date.now();
+      if (now - last < 10_000) return;
+      last = now;
+      try {
+        const { reportAppError } = await import("@/lib/report.functions");
+        await reportAppError({
+          data: {
+            severity: "major",
+            category: kind,
+            message,
+            stack,
+            context: { path: window.location.pathname },
+          },
+        });
+      } catch {
+        /* reporting must never surface to the user */
+      }
+    };
+
+    const onError = (event: ErrorEvent) => {
+      void send(event.message || "Unhandled error", event.error?.stack, "runtime");
+    };
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason;
+      void send(
+        reason instanceof Error ? reason.message : String(reason),
+        reason instanceof Error ? reason.stack : undefined,
+        "runtime",
+      );
+    };
+
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
+
   return (
     <QueryClientProvider client={queryClient}>
       <Outlet />
