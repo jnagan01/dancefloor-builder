@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { CalendarDays, Library, Music2, ArrowRight, Play, TrendingUp, Check, AlertCircle, Flame } from "lucide-react";
 import { listWorkflows, listMostRequested } from "@/lib/history.functions";
-import { getTrendingCharts, DJ_GENRES, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist, type DjGenre } from "@/lib/charts.functions";
+import { getTrendingCharts, getGenreCharts, DJ_GENRES, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist, type DjGenre } from "@/lib/charts.functions";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -40,6 +40,7 @@ function HomePage() {
   const { library, sources, files, loading } = useWorkspace();
   const list = useServerFn(listWorkflows);
   const charts = useServerFn(getTrendingCharts);
+  const genreCharts = useServerFn(getGenreCharts);
   const requested = useServerFn(listMostRequested);
 
   const { data: events = [] } = useQuery({ queryKey: ["workflowHistory"], queryFn: () => list() });
@@ -53,6 +54,15 @@ function HomePage() {
   const [djOnly, setDjOnly] = useState(false);
   const [genre, setGenre] = useState<DjGenre | "all">("all");
   const [platform, setPlatform] = useState("all");
+
+  /** Dedicated per-genre charts, so a genre pill shows a full list of its own. */
+  const dedicated = genre !== "all" && genre !== "other";
+  const { data: genreData, isLoading: genreLoading } = useQuery({
+    queryKey: ["genreCharts", genre],
+    queryFn: () => genreCharts({ data: { genre: genre as Exclude<DjGenre, "other" | "all"> } }),
+    enabled: dedicated,
+    staleTime: 30 * 60 * 1000,
+  });
 
   const [playing, setPlaying] = useState<PreviewTarget | null>(null);
 
