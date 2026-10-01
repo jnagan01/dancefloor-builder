@@ -58,13 +58,11 @@ export async function saveMusicLibrary(sources: SavedLibrarySource[], userId: st
   return ok ? savedAt : null;
 }
 
-export async function loadMusicLibrary(userId: string): Promise<SavedLibraryPayload | null> {
-  const db = await openDb();
-  if (!db) return null;
-  const result = await new Promise<SavedLibraryPayload | null>((resolve) => {
+function readKey(db: IDBDatabase, key: string): Promise<SavedLibraryPayload | null> {
+  return new Promise((resolve) => {
     try {
       const tx = db.transaction(STORE, "readonly");
-      const req = tx.objectStore(STORE).get(keyFor(userId));
+      const req = tx.objectStore(STORE).get(key);
       req.onsuccess = () => {
         const val = req.result as SavedLibraryPayload | undefined;
         if (!val || val.version !== 1 || !Array.isArray(val.sources)) return resolve(null);
@@ -75,6 +73,33 @@ export async function loadMusicLibrary(userId: string): Promise<SavedLibraryPayl
       resolve(null);
     }
   });
+}
+
+export async function loadMusicLibrary(userId: string): Promise<SavedLibraryPayload | null> {
+  const db = await openDb();
+  if (!db) return null;
+  let result = await readKey(db, keyFor(userId));
+  if (!result) {
+    // One-time migration: libraries saved before per-account storage used a
+    // shared key. Move it to the first account that loads on this device.
+    const legacy = await readKey(db, LIBRARY_KEY);
+    if (legacy) {
+      await new Promise<void>((resolve) => {
+        try {
+          const tx = db.transaction(STORE, "readwrite");
+          const store = tx.objectStore(STORE);
+          store.put(legacy, keyFor(userId));
+          store.delete(LIBRARY_KEY);
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => resolve();
+          tx.onabort = () => resolve();
+        } catch {
+          resolve();
+        }
+      });
+      result = legacy;
+    }
+  }
   db.close();
   return result;
 }
