@@ -3,7 +3,7 @@ import { generateObject, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-const SectionEnum = z.enum(["Warm Up", "Transition", "Peak"]);
+const SectionEnum = z.enum(["Warm Up", "Transition", "Peak", "Cocktail Hour", "Dinner"]);
 
 const ExistingEntrySchema = z.object({
   artist: z.string().max(300),
@@ -112,7 +112,12 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
         "MID-TO-HIGH energy (6–8), high danceability (7–9), valence 6–9, BPM ~110–125. Modern pop, alt, 2000s/2010s hits that bridge warm-up into peak.",
       Peak:
         "HIGH energy (8–10), high-to-max danceability (8–10), euphoric valence (6–10), BPM ~120–135. EDM, hip hop, party anthems for maximum dance floor.",
+      "Cocktail Hour":
+        "BACKGROUND listening while guests mingle — NOT a dance set. Steady low-to-mid energy (3–6), danceability does not matter, warm/upbeat valence (6–8). Smooth, recognizable, conversation-friendly songs: acoustic covers, soul, jazz-pop, lounge, laid-back pop and classics. No club tracks, no hard drops, no explicit lyrics.",
+      Dinner:
+        "BACKGROUND music during dinner — NOT a dance set. Steady low energy (2–5), danceability does not matter, warm valence (5–8). Soft, elegant, conversation-friendly songs: jazz standards, acoustic, soft soul, light pop, crooners and tasteful instrumental covers. No club tracks, no hard drops, no explicit lyrics.",
     };
+    const background = data.section === "Cocktail Hour" || data.section === "Dinner";
 
     // Sanitize user-controlled strings before embedding in the prompt.
     const sanitize = (s: string, max = 2000): string =>
@@ -166,8 +171,8 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
         genre: typeof row.genre === "string" ? sanitize(row.genre, 60) || "Pop" : "Pop",
         decade: normalizeDecade(row.decade, year),
         year,
-        energy: clampScore(row.energy, data.section === "Peak" ? 9 : data.section === "Transition" ? 7 : 5),
-        danceability: clampScore(row.danceability, data.section === "Peak" ? 9 : 8),
+        energy: clampScore(row.energy, data.section === "Peak" ? 9 : data.section === "Transition" ? 7 : background ? 4 : 5),
+        danceability: clampScore(row.danceability, data.section === "Peak" ? 9 : background ? 4 : 8),
         popularity: clampScore(row.popularity, 8),
         valence: clampScore(row.valence, 7),
         bpm: bpmValue && bpmValue > 0 ? Math.round(bpmValue) : undefined,
@@ -313,8 +318,8 @@ The DJ's favorite artists (${safeFavorites.join(", ")}) have already been mined 
 `
         : "";
 
-    const prompt = `You are an expert wedding/party DJ. Suggest ${data.count} real released songs for the "${data.section}" portion of a dance floor set.
-
+    const prompt = `You are an expert wedding/party DJ. Suggest ${data.count} real released songs for the "${data.section}" portion of a ${background ? "background playlist (one continuous list)" : "dance floor set"}.
+${background ? "IMPORTANT: Stay closely tied to the client's own uploaded artists, genres and decades — pick songs a guest who likes those would enjoy. Ignore any energy-ramp or dance-floor rules below; keep ONE steady relaxed mood and never suggest explicit songs.\n" : ""}
 Section targets: ${sectionGuide[data.section]}
 ${onlyBrief}${neighborBrief}${crowdBrief}${gapBrief}
 
@@ -340,7 +345,7 @@ Do NOT suggest unreleased tracks, leaks, bootlegs, mashups, edits, or remixes th
 SEQUENCING / TRANSITION RULES (use the existing set's features below as neighbors):
 - Prefer picks whose BPM is within ±6% of nearby existing songs in the same section.
 - Prefer picks whose Camelot key is the same, adjacent (±1 on the wheel), or the relative major/minor of a neighbor (smooth harmonic mixing).
-- Maintain a monotonic energy ramp: lower-energy picks early in the section, higher later.
+${background ? "- Keep the energy steady and even across the whole list." : "- Maintain a monotonic energy ramp: lower-energy picks early in the section, higher later."}
 
 AUDIENCE / CONTENT RULES:
 - Warm Up serves older guests who typically leave the dance floor after the first hour. Strongly favor pre-1990 crowd-pleasers (60s/70s/80s disco, soul, motown, classic rock, funk) for Warm Up. For Transition, mix pre-1990 classics with 90s/2000s hits. Save modern peak-time tracks for Peak.
