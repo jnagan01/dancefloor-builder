@@ -36,6 +36,22 @@ export interface VdjTrack {
   lastPlayTime?: string;
 }
 
+/**
+ * Normalize a tempo value into a clean whole-number BPM string.
+ * VirtualDJ stores `Scan Bpm` as seconds-per-beat (e.g. "0.468750" = 128 BPM),
+ * while file tags store the BPM itself, sometimes with trailing decimals.
+ */
+export function cleanBpm(v?: string | number | null): string | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  const n = typeof v === "number" ? v : parseFloat(String(v).trim());
+  if (!isFinite(n) || n <= 0) return undefined;
+  const bpm = n < 10 ? 60 / n : n;
+  if (!isFinite(bpm) || bpm <= 0 || bpm > 400) return undefined;
+  return String(Math.round(bpm));
+}
+
+
+
 export type MatchStatus =
   | "Matched"
   | "Possible Match"
@@ -115,7 +131,7 @@ function trackFromNode(node: Element): VdjTrack | null {
   let title = attr(tags, "Title") || "";
   const genre = attr(tags, "Genre");
   const year = attr(tags, "Year");
-  const bpm = attr(scan, "Bpm") || attr(tags, "Bpm");
+  const bpm = cleanBpm(attr(scan, "Bpm") || attr(tags, "Bpm"));
   const key = attr(scan, "Key") || attr(tags, "Key");
   const remixTag = attr(tags, "Remix");
   const infos = childByName(node, "Infos");
@@ -242,7 +258,7 @@ export function tracksFromAudioFiles(files: ReadonlyArray<FileLike>): VdjTrack[]
         genre: tg.genre || undefined,
         year,
         decade: year && /^\d{4}$/.test(year) ? `${year.slice(0, 3)}0s` : undefined,
-        bpm: tg.bpm || undefined,
+        bpm: cleanBpm(tg.bpm),
         key: tg.key || undefined,
         comment: tg.comment || undefined,
         fromTags,

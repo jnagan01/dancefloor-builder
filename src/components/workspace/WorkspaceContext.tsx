@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
+import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, cleanBpm, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
 import { loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
 import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle, supportsNativeScan, scanNativeFolder, chooseNativeMusicFolder, readNativeAudioFile, writeNativeTags } from "@/lib/desktopBridge";
 import { pickDirectoryHandle } from "@/lib/virtualDj";
@@ -326,7 +326,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       title: t.title || tr.title, artist: t.artist || tr.artist,
       album: t.album || undefined, genre: t.genre || undefined, year,
       decade: year && /^\d{4}$/.test(year) ? `${year.slice(0, 3)}0s` : tr.decade,
-      bpm: t.bpm || undefined, key: t.key || undefined, comment: t.comment || undefined, fromTags: true,
+      bpm: cleanBpm(t.bpm), key: t.key || undefined, comment: t.comment || undefined, fromTags: true,
     } : tr) } : s));
     return { ok: true };
   }

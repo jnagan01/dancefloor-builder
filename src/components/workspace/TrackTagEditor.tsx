@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "./WorkspaceContext";
 import { supportsTagWriting } from "@/lib/desktopBridge";
-import { resolveExportPath } from "@/lib/virtualDj";
+import { resolveExportPath, cleanBpm } from "@/lib/virtualDj";
 import type { VdjTrack } from "@/lib/virtualDj";
 
 const FIELDS = [
@@ -23,8 +23,9 @@ type Form = Record<Key, string>;
 
 const toForm = (t: VdjTrack): Form => ({
   title: t.title ?? "", artist: t.artist ?? "", album: t.album ?? "", genre: t.genre ?? "",
-  year: t.year ?? "", bpm: t.bpm ?? "", key: t.key ?? "", comment: t.comment ?? "",
+  year: t.year ?? "", bpm: cleanBpm(t.bpm) ?? "", key: t.key ?? "", comment: t.comment ?? "",
 });
+
 
 export function TrackTagEditor({ target, onClose }: { target: { source: number; index: number } | null; onClose: () => void }) {
   const { sources, saveTrackTags } = useWorkspace();
