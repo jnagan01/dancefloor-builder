@@ -109,8 +109,8 @@ function HomePage() {
 
 
   const eventSongs = events.reduce((n, e) => n + e.counts.warmUp + e.counts.transition + e.counts.peak, 0);
-  const topPlayed = sources.flatMap(s => s.tracks).filter(t => (t.playCount ?? 0) > 0)
-    .sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0)).slice(0, 8);
+  const topPlayed = useMemo(() => sources.flatMap(s => s.tracks).filter(t => (t.playCount ?? 0) > 0)
+    .sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0)).slice(0, 8), [sources]);
 
   const platforms = [
     { id: "all", label: "All platforms" },
