@@ -75,6 +75,7 @@ import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { getArtistNeighbors } from "@/lib/neighbors.functions";
 import { getArtistCrowdData, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
+import { importSpotifyPlaylist } from "@/lib/spotify.functions";
 import { type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
