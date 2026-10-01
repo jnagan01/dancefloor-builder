@@ -15,6 +15,7 @@ const errorMiddleware = createMiddleware().server(async ({ next, request }) => {
     if (error != null && typeof error === "object" && "statusCode" in error) {
       throw error;
     }
+    if (request.signal?.aborted) throw error;
     console.error(error);
 
     const { logAppError } = await import("./lib/errorLog.server");
