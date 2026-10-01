@@ -20,6 +20,7 @@ import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedEventsIndexRouteImport } from './routes/_authenticated/events.index'
 import { Route as AuthenticatedEventsNewRouteImport } from './routes/_authenticated/events.new'
 import { Route as LovableEmailTransactionalPreviewRouteImport } from './routes/lovable/email/transactional/preview'
+import { Route as ApiPublicSpotifyCallbackRouteImport } from './routes/api/public/spotify/callback'
 import { Route as ApiPublicHooksWeeklyErrorDigestRouteImport } from './routes/api/public/hooks/weekly-error-digest'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
@@ -78,6 +79,12 @@ const LovableEmailTransactionalPreviewRoute =
     path: '/lovable/email/transactional/preview',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicSpotifyCallbackRoute =
+  ApiPublicSpotifyCallbackRouteImport.update({
+    id: '/api/public/spotify/callback',
+    path: '/api/public/spotify/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicHooksWeeklyErrorDigestRoute =
   ApiPublicHooksWeeklyErrorDigestRouteImport.update({
     id: '/api/public/hooks/weekly-error-digest',
@@ -96,6 +103,7 @@ export interface FileRoutesByFullPath {
   '/events/new': typeof AuthenticatedEventsNewRoute
   '/events/': typeof AuthenticatedEventsIndexRoute
   '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
+  '/api/public/spotify/callback': typeof ApiPublicSpotifyCallbackRoute
   '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
 }
 export interface FileRoutesByTo {
@@ -108,6 +116,7 @@ export interface FileRoutesByTo {
   '/events/new': typeof AuthenticatedEventsNewRoute
   '/events': typeof AuthenticatedEventsIndexRoute
   '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
+  '/api/public/spotify/callback': typeof ApiPublicSpotifyCallbackRoute
   '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
 }
 export interface FileRoutesById {
@@ -123,6 +132,7 @@ export interface FileRoutesById {
   '/_authenticated/events/new': typeof AuthenticatedEventsNewRoute
   '/_authenticated/events/': typeof AuthenticatedEventsIndexRoute
   '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
+  '/api/public/spotify/callback': typeof ApiPublicSpotifyCallbackRoute
   '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
 }
 export interface FileRouteTypes {
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/events/new'
     | '/events/'
     | '/api/public/hooks/weekly-error-digest'
+    | '/api/public/spotify/callback'
     | '/lovable/email/transactional/preview'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -150,6 +161,7 @@ export interface FileRouteTypes {
     | '/events/new'
     | '/events'
     | '/api/public/hooks/weekly-error-digest'
+    | '/api/public/spotify/callback'
     | '/lovable/email/transactional/preview'
   id:
     | '__root__'
@@ -164,6 +176,7 @@ export interface FileRouteTypes {
     | '/_authenticated/events/new'
     | '/_authenticated/events/'
     | '/api/public/hooks/weekly-error-digest'
+    | '/api/public/spotify/callback'
     | '/lovable/email/transactional/preview'
   fileRoutesById: FileRoutesById
 }
@@ -172,6 +185,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ApiPublicHooksWeeklyErrorDigestRoute: typeof ApiPublicHooksWeeklyErrorDigestRoute
+  ApiPublicSpotifyCallbackRoute: typeof ApiPublicSpotifyCallbackRoute
   LovableEmailTransactionalPreviewRoute: typeof LovableEmailTransactionalPreviewRoute
 }
 
@@ -254,6 +268,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LovableEmailTransactionalPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/spotify/callback': {
+      id: '/api/public/spotify/callback'
+      path: '/api/public/spotify/callback'
+      fullPath: '/api/public/spotify/callback'
+      preLoaderRoute: typeof ApiPublicSpotifyCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/weekly-error-digest': {
       id: '/api/public/hooks/weekly-error-digest'
       path: '/api/public/hooks/weekly-error-digest'
@@ -301,6 +322,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ApiPublicHooksWeeklyErrorDigestRoute: ApiPublicHooksWeeklyErrorDigestRoute,
+  ApiPublicSpotifyCallbackRoute: ApiPublicSpotifyCallbackRoute,
   LovableEmailTransactionalPreviewRoute: LovableEmailTransactionalPreviewRoute,
 }
 export const routeTree = rootRouteImport
