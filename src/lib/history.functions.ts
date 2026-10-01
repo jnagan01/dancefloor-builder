@@ -69,11 +69,7 @@ export const listWorkflows = createServerFn({ method: "GET" })
         name: r.name as string,
         created_at: r.created_at as string,
         listType,
-        counts: {
-          warmUp: Array.isArray(lists.warmUp) ? lists.warmUp.length : 0,
-          transition: Array.isArray(lists.transition) ? lists.transition.length : 0,
-          peak: Array.isArray(lists.peak) ? lists.peak.length : 0,
-        },
+        counts: { warmUp, transition, peak },
       };
     });
   });
