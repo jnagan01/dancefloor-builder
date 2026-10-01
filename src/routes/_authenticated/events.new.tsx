@@ -2228,8 +2228,9 @@ function Index() {
         )}
 
 
-        {/* Step 4 */}
-        {step === 4 && (
+        {/* Step 4 — dance floor only; cocktail/dinner fill the gap automatically */}
+        {step === 4 && !background && (
+
         <StepPanel
           eyebrow="Step 4"
           title="Song expansion"
