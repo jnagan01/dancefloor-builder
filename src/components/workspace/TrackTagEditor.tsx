@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "./WorkspaceContext";
 import { supportsTagWriting } from "@/lib/desktopBridge";
-import { resolveExportPath } from "@/lib/exportPaths";
+import { resolveExportPath } from "@/lib/virtualDj";
 import type { VdjTrack } from "@/lib/virtualDj";
 
 const FIELDS = [
