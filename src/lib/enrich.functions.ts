@@ -262,6 +262,70 @@ async function fetchMusicBrainz(
   }
 }
 
+interface AiEstimate {
+  energy?: number;
+  danceability?: number;
+  valence?: number;
+  bpm?: number;
+  genre?: string;
+  year?: number;
+}
+
+/**
+ * Fallback acoustic profiler: one batched AI call estimating 1–10 Energy,
+ * Danceability and Valence for songs no catalog covers. Returns one entry
+ * per input (null when the model skipped it). Failures return all-null.
+ */
+async function estimateWithAi(
+  songs: Array<{ artist: string; song: string; genre?: string; year?: number; bpm?: number }>,
+): Promise<Array<AiEstimate | null>> {
+  const out: Array<AiEstimate | null> = songs.map(() => null);
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key || !songs.length) return out;
+  try {
+    const { streamText } = await import("ai");
+    const { createLovableAiGatewayProvider } = await import("./ai-gateway.server");
+    const gateway = createLovableAiGatewayProvider(key);
+    const clean = (s: string) => s.replace(/[\u0000-\u001F<>]/g, " ").slice(0, 150);
+    const lines = songs
+      .map((s, i) => `${i}. ${clean(s.artist)} — ${clean(s.song)}${s.genre ? ` | genre: ${clean(s.genre)}` : ""}${s.year ? ` | ${s.year}` : ""}${s.bpm ? ` | ${s.bpm} BPM` : ""}`)
+      .join("\n");
+    const prompt = `You are a DJ audio analyst. For each song, estimate Spotify-style audio features on a 1-10 integer scale: energy, danceability, valence (musical positivity). Also give bpm (integer), a short genre, and release year if you know them. Base it on your knowledge of the actual recording.
+Return ONLY JSON: {"items":[{"i":0,"energy":7,"danceability":8,"valence":6,"bpm":120,"genre":"Pop","year":2004}, ...]} with one item per song.
+
+${lines}`;
+    const result = streamText({
+      model: gateway("openai/gpt-6-astra"),
+      prompt,
+      providerOptions: { lovable: { reasoningEffort: "low" } },
+    });
+    const text = await result.text;
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start < 0 || end <= start) return out;
+    const parsed = JSON.parse(text.slice(start, end + 1)) as { items?: Array<Record<string, unknown>> };
+    const score = (v: unknown) =>
+      typeof v === "number" && Number.isFinite(v) ? Math.max(1, Math.min(10, Math.round(v))) : undefined;
+    for (const it of parsed.items ?? []) {
+      const i = typeof it.i === "number" ? it.i : -1;
+      if (i < 0 || i >= songs.length) continue;
+      const bpm = typeof it.bpm === "number" && it.bpm > 40 && it.bpm < 250 ? Math.round(it.bpm) : undefined;
+      const year = typeof it.year === "number" && it.year >= 1900 && it.year <= 2099 ? Math.round(it.year) : undefined;
+      out[i] = {
+        energy: score(it.energy),
+        danceability: score(it.danceability),
+        valence: score(it.valence),
+        bpm,
+        genre: typeof it.genre === "string" ? it.genre.slice(0, 60) : undefined,
+        year,
+      };
+    }
+  } catch (err) {
+    console.warn("[enrichSongs] AI estimate failed", err);
+  }
+  return out;
+}
+
 function pickSource(
   hasFeatures: boolean,
   hasMb: boolean,
