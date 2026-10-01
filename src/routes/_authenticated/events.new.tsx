@@ -1939,6 +1939,15 @@ function Index() {
   ];
   const stepNumber = (id: number) => stepDefs.find((s) => s.id === id)?.num ?? id;
 
+  // Resolve each song's BPM against its matched music file so the flow chart,
+  // vibe breakdown, and track cards all show the file's real BPM, not a guess.
+  const withFileBpm = (sec: SectionKey, songs: Song[]): RampSong[] =>
+    songs.map((s, i) => {
+      const ti = matches[songKey(sec, i, s)]?.trackIndex;
+      const fileBpm = ti != null ? parseBpm(mergedLibrary.tracks[ti]?.bpm) : undefined;
+      const base = s as RampSong;
+      return { ...base, bpm: fileBpm ?? base.bpm };
+    });
 
   return (
     <div className="min-h-dvh bg-background">
@@ -2525,12 +2534,7 @@ function Index() {
 
               <EventEnergyRamp
                 targets={targets}
-                sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []).map((s, i) => {
-                  // Use the matched music file's real BPM when there is one.
-                  const ti = matches[songKey(sec, i, s)]?.trackIndex;
-                  const fileBpm = ti != null ? parseBpm(mergedLibrary?.tracks[ti]?.bpm) : undefined;
-                  return { ...s, bpm: fileBpm ?? s.bpm } as RampSong;
-                }) }))}
+                sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: withFileBpm(sec, result[sec] ?? []) }))}
                 onSelect={(sec) => setActiveSection(sec)}
               />
 
@@ -2576,7 +2580,7 @@ function Index() {
                   <TabsContent value="vibe">
                     <VibeBreakdown
                       targets={targets}
-                      sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []) as RampSong[] }))}
+                      sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: withFileBpm(sec, result[sec] ?? []) }))}
                       onJump={(sec) => { setShowVibe(false); setActiveSection(sec); }}
                     />
                   </TabsContent>
@@ -2766,8 +2770,9 @@ type BadgeSong = Song & {
 };
 
 
-function MetricsDetail({ song }: { song: BadgeSong }) {
+function MetricsDetail({ song, fileBpm }: { song: BadgeSong; fileBpm?: number }) {
   const hasAny =
+    fileBpm != null ||
     typeof song.energy === "number" ||
     typeof song.danceability === "number" ||
     typeof song.popularity === "number" ||
@@ -2788,7 +2793,11 @@ function MetricsDetail({ song }: { song: BadgeSong }) {
     { label: "Popularity", value: fmt(song.popularity) },
     { label: "Valence", value: fmt(song.valence) },
     intensity ? { label: "Intensity (avg)", value: intensity } : null,
-    typeof song.bpm === "number" ? { label: "BPM", value: Math.round(song.bpm).toString() } : null,
+    fileBpm != null
+      ? { label: "BPM (from file)", value: String(Math.round(fileBpm)) }
+      : typeof song.bpm === "number"
+        ? { label: "BPM (estimate)", value: Math.round(song.bpm).toString() }
+        : null,
     song.camelot ? { label: "Key", value: song.camelot } : null,
     song.genre ? { label: "Genre", value: song.genre } : null,
     typeof song.year === "number" ? { label: "Year", value: String(song.year) } : null,
@@ -3040,6 +3049,8 @@ function SectionView(props: SectionViewProps) {
           const inReview = m?.status === "Possible Match" || m?.status === "Multiple Matches";
           if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
           const meta = s as BadgeSong;
+          const fileBpm = track ? parseBpm(track.bpm) : undefined;
+          const estimatedBpm = typeof meta.bpm === "number" ? Math.round(meta.bpm) : null;
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
           return (
@@ -3088,7 +3099,17 @@ function SectionView(props: SectionViewProps) {
                   <Hud label="Dance" value={meta.danceability != null ? Math.round(meta.danceability) : "—"} />
                   <Hud label="Mood" value={meta.valence != null ? Math.round(meta.valence) : "—"} />
                   <Hud label="Key" value={track?.key || meta.camelot || "—"} />
-                  <Hud label="BPM" value={track?.bpm || (meta.bpm != null ? Math.round(meta.bpm) : "—")} />
+                  <Hud
+                    label="BPM"
+                    value={fileBpm != null ? Math.round(fileBpm) : estimatedBpm != null ? `≈${estimatedBpm}` : "—"}
+                    title={
+                      fileBpm != null
+                        ? `Real BPM ${Math.round(fileBpm)} read from the matched music file`
+                        : estimatedBpm != null
+                          ? `Estimated ${estimatedBpm} BPM — match this song to a file in your folders to see its real BPM`
+                          : undefined
+                    }
+                  />
                 </div>
               </div>
 
@@ -3127,7 +3148,7 @@ function SectionView(props: SectionViewProps) {
 
               {expanded.has(key) && (
                 <div className="border-b border-border bg-muted/20 px-3 py-2">
-                  <MetricsDetail song={meta} />
+                  <MetricsDetail song={meta} fileBpm={fileBpm} />
                 </div>
               )}
 
@@ -3155,9 +3176,9 @@ function SectionView(props: SectionViewProps) {
   );
 }
 
-function Hud({ label, value }: { label: string; value: string | number }) {
+function Hud({ label, value, title }: { label: string; value: string | number; title?: string }) {
   return (
-    <div className="flex items-center gap-2 rounded-full bg-muted/30 px-2.5 py-1">
+    <div className="flex items-center gap-2 rounded-full bg-muted/30 px-2.5 py-1" title={title}>
       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</span>
       <span className="min-w-6 text-center text-sm font-semibold tabular-nums">{value}</span>
     </div>
