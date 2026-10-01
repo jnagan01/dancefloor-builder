@@ -192,6 +192,94 @@ function ChartList({ rows, loading, error, inLibrary }: { rows: ChartEntry[]; lo
   </ol>;
 }
 
+function SourcePills({ sources }: { sources: { source: ChartSource; rank: number }[] }) {
+  return <span className="flex flex-wrap items-center gap-1">
+    {sources.map(s => <span key={s.source} className="rounded-full border border-border/50 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+      {SOURCE_LABEL[s.source]} #{s.rank}
+    </span>)}
+  </span>;
+}
+
+function ConsensusTrackList({ rows, loading, inLibrary }: { rows: ConsensusTrack[]; loading: boolean; inLibrary: (e: { artist: string; title: string }) => boolean }) {
+  if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest charts…</p>;
+  if (!rows.length) return <p className="py-8 text-sm text-muted-foreground">No tracks to show right now.</p>;
+  const [hero, ...rest] = rows;
+  return <div>
+    {hero ? <div className="relative mb-3 overflow-hidden rounded-2xl border border-border/40">
+      {hero.artwork ? <img src={hero.artwork} alt="" className="h-44 w-full object-cover"/> : <div className="h-44 w-full bg-muted/50"/>}
+      <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-4">
+        <span className="font-display text-3xl font-semibold leading-none text-white/90">1</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-display text-lg font-semibold text-white">{hero.title}</span>
+          <span className="block truncate text-sm text-white/70">{hero.artist}</span>
+          <span className="mt-1.5 flex flex-wrap items-center gap-1">
+            {hero.sources.map(s => <span key={s.source} className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] text-white/85">{SOURCE_LABEL[s.source]} #{s.rank}</span>)}
+            {hero.sources.length >= 3 ? <span className="rounded-full bg-primary/85 px-2 py-0.5 text-[10px] font-medium text-primary-foreground">Cross-platform</span> : null}
+          </span>
+        </span>
+        <span className={`shrink-0 text-[11px] ${inLibrary(hero) ? "text-success" : "text-white/70"}`}>
+          {inLibrary(hero) ? "In library" : "Missing"}
+        </span>
+      </div>
+    </div> : null}
+    <ol className="grid gap-1">
+      {rest.slice(0, 14).map(t => {
+        const owned = inLibrary(t);
+        return <li key={`${t.rank}-${t.title}`} className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
+          <span className="w-5 text-right tabular-nums text-sm text-muted-foreground">{t.rank}</span>
+          {t.artwork
+            ? <img src={t.artwork} alt="" loading="lazy" className="size-11 rounded-lg object-cover"/>
+            : <span className="grid size-11 place-items-center rounded-lg bg-muted/60"><Music2 className="size-4 text-muted-foreground"/></span>}
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">{t.title}</span>
+            <span className="block truncate text-xs text-muted-foreground">{t.artist}</span>
+            <SourcePills sources={t.sources}/>
+          </span>
+          <span className={`flex shrink-0 items-center gap-1 text-[11px] ${owned ? "text-success" : "text-muted-foreground"}`}>
+            {owned ? <Check className="size-3.5"/> : <AlertCircle className="size-3.5"/>}
+          </span>
+        </li>;
+      })}
+    </ol>
+  </div>;
+}
+
+function ArtistList({ rows, loading }: { rows: ConsensusArtist[]; loading: boolean }) {
+  if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest charts…</p>;
+  if (!rows.length) return <p className="py-8 text-sm text-muted-foreground">No artists to show right now.</p>;
+  const [hero, ...rest] = rows;
+  const sub = (a: ConsensusArtist) => [
+    a.hits ? `${a.hits} charting ${a.hits === 1 ? "hit" : "hits"}` : null,
+    compact(a.listeners) ? `${compact(a.listeners)} listeners` : null,
+  ].filter(Boolean).join(" · ");
+  return <div>
+    {hero ? <div className="relative mb-3 overflow-hidden rounded-2xl border border-border/40">
+      {hero.artwork ? <img src={hero.artwork} alt="" className="h-44 w-full object-cover"/> : <div className="h-44 w-full bg-muted/50"/>}
+      <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-4">
+        <span className="font-display text-3xl font-semibold leading-none text-white/90">1</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-display text-lg font-semibold text-white">{hero.artist}</span>
+          <span className="block truncate text-sm text-white/70">{sub(hero) || "Trending now"}</span>
+          {hero.topTrack ? <span className="block truncate text-xs text-white/55">Top track: {hero.topTrack}</span> : null}
+        </span>
+      </div>
+    </div> : null}
+    <ol className="grid gap-1">
+      {rest.slice(0, 14).map(a => <li key={`${a.rank}-${a.artist}`} className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
+        <span className="w-5 text-right tabular-nums text-sm text-muted-foreground">{a.rank}</span>
+        {a.artwork
+          ? <img src={a.artwork} alt="" loading="lazy" className="size-11 rounded-full object-cover"/>
+          : <span className="grid size-11 place-items-center rounded-full bg-muted/60"><Music2 className="size-4 text-muted-foreground"/></span>}
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-medium">{a.artist}</span>
+          <span className="block truncate text-xs text-muted-foreground">{sub(a) || a.topTrack || ""}</span>
+        </span>
+      </li>)}
+    </ol>
+  </div>;
+}
+
+
 function Metric({ icon: Icon, label, value }: { icon: typeof Library; label: string; value: string }) {
   return <div className="flex items-center gap-3">
     <Icon className="size-4 text-primary"/>
