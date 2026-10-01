@@ -1945,7 +1945,8 @@ function Index() {
     songs.map((s, i) => {
       const ti = matches[songKey(sec, i, s)]?.trackIndex;
       const fileBpm = ti != null ? parseBpm(mergedLibrary.tracks[ti]?.bpm) : undefined;
-      return { ...s, bpm: fileBpm ?? s.bpm } as RampSong;
+      const base = s as RampSong;
+      return { ...base, bpm: fileBpm ?? base.bpm };
     });
 
   return (
