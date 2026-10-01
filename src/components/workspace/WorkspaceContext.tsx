@@ -289,7 +289,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
   async function rescan() {
     if (!sources.length) { await addFolder(); return; }
-    if (supportsNativeScan() && (await rescanNative())) return;
+    if (supportsNativeScan() && (await rescanNative())) {
+      const root = localStorage.getItem(VDJ_ROOT_KEY);
+      if (root && isDesktopApp()) await syncVirtualDj(vdjDatabaseIn(root), true);
+      return;
+    }
     if (!files.length) { toast.info("Reconnect a music folder to rescan it."); await addFolder(); return; }
     const available = new Map<string, File[]>();
     for (const file of files) {
