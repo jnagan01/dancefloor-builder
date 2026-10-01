@@ -132,6 +132,9 @@ const SECTION_FILES: Record<SectionKey, string> = {
   peak: "peak",
 };
 const MAX_AI_RECOMMENDATION_BATCH_SIZE = 40;
+type ListType = "dance" | "cocktail" | "dinner";
+const AVG_BACKGROUND_SONG_MIN = 3.5;
+const LIST_TYPE_LABEL: Record<ListType, string> = { dance: "Dance floor", cocktail: "Cocktail Hour", dinner: "Dinner" };
 
 interface DirHandleLike {
   getFileHandle(name: string, options?: { create?: boolean }): Promise<unknown>;
@@ -170,6 +173,15 @@ function Index() {
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
   const [songs, setSongs] = useState<Song[]>([]);
   const [hours, setHours] = useState<string>("3");
+  const [listType, setListType] = useState<ListType>("dance");
+  const [minutes, setMinutes] = useState<string>("60");
+  const background = listType !== "dance";
+  const minutesNum = Math.max(0, parseFloat(minutes) || 0);
+  const bgTarget = Math.ceil(minutesNum / AVG_BACKGROUND_SONG_MIN);
+  const bgLabel = listType === "dinner" ? "Dinner" : "Cocktail Hour";
+  const bgFile = listType === "dinner" ? "dinner" : "cocktail-hour";
+  const sectionFile = (sec: SectionKey) => (background && sec === "warmUp" ? bgFile : SECTION_FILES[sec]);
+  const sectionName = (sec: SectionKey) => (background && sec === "warmUp" ? bgLabel : sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak");
   const [artistsInput, setArtistsInput] = useState("");
   const [genresInput, setGenresInput] = useState("");
   const [decades, setDecades] = useState<string[]>(["2000s", "2010s", "2020s"]);
@@ -513,7 +525,7 @@ function Index() {
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer},
+      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -526,6 +538,8 @@ function Index() {
       const lists=row.lists as unknown as WorkflowSnapshot["lists"];
       if(!inputs || !lists)return;
       setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
+      const lt:ListType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:"dance";setListType(lt);setMinutes(inputs.minutes??"60");
+      if(lt!=="dance"){const t=Math.ceil((parseFloat(inputs.minutes??"60")||0)/AVG_BACKGROUND_SONG_MIN);const miss=Math.max(0,t-lists.warmUp.length);const sf={warmUp:miss,transition:0,peak:0,total:miss};setResult({warmUp:lists.warmUp,transition:[],peak:[],targetTotal:t,perSectionTarget:t,perSectionBase:t,shortfall:sf,finalShortfall:sf,duplicatesRemoved:0,blockedCount:0});return;}
       const per=Math.ceil((Math.max(0,Number(inputs.hours) || 0)*15/3)*(inputs.buffer??2));
       const shortfall={warmUp:Math.max(0,per-lists.warmUp.length),transition:Math.max(0,per-lists.transition.length),peak:Math.max(0,per-lists.peak.length),total:0};
       shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
@@ -554,15 +568,15 @@ function Index() {
       setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
     },1000);
     return ()=>{clearTimeout(timer);saveRevision.current+=1};
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer,savedEventId]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
 
   async function generate() {
     if (!songs.length) {
       toast.error("Upload at least one song first");
       return;
     }
-    if (hoursNum <= 0) {
-      toast.error("Enter a valid dance floor length");
+    if (background ? minutesNum <= 0 : hoursNum <= 0) {
+      toast.error(background ? "Enter how many minutes the list should cover" : "Enter a valid dance floor length");
       return;
     }
     const myToken = ++genTokenRef.current;
@@ -574,11 +588,19 @@ function Index() {
     // with the built-in library as a fallback if AI is unavailable.
     let r = generateLists({
       uploaded: uniqueSongs,
-      hours: hoursNum,
+      hours: background ? 24 : hoursNum,
       expand: false,
-      buffer,
+      buffer: background ? 1 : buffer,
       prefs,
     });
+    // Cocktail / dinner: one continuous list that must cover the time.
+    const collapseBackground = (g: typeof r): typeof r => {
+      const all = [...g.warmUp, ...g.transition, ...g.peak];
+      const miss = Math.max(0, bgTarget - all.length);
+      const sf = { warmUp: miss, transition: 0, peak: 0, total: miss };
+      return { ...g, warmUp: all, transition: [], peak: [], targetTotal: bgTarget, perSectionTarget: bgTarget, perSectionBase: bgTarget, shortfall: sf, finalShortfall: sf };
+    };
+    if (background) r = collapseBackground(r);
 
     // Metadata enrichment strategy (per user request):
     //   1) Online sources (ReccoBeats + MusicBrainz) via `enrichSongs`.
@@ -653,9 +675,11 @@ function Index() {
       );
     });
 
-    if (expand) {
+    if (expand || background) {
       {
-        const sectionMap: Array<{ key: SectionKey; label: "Warm Up" | "Transition" | "Peak" }> = [
+        type FillLabel = "Warm Up" | "Transition" | "Peak" | "Cocktail Hour" | "Dinner";
+        const gapSection = (l: FillLabel) => (l === "Cocktail Hour" || l === "Dinner" ? "Warm Up" : l);
+        const sectionMap: Array<{ key: SectionKey; label: FillLabel }> = background ? [{ key: "warmUp", label: bgLabel }] : [
           { key: "warmUp", label: "Warm Up" },
           { key: "transition", label: "Transition" },
           { key: "peak", label: "Peak" },
@@ -963,7 +987,7 @@ function Index() {
                 const gaps = buildGapProfile(
                   r[key],
                   [...r.warmUp, ...r.transition, ...r.peak],
-                  label,
+                  gapSection(label),
                   { favoriteArtists },
                 );
                 const res = await recommendFn({
@@ -1049,7 +1073,8 @@ function Index() {
           const globalHave = new SongKeySet();
           for (const s of [...r.warmUp, ...r.transition, ...r.peak]) globalHave.add(s.artist, s.song);
           for (const { key } of stillShort) {
-            for (const s of fallback[key]) {
+            const pool = background ? [...fallback.warmUp, ...fallback.transition, ...fallback.peak] : fallback[key];
+            for (const s of pool) {
               if (r[key].length >= r.perSectionTarget) break;
               if (!globalHave.tryAdd(s.artist, s.song)) continue;
               r[key].push({ ...s, metaSource: "Library" });
@@ -1100,9 +1125,24 @@ function Index() {
     // Re-bucket + sort the merged set so uploads and AI picks interleave into
     // a single ascending energy ramp from the first warm-up song to the last
     // peak song.
-    r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [] });
-    if (expand && r.finalShortfall && r.finalShortfall.total > 0) {
-      r = topUpSectionsFromLibrary(r, prefs);
+    if (background) {
+      // Steady mood: keep the client's songs in order and spread the
+      // fill-ins evenly between them (no energy ramp).
+      const ups = r.warmUp.filter((x) => x.fromUpload);
+      const extra = r.warmUp.filter((x) => !x.fromUpload);
+      const merged: typeof r.warmUp = [];
+      const total = ups.length + extra.length;
+      let ui = 0, ei = 0;
+      for (let i = 0; i < total; i++) {
+        const wantUp = ei >= extra.length || (ui < ups.length && ui / Math.max(1, ups.length) <= ei / Math.max(1, extra.length));
+        merged.push(wantUp ? ups[ui++]! : extra[ei++]!);
+      }
+      r = collapseBackground({ ...r, warmUp: merged });
+    } else {
+      r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [] });
+      if (expand && r.finalShortfall && r.finalShortfall.total > 0) {
+        r = topUpSectionsFromLibrary(r, prefs);
+      }
     }
 
     // A newer generate() (or a workflow reset) started while we were awaiting
@@ -1394,7 +1434,7 @@ function Index() {
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
       new Blob([songsToCsv(list)], { type: "text/csv" }),
-      `${prefix}${SECTION_FILES[section]}.csv`,
+      `${prefix}${sectionFile(section)}.csv`,
     );
   }
 
@@ -1430,7 +1470,7 @@ function Index() {
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
       new Blob([xml], { type: "text/plain" }),
-      `${prefix}${SECTION_FILES[section]}.txt`,
+      `${prefix}${sectionFile(section)}.txt`,
     );
   }
 
@@ -1447,7 +1487,7 @@ function Index() {
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
       new Blob([m3u], { type: "audio/x-mpegurl" }),
-      `${prefix}${SECTION_FILES[section]}.m3u`,
+      `${prefix}${sectionFile(section)}.m3u`,
     );
   }
 
@@ -1469,7 +1509,7 @@ function Index() {
     const refs = getSectionRefsForResult(exportResult, section);
     const xml = buildTxtPlaylist(refs, mergedLibrary);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    const fname = `${prefix}${SECTION_FILES[section]}.txt`;
+    const fname = `${prefix}${sectionFile(section)}.txt`;
     try {
       await writeFileToDir(dir, fname, xml);
       toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
@@ -1495,7 +1535,7 @@ function Index() {
     const m3u = buildM3u(refs, mergedLibrary);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    const fname = `${prefix}${SECTION_FILES[section]}.m3u`;
+    const fname = `${prefix}${sectionFile(section)}.m3u`;
     try {
       await writeFileToDir(dir, fname, m3u);
       toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
@@ -1530,12 +1570,12 @@ function Index() {
       const list = exportResult[section];
       if (!list.length) continue;
       const files: Array<{ name: string; data: string }> = [
-        { name: `${prefix}${SECTION_FILES[section]}.csv`, data: songsToCsv(list) },
+        { name: `${prefix}${sectionFile(section)}.csv`, data: songsToCsv(list) },
       ];
       if (mergedLibrary) {
         const refs = getSectionRefsForResult(exportResult, section);
-        files.push({ name: `${prefix}${SECTION_FILES[section]}.txt`, data: buildTxtPlaylist(refs, mergedLibrary) });
-        files.push({ name: `${prefix}${SECTION_FILES[section]}.m3u`, data: buildM3u(refs, mergedLibrary) });
+        files.push({ name: `${prefix}${sectionFile(section)}.txt`, data: buildTxtPlaylist(refs, mergedLibrary) });
+        files.push({ name: `${prefix}${sectionFile(section)}.m3u`, data: buildM3u(refs, mergedLibrary) });
         unresolvedTotal += countUnresolvedPaths(refs, mergedLibrary);
       }
       for (const f of files) {
@@ -1569,11 +1609,11 @@ function Index() {
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const zip = new JSZip();
     (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-      zip.file(`${prefix}${SECTION_FILES[section]}.csv`, songsToCsv(exportResult[section]));
+      zip.file(`${prefix}${sectionFile(section)}.csv`, songsToCsv(exportResult[section]));
       if (mergedLibrary) {
         const refs = getSectionRefsForResult(exportResult, section);
-        zip.file(`${prefix}${SECTION_FILES[section]}.txt`, buildTxtPlaylist(refs, mergedLibrary));
-        zip.file(`${prefix}${SECTION_FILES[section]}.m3u`, buildM3u(refs, mergedLibrary));
+        zip.file(`${prefix}${sectionFile(section)}.txt`, buildTxtPlaylist(refs, mergedLibrary));
+        zip.file(`${prefix}${sectionFile(section)}.m3u`, buildM3u(refs, mergedLibrary));
       }
     });
     if (includeCombined) zip.file(`${prefix}combined-dance-floor-lists.csv`, combinedCsv(exportResult));
@@ -1584,7 +1624,7 @@ function Index() {
   function exportSectionPdf(section: SectionKey) {
     if (!result) return;
     const pdf = new jsPDF();
-    const name = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
+    const name = sectionName(section);
     pdf.setFontSize(18); pdf.text(`${eventName || "Event"} — ${name}`, 15, 20);
     pdf.setFontSize(10);
     let y = 32;
@@ -1594,7 +1634,7 @@ function Index() {
       if (y + lines.length * 6 > 280) { pdf.addPage(); y = 20; }
       pdf.text(lines, 15, y); y += lines.length * 6 + 2;
     });
-    pdf.save(`${eventName ? `${toKebabCase(eventName)}-` : ""}${SECTION_FILES[section]}.pdf`);
+    pdf.save(`${eventName ? `${toKebabCase(eventName)}-` : ""}${sectionFile(section)}.pdf`);
   }
 
   // --- Summary ---
@@ -1708,7 +1748,7 @@ function Index() {
   }, [result]);
 
   const stepDefs: StepDef[] = [
-    { id: 1, label: "Dance floor", hint: hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && hoursNum > 0) },
+    { id: 1, label: background ? bgLabel : "Dance floor", hint: background ? (minutesNum > 0 ? `${minutesNum} min` : "Set the length") : hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && (background ? minutesNum > 0 : hoursNum > 0)) },
     { id: 2, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
     { id: 3, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
     { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result },
@@ -1734,10 +1774,29 @@ function Index() {
         {step === 1 && (
         <StepPanel
           eyebrow="Step 1"
-          title="Dance floor details"
-          description="Set the vibe and length of the open dance floor."
+          title={background ? `${bgLabel} details` : "Dance floor details"}
+          description={background ? "One relaxed list that covers the time you set. Missing time is filled with similar songs." : "Set the vibe and length of the open dance floor."}
         >
           <div className="space-y-5">
+            <div>
+              <Label>List type</Label>
+              <div className="mt-2 inline-flex flex-wrap gap-1 rounded-full border border-border bg-muted/40 p-1" role="radiogroup">
+                {(["dance", "cocktail", "dinner"] as ListType[]).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    role="radio"
+                    aria-checked={listType === t}
+                    disabled={!!result}
+                    onClick={() => setListType(t)}
+                    className={`rounded-full px-4 py-1.5 text-sm transition-colors disabled:opacity-60 ${listType === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    {LIST_TYPE_LABEL[t]}
+                  </button>
+                ))}
+              </div>
+              {result && <p className="mt-1.5 text-xs text-muted-foreground">Start a new event to change the list type.</p>}
+            </div>
 
             <div>
               <Label htmlFor="eventName">Couple / Event name (optional)</Label>
@@ -1750,11 +1809,22 @@ function Index() {
               />
               {eventName && (
                 <p className="mt-1.5 text-xs text-muted-foreground">
-                  Files will be named: <code className="rounded bg-muted px-1 py-0.5 text-xs">{toKebabCase(eventName)}-warm-up.csv</code>
+                  Files will be named: <code className="rounded bg-muted px-1 py-0.5 text-xs">{toKebabCase(eventName)}-{background ? bgFile : "warm-up"}.csv</code>
                 </p>
               )}
             </div>
             <div className="grid gap-4 md:grid-cols-2">
+              {background ? (
+              <div>
+                <Label htmlFor="minutes">Length (minutes)</Label>
+                <Input id="minutes" type="number" step="5" min="0" value={minutes} onChange={(e) => setMinutes(e.target.value)} className="mt-1.5" />
+                {minutesNum > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    About {bgTarget} songs to cover {minutesNum} min · {songs.length} uploaded{songs.length < bgTarget ? ` · ${bgTarget - songs.length} will be added automatically` : ""}
+                  </p>
+                )}
+              </div>
+              ) : (
               <div>
                 <Label htmlFor="hours">Dance floor length (hours)</Label>
                 <Input
@@ -1772,6 +1842,7 @@ function Index() {
                   </p>
                 )}
               </div>
+              )}
               <div>
                 <Label>Preferred decades</Label>
                 <div className="mt-2 flex flex-wrap gap-3">
@@ -1787,7 +1858,7 @@ function Index() {
                     </label>
                   ))}
                 </div>
-                {hoursNum > 0 && (
+                {!background && hoursNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
                     Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section ({buffer}× buffer)
 
@@ -2142,7 +2213,7 @@ function Index() {
           >
             <div className="space-y-4">
 
-              {summary && <div className="grid gap-4 sm:grid-cols-2"><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Match summary · {activeSection === "warmUp" ? "Warm Up" : activeSection === "transition" ? "Transition" : "Peak"}</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.perSection[activeSection].matched} matched</span><span className="text-warning">{summary.perSection[activeSection].attention} need attention</span><span>{summary.perSection[activeSection].total} total</span></div></div><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Song sources</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.sourceCounts[activeSection].uploads} Upload</span><span>{summary.sourceCounts[activeSection].ai} AI</span><span>{summary.sourceCounts[activeSection].library} Library</span></div></div></div>}
+              {summary && <div className="grid gap-4 sm:grid-cols-2"><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Match summary · {sectionName(activeSection)}</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.perSection[activeSection].matched} matched</span><span className="text-warning">{summary.perSection[activeSection].attention} need attention</span><span>{summary.perSection[activeSection].total} total</span></div></div><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Song sources</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.sourceCounts[activeSection].uploads} Upload</span><span>{summary.sourceCounts[activeSection].ai} AI</span><span>{summary.sourceCounts[activeSection].library} Library</span></div></div></div>}
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button onClick={exportAllZip}>
@@ -2165,7 +2236,7 @@ function Index() {
                 </Button>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={includeCombined} onCheckedChange={(v) => setIncludeCombined(!!v)} />
-                  Include combined CSV (all three lists in play order)
+                  {background ? "Include combined CSV" : "Include combined CSV (all three lists in play order)"}
                 </label>
               </div>
 
@@ -2173,8 +2244,8 @@ function Index() {
                  <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="w-full">
-                    <div className="font-medium">Not enough songs to fully fill every section</div>
-                    <div className="mt-1.5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
+                    <div className="font-medium">{background ? `${bgLabel} is ${result.finalShortfall.warmUp} songs (about ${Math.round(result.finalShortfall.warmUp * AVG_BACKGROUND_SONG_MIN)} min) short` : "Not enough songs to fully fill every section"}</div>
+                    {!background && <div className="mt-1.5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Warm Up</div>
                         <div>{result.warmUp.length} / {result.perSectionTarget}</div>
@@ -2190,19 +2261,19 @@ function Index() {
                         <div>{result.peak.length} / {result.perSectionTarget}</div>
                          <div className="text-warning">-{result.finalShortfall.peak} short</div>
                       </div>
-                    </div>
+                    </div>}
 
-                    <div className="mt-1.5 text-xs">
+                    {!background && <div className="mt-1.5 text-xs">
                       Target {result.perSectionTarget} songs per section. The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
-                    </div>
+                    </div>}
                   </div>
                 </div>
               ) : null}
 
               <Tabs value={activeSection} onValueChange={v=>setActiveSection(v as SectionKey)}>
                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b border-border bg-transparent p-0">
-                  {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => {
-                    const label = sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak";
+                  {((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => {
+                    const label = sectionName(sec);
                     const ps = summary?.perSection[sec];
                     const shortfall = result.finalShortfall?.[sec] ?? 0;
                     return (
@@ -2236,6 +2307,7 @@ function Index() {
                 {(["warmUp", "transition", "peak"] as SectionKey[]).map((sec) => (
                   <TabsContent key={sec} value={sec}>
                     <SectionView
+                      labelOverride={background && sec === "warmUp" ? bgLabel : undefined}
                       section={sec}
                       songs={result[sec]}
                       matches={matches}
@@ -2291,7 +2363,9 @@ function Index() {
             <ChevronLeft className="mr-1 h-4 w-4" /> Back
           </Button>
           <p className="min-w-0 truncate text-center text-xs text-muted-foreground">
-            {hoursNum > 0
+            {background
+              ? minutesNum > 0 ? `${bgLabel} · about ${bgTarget} songs for ${minutesNum} min` : "Set the length to see the song target"
+              : hoursNum > 0
               ? `Target ${liveTargets.total} songs · ${liveTargets.perSection} per section (${buffer}× buffer)`
               : "Set the dance floor length to see song targets"}
           </p>
@@ -2300,7 +2374,7 @@ function Index() {
               <Button
                 size="sm"
                 onClick={() => {
-                  if (step === 1 && hoursNum > 0) setDanceFloorConfirmed(true);
+                  if (step === 1 && (background ? minutesNum > 0 : hoursNum > 0)) setDanceFloorConfirmed(true);
                   setStep((s) => Math.min(5, s + 1));
                 }}
               >
@@ -2574,13 +2648,14 @@ interface SectionViewProps {
   onPickLocalFile?: (key: string, file: File) => void;
   onPreview?: (target: PreviewTarget) => void;
   matchLimit: number; matcherOn: boolean; software: string;
+  labelOverride?: string;
   reviewMode: "first" | "most" | "all" | "none";
   onReviewModeChange: (mode: "first" | "most" | "all" | "none") => void;
 }
 
 function SectionView(props: SectionViewProps) {
   const { section, songs, matches, library, songKey, onExportCsv, onExportPdf, onExportXml, onExportM3u, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile, matchLimit, matcherOn, software, reviewMode, onReviewModeChange } = props;
-  const sectionLabel = section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak";
+  const sectionLabel = props.labelOverride ?? (section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter,setFilter] = useState("all");
   const toggleExpanded = (key: string) => {
