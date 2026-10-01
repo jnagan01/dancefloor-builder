@@ -465,39 +465,64 @@ async function backfillMeta(
   artists: ConsensusArtist[],
   lfmKey?: string,
 ): Promise<void> {
-  const jobs: Array<() => Promise<void>> = [];
-  for (const t of tracks) {
-    if (t.artwork && t.genre) continue;
-    jobs.push(async () => {
-      const meta = await itunesMeta(`${primaryArtist(t.artist)} ${t.title}`, "song");
-      if (!t.artwork) t.artwork = meta.url;
-      if (!t.genre) t.genre = meta.genre;
-    });
-  }
-  for (const a of artists) {
-    if (a.artwork && a.genre) continue;
-    jobs.push(async () => {
-      const meta = await itunesMeta(a.artist, "album");
-      if (!a.artwork) a.artwork = meta.url;
-      if (!a.genre) a.genre = meta.genre;
-      if (classifyGenre(a.genre) === "other" && lfmKey) {
-        const tag = await lastfmArtistTags(lfmKey, a.artist);
-        if (tag) a.genre = tag;
+  const run = async (jobs: Array<() => Promise<void>>) => {
+    const workers = Array.from({ length: Math.min(8, jobs.length) }, async () => {
+      for (;;) {
+        const job = jobs.shift();
+        if (!job) return;
+        await job();
       }
     });
-  }
-  const workers = Array.from({ length: Math.min(8, jobs.length) }, async () => {
-    for (;;) {
-      const job = jobs.shift();
-      if (!job) return;
-      await job();
-    }
-  });
-  await Promise.all(workers);
+    await Promise.all(workers);
+  };
 
+  // 1. Tracks: artwork + official genre from iTunes.
+  await run(
+    tracks
+      .filter(t => !t.artwork || !t.genre)
+      .map(t => async () => {
+        const meta = await itunesMeta(`${primaryArtist(t.artist)} ${t.title}`, "song");
+        if (!t.artwork) t.artwork = meta.url;
+        if (!t.genre) t.genre = meta.genre;
+      }),
+  );
   for (const t of tracks) t.djGenre = classifyGenre(t.genre);
+
+  // 2. Artists inherit the dominant genre of their own charting tracks.
+  const byArtist = new Map<string, Map<string, number>>();
+  for (const t of tracks) {
+    if (!t.genre) continue;
+    const key = normKey(primaryArtist(t.artist));
+    const counts = byArtist.get(key) ?? new Map<string, number>();
+    counts.set(t.genre, (counts.get(t.genre) ?? 0) + 1);
+    byArtist.set(key, counts);
+  }
+  for (const a of artists) {
+    if (a.genre) continue;
+    const counts = byArtist.get(normKey(a.artist));
+    if (!counts) continue;
+    a.genre = [...counts.entries()].sort((x, y) => y[1] - x[1])[0]?.[0];
+  }
+
+  // 3. Anything still unknown (mostly Last.fm-only artists) gets looked up.
+  await run(
+    artists
+      .filter(a => !a.artwork || classifyGenre(a.genre) === "other")
+      .map(a => async () => {
+        if (!a.artwork || !a.genre) {
+          const meta = await itunesMeta(a.artist, "album");
+          if (!a.artwork) a.artwork = meta.url;
+          if (!a.genre) a.genre = meta.genre;
+        }
+        if (classifyGenre(a.genre) === "other" && lfmKey) {
+          const tag = await lastfmArtistTags(lfmKey, a.artist);
+          if (tag) a.genre = tag;
+        }
+      }),
+  );
   for (const a of artists) a.djGenre = classifyGenre(a.genre);
 }
+
 
 
 /* ---------------------------------------------------------------- handler */
