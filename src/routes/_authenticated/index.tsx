@@ -153,6 +153,11 @@ function HomePage() {
           {platforms.map(p => <TabsTrigger key={p.id} value={p.id} className="rounded-full">{p.label}</TabsTrigger>)}
         </TabsList>
 
+        <div className="mt-4 flex flex-wrap gap-1.5" role="group" aria-label="Filter by genre">
+          <GenrePill label="All genres" active={genre === "all"} onClick={() => setGenre("all")}/>
+          {genreOptions.map(g => <GenrePill key={g.id} label={g.label} active={genre === g.id} onClick={() => setGenre(g.id)}/>)}
+        </div>
+
         <TabsContent value="all" className="mt-5">
           <div className="grid gap-8 xl:grid-cols-2">
             <div>
@@ -161,12 +166,13 @@ function HomePage() {
             </div>
             <div>
               <h3 className="mb-3 font-display text-base tracking-tight">Top artists</h3>
-              <ArtistList rows={chartData?.topArtists ?? []} loading={chartsLoading} onPlay={play}/>
+              <ArtistList rows={filterArtists(chartData?.topArtists ?? [])} loading={chartsLoading} onPlay={play}/>
 
             </div>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam.</p>
         </TabsContent>
+
 
         {platforms.filter(p => p.id !== "all").map(p => <TabsContent key={p.id} value={p.id} className="mt-5">
           <ChartList rows={filterEntries(perPlatform[p.id] ?? [])} loading={chartsLoading} error={chartData?.errors?.[p.id as ChartSource]} inLibrary={inLibrary} onPlay={play}/>
