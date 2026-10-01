@@ -51,7 +51,7 @@ export function StepRail({
                         : "bg-muted/60 text-muted-foreground"
                   }`}
                 >
-                  {s.done && !active ? <Check className="size-3" /> : s.id}
+                  {s.done && !active ? <Check className="size-3" /> : (s.num ?? s.id)}
                 </span>
                 <span className="min-w-0">
                   <span className={`block truncate ${active ? "font-semibold" : ""}`}>{s.label}</span>
