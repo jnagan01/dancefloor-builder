@@ -1699,6 +1699,7 @@ function Index() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
     (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
       const refs = getSectionRefsForResult(exportResult, section);
@@ -1714,8 +1715,9 @@ function Index() {
     downloadBlob(blob, `${prefix}dance-floor-lists.zip`);
   }
 
-  function exportSectionPdf(section: SectionKey) {
+  async function exportSectionPdf(section: SectionKey) {
     if (!result) return;
+    const { jsPDF } = await import("jspdf");
     const pdf = new jsPDF();
     const name = sectionName(section);
     pdf.setFontSize(18); pdf.text(`${eventName || "Event"} — ${name}`, 15, 20);
