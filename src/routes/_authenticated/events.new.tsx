@@ -1572,6 +1572,7 @@ function Index() {
 
   // --- Direct-to-VirtualDJ folder exports ---
 
+  /** Direct-to-VirtualDJ set list: matched songs only, so VirtualDJ only sees playable files. */
   async function exportSectionXmlToVdj(section: SectionKey) {
     if (!mergedLibrary) {
       toast.error("Load a VirtualDJ database first");
@@ -1586,12 +1587,12 @@ function Index() {
       return;
     }
     const refs = getSectionRefsForResult(exportResult, section);
-    const xml = buildTxtPlaylist(refs, mergedLibrary);
+    const xml = buildTxtPlaylist(refs, mergedLibrary, { matchedOnly: true });
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.txt`;
     try {
       await writeFileToDir(dir, fname, xml);
-      toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
+      toast.success(matchedSummary(refs, fname));
     } catch {
       toast.error("Could not write to VirtualDJ folder, downloading instead");
       downloadBlob(new Blob([xml], { type: "text/plain" }), fname);
@@ -1617,24 +1618,30 @@ function Index() {
     const fname = `${prefix}${sectionFile(section)}.m3u`;
     try {
       await writeFileToDir(dir, fname, m3u);
-      toast.success(`Saved ${fname} to ${vdjDirName ?? "VirtualDJ folder"}`);
+      toast.success(matchedSummary(refs, fname));
     } catch {
       toast.error("Could not write to VirtualDJ folder, downloading instead");
       downloadBlob(new Blob([m3u], { type: "audio/x-mpegurl" }), fname);
     }
   }
 
-  function warnUnresolvedPaths(count: number) {
-    if (count > 0) {
-      toast.warning(
-        `${count} song${count === 1 ? "" : "s"} may not be found by VirtualDJ — set the full folder location in Settings › DJ software & folders.`,
-      );
-    }
+  /** "Saved X matched songs … (N unmatched songs left out)" message for DJ-software exports. */
+  function matchedSummary(refs: ReturnType<typeof getSectionRefsForResult>, fname: string): string {
+    const matched = countMatchedForExport(refs, mergedLibrary);
+    const skipped = refs.length - matched;
+    const where = vdjDirName ?? "VirtualDJ folder";
+    return skipped > 0
+      ? `Saved ${matched} matched song${matched === 1 ? "" : "s"} to ${where} as ${fname} — ${skipped} unmatched left out`
+      : `Saved ${matched} matched song${matched === 1 ? "" : "s"} to ${where} as ${fname}`;
   }
 
   async function exportAllToVdj() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
+    if (!mergedLibrary) {
+      toast.error("Load a VirtualDJ database first");
+      return;
+    }
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
@@ -1645,18 +1652,20 @@ function Index() {
     let written = 0;
     let unresolvedTotal = 0;
     let failed = 0;
+    let matchedTotal = 0;
+    let skippedTotal = 0;
     for (const section of sections) {
       const list = exportResult[section];
       if (!list.length) continue;
+      // DJ software only receives playlists of songs matched to real files.
+      const refs = getSectionRefsForResult(exportResult, section);
+      const matched = countMatchedForExport(refs, mergedLibrary);
+      matchedTotal += matched;
+      skippedTotal += refs.length - matched;
+      unresolvedTotal += countUnresolvedPaths(refs, mergedLibrary);
       const files: Array<{ name: string; data: string }> = [
-        { name: `${prefix}${sectionFile(section)}.csv`, data: songsToCsv(list) },
+        { name: `${prefix}${sectionFile(section)}.m3u`, data: buildM3u(refs, mergedLibrary) },
       ];
-      if (mergedLibrary) {
-        const refs = getSectionRefsForResult(exportResult, section);
-        files.push({ name: `${prefix}${sectionFile(section)}.txt`, data: buildTxtPlaylist(refs, mergedLibrary) });
-        files.push({ name: `${prefix}${sectionFile(section)}.m3u`, data: buildM3u(refs, mergedLibrary) });
-        unresolvedTotal += countUnresolvedPaths(refs, mergedLibrary);
-      }
       for (const f of files) {
         try {
           await writeFileToDir(dir, f.name, f.data);
@@ -1666,17 +1675,12 @@ function Index() {
         }
       }
     }
-    if (includeCombined) {
-      try {
-        await writeFileToDir(dir, `${prefix}combined-dance-floor-lists.csv`, combinedCsv(exportResult));
-        written += 1;
-      } catch {
-        failed += 1;
-      }
-    }
     warnUnresolvedPaths(unresolvedTotal);
     if (failed === 0) {
-      toast.success(`Saved ${written} file${written === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}`);
+      toast.success(
+        `Saved ${written} playlist${written === 1 ? "" : "s"} with ${matchedTotal} matched song${matchedTotal === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}` +
+          (skippedTotal > 0 ? ` — ${skippedTotal} unmatched left out` : ""),
+      );
     } else {
       toast.error(`Saved ${written}, failed ${failed}. Check folder permissions.`);
     }
@@ -1688,10 +1692,11 @@ function Index() {
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const zip = new JSZip();
     (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
+      const refs = getSectionRefsForResult(exportResult, section);
+      // Reference files keep every song; the DJ playlist keeps matched songs only.
       zip.file(`${prefix}${sectionFile(section)}.csv`, songsToCsv(exportResult[section]));
+      zip.file(`${prefix}${sectionFile(section)}.txt`, buildTxtPlaylist(refs, mergedLibrary));
       if (mergedLibrary) {
-        const refs = getSectionRefsForResult(exportResult, section);
-        zip.file(`${prefix}${sectionFile(section)}.txt`, buildTxtPlaylist(refs, mergedLibrary));
         zip.file(`${prefix}${sectionFile(section)}.m3u`, buildM3u(refs, mergedLibrary));
       }
     });
