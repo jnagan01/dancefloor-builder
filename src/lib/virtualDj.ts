@@ -131,7 +131,7 @@ function trackFromNode(node: Element): VdjTrack | null {
   let title = attr(tags, "Title") || "";
   const genre = attr(tags, "Genre");
   const year = attr(tags, "Year");
-  const bpm = attr(scan, "Bpm") || attr(tags, "Bpm");
+  const bpm = cleanBpm(attr(scan, "Bpm") || attr(tags, "Bpm"));
   const key = attr(scan, "Key") || attr(tags, "Key");
   const remixTag = attr(tags, "Remix");
   const infos = childByName(node, "Infos");
@@ -258,7 +258,7 @@ export function tracksFromAudioFiles(files: ReadonlyArray<FileLike>): VdjTrack[]
         genre: tg.genre || undefined,
         year,
         decade: year && /^\d{4}$/.test(year) ? `${year.slice(0, 3)}0s` : undefined,
-        bpm: tg.bpm || undefined,
+        bpm: cleanBpm(tg.bpm),
         key: tg.key || undefined,
         comment: tg.comment || undefined,
         fromTags,
