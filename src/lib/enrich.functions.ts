@@ -305,7 +305,9 @@ ${lines}`;
     if (start < 0 || end <= start) return out;
     const parsed = JSON.parse(text.slice(start, end + 1)) as { items?: Array<Record<string, unknown>> };
     const score = (v: unknown) =>
-      typeof v === "number" && Number.isFinite(v) ? Math.max(1, Math.min(10, Math.round(v))) : undefined;
+      typeof v === "number" && Number.isFinite(v)
+        ? v <= 1 ? toScore10(v) : Math.max(1, Math.min(10, Math.round(v)))
+        : undefined;
     for (const it of parsed.items ?? []) {
       const i = typeof it.i === "number" ? it.i : -1;
       if (i < 0 || i >= songs.length) continue;
