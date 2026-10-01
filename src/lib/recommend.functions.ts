@@ -54,6 +54,17 @@ const InputSchema = z.object({
   favoriteArtists: z.array(z.string().max(150)).max(50).default([]),
   /** Music-Map style sonic neighbors of the client's requested artists. */
   neighborArtists: z.array(z.string().max(150)).max(120).default([]),
+  /** Real listening data from Last.fm for the seed/neighbor artists. */
+  crowdArtists: z
+    .array(
+      z.object({
+        artist: z.string().max(150),
+        listeners: z.number().optional(),
+        tags: z.array(z.string().max(40)).max(6).default([]),
+      }),
+    )
+    .max(60)
+    .default([]),
 });
 
 
