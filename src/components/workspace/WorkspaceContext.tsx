@@ -193,15 +193,29 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (userId && !loading) void saveMusicLibrary(sources, userId);
   }, [sources, userId, loading]);
   // Desktop app: silently re-read remembered music folders from disk on launch
-  // so nothing has to be reconnected.
+  // and then re-read VirtualDJ so play counts are there without any manual refresh.
   useEffect(() => {
     if (loading || autoScanned.current || !supportsNativeScan()) return;
     const roots = getFolderRoots();
     if (!sources.some(s => roots[s.label])) return;
     autoScanned.current = true;
-    void rescanNative(true);
+    void (async () => {
+      await rescanNative(true);
+      autoSynced.current = true;
+      const root = localStorage.getItem(VDJ_ROOT_KEY);
+      if (root) await syncVirtualDj(vdjDatabaseIn(root), true);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, sources]);
+  // Desktop app with a saved VirtualDJ folder but no scanned music folders.
+  useEffect(() => {
+    if (loading || autoSynced.current || !isDesktopApp()) return;
+    const root = localStorage.getItem(VDJ_ROOT_KEY);
+    if (!root) return;
+    autoSynced.current = true;
+    void syncVirtualDj(vdjDatabaseIn(root), true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
   const library = useMemo(() => sources.length ? mergeLibraries(sources.map(s => buildLibrary(s.tracks))) : null, [sources]);
   async function addFolder() {
     // Desktop app: use the native picker so we learn the folder's real
