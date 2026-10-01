@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { CalendarDays, Library, Music2, ArrowRight, Play, TrendingUp, Check, AlertCircle, Flame } from "lucide-react";
 import { listWorkflows, listMostRequested } from "@/lib/history.functions";
-import { getTrendingCharts, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist } from "@/lib/charts.functions";
+import { getTrendingCharts, DJ_GENRES, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist, type DjGenre } from "@/lib/charts.functions";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -51,7 +51,9 @@ function HomePage() {
   const { data: mostRequested = [] } = useQuery({ queryKey: ["mostRequested"], queryFn: () => requested() });
 
   const [djOnly, setDjOnly] = useState(false);
+  const [genre, setGenre] = useState<DjGenre | "all">("all");
   const [platform, setPlatform] = useState("all");
+
   const [playing, setPlaying] = useState<PreviewTarget | null>(null);
 
   /** Finds a connected local file so charts play the real song when owned. */
@@ -104,8 +106,25 @@ function HomePage() {
     shazam: chartData?.shazam ?? [],
   };
 
-  const filterTracks = (rows: ConsensusTrack[]) => (djOnly ? rows.filter(isDanceable) : rows);
-  const filterEntries = (rows: ChartEntry[]) => (djOnly ? rows.filter(isDanceable) : rows);
+  const matchesGenre = (e: { djGenre?: DjGenre }) => genre === "all" || e.djGenre === genre;
+
+  const filterTracks = (rows: ConsensusTrack[]) =>
+    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre).map((t, i) => ({ ...t, rank: genre === "all" ? t.rank : i + 1 }));
+  const filterArtists = (rows: ConsensusArtist[]) =>
+    rows.filter(matchesGenre).map((a, i) => ({ ...a, rank: genre === "all" ? a.rank : i + 1 }));
+  const filterEntries = (rows: ChartEntry[]) =>
+    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre);
+
+  /** Only offer genre pills that actually have charting songs right now. */
+  const genreOptions = useMemo(() => {
+    const present = new Set<DjGenre>();
+    for (const t of chartData?.topTracks ?? []) if (t.djGenre) present.add(t.djGenre);
+    for (const a of chartData?.topArtists ?? []) if (a.djGenre) present.add(a.djGenre);
+    for (const key of ["apple", "billboard", "lastfm", "shazam"] as const)
+      for (const e of chartData?.[key] ?? []) if (e.djGenre) present.add(e.djGenre);
+    return DJ_GENRES.filter(g => present.has(g.id));
+  }, [chartData]);
+
 
   return <div className="space-y-10">
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
@@ -134,6 +153,11 @@ function HomePage() {
           {platforms.map(p => <TabsTrigger key={p.id} value={p.id} className="rounded-full">{p.label}</TabsTrigger>)}
         </TabsList>
 
+        <div className="mt-4 flex flex-wrap gap-1.5" role="group" aria-label="Filter by genre">
+          <GenrePill label="All genres" active={genre === "all"} onClick={() => setGenre("all")}/>
+          {genreOptions.map(g => <GenrePill key={g.id} label={g.label} active={genre === g.id} onClick={() => setGenre(g.id)}/>)}
+        </div>
+
         <TabsContent value="all" className="mt-5">
           <div className="grid gap-8 xl:grid-cols-2">
             <div>
@@ -142,12 +166,13 @@ function HomePage() {
             </div>
             <div>
               <h3 className="mb-3 font-display text-base tracking-tight">Top artists</h3>
-              <ArtistList rows={chartData?.topArtists ?? []} loading={chartsLoading} onPlay={play}/>
+              <ArtistList rows={filterArtists(chartData?.topArtists ?? [])} loading={chartsLoading} onPlay={play}/>
 
             </div>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam.</p>
         </TabsContent>
+
 
         {platforms.filter(p => p.id !== "all").map(p => <TabsContent key={p.id} value={p.id} className="mt-5">
           <ChartList rows={filterEntries(perPlatform[p.id] ?? [])} loading={chartsLoading} error={chartData?.errors?.[p.id as ChartSource]} inLibrary={inLibrary} onPlay={play}/>
@@ -205,6 +230,17 @@ function HomePage() {
 }
 
 type PlayFn = (artist: string, song: string, filePath?: string) => void;
+
+/** Genre filter chip under the platform tabs. */
+function GenrePill({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return <button type="button" aria-pressed={active} onClick={onClick}
+    className={`rounded-full border px-3 py-1 text-xs transition-colors ${active
+      ? "border-primary/60 bg-primary text-primary-foreground"
+      : "border-border/50 bg-muted/30 text-muted-foreground hover:bg-accent/40 hover:text-foreground"}`}>
+    {label}
+  </button>;
+}
+
 
 /** Artwork thumbnail with a play overlay on hover. */
 function Art({ src, round, onPlay, label }: { src?: string; round?: boolean; onPlay: () => void; label: string }) {
