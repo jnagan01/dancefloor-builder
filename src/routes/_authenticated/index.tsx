@@ -303,7 +303,7 @@ function ConsensusTrackList({ rows, loading, inLibrary, onPlay }: { rows: Consen
 }
 
 
-function ArtistList({ rows, loading }: { rows: ConsensusArtist[]; loading: boolean }) {
+function ArtistList({ rows, loading, onPlay }: { rows: ConsensusArtist[]; loading: boolean; onPlay: PlayFn }) {
   if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest charts…</p>;
   if (!rows.length) return <p className="py-8 text-sm text-muted-foreground">No artists to show right now.</p>;
   const [hero, ...rest] = rows;
@@ -314,6 +314,7 @@ function ArtistList({ rows, loading }: { rows: ConsensusArtist[]; loading: boole
   return <div>
     {hero ? <div className="relative mb-3 overflow-hidden rounded-2xl border border-border/40">
       {hero.artwork ? <img src={hero.artwork} alt="" className="h-44 w-full object-cover"/> : <div className="h-44 w-full bg-muted/50"/>}
+      {hero.topTrack ? <HeroPlay label={hero.topTrack} onClick={() => onPlay(hero.artist, hero.topTrack!)}/> : null}
       <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-4">
         <span className="font-display text-3xl font-semibold leading-none text-white/90">1</span>
         <span className="min-w-0 flex-1">
@@ -324,17 +325,16 @@ function ArtistList({ rows, loading }: { rows: ConsensusArtist[]; loading: boole
       </div>
     </div> : null}
     <ol className="grid gap-1">
-      {rest.slice(0, 14).map(a => <li key={`${a.rank}-${a.artist}`} className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
+      {rest.slice(0, 14).map(a => <li key={`${a.rank}-${a.artist}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
         <span className="w-5 text-right tabular-nums text-sm text-muted-foreground">{a.rank}</span>
-        {a.artwork
-          ? <img src={a.artwork} alt="" loading="lazy" className="size-11 rounded-full object-cover"/>
-          : <span className="grid size-11 place-items-center rounded-full bg-muted/60"><Music2 className="size-4 text-muted-foreground"/></span>}
+        <Art src={a.artwork} round label={a.topTrack ?? a.artist} onPlay={() => onPlay(a.artist, a.topTrack ?? "")}/>
         <span className="min-w-0">
           <span className="block truncate text-sm font-medium">{a.artist}</span>
           <span className="block truncate text-xs text-muted-foreground">{sub(a) || a.topTrack || ""}</span>
         </span>
       </li>)}
     </ol>
+
   </div>;
 }
 
