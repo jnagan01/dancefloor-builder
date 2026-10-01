@@ -3043,6 +3043,8 @@ function SectionView(props: SectionViewProps) {
           const inReview = m?.status === "Possible Match" || m?.status === "Multiple Matches";
           if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
           const meta = s as BadgeSong;
+          const fileBpm = track ? parseBpm(track.bpm) : undefined;
+          const estimatedBpm = typeof meta.bpm === "number" ? Math.round(meta.bpm) : null;
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
           return (
