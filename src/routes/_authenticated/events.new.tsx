@@ -38,6 +38,7 @@ import {
 
   buildTxtPlaylist,
   buildM3u,
+  countMatchedForExport,
   countUnresolvedPaths,
   resolveExportPath,
   cleanBpm,
@@ -1536,7 +1537,7 @@ function Index() {
     const unmatched = unmatchedCountForResult(exportResult, section);
     if (unmatched === 0) return true;
     return window.confirm(
-      `${unmatched} songs are not matched to files in your VirtualDJ library. They will remain in your CSV reference lists but will not appear in the VirtualDJ M3U playlist unless matched. Continue?`,
+      `${unmatched} songs are not matched to files in your library, so they will be left out of the playlist sent to your DJ software. They are still included in the CSV, PDF, text and Spotify exports. Continue?`,
     );
   }
 
