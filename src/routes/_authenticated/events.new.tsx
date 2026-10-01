@@ -583,7 +583,7 @@ function Index() {
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,vibe,bpmOn,bpmRange,danceOn,danceRange,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
+      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,vibe,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -636,7 +636,7 @@ function Index() {
       setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
     },1000);
     return ()=>{clearTimeout(timer);saveRevision.current+=1};
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,bpmOn,bpmRange,danceOn,danceRange,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
 
   async function generate() {
     // No uploads is fine as long as the client gave artists, genres or decades —
