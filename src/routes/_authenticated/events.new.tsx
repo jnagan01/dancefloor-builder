@@ -2919,7 +2919,7 @@ function InlineMatchSearch({
                      {mostPlayed && <span className="rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-success">Most played</span>}
                      {t.playCount != null && <span className="tabular-nums">Plays {t.playCount.toLocaleString()}</span>}
                      <span className="rounded-full bg-muted/40 px-1.5 py-0.5 font-semibold text-foreground">{t.key || "—"}</span>
-                     <span className="tabular-nums">BPM <strong className="text-foreground">{t.bpm || "—"}</strong></span>
+                     <span className="tabular-nums">BPM <strong className="text-foreground">{cleanBpm(t.bpm) ?? "—"}</strong></span>
                    </div>
                 </li>
               );
