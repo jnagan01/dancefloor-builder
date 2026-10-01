@@ -18,6 +18,29 @@ export const VIBES: Vibe[] = [
 
 export const getVibe = (id?: string | null) => VIBES.find((v) => v.id === id);
 
+export type VibeFit = "inside" | "low" | "high" | "unknown";
+type FitSection = "warmUp" | "transition" | "peak";
+/** Section-aware fit: warm-up may sit lower, peak higher, so the build is kept. */
+export function vibeRange(v: Vibe, section?: FitSection) {
+  const dE = section === "warmUp" ? [-1, 0] : section === "peak" ? [0, 1] : [0, 0];
+  const dB = section === "warmUp" ? [-8, 0] : section === "peak" ? [0, 8] : [0, 0];
+  return { energy: [v.energy[0] + dE[0], v.energy[1] + dE[1]] as [number, number], bpm: [v.bpm[0] + dB[0], v.bpm[1] + dB[1]] as [number, number] };
+}
+export function vibeFit(song: { energy?: number; bpm?: number }, v: Vibe, section?: FitSection): VibeFit {
+  const r = vibeRange(v, section);
+  if (typeof song.energy === "number") {
+    if (song.energy < r.energy[0] - 0.5) return "low";
+    if (song.energy > r.energy[1] + 0.5) return "high";
+    return "inside";
+  }
+  if (typeof song.bpm === "number" && song.bpm > 0) {
+    if (song.bpm < r.bpm[0] - 4) return "low";
+    if (song.bpm > r.bpm[1] + 4) return "high";
+    return "inside";
+  }
+  return "unknown";
+}
+
 export function vibeNote(id?: string | null) {
   const v = getVibe(id);
   if (!v) return "";

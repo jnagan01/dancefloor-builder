@@ -1,3 +1,4 @@
+import { vibeNote } from "./vibes";
 import { createServerFn } from "@tanstack/react-start";
 import { generateObject, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
@@ -41,6 +42,7 @@ const InputSchema = z.object({
     genres: z.array(z.string().max(60)).max(50).default([]),
     decades: z.array(z.string().max(20)).max(20).default([]),
     notes: z.string().max(2000).default(""),
+    vibe: z.string().max(40).optional(),
     doNotPlay: z
       .array(z.object({ artist: z.string().max(300).optional(), song: z.string().max(300).optional() }))
       .max(500)
@@ -370,6 +372,7 @@ DJ preferences (bias, not hard filter):
 - Preferred genres: <dj_genres>${safeGenres.join(", ") || "(none specified)"}</dj_genres>
 - Preferred decades: <dj_decades>${safeDecades.join(", ") || "(any)"}</dj_decades>
 - Notes from DJ: <dj_notes>${safeNotes || "(none)"}</dj_notes>
+${vibeNote(data.prefs.vibe) ? `- ${vibeNote(data.prefs.vibe)} Treat this as a strong preference for every pick.` : ""}
 
 Already in the set (do NOT suggest these or near-duplicates; use their features as neighbors for BPM/key matching):
 <existing_set>
