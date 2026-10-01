@@ -2862,10 +2862,18 @@ function SectionView(props: SectionViewProps) {
           {reviewCount > 0 && <> · <span className="text-warning">{reviewCount} review</span></>}
         </span>
         <div className="ml-auto flex flex-wrap gap-1">
-          {[["all","All"],["matched","Matched"],["unmatched","Unmatched"],["review","Review"]].map(([value,label])=>(
-            <Button key={value} size="sm" className={`h-7 rounded-full px-3 text-xs ${filter===value?"":"text-muted-foreground"}`} variant={filter===value?"default":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>
-          ))}
+          {[["all","All"],["matched","Matched"],["unmatched","Unmatched"],["review","Review"]].map(([value,label])=>{
+            const n = filterCounts[value] ?? 0;
+            const active = filter === value;
+            return (
+              <Button key={value} size="sm" className={`h-7 gap-1.5 rounded-full px-3 text-xs ${active?"":"text-muted-foreground"}`} variant={active?"default":"ghost"} onClick={()=>setFilter(value)}>
+                {label}
+                <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${active ? "bg-background/25" : value === "review" && n > 0 ? "bg-warning/15 text-warning" : "bg-muted/60"}`}>{n}</span>
+              </Button>
+            );
+          })}
         </div>
+
         {reviewMode === "most" && <p className="w-full text-xs text-warning">Play counts unavailable for folder-only sources; first result is used.</p>}
       </div>
 
