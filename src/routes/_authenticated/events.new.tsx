@@ -973,6 +973,7 @@ function Index() {
                     gaps,
                     favoriteArtists,
                     neighborArtists,
+                    crowdArtists,
                   },
                 });
 
