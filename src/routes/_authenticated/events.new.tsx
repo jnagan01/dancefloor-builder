@@ -898,6 +898,7 @@ function Index() {
                       existing: existingNow,
                       onlyArtists: eligible,
                       neighborArtists,
+                      crowdArtists,
                     },
                   });
                   if (!res.suggestions.length) break;
