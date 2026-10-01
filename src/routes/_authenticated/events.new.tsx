@@ -1475,6 +1475,40 @@ function Index() {
     );
   }
 
+  /** Spotify matching uses the UPLOADED artist/title only, never file matches. */
+  function exportSectionToSpotify(section: SectionKey) {
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const list = exportResult[section];
+    if (!list.length) {
+      toast.error("No songs in this section");
+      return;
+    }
+    setSpotifyJob({
+      name: `${eventName || "Dancefloor Builder"} — ${sectionName(section)}`,
+      description: `${sectionName(section)} list created with Dancefloor Builder`,
+      songs: list.map((s) => ({ artist: s.artist, song: s.song })),
+    });
+  }
+
+  function exportAllToSpotify() {
+    const exportResult = ensureBufferedResultForExport();
+    if (!exportResult) return;
+    const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
+    const songs = sections.flatMap((sec) => exportResult[sec].map((s) => ({ artist: s.artist, song: s.song })));
+    if (!songs.length) {
+      toast.error("No songs to export");
+      return;
+    }
+    setSpotifyJob({
+      name: `${eventName || "Dancefloor Builder"} — ${background ? bgLabel : "Full event"}`,
+      description: "Created with Dancefloor Builder",
+      songs,
+    });
+  }
+
+
+
   function unmatchedCount(section: SectionKey): number {
     if (!result) return 0;
     return unmatchedCountForResult(result, section);
