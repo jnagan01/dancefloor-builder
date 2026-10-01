@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { CalendarDays, Library, Music2, ArrowRight, Play, TrendingUp, Check, AlertCircle, Flame } from "lucide-react";
 import { listWorkflows, listMostRequested } from "@/lib/history.functions";
-import { getTrendingCharts, DJ_GENRES, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist, type DjGenre } from "@/lib/charts.functions";
+import { getTrendingCharts, getGenreCharts, DJ_GENRES, type ChartEntry, type ChartSource, type ConsensusTrack, type ConsensusArtist, type DjGenre } from "@/lib/charts.functions";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -40,6 +40,7 @@ function HomePage() {
   const { library, sources, files, loading } = useWorkspace();
   const list = useServerFn(listWorkflows);
   const charts = useServerFn(getTrendingCharts);
+  const genreCharts = useServerFn(getGenreCharts);
   const requested = useServerFn(listMostRequested);
 
   const { data: events = [] } = useQuery({ queryKey: ["workflowHistory"], queryFn: () => list() });
@@ -53,6 +54,15 @@ function HomePage() {
   const [djOnly, setDjOnly] = useState(false);
   const [genre, setGenre] = useState<DjGenre | "all">("all");
   const [platform, setPlatform] = useState("all");
+
+  /** Dedicated per-genre charts, so a genre pill shows a full list of its own. */
+  const dedicated = genre !== "all" && genre !== "other";
+  const { data: genreData, isLoading: genreLoading } = useQuery({
+    queryKey: ["genreCharts", genre],
+    queryFn: () => genreCharts({ data: { genre: genre as Exclude<DjGenre, "other" | "all"> } }),
+    enabled: dedicated,
+    staleTime: 30 * 60 * 1000,
+  });
 
   const [playing, setPlaying] = useState<PreviewTarget | null>(null);
 
@@ -99,30 +109,34 @@ function HomePage() {
     { id: "shazam", label: "Shazam" },
   ] as const;
 
+  // With a genre selected, Apple and Last.fm serve that genre's own chart.
   const perPlatform: Record<string, ChartEntry[]> = {
-    apple: chartData?.apple ?? [],
+    apple: (dedicated ? genreData?.apple : chartData?.apple) ?? [],
     billboard: chartData?.billboard ?? [],
-    lastfm: chartData?.lastfm ?? [],
+    lastfm: (dedicated ? genreData?.lastfm : chartData?.lastfm) ?? [],
     shazam: chartData?.shazam ?? [],
   };
+  const dedicatedPlatform = (id: string) => dedicated && (id === "apple" || id === "lastfm");
 
   const matchesGenre = (e: { djGenre?: DjGenre }) => genre === "all" || e.djGenre === genre;
 
   const filterTracks = (rows: ConsensusTrack[]) =>
-    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre).map((t, i) => ({ ...t, rank: genre === "all" ? t.rank : i + 1 }));
+    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre).map((t, i) => ({ ...t, rank: i + 1 }));
   const filterArtists = (rows: ConsensusArtist[]) =>
-    rows.filter(matchesGenre).map((a, i) => ({ ...a, rank: genre === "all" ? a.rank : i + 1 }));
-  const filterEntries = (rows: ChartEntry[]) =>
-    (djOnly ? rows.filter(isDanceable) : rows).filter(matchesGenre);
+    rows.filter(matchesGenre).map((a, i) => ({ ...a, rank: i + 1 }));
+  const filterEntries = (rows: ChartEntry[], skipGenre = false) =>
+    (djOnly ? rows.filter(isDanceable) : rows).filter(e => skipGenre || matchesGenre(e));
 
-  /** Only offer genre pills that actually have charting songs right now. */
+  const trackRows = dedicated ? filterTracks(genreData?.topTracks ?? []) : filterTracks(chartData?.topTracks ?? []);
+  const artistRows = dedicated ? filterArtists(genreData?.topArtists ?? []) : filterArtists(chartData?.topArtists ?? []);
+  const listLoading = dedicated ? genreLoading : chartsLoading;
+
+  /** Every DJ genre has its own chart; "Other" only appears when it has songs. */
   const genreOptions = useMemo(() => {
     const present = new Set<DjGenre>();
     for (const t of chartData?.topTracks ?? []) if (t.djGenre) present.add(t.djGenre);
     for (const a of chartData?.topArtists ?? []) if (a.djGenre) present.add(a.djGenre);
-    for (const key of ["apple", "billboard", "lastfm", "shazam"] as const)
-      for (const e of chartData?.[key] ?? []) if (e.djGenre) present.add(e.djGenre);
-    return DJ_GENRES.filter(g => present.has(g.id));
+    return DJ_GENRES.filter(g => g.id !== "other" || present.has("other"));
   }, [chartData]);
 
 
@@ -162,20 +176,25 @@ function HomePage() {
           <div className="grid gap-8 xl:grid-cols-2">
             <div>
               <h3 className="mb-3 font-display text-base tracking-tight">Top tracks</h3>
-              <ConsensusTrackList rows={filterTracks(chartData?.topTracks ?? [])} loading={chartsLoading} inLibrary={inLibrary} onPlay={play}/>
+              <ConsensusTrackList rows={trackRows} loading={listLoading} inLibrary={inLibrary} onPlay={play}/>
             </div>
             <div>
               <h3 className="mb-3 font-display text-base tracking-tight">Top artists</h3>
-              <ArtistList rows={filterArtists(chartData?.topArtists ?? [])} loading={chartsLoading} onPlay={play}/>
+              <ArtistList rows={artistRows} loading={listLoading} onPlay={play}/>
 
             </div>
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam.</p>
+          <p className="mt-4 text-xs text-muted-foreground">{dedicated
+            ? "The genre's own charts from Apple Music and Last.fm, ranked by agreement."
+            : "Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam."}</p>
         </TabsContent>
 
 
         {platforms.filter(p => p.id !== "all").map(p => <TabsContent key={p.id} value={p.id} className="mt-5">
-          <ChartList rows={filterEntries(perPlatform[p.id] ?? [])} loading={chartsLoading} error={chartData?.errors?.[p.id as ChartSource]} inLibrary={inLibrary} onPlay={play}/>
+          <ChartList rows={filterEntries(perPlatform[p.id] ?? [], dedicatedPlatform(p.id))}
+            loading={dedicatedPlatform(p.id) ? genreLoading : chartsLoading}
+            error={(dedicatedPlatform(p.id) ? genreData?.errors : chartData?.errors)?.[p.id as ChartSource]}
+            inLibrary={inLibrary} onPlay={play}/>
         </TabsContent>)}
       </Tabs>
       {chartData ? <p className="mt-3 text-xs text-muted-foreground">Updated {new Date(chartData.fetchedAt).toLocaleString()}</p> : null}

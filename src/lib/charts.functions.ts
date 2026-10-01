@@ -642,3 +642,171 @@ export const getTrendingCharts = createServerFn({ method: "GET" }).handler(
     return value;
   },
 );
+
+/* ------------------------------------------------------- dedicated genres */
+
+/**
+ * Per-genre charts. The general Hot 100 / Top 50 feeds are dominated by a few
+ * mainstream genres, so filtering them leaves thin lists. These pull the
+ * genre's own chart from Apple Music and Last.fm instead.
+ */
+const APPLE_GENRE_ID: Record<Exclude<DjGenre, "other">, number> = {
+  pop: 14,
+  hiphop: 18,
+  dance: 17,
+  rnb: 15,
+  country: 6,
+  latin: 12,
+  rock: 21,
+};
+
+const LASTFM_TAG: Record<Exclude<DjGenre, "other">, string> = {
+  pop: "pop",
+  hiphop: "hip-hop",
+  dance: "dance",
+  rnb: "rnb",
+  country: "country",
+  latin: "latin",
+  rock: "rock",
+};
+
+export type GenreChartsResult = {
+  genre: DjGenre;
+  apple: ChartEntry[];
+  lastfm: ChartEntry[];
+  topTracks: ConsensusTrack[];
+  topArtists: ConsensusArtist[];
+  errors: Partial<Record<ChartSource, string>>;
+  fetchedAt: string;
+};
+
+const genreCache = new Map<string, { at: number; value: GenreChartsResult }>();
+
+async function fetchAppleGenre(genreId: number): Promise<ChartEntry[]> {
+  const json = (await getJson(
+    `https://itunes.apple.com/us/rss/topsongs/limit=50/genre=${genreId}/json`,
+  )) as { feed?: { entry?: Array<Record<string, unknown>> } };
+  const rows = json.feed?.entry ?? [];
+  return rows
+    .map((r, i) => {
+      const label = (v: unknown): string =>
+        typeof v === "object" && v !== null
+          ? String((v as { label?: unknown }).label ?? "").trim()
+          : "";
+      const images = Array.isArray(r["im:image"]) ? (r["im:image"] as Array<{ label?: string }>) : [];
+      const art = images[images.length - 1]?.label;
+      const cat = r["category"] as { attributes?: { label?: string } } | undefined;
+      const links = Array.isArray(r["link"]) ? (r["link"] as Array<{ attributes?: { href?: string } }>) : [];
+      return {
+        rank: i + 1,
+        title: label(r["im:name"]),
+        artist: label(r["im:artist"]),
+        source: "apple" as const,
+        artwork: bigArtwork(art),
+        genre: cat?.attributes?.label,
+        url: links[0]?.attributes?.href,
+      };
+    })
+    .filter(e => e.title && e.artist);
+}
+
+async function fetchLastfmTagTracks(key: string, tag: string): Promise<ChartEntry[]> {
+  const json = (await getJson(
+    `https://ws.audioscrobbler.com/2.0/?method=tag.gettoptracks&tag=${encodeURIComponent(tag)}&limit=50&format=json&api_key=${encodeURIComponent(key)}`,
+  )) as { tracks?: { track?: Array<Record<string, unknown>> } };
+  const rows = json.tracks?.track ?? [];
+  return rows
+    .slice(0, 50)
+    .map((r, i) => ({
+      rank: i + 1,
+      title: String(r["name"] ?? "").trim(),
+      artist: String((r["artist"] as { name?: string } | undefined)?.name ?? "").trim(),
+      source: "lastfm" as const,
+      artwork: pickImage(r["image"] as LfmImage | undefined),
+      url: typeof r["url"] === "string" ? r["url"] : undefined,
+    }))
+    .filter(e => e.title && e.artist);
+}
+
+async function fetchLastfmTagArtists(key: string, tag: string): Promise<ConsensusArtist[]> {
+  const json = (await getJson(
+    `https://ws.audioscrobbler.com/2.0/?method=tag.gettopartists&tag=${encodeURIComponent(tag)}&limit=40&format=json&api_key=${encodeURIComponent(key)}`,
+  )) as { topartists?: { artist?: Array<Record<string, unknown>> } };
+  const rows = json.topartists?.artist ?? [];
+  return rows
+    .slice(0, 40)
+    .map((r, i) => ({
+      rank: i + 1,
+      artist: String(r["name"] ?? "").trim(),
+      artwork: pickImage(r["image"] as LfmImage | undefined),
+      score: 0,
+      hits: 0,
+      sources: ["lastfm" as const],
+    }))
+    .filter(a => a.artist);
+}
+
+export const getGenreCharts = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown): { genre: Exclude<DjGenre, "other"> } => {
+    const g = (data as { genre?: string } | undefined)?.genre ?? "";
+    if (!(g in APPLE_GENRE_ID)) throw new Error("Unknown genre");
+    return { genre: g as Exclude<DjGenre, "other"> };
+  })
+  .handler(async ({ data }): Promise<GenreChartsResult> => {
+    const { genre } = data;
+    const hit = genreCache.get(genre);
+    if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
+
+    const lfmKey = process.env["LASTFM_API_KEY"];
+    const tag = LASTFM_TAG[genre];
+
+    const [appleRes, lfmTrackRes, lfmArtistRes] = await Promise.allSettled([
+      fetchAppleGenre(APPLE_GENRE_ID[genre]),
+      lfmKey ? fetchLastfmTagTracks(lfmKey, tag) : Promise.resolve<ChartEntry[]>([]),
+      lfmKey ? fetchLastfmTagArtists(lfmKey, tag) : Promise.resolve<ConsensusArtist[]>([]),
+    ]);
+
+    const errors: Partial<Record<ChartSource, string>> = {};
+    const apple = appleRes.status === "fulfilled" ? appleRes.value : [];
+    const lastfm = lfmTrackRes.status === "fulfilled" ? lfmTrackRes.value : [];
+    const lastfmArtists = lfmArtistRes.status === "fulfilled" ? lfmArtistRes.value : [];
+    if (appleRes.status === "rejected") errors.apple = "Apple Music charts are temporarily unavailable.";
+    if (!lfmKey) errors.lastfm = "Last.fm charts are not connected yet.";
+    else if (lfmTrackRes.status === "rejected") errors.lastfm = "Last.fm charts are temporarily unavailable.";
+
+    const topTracks = buildConsensusTracks([apple, lastfm]);
+    const topArtists = buildConsensusArtists(topTracks, lastfmArtists);
+
+    const deadline = Date.now() + 5000;
+    const withinBudget = (p: Promise<void>) =>
+      Promise.race([
+        p.catch(() => undefined),
+        new Promise<void>(r => setTimeout(r, Math.max(0, deadline - Date.now()))),
+      ]);
+    await withinBudget(backfillMeta(topTracks, topArtists, lfmKey));
+
+    // Every entry here already belongs to the genre chart it came from.
+    for (const t of topTracks) t.djGenre = genre;
+    for (const a of topArtists) a.djGenre = genre;
+    const metaByKey = new Map<string, { artwork?: string }>();
+    for (const t of topTracks)
+      metaByKey.set(`${normKey(primaryArtist(t.artist))}|${normKey(t.title)}`, { artwork: t.artwork });
+    for (const feed of [apple, lastfm])
+      for (const e of feed) {
+        if (!e.artwork)
+          e.artwork = metaByKey.get(`${normKey(primaryArtist(e.artist))}|${normKey(e.title)}`)?.artwork;
+        e.djGenre = genre;
+      }
+
+    const value: GenreChartsResult = {
+      genre,
+      apple,
+      lastfm,
+      topTracks,
+      topArtists,
+      errors,
+      fetchedAt: new Date().toISOString(),
+    };
+    if (apple.length || lastfm.length) genreCache.set(genre, { at: Date.now(), value });
+    return value;
+  });
