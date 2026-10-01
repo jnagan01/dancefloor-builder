@@ -2061,7 +2061,28 @@ function Index() {
                 }}
               />
             </div>
-            <div className="mt-6 border-t border-border pt-5"><Label htmlFor="spotify-url">Spotify playlist link (optional)</Label><div className="mt-2 flex flex-wrap gap-2"><Input id="spotify-url" type="url" value={spotifyLink} onChange={e=>setSpotifyLink(e.target.value)} placeholder="https://open.spotify.com/playlist/…" className="min-w-52 flex-1"/><Button variant="outline" onClick={()=>toast.info("Spotify does not provide track lists from public links without account access. Export that playlist as CSV or TXT and upload it above.")}>Import link</Button></div><p className="mt-2 text-xs text-muted-foreground">Public links may require Spotify access. CSV or TXT always works without connecting an account.</p></div>
+            <div className="mt-6 border-t border-border pt-5">
+              <Label htmlFor="spotify-url">Spotify playlist link (optional)</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Input
+                  id="spotify-url"
+                  type="url"
+                  value={spotifyLink}
+                  onChange={(e) => setSpotifyLink(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !spotifyBusy) void handleSpotifyImport();
+                  }}
+                  placeholder="https://open.spotify.com/playlist/…"
+                  className="min-w-52 flex-1"
+                />
+                <Button variant="outline" disabled={spotifyBusy} onClick={() => void handleSpotifyImport()}>
+                  {spotifyBusy ? "Importing…" : "Import link"}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Paste a public Spotify playlist or album link — no Spotify login needed. CSV or TXT uploads always work too.
+              </p>
+            </div>
             {uploadStatuses.length > 0 && (
               <div className="mt-4 space-y-2">
                 <div className="flex items-center justify-between">
