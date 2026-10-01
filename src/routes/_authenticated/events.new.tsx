@@ -1573,6 +1573,16 @@ function Index() {
 
   // --- Direct-to-VirtualDJ folder exports ---
 
+  function warnUnresolvedPaths(count: number) {
+    if (count > 0) {
+      toast.warning(
+        `${count} song${count === 1 ? "" : "s"} may not be found by VirtualDJ — set the full folder location in Settings › DJ software & folders.`,
+      );
+    }
+  }
+
+
+
   /** Direct-to-VirtualDJ set list: matched songs only, so VirtualDJ only sees playable files. */
   async function exportSectionXmlToVdj(section: SectionKey) {
     if (!mergedLibrary) {
