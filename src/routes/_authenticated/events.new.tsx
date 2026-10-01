@@ -2165,7 +2165,7 @@ function Index() {
                 </Button>
                 <label className="flex items-center gap-2 text-sm">
                   <Checkbox checked={includeCombined} onCheckedChange={(v) => setIncludeCombined(!!v)} />
-                  Include combined reference CSV
+                  Include combined CSV (all three lists in play order)
                 </label>
               </div>
 
