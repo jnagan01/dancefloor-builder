@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_errors: {
+        Row: {
+          alerted_at: string | null
+          category: string
+          context: Json
+          created_at: string
+          fingerprint: string
+          id: string
+          message: string
+          severity: string
+          stack: string | null
+          user_id: string | null
+        }
+        Insert: {
+          alerted_at?: string | null
+          category?: string
+          context?: Json
+          created_at?: string
+          fingerprint?: string
+          id?: string
+          message: string
+          severity?: string
+          stack?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          alerted_at?: string | null
+          category?: string
+          context?: Json
+          created_at?: string
+          fingerprint?: string
+          id?: string
+          message?: string
+          severity?: string
+          stack?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           approved: boolean
