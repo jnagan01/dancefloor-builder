@@ -605,9 +605,12 @@ export const getTrendingCharts = createServerFn({ method: "GET" }).handler(
         const m = metaByKey.get(`${normKey(primaryArtist(e.artist))}|${normKey(e.title)}`);
         if (!e.artwork) e.artwork = m?.artwork;
         if (!e.genre) e.genre = m?.genre;
-        e.djGenre = classifyGenre(e.genre);
       }
+    await backfillEntries([apple, billboard, lastfm, shazam]);
+    for (const feed of [apple, billboard, lastfm, shazam])
+      for (const e of feed) e.djGenre = classifyGenre(e.genre);
     for (const a of lastfmArtists) a.djGenre = classifyGenre(a.genre);
+
 
 
     const value: ChartsResult = {
