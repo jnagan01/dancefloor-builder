@@ -397,44 +397,96 @@ function buildConsensusArtists(
   return out.slice(0, 25).map((a, i) => ({ ...a, rank: i + 1 }));
 }
 
-/* ------------------------------------------------------ artwork back-fill */
+/* --------------------------------------------- artwork + genre back-fill */
 
-const artCache = new Map<string, { at: number; url?: string }>();
+type Meta = { url?: string; genre?: string };
+const metaCache = new Map<string, { at: number; value: Meta }>();
 const ART_TTL = 24 * 60 * 60 * 1000;
 
-async function itunesArtwork(term: string, entity: "song" | "album"): Promise<string | undefined> {
+async function itunesMeta(term: string, entity: "song" | "album"): Promise<Meta> {
   const key = `${entity}:${term.toLowerCase()}`;
-  const hit = artCache.get(key);
-  if (hit && Date.now() - hit.at < ART_TTL) return hit.url;
+  const hit = metaCache.get(key);
+  if (hit && Date.now() - hit.at < ART_TTL) return hit.value;
   try {
     const json = (await getJson(
       `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=1&country=US`,
       6000,
-    )) as { results?: Array<{ artworkUrl100?: string }> };
-    const url = bigArtwork(json.results?.[0]?.artworkUrl100);
-    artCache.set(key, { at: Date.now(), url });
-    return url;
+    )) as { results?: Array<{ artworkUrl100?: string; primaryGenreName?: string }> };
+    const first = json.results?.[0];
+    const value: Meta = { url: bigArtwork(first?.artworkUrl100), genre: first?.primaryGenreName };
+    metaCache.set(key, { at: Date.now(), value });
+    return value;
   } catch {
-    artCache.set(key, { at: Date.now(), url: undefined });
+    const value: Meta = {};
+    metaCache.set(key, { at: Date.now(), value });
+    return value;
+  }
+}
+
+/** Last.fm crowd tags, used when iTunes has no match for an artist. */
+async function lastfmArtistTags(key: string, artist: string): Promise<string | undefined> {
+  const cacheKey = `tags:${artist.toLowerCase()}`;
+  const hit = metaCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < ART_TTL) return hit.value.genre;
+  try {
+    const json = (await getJson(
+      `https://ws.audioscrobbler.com/2.0/?method=artist.gettoptags&artist=${encodeURIComponent(artist)}&format=json&api_key=${encodeURIComponent(key)}`,
+      6000,
+    )) as { toptags?: { tag?: Array<{ name?: string }> } };
+    const tags = (json.toptags?.tag ?? []).map(t => String(t.name ?? "")).filter(Boolean);
+    // Pick the first tag that maps to a real bucket, so "female vocalists" loses to "pop".
+    const useful = tags.find(t => classifyGenre(t) !== "other");
+    metaCache.set(cacheKey, { at: Date.now(), value: { genre: useful } });
+    return useful;
+  } catch {
+    metaCache.set(cacheKey, { at: Date.now(), value: {} });
     return undefined;
   }
 }
 
-async function backfillArtwork(tracks: ConsensusTrack[], artists: ConsensusArtist[]): Promise<void> {
+/** Folds raw chart/tag genre strings into the broad DJ buckets. */
+export function classifyGenre(raw?: string): DjGenre {
+  const g = (raw ?? "").toLowerCase();
+  if (!g) return "other";
+  if (/latin|reggaeton|regional mexican|salsa|bachata|cumbia|k-pop ?latin|musica/.test(g))
+    return "latin";
+  if (/hip.?hop|rap|trap|drill|grime/.test(g)) return "hiphop";
+  if (/dance|electronic|edm|house|techno|trance|dubstep|club|disco|drum and bass|dnb/.test(g))
+    return "dance";
+  if (/r&b|rnb|soul|funk|motown|neo.?soul/.test(g)) return "rnb";
+  if (/country|americana|bluegrass/.test(g)) return "country";
+  if (/rock|alternative|indie|metal|punk|grunge/.test(g)) return "rock";
+  if (/pop|singer.?songwriter/.test(g)) return "pop";
+  return "other";
+}
+
+async function backfillMeta(
+  tracks: ConsensusTrack[],
+  artists: ConsensusArtist[],
+  lfmKey?: string,
+): Promise<void> {
   const jobs: Array<() => Promise<void>> = [];
-  for (const t of tracks.slice(0, 12)) {
-    if (t.artwork) continue;
+  for (const t of tracks) {
+    if (t.artwork && t.genre) continue;
     jobs.push(async () => {
-      t.artwork = await itunesArtwork(`${primaryArtist(t.artist)} ${t.title}`, "song");
+      const meta = await itunesMeta(`${primaryArtist(t.artist)} ${t.title}`, "song");
+      if (!t.artwork) t.artwork = meta.url;
+      if (!t.genre) t.genre = meta.genre;
     });
   }
-  for (const a of artists.slice(0, 12)) {
-    if (a.artwork) continue;
+  for (const a of artists) {
+    if (a.artwork && a.genre) continue;
     jobs.push(async () => {
-      a.artwork = await itunesArtwork(a.artist, "album");
+      const meta = await itunesMeta(a.artist, "album");
+      if (!a.artwork) a.artwork = meta.url;
+      if (!a.genre) a.genre = meta.genre;
+      if (classifyGenre(a.genre) === "other" && lfmKey) {
+        const tag = await lastfmArtistTags(lfmKey, a.artist);
+        if (tag) a.genre = tag;
+      }
     });
   }
-  const workers = Array.from({ length: Math.min(6, jobs.length) }, async () => {
+  const workers = Array.from({ length: Math.min(8, jobs.length) }, async () => {
     for (;;) {
       const job = jobs.shift();
       if (!job) return;
@@ -442,7 +494,11 @@ async function backfillArtwork(tracks: ConsensusTrack[], artists: ConsensusArtis
     }
   });
   await Promise.all(workers);
+
+  for (const t of tracks) t.djGenre = classifyGenre(t.genre);
+  for (const a of artists) a.djGenre = classifyGenre(a.genre);
 }
+
 
 /* ---------------------------------------------------------------- handler */
 
