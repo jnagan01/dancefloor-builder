@@ -75,6 +75,7 @@ import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { getArtistNeighbors } from "@/lib/neighbors.functions";
 import { getArtistCrowdData, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
+import { importSpotifyPlaylist } from "@/lib/spotify.functions";
 import { type PreviewTarget } from "@/components/PreviewPlayer";
 import { buildAudioIndex, resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
@@ -154,6 +155,8 @@ function Index() {
   const [buffer, setBuffer] = useState(2);
   const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
   const [spotifyLink, setSpotifyLink] = useState("");
+  const [spotifyBusy, setSpotifyBusy] = useState(false);
+  const spotifyImportFn = useServerFn(importSpotifyPlaylist);
   const [matchLimit, setMatchLimit] = useState(10);
   const [matcherOn, setMatcherOn] = useState(true);
   const [software, setSoftware] = useState("VirtualDJ");
@@ -461,6 +464,40 @@ function Index() {
     if (okFiles) toast.success(`Imported ${added} songs from ${okFiles} file${okFiles > 1 ? "s" : ""}`);
     else toast.error("No songs imported — see file details below the drop zone.");
   }
+
+  async function handleSpotifyImport() {
+    const url = spotifyLink.trim();
+    if (!url) {
+      toast.error("Paste a Spotify playlist link first.");
+      return;
+    }
+    setSpotifyBusy(true);
+    const id = `spotify-${Date.now()}`;
+    const entry: UploadStatus = { id, name: "Spotify playlist", state: "parsing" };
+    setUploadStatuses((prev) => [entry, ...prev].slice(0, 20));
+    const update = (patch: Partial<UploadStatus>) =>
+      setUploadStatuses((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+    try {
+      const res = await spotifyImportFn({ data: { url } });
+      if (res.error || !res.songs.length) {
+        update({ state: "error", message: res.error || "No songs found in that link." });
+        toast.error(res.error || "No songs found in that link.");
+        return;
+      }
+      setSongs((prev) => [...prev, ...res.songs]);
+      update({ state: "done", count: res.songs.length, name: res.name ? `Spotify · ${res.name}` : "Spotify playlist" });
+      toast.success(
+        `Imported ${res.songs.length} songs from Spotify${res.truncated ? " (first 1,000)" : ""}`,
+      );
+      setSpotifyLink("");
+    } catch {
+      update({ state: "error", message: "We couldn't reach Spotify. Try again in a moment." });
+      toast.error("We couldn't reach Spotify. Try again in a moment.");
+    } finally {
+      setSpotifyBusy(false);
+    }
+  }
+
 
   const hoursNum = parseFloat(hours) || 0;
   const sectionMinutes = formatMinutes(hoursNum);
@@ -2025,7 +2062,28 @@ function Index() {
                 }}
               />
             </div>
-            <div className="mt-6 border-t border-border pt-5"><Label htmlFor="spotify-url">Spotify playlist link (optional)</Label><div className="mt-2 flex flex-wrap gap-2"><Input id="spotify-url" type="url" value={spotifyLink} onChange={e=>setSpotifyLink(e.target.value)} placeholder="https://open.spotify.com/playlist/…" className="min-w-52 flex-1"/><Button variant="outline" onClick={()=>toast.info("Spotify does not provide track lists from public links without account access. Export that playlist as CSV or TXT and upload it above.")}>Import link</Button></div><p className="mt-2 text-xs text-muted-foreground">Public links may require Spotify access. CSV or TXT always works without connecting an account.</p></div>
+            <div className="mt-6 border-t border-border pt-5">
+              <Label htmlFor="spotify-url">Spotify playlist link (optional)</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Input
+                  id="spotify-url"
+                  type="url"
+                  value={spotifyLink}
+                  onChange={(e) => setSpotifyLink(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !spotifyBusy) void handleSpotifyImport();
+                  }}
+                  placeholder="https://open.spotify.com/playlist/…"
+                  className="min-w-52 flex-1"
+                />
+                <Button variant="outline" disabled={spotifyBusy} onClick={() => void handleSpotifyImport()}>
+                  {spotifyBusy ? "Importing…" : "Import link"}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Paste a public Spotify playlist or album link — no Spotify login needed. CSV or TXT uploads always work too.
+              </p>
+            </div>
             {uploadStatuses.length > 0 && (
               <div className="mt-4 space-y-2">
                 <div className="flex items-center justify-between">
