@@ -35,6 +35,7 @@ export type EnrichSource =
   | "ReccoBeats+MusicBrainz"
   | "ReccoBeats"
   | "MusicBrainz"
+  | "AI"
   | "cache"
   | "none";
 
@@ -118,33 +119,57 @@ interface ReccoBeatsFeatures {
   camelot?: string;
 }
 
+/**
+ * Strip version/feature noise so ReccoBeats' title-only search can hit.
+ * "Yeah! (feat. Lil Jon) [Clean Radio Edit]" → "Yeah!"
+ */
+export function cleanTitleForSearch(song: string): string {
+  return song
+    .replace(/\s*[([][^)\]]*[)\]]/g, " ")
+    .replace(/\s+(feat\.?|ft\.?|featuring|with)\s+.*$/i, " ")
+    .replace(/\s+-\s+.*(edit|mix|version|remaster|remastered|clean|dirty|live|intro|extended).*$/i, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+type RbItem = {
+  id?: string;
+  trackTitle?: string;
+  artists?: Array<{ name?: string }>;
+  popularity?: number;
+};
+
+async function searchReccoBeats(text: string, page = 0): Promise<RbItem[]> {
+  const q = encodeURIComponent(text);
+  const res = await fetchWithTimeout(
+    `https://api.reccobeats.com/v1/track/search?searchText=${q}&size=25&page=${page}`,
+    { headers: { Accept: "application/json" } },
+  );
+  if (!res.ok) return [];
+  const json = (await res.json()) as { content?: RbItem[] };
+  return json.content ?? [];
+}
+
 async function fetchReccoBeats(
   artist: string,
   song: string,
 ): Promise<ReccoBeatsFeatures | null> {
   try {
-    const q = encodeURIComponent(`${song} ${artist}`.trim());
-    const searchRes = await fetchWithTimeout(
-      `https://api.reccobeats.com/v1/track/search?searchText=${q}&limit=10`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (!searchRes.ok) return null;
-    const searchJson = (await searchRes.json()) as {
-      content?: Array<{
-        id?: string;
-        trackTitle?: string;
-        artists?: Array<{ name?: string }>;
-        popularity?: number;
-      }>;
+    // ReccoBeats indexes titles only — never send "title artist".
+    const clean = cleanTitleForSearch(song) || song.trim();
+    const wantTitle = normalizeKey(clean);
+    const primaryArtist = artist.split(/\s*(?:,|&| x | feat\.?| ft\.?| featuring| and )\s*/i)[0] || artist;
+    const pick = (items: RbItem[]) => {
+      const byArtist = items.filter((it) =>
+        (it.artists ?? []).some((a) => a?.name && (artistLooseMatch(a.name, artist) || artistLooseMatch(a.name, primaryArtist))),
+      );
+      return (
+        byArtist.find((it) => normalizeKey(cleanTitleForSearch(it.trackTitle ?? "")) === wantTitle) ??
+        byArtist[0]
+      );
     };
-    const items = searchJson.content ?? [];
-    // Pick the first result whose artist matches loosely.
-    const match = items.find((it) => {
-      const artistNames = (it.artists ?? [])
-        .map((a) => a?.name ?? "")
-        .filter(Boolean);
-      return artistNames.some((n) => artistLooseMatch(n, artist));
-    });
+    let match = pick(await searchReccoBeats(clean, 0));
+    if (!match) match = pick(await searchReccoBeats(clean, 1));
     if (!match?.id) return null;
 
     const featRes = await fetchWithTimeout(
