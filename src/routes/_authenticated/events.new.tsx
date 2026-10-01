@@ -1783,14 +1783,23 @@ function Index() {
   useEffect(() => {
     if (result) setStep(5);
   }, [result]);
+  // Cocktail / dinner lists never use the manual song-expansion step — the
+  // engine fills any time gap on its own. Bounce off it if we ever land there.
+  useEffect(() => {
+    if (background && step === 4) setStep(3);
+  }, [background, step]);
 
+  // Step 4 (song expansion) only exists for dance floor lists.
+  const lastInputStep = background ? 3 : 4;
   const stepDefs: StepDef[] = [
     { id: 1, label: background ? bgLabel : "Dance floor", hint: background ? (minutesNum > 0 ? `${minutesNum} min` : "Set the length") : hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && (background ? minutesNum > 0 : hoursNum > 0)) },
     { id: 2, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
     { id: 3, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
-    { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result },
-    { id: 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
+    ...(background ? [] : [{ id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result }]),
+    { id: 5, num: background ? 4 : 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
   ];
+  const stepNumber = (id: number) => stepDefs.find((s) => s.id === id)?.num ?? id;
+
 
   return (
     <div className="min-h-dvh bg-background">
