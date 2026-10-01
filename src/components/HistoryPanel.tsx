@@ -36,6 +36,7 @@ export interface WorkflowSnapshot {
     decades: string[];
     notes: string;
     doNotPlayInput: string;
+    vibe?: string;
     expand: boolean;
     buffer?: number;
     listType?: "dance" | "cocktail" | "dinner";

@@ -74,6 +74,7 @@ export interface WorkflowScopedState {
   decades: string[];
   notes: string;
   doNotPlayInput: string;
+  vibe?: string;
   expand: boolean;
   includeCombined: boolean;
   eventName: string;
