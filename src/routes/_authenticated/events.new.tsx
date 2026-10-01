@@ -2533,12 +2533,7 @@ function Index() {
 
               <EventEnergyRamp
                 targets={targets}
-                sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []).map((s, i) => {
-                  // Use the matched music file's real BPM when there is one.
-                  const ti = matches[songKey(sec, i, s)]?.trackIndex;
-                  const fileBpm = ti != null ? parseBpm(mergedLibrary?.tracks[ti]?.bpm) : undefined;
-                  return { ...s, bpm: fileBpm ?? s.bpm } as RampSong;
-                }) }))}
+                sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: withFileBpm(sec, result[sec] ?? []) }))}
                 onSelect={(sec) => setActiveSection(sec)}
               />
 
