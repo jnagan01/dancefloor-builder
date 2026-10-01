@@ -36,6 +36,22 @@ export interface VdjTrack {
   lastPlayTime?: string;
 }
 
+/**
+ * Normalize a tempo value into a clean whole-number BPM string.
+ * VirtualDJ stores `Scan Bpm` as seconds-per-beat (e.g. "0.468750" = 128 BPM),
+ * while file tags store the BPM itself, sometimes with trailing decimals.
+ */
+export function cleanBpm(v?: string | number | null): string | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  const n = typeof v === "number" ? v : parseFloat(String(v).trim());
+  if (!isFinite(n) || n <= 0) return undefined;
+  const bpm = n < 10 ? 60 / n : n;
+  if (!isFinite(bpm) || bpm <= 0 || bpm > 400) return undefined;
+  return String(Math.round(bpm));
+}
+
+
+
 export type MatchStatus =
   | "Matched"
   | "Possible Match"
