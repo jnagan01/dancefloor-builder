@@ -94,6 +94,7 @@ import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
 import { UserCog, Music2 } from "lucide-react";
 import { SpotifyExportDialog, type SpotifyExportJob } from "@/components/SpotifyExportDialog";
+import { VIBES, vibeNote } from "@/lib/vibes";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -191,6 +192,7 @@ function Index() {
   const [artistsInput, setArtistsInput] = useState("");
   const [genresInput, setGenresInput] = useState("");
   const [decades, setDecades] = useState<string[]>(["2000s", "2010s", "2020s"]);
+  const [vibe, setVibe] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [doNotPlayInput, setDoNotPlayInput] = useState("");
   const [expand, setExpand] = useState(false);
@@ -282,6 +284,7 @@ function Index() {
     setArtistsInput("");
     setGenresInput("");
     setDecades([...defaultsRef.current.decades]);
+    setVibe("");
     setNotes("");
     setDoNotPlayInput("");
     setExpand(defaultsRef.current.expand);
@@ -514,7 +517,7 @@ function Index() {
       artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean),
       genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean),
       decades,
-      notes,
+      notes: [vibeNote(vibe), notes].filter(Boolean).join("\n"),
       doNotPlay: parseDoNotPlay(doNotPlayInput),
     };
   }
@@ -567,7 +570,7 @@ function Index() {
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
+      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,vibe,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -579,7 +582,7 @@ function Index() {
       const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
       const lists=row.lists as unknown as WorkflowSnapshot["lists"];
       if(!inputs || !lists)return;
-      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
       // A saved event with only a single list and no dance-floor sections is a
       // cocktail/dinner list even if the stored snapshot predates listType.
       const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
@@ -620,7 +623,7 @@ function Index() {
       setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
     },1000);
     return ()=>{clearTimeout(timer);saveRevision.current+=1};
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
 
   async function generate() {
     // No uploads is fine as long as the client gave artists, genres or decades —
@@ -2032,6 +2035,18 @@ function Index() {
               </div>
             </div>
             <div>
+              <Label>Music style / vibe</Label>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {VIBES.map((v) => (
+                  <button key={v.id} type="button" title={v.description} onClick={() => setVibe(vibe === v.id ? "" : v.id)}
+                    className={`rounded-full border px-3 py-1 text-xs transition ${vibe === v.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                    {v.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-muted-foreground">{VIBES.find((v) => v.id === vibe)?.description ?? "Optional · shapes song picks and shows a target band on the event flow chart"}</p>
+            </div>
+            <div>
               <Label htmlFor="artists">Favorite artists (comma separated)</Label>
               <Input id="artists" value={artistsInput} onChange={(e) => setArtistsInput(e.target.value)} className="mt-1.5" />
             </div>
@@ -2470,6 +2485,7 @@ function Index() {
               ) : null}
 
               <EventEnergyRamp
+                vibe={vibe}
                 sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []) as RampSong[] }))}
                 onSelect={(sec) => setActiveSection(sec)}
               />
