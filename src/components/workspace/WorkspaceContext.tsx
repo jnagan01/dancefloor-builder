@@ -55,16 +55,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const root = localStorage.getItem(VDJ_ROOT_KEY) ?? (path ? path.replace(/[\\/]database\.xml$/i, "") : null);
     setVdjRoot(root);
   }, []);
-  async function syncVirtualDj(customPath?: string | null) {
+  async function syncVirtualDj(customPath?: string | null, silent = false) {
     if (!isDesktopApp()) return refreshBrowserVdj();
     setVdjSyncing(true);
     try {
       const result = await readVdjDatabase(customPath ?? vdjPath);
-      if (!result.ok || !result.xml) { toast.error(result.error ?? "Couldn't read the VirtualDJ database."); return false; }
+      if (!result.ok || !result.xml) { if (!silent) toast.error(result.error ?? "Couldn't read the VirtualDJ database."); return false; }
       if (result.path) { setVdjPath(result.path); localStorage.setItem(VDJ_PATH_KEY, result.path); }
-      return applyVdjXml(result.xml);
+      return applyVdjXml(result.xml, silent);
     } catch (e) {
-      toast.error((e as Error).message);
+      if (!silent) toast.error((e as Error).message);
       return false;
     } finally {
       setVdjSyncing(false);
