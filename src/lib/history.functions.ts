@@ -22,6 +22,7 @@ const inputsSchema = z.object({
   decades: z.array(z.string().max(20)).max(20),
   notes: z.string().max(5000),
   doNotPlayInput: z.string().max(20000),
+  vibe: z.string().max(40).optional(),
   expand: z.boolean(),
   buffer: z.number().int().min(2).max(4).optional(),
   eventName: z.string().max(200),
