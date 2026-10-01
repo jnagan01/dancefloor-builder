@@ -325,7 +325,15 @@ export const enrichSongs = createServerFn({ method: "POST" })
       }
     }
 
-    // 2) Determine misses (unique per normalized key).
+    // 2) Determine misses (unique per normalized key). Cache rows without
+    //    energy/danceability are partial hits — re-fetch to upgrade them.
+    const partial = new Map<string, EnrichedSong>();
+    for (const [k, c] of cache) {
+      if (c.energy == null || c.danceability == null) {
+        partial.set(k, c);
+        cache.delete(k);
+      }
+    }
     const missSet = new Set<string>();
     const missOrder: Query[] = [];
     for (const q of queries) {
@@ -338,10 +346,6 @@ export const enrichSongs = createServerFn({ method: "POST" })
     }
 
     // 3) Fetch misses with a bounded worker pool and an overall deadline.
-    //    Previously this ran strictly sequentially with a 1.1s spacer, so a
-    //    single 200-song batch cost 220s+. Providers tolerate modest
-    //    concurrency; anything that fails or runs past the deadline simply
-    //    falls back to VirtualDJ/heuristic data on the caller side.
     const fetched = new Map<string, EnrichedSong>();
     const deadline = Date.now() + FETCH_BUDGET_MS;
     let cursor = 0;
@@ -351,32 +355,70 @@ export const enrichSongs = createServerFn({ method: "POST" })
         if (i >= missOrder.length) return;
         if (Date.now() > deadline) return;
         const q = missOrder[i];
+        const k = `${q.artistKey}\u0000${q.songKey}`;
+        const prev = partial.get(k);
         const [reco, mb] = await Promise.all([
           fetchReccoBeats(q.original.artist, q.original.song),
-          fetchMusicBrainz(q.original.artist, q.original.song),
+          prev && (prev.genre || prev.year)
+            ? Promise.resolve({ genre: prev.genre, year: prev.year } as MusicBrainzInfo)
+            : fetchMusicBrainz(q.original.artist, q.original.song),
         ]);
-        fetched.set(`${q.artistKey}\u0000${q.songKey}`, {
+        fetched.set(k, {
           artist: q.original.artist,
           song: q.original.song,
           energy: reco?.energy,
           danceability: reco?.danceability,
           valence: reco?.valence,
-          popularity: reco?.popularity,
-          bpm: reco?.bpm,
-          camelot: reco?.camelot,
+          popularity: reco?.popularity ?? prev?.popularity,
+          bpm: reco?.bpm ?? prev?.bpm,
+          camelot: reco?.camelot ?? prev?.camelot,
           genre: mb?.genre,
           year: mb?.year,
-          source: pickSource(!!reco, !!mb),
+          source: pickSource(reco?.energy != null, !!(mb?.genre || mb?.year)),
         });
       }
     };
     await Promise.all(
       Array.from({ length: Math.min(FETCH_CONCURRENCY, missOrder.length) }, worker),
     );
-    if (fetched.size < missOrder.length) {
-      console.warn(
-        `[enrichSongs] enriched ${fetched.size}/${missOrder.length} misses before budget (${FETCH_BUDGET_MS}ms)`,
+    // Anything the budget skipped keeps its partial cache data.
+    for (const q of missOrder) {
+      const k = `${q.artistKey}\u0000${q.songKey}`;
+      const prev = partial.get(k);
+      if (!fetched.has(k) && prev) {
+        fetched.set(k, { ...prev, artist: q.original.artist, song: q.original.song, source: "MusicBrainz" });
+      }
+    }
+
+    // 3b) AI acoustic estimate for anything still missing energy/danceability.
+    const needAi = missOrder
+      .map((q) => ({ q, k: `${q.artistKey}\u0000${q.songKey}` }))
+      .filter(({ k }) => {
+        const e = fetched.get(k);
+        return !e || e.energy == null || e.danceability == null;
+      });
+    if (needAi.length) {
+      const est = await estimateWithAi(
+        needAi.map(({ q, k }) => {
+          const e = fetched.get(k);
+          return { artist: q.original.artist, song: q.original.song, genre: e?.genre, year: e?.year, bpm: e?.bpm };
+        }),
       );
+      needAi.forEach(({ q, k }, idx) => {
+        const a = est[idx];
+        if (!a) return;
+        const e = fetched.get(k) ?? { artist: q.original.artist, song: q.original.song, source: "none" as const };
+        fetched.set(k, {
+          ...e,
+          energy: e.energy ?? a.energy,
+          danceability: e.danceability ?? a.danceability,
+          valence: e.valence ?? a.valence,
+          bpm: e.bpm ?? a.bpm,
+          genre: e.genre ?? a.genre,
+          year: e.year ?? a.year,
+          source: e.source === "none" || e.source === "MusicBrainz" ? "AI" : e.source,
+        });
+      });
     }
 
     // 4) Upsert successful fetches into the cache (service role bypasses RLS).
