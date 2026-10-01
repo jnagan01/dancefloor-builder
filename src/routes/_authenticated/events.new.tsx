@@ -3093,7 +3093,17 @@ function SectionView(props: SectionViewProps) {
                   <Hud label="Dance" value={meta.danceability != null ? Math.round(meta.danceability) : "—"} />
                   <Hud label="Mood" value={meta.valence != null ? Math.round(meta.valence) : "—"} />
                   <Hud label="Key" value={track?.key || meta.camelot || "—"} />
-                  <Hud label="BPM" value={track?.bpm || (meta.bpm != null ? Math.round(meta.bpm) : "—")} />
+                  <Hud
+                    label="BPM"
+                    value={fileBpm != null ? Math.round(fileBpm) : estimatedBpm != null ? `≈${estimatedBpm}` : "—"}
+                    title={
+                      fileBpm != null
+                        ? `Real BPM ${Math.round(fileBpm)} read from the matched music file`
+                        : estimatedBpm != null
+                          ? `Estimated ${estimatedBpm} BPM — match this song to a file in your folders to see its real BPM`
+                          : undefined
+                    }
+                  />
                 </div>
               </div>
 
