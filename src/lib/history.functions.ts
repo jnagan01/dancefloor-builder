@@ -25,6 +25,8 @@ const inputsSchema = z.object({
   expand: z.boolean(),
   buffer: z.number().int().min(2).max(4).optional(),
   eventName: z.string().max(200),
+  listType: z.enum(["dance", "cocktail", "dinner"]).optional(),
+  minutes: z.string().max(10).optional(),
 });
 
 const listsSchema = z.object({
