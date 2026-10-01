@@ -568,16 +568,24 @@ export const getTrendingCharts = createServerFn({ method: "GET" }).handler(
 
     const topTracks = buildConsensusTracks([apple, billboard, lastfm, shazam]);
     const topArtists = buildConsensusArtists(topTracks, lastfmArtists);
-    await backfillArtwork(topTracks, topArtists);
+    await backfillMeta(topTracks, topArtists, lfmKey);
 
-    // Give the per-platform lists the artwork we resolved for the merged view.
-    const artByKey = new Map<string, string>();
+    // Give the per-platform lists the artwork and genre resolved for the merged view.
+    const metaByKey = new Map<string, { artwork?: string; genre?: string }>();
     for (const t of topTracks)
-      if (t.artwork) artByKey.set(`${normKey(primaryArtist(t.artist))}|${normKey(t.title)}`, t.artwork);
-    for (const feed of [billboard, lastfm, shazam])
-      for (const e of feed)
-        if (!e.artwork)
-          e.artwork = artByKey.get(`${normKey(primaryArtist(e.artist))}|${normKey(e.title)}`);
+      metaByKey.set(`${normKey(primaryArtist(t.artist))}|${normKey(t.title)}`, {
+        artwork: t.artwork,
+        genre: t.genre,
+      });
+    for (const feed of [apple, billboard, lastfm, shazam])
+      for (const e of feed) {
+        const m = metaByKey.get(`${normKey(primaryArtist(e.artist))}|${normKey(e.title)}`);
+        if (!e.artwork) e.artwork = m?.artwork;
+        if (!e.genre) e.genre = m?.genre;
+        e.djGenre = classifyGenre(e.genre);
+      }
+    for (const a of lastfmArtists) a.djGenre = classifyGenre(a.genre);
+
 
     const value: ChartsResult = {
       apple,
