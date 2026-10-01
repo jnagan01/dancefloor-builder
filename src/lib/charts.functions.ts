@@ -1,40 +1,87 @@
 import { createServerFn } from "@tanstack/react-start";
 
+/**
+ * Cross-platform trending charts.
+ *
+ * Pulls four independent "what is hot right now" feeds and merges them into a
+ * single consensus ranking of tracks and artists:
+ *  - Apple Music most-played (US)
+ *  - Billboard Hot 100
+ *  - Last.fm global top tracks / top artists (needs LASTFM_API_KEY)
+ *  - Shazam top 200 (US) — what people hear out and try to identify
+ *
+ * Any feed can fail; the rest still render.
+ */
+
+export type ChartSource = "apple" | "billboard" | "lastfm" | "shazam";
+
 export type ChartEntry = {
   rank: number;
   title: string;
   artist: string;
-  source: "apple" | "billboard";
+  source: ChartSource;
   artwork?: string;
   genre?: string;
   url?: string;
   releaseDate?: string;
+  listeners?: number;
+};
+
+export type SourceRank = { source: ChartSource; rank: number };
+
+export type ConsensusTrack = {
+  rank: number;
+  title: string;
+  artist: string;
+  artwork?: string;
+  genre?: string;
+  score: number;
+  sources: SourceRank[];
+};
+
+export type ConsensusArtist = {
+  rank: number;
+  artist: string;
+  artwork?: string;
+  score: number;
+  hits: number;
+  topTrack?: string;
+  listeners?: number;
+  sources: ChartSource[];
 };
 
 export type ChartsResult = {
   apple: ChartEntry[];
   billboard: ChartEntry[];
-  appleError?: string;
-  billboardError?: string;
+  lastfm: ChartEntry[];
+  shazam: ChartEntry[];
+  lastfmArtists: ConsensusArtist[];
+  topTracks: ConsensusTrack[];
+  topArtists: ConsensusArtist[];
+  errors: Partial<Record<ChartSource, string>>;
   fetchedAt: string;
 };
 
 const TTL_MS = 30 * 60 * 1000;
 let cache: { at: number; value: ChartsResult } | null = null;
 
-async function getJson(url: string, timeoutMs = 8000): Promise<unknown> {
+const UA = "DancefloorBuilder/1.0";
+
+async function getText(url: string, timeoutMs = 9000): Promise<string> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      signal: ctrl.signal,
-      headers: { accept: "application/json", "user-agent": "DancefloorBuilder/1.0" },
-    });
+    const res = await fetch(url, { signal: ctrl.signal, headers: { "user-agent": UA } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    return await res.text();
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function getJson(url: string, timeoutMs = 9000): Promise<unknown> {
+  const text = await getText(url, timeoutMs);
+  return JSON.parse(text) as unknown;
 }
 
 function bigArtwork(url?: string): string | undefined {
@@ -42,23 +89,33 @@ function bigArtwork(url?: string): string | undefined {
   return url.replace(/\/\d+x\d+bb\.(jpg|png)/i, "/300x300bb.$1");
 }
 
+/** Last.fm serves a placeholder star for most images — treat it as no image. */
+const PLACEHOLDER = "2a96cbd8b46e442fc41c2b86b821562f";
+const realImage = (u?: string): string | undefined =>
+  u && !u.includes(PLACEHOLDER) ? u : undefined;
+
+/* ------------------------------------------------------------------ feeds */
+
 async function fetchApple(): Promise<ChartEntry[]> {
   const json = (await getJson(
     "https://rss.marketingtools.apple.com/api/v2/us/music/most-played/50/songs.json",
   )) as { feed?: { results?: Array<Record<string, unknown>> } };
   const results = json.feed?.results ?? [];
-  return results.slice(0, 50).map((r, i) => ({
-    rank: i + 1,
-    title: String(r["name"] ?? "").trim(),
-    artist: String(r["artistName"] ?? "").trim(),
-    source: "apple" as const,
-    artwork: bigArtwork(typeof r["artworkUrl100"] === "string" ? r["artworkUrl100"] : undefined),
-    genre: Array.isArray(r["genres"])
-      ? String((r["genres"] as Array<{ name?: string }>)[0]?.name ?? "")
-      : undefined,
-    url: typeof r["url"] === "string" ? r["url"] : undefined,
-    releaseDate: typeof r["releaseDate"] === "string" ? r["releaseDate"] : undefined,
-  })).filter(e => e.title && e.artist);
+  return results
+    .slice(0, 50)
+    .map((r, i) => ({
+      rank: i + 1,
+      title: String(r["name"] ?? "").trim(),
+      artist: String(r["artistName"] ?? "").trim(),
+      source: "apple" as const,
+      artwork: bigArtwork(typeof r["artworkUrl100"] === "string" ? r["artworkUrl100"] : undefined),
+      genre: Array.isArray(r["genres"])
+        ? String((r["genres"] as Array<{ name?: string }>)[0]?.name ?? "")
+        : undefined,
+      url: typeof r["url"] === "string" ? r["url"] : undefined,
+      releaseDate: typeof r["releaseDate"] === "string" ? r["releaseDate"] : undefined,
+    }))
+    .filter(e => e.title && e.artist);
 }
 
 async function fetchBillboard(): Promise<ChartEntry[]> {
@@ -66,33 +123,367 @@ async function fetchBillboard(): Promise<ChartEntry[]> {
     "https://raw.githubusercontent.com/mhollingshead/billboard-hot-100/main/recent.json",
   )) as { data?: Array<Record<string, unknown>> };
   const rows = json.data ?? [];
-  return rows.slice(0, 100).map((r, i) => ({
-    rank: typeof r["this_week"] === "number" ? (r["this_week"] as number) : i + 1,
-    title: String(r["song"] ?? "").trim(),
-    artist: String(r["artist"] ?? "").trim(),
-    source: "billboard" as const,
-  })).filter(e => e.title && e.artist);
+  return rows
+    .slice(0, 100)
+    .map((r, i) => ({
+      rank: typeof r["this_week"] === "number" ? (r["this_week"] as number) : i + 1,
+      title: String(r["song"] ?? "").trim(),
+      artist: String(r["artist"] ?? "").trim(),
+      source: "billboard" as const,
+    }))
+    .filter(e => e.title && e.artist);
 }
 
-export const getTrendingCharts = createServerFn({ method: "GET" }).handler(async (): Promise<ChartsResult> => {
-  if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
+type LfmImage = Array<{ "#text"?: string; size?: string }>;
+const pickImage = (images?: LfmImage): string | undefined =>
+  realImage(
+    images?.find(i => i.size === "extralarge")?.["#text"] ??
+      images?.find(i => i.size === "large")?.["#text"],
+  );
 
-  const [appleRes, billboardRes] = await Promise.allSettled([fetchApple(), fetchBillboard()]);
+async function fetchLastfmTracks(key: string): Promise<ChartEntry[]> {
+  const json = (await getJson(
+    `https://ws.audioscrobbler.com/2.0/?method=chart.gettoptracks&limit=50&format=json&api_key=${encodeURIComponent(key)}`,
+  )) as { tracks?: { track?: Array<Record<string, unknown>> } };
+  const rows = json.tracks?.track ?? [];
+  return rows
+    .slice(0, 50)
+    .map((r, i) => ({
+      rank: i + 1,
+      title: String(r["name"] ?? "").trim(),
+      artist: String((r["artist"] as { name?: string } | undefined)?.name ?? "").trim(),
+      source: "lastfm" as const,
+      artwork: pickImage(r["image"] as LfmImage | undefined),
+      url: typeof r["url"] === "string" ? r["url"] : undefined,
+      listeners: Number(r["listeners"]) || undefined,
+    }))
+    .filter(e => e.title && e.artist);
+}
 
-  const value: ChartsResult = {
-    apple: appleRes.status === "fulfilled" ? appleRes.value : [],
-    billboard: billboardRes.status === "fulfilled" ? billboardRes.value : [],
-    fetchedAt: new Date().toISOString(),
-  };
-  if (appleRes.status === "rejected") {
-    console.error("[charts] apple failed:", appleRes.reason);
-    value.appleError = "Apple Music charts are temporarily unavailable.";
+async function fetchLastfmArtists(key: string): Promise<ConsensusArtist[]> {
+  const json = (await getJson(
+    `https://ws.audioscrobbler.com/2.0/?method=chart.gettopartists&limit=30&format=json&api_key=${encodeURIComponent(key)}`,
+  )) as { artists?: { artist?: Array<Record<string, unknown>> } };
+  const rows = json.artists?.artist ?? [];
+  return rows
+    .slice(0, 30)
+    .map((r, i) => ({
+      rank: i + 1,
+      artist: String(r["name"] ?? "").trim(),
+      artwork: pickImage(r["image"] as LfmImage | undefined),
+      score: 0,
+      hits: 0,
+      listeners: Number(r["listeners"]) || undefined,
+      sources: ["lastfm" as const],
+    }))
+    .filter(a => a.artist);
+}
+
+/** Shazam publishes its top 200 as a CSV: Rank,Artist,Title */
+async function fetchShazam(): Promise<ChartEntry[]> {
+  const csv = await getText("https://www.shazam.com/services/charts/csv/top-200/united-states/");
+  const out: ChartEntry[] = [];
+  for (const raw of csv.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || /^rank\s*,/i.test(line)) continue;
+    const cells = parseCsvLine(line);
+    if (cells.length < 3) continue;
+    const rank = parseInt(cells[0] ?? "", 10);
+    const artist = (cells[1] ?? "").trim();
+    const title = (cells[2] ?? "").trim();
+    if (!Number.isFinite(rank) || !artist || !title) continue;
+    out.push({ rank, title, artist, source: "shazam" });
+    if (out.length >= 100) break;
   }
-  if (billboardRes.status === "rejected") {
-    console.error("[charts] billboard failed:", billboardRes.reason);
-    value.billboardError = "Billboard Hot 100 is temporarily unavailable.";
+  return out;
+}
+
+function parseCsvLine(line: string): string[] {
+  const cells: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else quoted = false;
+      } else cur += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") {
+      cells.push(cur);
+      cur = "";
+    } else cur += c;
+  }
+  cells.push(cur);
+  return cells;
+}
+
+/* ------------------------------------------------------------- consensus */
+
+const normKey = (s: string): string =>
+  s
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/\(.*?\)|\[.*?\]/g, " ")
+    .replace(/\b(feat|ft|featuring|with|x)\b.*$/g, " ")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+/** First credited artist only — charts list collaborators inconsistently. */
+const primaryArtist = (artist: string): string =>
+  artist
+    .split(/\s*(?:,|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bwith\b|\bx\b|\/)\s*/i)[0]
+    ?.trim() || artist.trim();
+
+/** #1 scores 100, falling off gently so deep chart positions still count. */
+const rankPoints = (rank: number): number => Math.max(5, 101 - rank);
+
+function buildConsensusTracks(all: ChartEntry[][]): ConsensusTrack[] {
+  const map = new Map<
+    string,
+    { title: string; artist: string; artwork?: string; genre?: string; sources: SourceRank[] }
+  >();
+
+  for (const feed of all) {
+    for (const e of feed) {
+      const key = `${normKey(primaryArtist(e.artist))}|${normKey(e.title)}`;
+      if (!key.trim() || key === "|") continue;
+      const hit = map.get(key);
+      if (hit) {
+        if (!hit.sources.some(s => s.source === e.source))
+          hit.sources.push({ source: e.source, rank: e.rank });
+        if (!hit.artwork && e.artwork) hit.artwork = e.artwork;
+        if (!hit.genre && e.genre) hit.genre = e.genre;
+      } else {
+        map.set(key, {
+          title: e.title,
+          artist: e.artist,
+          artwork: e.artwork,
+          genre: e.genre,
+          sources: [{ source: e.source, rank: e.rank }],
+        });
+      }
+    }
   }
 
-  if (value.apple.length || value.billboard.length) cache = { at: Date.now(), value };
-  return value;
-});
+  const scored = [...map.values()].map(v => {
+    const base = v.sources.reduce((n, s) => n + rankPoints(s.rank), 0);
+    // Multi-platform agreement is the whole point — reward it hard.
+    const bonus = 1 + (v.sources.length - 1) * 0.6;
+    return {
+      title: v.title,
+      artist: v.artist,
+      artwork: v.artwork,
+      genre: v.genre,
+      sources: v.sources.sort((a, b) => a.rank - b.rank),
+      score: Math.round(base * bonus),
+    };
+  });
+
+  scored.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+  return scored.slice(0, 40).map((t, i) => ({ ...t, rank: i + 1 }));
+}
+
+function buildConsensusArtists(
+  tracks: ConsensusTrack[],
+  lastfmArtists: ConsensusArtist[],
+): ConsensusArtist[] {
+  const map = new Map<
+    string,
+    {
+      artist: string;
+      artwork?: string;
+      score: number;
+      hits: number;
+      topTrack?: string;
+      topScore: number;
+      listeners?: number;
+      sources: Set<ChartSource>;
+    }
+  >();
+
+  for (const t of tracks) {
+    const name = primaryArtist(t.artist);
+    const key = normKey(name);
+    if (!key) continue;
+    const hit = map.get(key) ?? {
+      artist: name,
+      artwork: undefined,
+      score: 0,
+      hits: 0,
+      topTrack: undefined,
+      topScore: -1,
+      listeners: undefined,
+      sources: new Set<ChartSource>(),
+    };
+    hit.score += t.score;
+    hit.hits += 1;
+    if (t.score > hit.topScore) {
+      hit.topScore = t.score;
+      hit.topTrack = t.title;
+    }
+    if (!hit.artwork && t.artwork) hit.artwork = t.artwork;
+    for (const s of t.sources) hit.sources.add(s.source);
+    map.set(key, hit);
+  }
+
+  for (const a of lastfmArtists) {
+    const key = normKey(a.artist);
+    if (!key) continue;
+    const hit = map.get(key);
+    const points = rankPoints(a.rank) * 2;
+    if (hit) {
+      hit.score += points;
+      hit.listeners = hit.listeners ?? a.listeners;
+      hit.sources.add("lastfm");
+      if (!hit.artwork && a.artwork) hit.artwork = a.artwork;
+    } else {
+      map.set(key, {
+        artist: a.artist,
+        artwork: a.artwork,
+        score: points,
+        hits: 0,
+        topTrack: undefined,
+        topScore: -1,
+        listeners: a.listeners,
+        sources: new Set<ChartSource>(["lastfm"]),
+      });
+    }
+  }
+
+  const out = [...map.values()].map(v => ({
+    artist: v.artist,
+    artwork: v.artwork,
+    score: v.score,
+    hits: v.hits,
+    topTrack: v.topTrack,
+    listeners: v.listeners,
+    sources: [...v.sources],
+    rank: 0,
+  }));
+  out.sort((a, b) => b.score - a.score || a.artist.localeCompare(b.artist));
+  return out.slice(0, 25).map((a, i) => ({ ...a, rank: i + 1 }));
+}
+
+/* ------------------------------------------------------ artwork back-fill */
+
+const artCache = new Map<string, { at: number; url?: string }>();
+const ART_TTL = 24 * 60 * 60 * 1000;
+
+async function itunesArtwork(term: string, entity: "song" | "album"): Promise<string | undefined> {
+  const key = `${entity}:${term.toLowerCase()}`;
+  const hit = artCache.get(key);
+  if (hit && Date.now() - hit.at < ART_TTL) return hit.url;
+  try {
+    const json = (await getJson(
+      `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=${entity}&limit=1&country=US`,
+      6000,
+    )) as { results?: Array<{ artworkUrl100?: string }> };
+    const url = bigArtwork(json.results?.[0]?.artworkUrl100);
+    artCache.set(key, { at: Date.now(), url });
+    return url;
+  } catch {
+    artCache.set(key, { at: Date.now(), url: undefined });
+    return undefined;
+  }
+}
+
+async function backfillArtwork(tracks: ConsensusTrack[], artists: ConsensusArtist[]): Promise<void> {
+  const jobs: Array<() => Promise<void>> = [];
+  for (const t of tracks.slice(0, 12)) {
+    if (t.artwork) continue;
+    jobs.push(async () => {
+      t.artwork = await itunesArtwork(`${primaryArtist(t.artist)} ${t.title}`, "song");
+    });
+  }
+  for (const a of artists.slice(0, 12)) {
+    if (a.artwork) continue;
+    jobs.push(async () => {
+      a.artwork = await itunesArtwork(a.artist, "album");
+    });
+  }
+  const workers = Array.from({ length: Math.min(6, jobs.length) }, async () => {
+    for (;;) {
+      const job = jobs.shift();
+      if (!job) return;
+      await job();
+    }
+  });
+  await Promise.all(workers);
+}
+
+/* ---------------------------------------------------------------- handler */
+
+export const getTrendingCharts = createServerFn({ method: "GET" }).handler(
+  async (): Promise<ChartsResult> => {
+    if (cache && Date.now() - cache.at < TTL_MS) return cache.value;
+
+    const lfmKey = process.env["LASTFM_API_KEY"];
+
+    const [appleRes, billboardRes, lfmTrackRes, lfmArtistRes, shazamRes] = await Promise.allSettled([
+      fetchApple(),
+      fetchBillboard(),
+      lfmKey ? fetchLastfmTracks(lfmKey) : Promise.resolve<ChartEntry[]>([]),
+      lfmKey ? fetchLastfmArtists(lfmKey) : Promise.resolve<ConsensusArtist[]>([]),
+      fetchShazam(),
+    ]);
+
+    const errors: Partial<Record<ChartSource, string>> = {};
+    const apple = appleRes.status === "fulfilled" ? appleRes.value : [];
+    const billboard = billboardRes.status === "fulfilled" ? billboardRes.value : [];
+    const lastfm = lfmTrackRes.status === "fulfilled" ? lfmTrackRes.value : [];
+    const lastfmArtists = lfmArtistRes.status === "fulfilled" ? lfmArtistRes.value : [];
+    const shazam = shazamRes.status === "fulfilled" ? shazamRes.value : [];
+
+    if (appleRes.status === "rejected") {
+      console.error("[charts] apple failed:", appleRes.reason);
+      errors.apple = "Apple Music charts are temporarily unavailable.";
+    }
+    if (billboardRes.status === "rejected") {
+      console.error("[charts] billboard failed:", billboardRes.reason);
+      errors.billboard = "Billboard Hot 100 is temporarily unavailable.";
+    }
+    if (shazamRes.status === "rejected") {
+      console.error("[charts] shazam failed:", shazamRes.reason);
+      errors.shazam = "The Shazam chart is temporarily unavailable.";
+    }
+    if (!lfmKey) errors.lastfm = "Last.fm charts are not connected yet.";
+    else if (lfmTrackRes.status === "rejected" || lfmArtistRes.status === "rejected") {
+      console.error("[charts] lastfm failed");
+      errors.lastfm = "Last.fm charts are temporarily unavailable.";
+    }
+
+    const topTracks = buildConsensusTracks([apple, billboard, lastfm, shazam]);
+    const topArtists = buildConsensusArtists(topTracks, lastfmArtists);
+    await backfillArtwork(topTracks, topArtists);
+
+    // Give the per-platform lists the artwork we resolved for the merged view.
+    const artByKey = new Map<string, string>();
+    for (const t of topTracks)
+      if (t.artwork) artByKey.set(`${normKey(primaryArtist(t.artist))}|${normKey(t.title)}`, t.artwork);
+    for (const feed of [billboard, lastfm, shazam])
+      for (const e of feed)
+        if (!e.artwork)
+          e.artwork = artByKey.get(`${normKey(primaryArtist(e.artist))}|${normKey(e.title)}`);
+
+    const value: ChartsResult = {
+      apple,
+      billboard,
+      lastfm,
+      shazam,
+      lastfmArtists,
+      topTracks,
+      topArtists,
+      errors,
+      fetchedAt: new Date().toISOString(),
+    };
+
+    if (apple.length || billboard.length || lastfm.length || shazam.length)
+      cache = { at: Date.now(), value };
+    return value;
+  },
+);
