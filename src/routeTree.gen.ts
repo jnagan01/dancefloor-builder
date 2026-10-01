@@ -20,6 +20,7 @@ import { Route as AuthenticatedEventsRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedEventsIndexRouteImport } from './routes/_authenticated/events.index'
 import { Route as AuthenticatedEventsNewRouteImport } from './routes/_authenticated/events.new'
 import { Route as LovableEmailTransactionalPreviewRouteImport } from './routes/lovable/email/transactional/preview'
+import { Route as ApiPublicHooksWeeklyErrorDigestRouteImport } from './routes/api/public/hooks/weekly-error-digest'
 
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
@@ -77,6 +78,12 @@ const LovableEmailTransactionalPreviewRoute =
     path: '/lovable/email/transactional/preview',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiPublicHooksWeeklyErrorDigestRoute =
+  ApiPublicHooksWeeklyErrorDigestRouteImport.update({
+    id: '/api/public/hooks/weekly-error-digest',
+    path: '/api/public/hooks/weekly-error-digest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/updates': typeof AuthenticatedUpdatesRoute
   '/events/new': typeof AuthenticatedEventsNewRoute
   '/events/': typeof AuthenticatedEventsIndexRoute
+  '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
   '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
 }
 export interface FileRoutesByTo {
@@ -99,6 +107,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/events/new': typeof AuthenticatedEventsNewRoute
   '/events': typeof AuthenticatedEventsIndexRoute
+  '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
   '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
 }
 export interface FileRoutesById {
@@ -113,6 +122,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/events/new': typeof AuthenticatedEventsNewRoute
   '/_authenticated/events/': typeof AuthenticatedEventsIndexRoute
+  '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
   '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
 }
 export interface FileRouteTypes {
@@ -127,6 +137,7 @@ export interface FileRouteTypes {
     | '/updates'
     | '/events/new'
     | '/events/'
+    | '/api/public/hooks/weekly-error-digest'
     | '/lovable/email/transactional/preview'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -138,6 +149,7 @@ export interface FileRouteTypes {
     | '/'
     | '/events/new'
     | '/events'
+    | '/api/public/hooks/weekly-error-digest'
     | '/lovable/email/transactional/preview'
   id:
     | '__root__'
@@ -151,6 +163,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/events/new'
     | '/_authenticated/events/'
+    | '/api/public/hooks/weekly-error-digest'
     | '/lovable/email/transactional/preview'
   fileRoutesById: FileRoutesById
 }
@@ -158,6 +171,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ApiPublicHooksWeeklyErrorDigestRoute: typeof ApiPublicHooksWeeklyErrorDigestRoute
   LovableEmailTransactionalPreviewRoute: typeof LovableEmailTransactionalPreviewRoute
 }
 
@@ -240,6 +254,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LovableEmailTransactionalPreviewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/weekly-error-digest': {
+      id: '/api/public/hooks/weekly-error-digest'
+      path: '/api/public/hooks/weekly-error-digest'
+      fullPath: '/api/public/hooks/weekly-error-digest'
+      preLoaderRoute: typeof ApiPublicHooksWeeklyErrorDigestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -279,6 +300,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ApiPublicHooksWeeklyErrorDigestRoute: ApiPublicHooksWeeklyErrorDigestRoute,
   LovableEmailTransactionalPreviewRoute: LovableEmailTransactionalPreviewRoute,
 }
 export const routeTree = rootRouteImport
