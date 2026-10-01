@@ -138,11 +138,12 @@ function HomePage() {
           <div className="grid gap-8 xl:grid-cols-2">
             <div>
               <h3 className="mb-3 font-display text-base tracking-tight">Top tracks</h3>
-              <ConsensusTrackList rows={filterTracks(chartData?.topTracks ?? [])} loading={chartsLoading} inLibrary={inLibrary}/>
+              <ConsensusTrackList rows={filterTracks(chartData?.topTracks ?? [])} loading={chartsLoading} inLibrary={inLibrary} onPlay={play}/>
             </div>
             <div>
               <h3 className="mb-3 font-display text-base tracking-tight">Top artists</h3>
-              <ArtistList rows={chartData?.topArtists ?? []} loading={chartsLoading}/>
+              <ArtistList rows={chartData?.topArtists ?? []} loading={chartsLoading} onPlay={play}/>
+
             </div>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam.</p>
