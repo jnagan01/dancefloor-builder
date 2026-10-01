@@ -252,13 +252,21 @@ function SourcePills({ sources }: { sources: { source: ChartSource; rank: number
   </span>;
 }
 
-function ConsensusTrackList({ rows, loading, inLibrary }: { rows: ConsensusTrack[]; loading: boolean; inLibrary: (e: { artist: string; title: string }) => boolean }) {
+function HeroPlay({ onClick, label }: { onClick: () => void; label: string }) {
+  return <button type="button" aria-label={`Play ${label}`} title={`Play ${label}`} onClick={onClick}
+    className="absolute right-4 top-4 grid size-11 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105">
+    <Play size={18} className="translate-x-px"/>
+  </button>;
+}
+
+function ConsensusTrackList({ rows, loading, inLibrary, onPlay }: { rows: ConsensusTrack[]; loading: boolean; inLibrary: (e: { artist: string; title: string }) => boolean; onPlay: PlayFn }) {
   if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest charts…</p>;
   if (!rows.length) return <p className="py-8 text-sm text-muted-foreground">No tracks to show right now.</p>;
   const [hero, ...rest] = rows;
   return <div>
     {hero ? <div className="relative mb-3 overflow-hidden rounded-2xl border border-border/40">
       {hero.artwork ? <img src={hero.artwork} alt="" className="h-44 w-full object-cover"/> : <div className="h-44 w-full bg-muted/50"/>}
+      <HeroPlay label={hero.title} onClick={() => onPlay(hero.artist, hero.title)}/>
       <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-4">
         <span className="font-display text-3xl font-semibold leading-none text-white/90">1</span>
         <span className="min-w-0 flex-1">
@@ -277,11 +285,9 @@ function ConsensusTrackList({ rows, loading, inLibrary }: { rows: ConsensusTrack
     <ol className="grid gap-1">
       {rest.slice(0, 14).map(t => {
         const owned = inLibrary(t);
-        return <li key={`${t.rank}-${t.title}`} className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
+        return <li key={`${t.rank}-${t.title}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-accent/30">
           <span className="w-5 text-right tabular-nums text-sm text-muted-foreground">{t.rank}</span>
-          {t.artwork
-            ? <img src={t.artwork} alt="" loading="lazy" className="size-11 rounded-lg object-cover"/>
-            : <span className="grid size-11 place-items-center rounded-lg bg-muted/60"><Music2 className="size-4 text-muted-foreground"/></span>}
+          <Art src={t.artwork} label={t.title} onPlay={() => onPlay(t.artist, t.title)}/>
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">{t.title}</span>
             <span className="block truncate text-xs text-muted-foreground">{t.artist}</span>
@@ -295,6 +301,7 @@ function ConsensusTrackList({ rows, loading, inLibrary }: { rows: ConsensusTrack
     </ol>
   </div>;
 }
+
 
 function ArtistList({ rows, loading }: { rows: ConsensusArtist[]; loading: boolean }) {
   if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest charts…</p>;
