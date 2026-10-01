@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { getVibe, vibeFit } from "@/lib/vibes";
+import { vibeFit, type Targets } from "@/lib/vibes";
 
 export type RampSong = {
   song: string;
@@ -41,10 +41,10 @@ function path(pts: ({ x: number; y: number } | null)[]) {
 export function EventEnergyRamp<K extends string>({
   sections,
   onSelect,
-  vibe,
+  targets,
 }: {
   sections: RampSection<K>[];
-  vibe?: string;
+  targets?: Targets | null;
   onSelect?: (section: K, index: number) => void;
 }) {
   const [show, setShow] = useState({ energy: true, dance: true, bpm: true });
@@ -79,7 +79,7 @@ export function EventEnergyRamp<K extends string>({
     };
   });
 
-  const v = getVibe(vibe);
+  const v = targets ?? null;
   const fits = v ? flat.map((f) => vibeFit(f.song, v, f.sec as "warmUp")).filter((r) => r !== "unknown") : [];
   const fit = v && fits.length ? Math.round((fits.filter((r) => r === "inside").length / fits.length) * 100) : null;
   if (n === 0) return null;
@@ -95,7 +95,7 @@ export function EventEnergyRamp<K extends string>({
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Event flow</h3>
-          {v && <p className="text-xs text-foreground">Vibe: {v.label} · target energy {v.energy[0]}–{v.energy[1]}, {v.bpm[0]}–{v.bpm[1]} BPM{fit != null ? ` · ${fit}% of songs on target` : ""}</p>}
+          {v && <p className="text-xs text-foreground">{v.label ? `Vibe: ${v.label}` : "Custom targets"}{v.energy ? ` · energy ${v.energy[0]}–${v.energy[1]}` : ""}{v.bpm ? ` · ${v.bpm[0]}–${v.bpm[1]} BPM` : ""}{v.dance ? ` · dance ${v.dance[0]}–${v.dance[1]}` : ""}{fit != null ? ` · ${fit}% of songs on target` : ""}</p>}
           <p className="text-xs text-muted-foreground">{n} songs · Energy & danceability (1–10, left) · BPM ({BPM_MIN}–{BPM_MAX}, right)</p>
         </div>
         <div className="flex gap-1.5">
@@ -138,8 +138,14 @@ export function EventEnergyRamp<K extends string>({
         {show.bpm && [80, 120, 160].map((v) => (
           <text key={v} x={W - PAD.r + 6} y={yBpm(v) + 3} fontSize="10" fill="var(--success)">{v}</text>
         ))}
-        {v && (
+        {v?.energy && show.energy && (
           <rect x={PAD.l} width={innerW} y={y10(v.energy[1])} height={y10(v.energy[0]) - y10(v.energy[1])} fill="var(--primary)" fillOpacity={0.08} stroke="var(--primary)" strokeOpacity={0.3} strokeDasharray="3 5" vectorEffect="non-scaling-stroke" />
+        )}
+        {v?.dance && show.dance && (
+          <rect x={PAD.l} width={innerW} y={y10(v.dance[1])} height={y10(v.dance[0]) - y10(v.dance[1])} fill="var(--info)" fillOpacity={0.07} stroke="var(--info)" strokeOpacity={0.3} strokeDasharray="3 5" vectorEffect="non-scaling-stroke" />
+        )}
+        {v?.bpm && show.bpm && (
+          <rect x={PAD.l} width={innerW} y={yBpm(v.bpm[1])} height={yBpm(v.bpm[0]) - yBpm(v.bpm[1])} fill="var(--success)" fillOpacity={0.06} stroke="var(--success)" strokeOpacity={0.3} strokeDasharray="3 5" vectorEffect="non-scaling-stroke" />
         )}
         {bounds.slice(1).map((b) => (
           <line key={b.key} x1={x(b.start - 0.5)} x2={x(b.start - 0.5)} y1={PAD.t} y2={H - PAD.b} stroke="var(--muted-foreground)" strokeDasharray="4 4" strokeOpacity={0.5} vectorEffect="non-scaling-stroke" />

@@ -1,7 +1,9 @@
-import { getVibe, vibeFit, vibeRange, type VibeFit } from "@/lib/vibes";
+import { vibeFit, vibeRange, type VibeFit, type Targets, type Range } from "@/lib/vibes";
 import type { RampSection } from "./EventEnergyRamp";
 
 type Sec = "warmUp" | "transition" | "peak";
+
+const fmt = (r: Range) => `${r[0]}–${r[1]}`;
 
 function avg(xs: (number | undefined)[]) {
   const v = xs.filter((x): x is number => typeof x === "number" && Number.isFinite(x));
@@ -16,15 +18,15 @@ const LABELS: Record<VibeFit, { label: string; cls: string }> = {
 };
 
 export function VibeBreakdown<K extends Sec>({
-  vibe,
+  targets,
   sections,
   onJump,
 }: {
-  vibe: string;
+  targets: Targets | null;
   sections: RampSection<K>[];
   onJump?: (section: K) => void;
 }) {
-  const v = getVibe(vibe);
+  const v = targets;
   if (!v) return null;
 
   const rows = sections.map((s) => {
@@ -51,7 +53,8 @@ export function VibeBreakdown<K extends Sec>({
         .filter((f) => f.fit === "low" || f.fit === "high")
         .map((f) => {
           const e = f.song.energy;
-          const dist = typeof e === "number" ? (f.fit === "low" ? r.range.energy[0] - e : e - r.range.energy[1]) : 0;
+          const re = r.range.energy;
+          const dist = typeof e === "number" && re ? (f.fit === "low" ? re[0] - e : e - re[1]) : f.fit === "low" || f.fit === "high" ? 0.1 : 0;
           return { ...f, sec: r.key, secLabel: r.label, dist };
         }),
     )
@@ -71,9 +74,9 @@ export function VibeBreakdown<K extends Sec>({
   return (
     <div className="space-y-4 pt-4">
       <div className="rounded-lg border border-border bg-card/60 p-4">
-        <div className="text-sm font-semibold text-foreground">{v.label}</div>
+        <div className="text-sm font-semibold text-foreground">{v.label ?? "Custom targets"}</div>
         <div className="text-xs text-muted-foreground">
-          {v.description} · target energy {v.energy[0]}–{v.energy[1]} · {v.bpm[0]}–{v.bpm[1]} BPM
+          {[v.description, v.energy && `energy ${fmt(v.energy)}`, v.bpm && `${fmt(v.bpm)} BPM`, v.dance && `danceability ${fmt(v.dance)}`].filter(Boolean).join(" · ")}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">
           <span className="text-2xl font-semibold text-foreground">{known ? Math.round((total.inside / known) * 100) : 0}%</span>
@@ -87,9 +90,9 @@ export function VibeBreakdown<K extends Sec>({
           <button key={r.key} type="button" onClick={() => onJump?.(r.key)} className="rounded-lg border border-border bg-card/60 p-4 text-left transition hover:border-primary/50">
             <div className="text-sm font-semibold text-foreground">{r.label} <span className="font-normal text-muted-foreground">· {r.songs.length} songs</span></div>
             <dl className="mt-2 grid grid-cols-3 gap-2 text-xs">
-              <div><dt className="text-muted-foreground">Energy</dt><dd className="text-base text-foreground">{r.e?.toFixed(1) ?? "—"}</dd><dd className="text-muted-foreground">target {r.range.energy[0]}–{r.range.energy[1]}</dd></div>
-              <div><dt className="text-muted-foreground">Dance</dt><dd className="text-base text-foreground">{r.d?.toFixed(1) ?? "—"}</dd></div>
-              <div><dt className="text-muted-foreground">BPM</dt><dd className="text-base text-foreground">{r.b ? Math.round(r.b) : "—"}</dd><dd className="text-muted-foreground">target {r.range.bpm[0]}–{r.range.bpm[1]}</dd></div>
+              <div><dt className="text-muted-foreground">Energy</dt><dd className="text-base text-foreground">{r.e?.toFixed(1) ?? "—"}</dd>{r.range.energy && <dd className="text-muted-foreground">target {fmt(r.range.energy)}</dd>}</div>
+              <div><dt className="text-muted-foreground">Dance</dt><dd className="text-base text-foreground">{r.d?.toFixed(1) ?? "—"}</dd>{r.range.dance && <dd className="text-muted-foreground">target {fmt(r.range.dance)}</dd>}</div>
+              <div><dt className="text-muted-foreground">BPM</dt><dd className="text-base text-foreground">{r.b ? Math.round(r.b) : "—"}</dd>{r.range.bpm && <dd className="text-muted-foreground">target {fmt(r.range.bpm)}</dd>}</div>
             </dl>
             <div className="mt-3"><Pills c={r.counts} /></div>
           </button>

@@ -218,6 +218,8 @@ export interface Preferences {
   notes: string;
   doNotPlay?: DoNotPlayEntry[];
   vibe?: string;
+  bpmRange?: [number, number];
+  danceRange?: [number, number];
 }
 
 export interface DoNotPlayEntry {
@@ -666,6 +668,11 @@ function libraryPreferenceScore(lib: LibrarySong, prefs: Preferences): number {
   if (v && typeof lib.energy === "number") {
     if (lib.energy >= v.energy[0] - 1 && lib.energy <= v.energy[1] + 1) score += 4;
     else if (lib.energy < v.energy[0] - 3 || lib.energy > v.energy[1] + 3) score -= 3;
+  }
+  const dr = prefs.danceRange;
+  if (dr && typeof lib.danceability === "number") {
+    if (lib.danceability >= dr[0] && lib.danceability <= dr[1]) score += 3;
+    else if (lib.danceability < dr[0] - 2 || lib.danceability > dr[1] + 2) score -= 2;
   }
   return score;
 }

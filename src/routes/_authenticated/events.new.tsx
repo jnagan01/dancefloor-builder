@@ -94,7 +94,8 @@ import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
 import { UserCog, Music2 } from "lucide-react";
 import { SpotifyExportDialog, type SpotifyExportJob } from "@/components/SpotifyExportDialog";
-import { VIBES, getVibe } from "@/lib/vibes";
+import { VIBES, getVibe, resolveTargets } from "@/lib/vibes";
+import { Slider } from "@/components/ui/slider";
 import { VibeBreakdown } from "@/components/builder/VibeBreakdown";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
 
@@ -195,6 +196,11 @@ function Index() {
   const [genresInput, setGenresInput] = useState("");
   const [decades, setDecades] = useState<string[]>(["2000s", "2010s", "2020s"]);
   const [vibe, setVibe] = useState<string>("");
+  const [bpmOn, setBpmOn] = useState(false);
+  const [bpmRange, setBpmRange] = useState<[number, number]>([110, 128]);
+  const [danceOn, setDanceOn] = useState(false);
+  const [danceRange, setDanceRange] = useState<[number, number]>([6, 9]);
+  const targets = useMemo(() => resolveTargets(vibe, bpmOn ? bpmRange : null, danceOn ? danceRange : null), [vibe, bpmOn, bpmRange, danceOn, danceRange]);
   const [notes, setNotes] = useState("");
   const [doNotPlayInput, setDoNotPlayInput] = useState("");
   const [expand, setExpand] = useState(false);
@@ -287,6 +293,8 @@ function Index() {
     setGenresInput("");
     setDecades([...defaultsRef.current.decades]);
     setVibe("");
+    setBpmOn(false);
+    setDanceOn(false);
     setNotes("");
     setDoNotPlayInput("");
     setExpand(defaultsRef.current.expand);
@@ -521,6 +529,8 @@ function Index() {
       decades,
       notes,
       vibe: vibe || undefined,
+      bpmRange: bpmOn ? bpmRange : undefined,
+      danceRange: danceOn ? danceRange : undefined,
       doNotPlay: parseDoNotPlay(doNotPlayInput),
     };
   }
@@ -573,7 +583,7 @@ function Index() {
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,vibe,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
+      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,vibe,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -585,7 +595,7 @@ function Index() {
       const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
       const lists=row.lists as unknown as WorkflowSnapshot["lists"];
       if(!inputs || !lists)return;
-      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
       // A saved event with only a single list and no dance-floor sections is a
       // cocktail/dinner list even if the stored snapshot predates listType.
       const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
@@ -626,7 +636,7 @@ function Index() {
       setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
     },1000);
     return ()=>{clearTimeout(timer);saveRevision.current+=1};
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,bpmOn,bpmRange,danceOn,danceRange,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
 
   async function generate() {
     // No uploads is fine as long as the client gave artists, genres or decades —
@@ -917,9 +927,9 @@ function Index() {
                     const tg = (t.genre ?? "").toLowerCase();
                     if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) continue;
                   }
-                  const vb = getVibe(prefs.vibe);
+                  const vbpm = prefs.bpmRange ?? getVibe(prefs.vibe)?.bpm;
                   const tb = parseBpm(t.bpm);
-                  if (vb && tb && (tb < vb.bpm[0] - 15 || tb > vb.bpm[1] + 15)) continue;
+                  if (vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) continue;
                   crateFinds.push({
                     artist: t.artist,
                     song: t.title,
@@ -2051,6 +2061,28 @@ function Index() {
                 ))}
               </div>
               <p className="mt-1.5 text-xs text-muted-foreground">{VIBES.find((v) => v.id === vibe)?.description ?? "Optional · shapes song picks and shows a target band on the event flow chart"}</p>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className={bpmOn ? "" : "opacity-50"}>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Tempo target</Label>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {bpmRange[0]}–{bpmRange[1]} BPM
+                      <Switch checked={bpmOn} aria-label="Use tempo target" onCheckedChange={(on) => { if (on && !bpmOn) { const vb = getVibe(vibe); if (vb) setBpmRange([...vb.bpm]); } setBpmOn(on); }} />
+                    </div>
+                  </div>
+                  <Slider className="mt-3" min={60} max={180} step={1} minStepsBetweenThumbs={1} disabled={!bpmOn} value={bpmRange} onValueChange={(v) => setBpmRange([v[0], v[1]])} />
+                </div>
+                <div className={danceOn ? "" : "opacity-50"}>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Danceability target</Label>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      {danceRange[0]}–{danceRange[1]}
+                      <Switch checked={danceOn} aria-label="Use danceability target" onCheckedChange={setDanceOn} />
+                    </div>
+                  </div>
+                  <Slider className="mt-3" min={1} max={10} step={0.5} minStepsBetweenThumbs={1} disabled={!danceOn} value={danceRange} onValueChange={(v) => setDanceRange([v[0], v[1]])} />
+                </div>
+              </div>
             </div>
             <div>
               <Label htmlFor="artists">Favorite artists (comma separated)</Label>
@@ -2491,12 +2523,12 @@ function Index() {
               ) : null}
 
               <EventEnergyRamp
-                vibe={vibe}
+                targets={targets}
                 sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []) as RampSong[] }))}
                 onSelect={(sec) => setActiveSection(sec)}
               />
 
-              <Tabs value={showVibe && vibe ? "vibe" : activeSection} onValueChange={v=>{ if (v === "vibe") setShowVibe(true); else { setShowVibe(false); setActiveSection(v as SectionKey); } }}>
+              <Tabs value={showVibe && targets ? "vibe" : activeSection} onValueChange={v=>{ if (v === "vibe") setShowVibe(true); else { setShowVibe(false); setActiveSection(v as SectionKey); } }}>
                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b border-border bg-transparent p-0">
                   {((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => {
                     const label = sectionName(sec);
@@ -2528,16 +2560,16 @@ function Index() {
                       </TabsTrigger>
                     );
                   })}
-                  {vibe && (
+                  {targets && (
                     <TabsTrigger value="vibe" className="h-auto rounded-none border-b-2 border-transparent px-3 py-2 text-left leading-tight data-[state=active]:border-primary data-[state=active]:bg-sidebar-accent">
                       Vibe
                     </TabsTrigger>
                   )}
                 </TabsList>
-                {vibe && (
+                {targets && (
                   <TabsContent value="vibe">
                     <VibeBreakdown
-                      vibe={vibe}
+                      targets={targets}
                       sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []) as RampSong[] }))}
                       onJump={(sec) => { setShowVibe(false); setActiveSection(sec); }}
                     />
