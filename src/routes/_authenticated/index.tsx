@@ -138,8 +138,10 @@ function HomePage() {
   const filterEntries = (rows: ChartEntry[], skipGenre = false) =>
     (djOnly ? rows.filter(isDanceable) : rows).filter(e => skipGenre || matchesGenre(e));
 
-  const trackRows = dedicated ? filterTracks(genreData?.topTracks ?? []) : filterTracks(chartData?.topTracks ?? []);
-  const artistRows = dedicated ? filterArtists(genreData?.topArtists ?? []) : filterArtists(chartData?.topArtists ?? []);
+  const rawTracks = (dedicated ? genreData?.topTracks : chartData?.topTracks) ?? [];
+  const rawArtists = (dedicated ? genreData?.topArtists : chartData?.topArtists) ?? [];
+  const trackRows = useMemo(() => filterTracks(rawTracks), [rawTracks, djOnly, genre]);
+  const artistRows = useMemo(() => filterArtists(rawArtists), [rawArtists, genre]);
   const listLoading = dedicated ? genreLoading : chartsLoading;
 
   /** Every DJ genre has its own chart; "Other" only appears when it has songs. */
