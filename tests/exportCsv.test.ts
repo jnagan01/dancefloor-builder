@@ -11,20 +11,22 @@ describe("CSV export columns", () => {
     peak: [song('Rihanna, "Robyn"', 'We Found "Love" (Remix)')],
   } as unknown as GenerationResult;
 
+  const lines = (csv: string) => csv.trim().split(/\r?\n/);
+
   it("section CSVs contain exactly the Artist and Song columns", () => {
     for (const section of [result.warmUp, result.transition, result.peak]) {
-      const lines = songsToCsv(section).trim().split("\n");
-      expect(lines[0]).toBe("Artist,Song");
-      expect(lines).toHaveLength(section.length + 1);
+      const rows = lines(songsToCsv(section));
+      expect(rows[0]).toBe("Artist,Song");
+      expect(rows).toHaveLength(section.length + 1);
     }
   });
 
   it("combined CSV contains exactly the Artist and Song columns, sections in order", () => {
-    const lines = combinedCsv(result).trim().split("\n");
-    expect(lines[0]).toBe("Artist,Song");
-    expect(lines).toHaveLength(5); // header + 4 songs, no Section column
-    expect(lines[1]).toContain("Pitbull");
-    expect(lines[4]).toContain("Rihanna");
+    const rows = lines(combinedCsv(result));
+    expect(rows[0]).toBe("Artist,Song");
+    expect(rows).toHaveLength(5); // header + 4 songs, no Section column
+    expect(rows[1]).toContain("Pitbull");
+    expect(rows[4]).toContain("Rihanna");
   });
 
   it("quotes values containing commas or quotes", () => {
