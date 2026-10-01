@@ -2275,7 +2275,7 @@ function Index() {
         {/* Results */}
         {step === 5 && result && (
           <StepPanel
-            eyebrow="Step 5"
+            eyebrow={`Step ${stepNumber(5)}`}
             title="Review & export"
             description="Each CSV exports with exactly two columns: Artist, Song."
           >
