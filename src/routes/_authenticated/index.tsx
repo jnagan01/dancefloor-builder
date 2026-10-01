@@ -161,11 +161,13 @@ function HomePage() {
       <div className="panel px-5 py-5 sm:px-6">
         <h2 className="mb-3 font-display text-lg tracking-tight">Your most played</h2>
         {topPlayed.length ? <ol className="hairline-y text-sm">
-          {topPlayed.map((t, i) => <li key={`${t.filePath}-${i}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 py-2.5">
+          {topPlayed.map((t, i) => <li key={`${t.filePath}-${i}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 py-2.5">
             <span className="w-5 tabular-nums text-muted-foreground">{i + 1}</span>
+            <PlayButton label={t.title ?? "song"} onClick={() => play(t.artist ?? "", t.title ?? "", t.filePath)}/>
             <span className="min-w-0 truncate">{t.artist ? `${t.artist} — ` : ""}{t.title}{t.key ? ` · ${t.key}` : ""}</span>
             <span className="shrink-0 tabular-nums text-xs text-muted-foreground">{(t.playCount ?? 0).toLocaleString()} plays</span>
           </li>)}
+
         </ol> : <p className="py-8 text-sm text-muted-foreground">Connect your VirtualDJ folder in Settings (Mac app) to see real play counts.</p>}
         <Button asChild variant="ghost" size="sm" className="mt-4 rounded-full"><Link to="/library"><Play size={15} className="mr-2"/> Open library</Link></Button>
       </div>
