@@ -144,6 +144,8 @@ interface DirHandleLike {
 function Index() {
   const navigate = useNavigate();
   const { eventId: openedEventId } = Route.useSearch();
+  const openedEventIdRef = useRef(openedEventId);
+  openedEventIdRef.current = openedEventId;
   const workspace = useWorkspace();
   const saveEventFn = useServerFn(saveWorkflow);
   const updateEventFn = useServerFn(updateWorkflow);
