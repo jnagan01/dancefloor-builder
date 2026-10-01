@@ -730,21 +730,77 @@ function Index() {
             return true;
           }).slice(0, 20);
           if (uniqueSeeds.length) {
-            const res = await neighborsFn({
-              data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
-            });
+            // AI cluster and Last.fm crowd data in parallel: the model knows
+            // vibe and context, Last.fm knows what real listeners actually
+            // play together.
+            const [res, crowdRes] = await Promise.all([
+              neighborsFn({
+                data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
+              }),
+              crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }).catch(
+                () => ({ available: false, artists: [] as ArtistCrowd[] }),
+              ),
+            ]);
             const seedKeys = new Set(uniqueSeeds.map((a) => normalizeKey(a)));
             const seenNeighbor = new Set<string>();
-            const ordered: Array<{ name: string; seed: string }> = [];
+            const ordered: Array<{ name: string; seed: string; score: number }> = [];
             for (const c of res.clusters) {
               for (const n of c.neighbors) {
                 const k = normalizeKey(n);
                 if (!k || seedKeys.has(k) || seenNeighbor.has(k)) continue;
                 seenNeighbor.add(k);
-                ordered.push({ name: n, seed: c.artist });
+                // AI agreement is worth a baseline score on its own.
+                ordered.push({ name: n, seed: c.artist, score: 0.5 });
               }
             }
+
+            // Fold in Last.fm's similar artists: boost anyone both sources
+            // agree on, and add listener-backed artists the AI missed.
+            const byKey = new Map(ordered.map((o) => [normalizeKey(o.name), o]));
+            for (const c of crowdRes.artists) {
+              for (const s of c.similar) {
+                const k = normalizeKey(s.name);
+                if (!k || seedKeys.has(k)) continue;
+                const existing = byKey.get(k);
+                if (existing) {
+                  existing.score += s.match;
+                } else {
+                  const entry = { name: s.name, seed: c.name, score: s.match };
+                  ordered.push(entry);
+                  byKey.set(k, entry);
+                  seenNeighbor.add(k);
+                }
+              }
+            }
+            ordered.sort((a, b) => b.score - a.score);
             neighborArtists = ordered.map((n) => n.name).slice(0, 100);
+
+            // Popularity + crowd tags for the seeds and the strongest
+            // neighbours, so the recommender can judge recognition.
+            try {
+              const topNeighbors = neighborArtists.slice(0, 20);
+              const extra = topNeighbors.length
+                ? await crowdFn({
+                    data: { artists: topNeighbors, perArtistSimilar: 0 },
+                  }).catch(() => ({ available: false, artists: [] as ArtistCrowd[] }))
+                : { available: false, artists: [] as ArtistCrowd[] };
+              const seenCrowd = new Set<string>();
+              crowdArtists = [...crowdRes.artists, ...extra.artists]
+                .filter((c) => {
+                  const k = normalizeKey(c.name);
+                  if (!k || seenCrowd.has(k)) return false;
+                  seenCrowd.add(k);
+                  return true;
+                })
+                .slice(0, 60)
+                .map((c) => ({
+                  artist: c.name,
+                  listeners: c.listeners || undefined,
+                  tags: c.tags.slice(0, 6),
+                }));
+            } catch (err) {
+              console.warn("Crowd data unavailable", err);
+            }
 
             // ---- YOUR CRATES FIRST ----------------------------------------
             if (mergedLibrary?.tracks.length && ordered.length) {
