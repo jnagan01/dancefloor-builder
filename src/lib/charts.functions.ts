@@ -396,7 +396,7 @@ function buildConsensusArtists(
     rank: 0,
   }));
   out.sort((a, b) => b.score - a.score || a.artist.localeCompare(b.artist));
-  return out.slice(0, 25).map((a, i) => ({ ...a, rank: i + 1 }));
+  return out.slice(0, 60).map((a, i) => ({ ...a, rank: i + 1 }));
 }
 
 /* --------------------------------------------- artwork + genre back-fill */
