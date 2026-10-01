@@ -176,20 +176,25 @@ function HomePage() {
           <div className="grid gap-8 xl:grid-cols-2">
             <div>
               <h3 className="mb-3 font-display text-base tracking-tight">Top tracks</h3>
-              <ConsensusTrackList rows={filterTracks(chartData?.topTracks ?? [])} loading={chartsLoading} inLibrary={inLibrary} onPlay={play}/>
+              <ConsensusTrackList rows={trackRows} loading={listLoading} inLibrary={inLibrary} onPlay={play}/>
             </div>
             <div>
               <h3 className="mb-3 font-display text-base tracking-tight">Top artists</h3>
-              <ArtistList rows={filterArtists(chartData?.topArtists ?? [])} loading={chartsLoading} onPlay={play}/>
+              <ArtistList rows={artistRows} loading={listLoading} onPlay={play}/>
 
             </div>
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam.</p>
+          <p className="mt-4 text-xs text-muted-foreground">{dedicated
+            ? "The genre's own charts from Apple Music and Last.fm, ranked by agreement."
+            : "Ranked by agreement across Apple Music, Billboard, Last.fm and Shazam."}</p>
         </TabsContent>
 
 
         {platforms.filter(p => p.id !== "all").map(p => <TabsContent key={p.id} value={p.id} className="mt-5">
-          <ChartList rows={filterEntries(perPlatform[p.id] ?? [])} loading={chartsLoading} error={chartData?.errors?.[p.id as ChartSource]} inLibrary={inLibrary} onPlay={play}/>
+          <ChartList rows={filterEntries(perPlatform[p.id] ?? [], dedicatedPlatform(p.id))}
+            loading={dedicatedPlatform(p.id) ? genreLoading : chartsLoading}
+            error={(dedicatedPlatform(p.id) ? genreData?.errors : chartData?.errors)?.[p.id as ChartSource]}
+            inLibrary={inLibrary} onPlay={play}/>
         </TabsContent>)}
       </Tabs>
       {chartData ? <p className="mt-3 text-xs text-muted-foreground">Updated {new Date(chartData.fetchedAt).toLocaleString()}</p> : null}
