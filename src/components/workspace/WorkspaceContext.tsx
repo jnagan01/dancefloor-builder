@@ -129,12 +129,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (isDesktopApp()) await syncVirtualDj(vdjRoot ? vdjDatabaseIn(vdjRoot) : null);
     else await refreshBrowserVdj();
   }
-  function applyVdjXml(xml: string): boolean {
+  function applyVdjXml(xml: string, silent = false): boolean {
     {
       const tracks = parseVdjDatabaseXml(xml);
-      if (!tracks.length) { toast.error("No tracks found in that VirtualDJ database."); return false; }
+      if (!tracks.length) { if (!silent) toast.error("No tracks found in that VirtualDJ database."); return false; }
       const byName = new Map<string, VdjTrack>();
       for (const t of tracks) byName.set(basename(t.filePath), t);
+      vdjInfo.current = byName;
       let matched = 0;
       setSources(prev => prev.map(source => ({
         ...source,
@@ -158,11 +159,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(VDJ_SYNC_KEY, String(at));
       setVdjTrackCount(tracks.length);
       localStorage.setItem(VDJ_COUNT_KEY, String(tracks.length));
-      toast.success(`Synced ${tracks.length.toLocaleString()} VirtualDJ tracks · ${matched.toLocaleString()} matched in your folders`);
+      if (!silent) toast.success(`Synced ${tracks.length.toLocaleString()} VirtualDJ tracks · ${matched.toLocaleString()} matched in your folders`);
       return true;
     }
   }
   const autoScanned = useRef(false);
+  const autoSynced = useRef(false);
+  /** Last known VirtualDJ info by file name, so rescans keep play counts. */
+  const vdjInfo = useRef(new Map<string, VdjTrack>());
   /** relative path / filename → full on-disk path, from native scans. */
   const nativePaths = useRef(new Map<string, string>());
   function indexNativeFiles(scanned: ReadonlyArray<{ name: string; path: string; relativePath: string }>) {
