@@ -55,16 +55,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const root = localStorage.getItem(VDJ_ROOT_KEY) ?? (path ? path.replace(/[\\/]database\.xml$/i, "") : null);
     setVdjRoot(root);
   }, []);
-  async function syncVirtualDj(customPath?: string | null) {
+  async function syncVirtualDj(customPath?: string | null, silent = false) {
     if (!isDesktopApp()) return refreshBrowserVdj();
     setVdjSyncing(true);
     try {
       const result = await readVdjDatabase(customPath ?? vdjPath);
-      if (!result.ok || !result.xml) { toast.error(result.error ?? "Couldn't read the VirtualDJ database."); return false; }
+      if (!result.ok || !result.xml) { if (!silent) toast.error(result.error ?? "Couldn't read the VirtualDJ database."); return false; }
       if (result.path) { setVdjPath(result.path); localStorage.setItem(VDJ_PATH_KEY, result.path); }
-      return applyVdjXml(result.xml);
+      return applyVdjXml(result.xml, silent);
     } catch (e) {
-      toast.error((e as Error).message);
+      if (!silent) toast.error((e as Error).message);
       return false;
     } finally {
       setVdjSyncing(false);
@@ -129,12 +129,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (isDesktopApp()) await syncVirtualDj(vdjRoot ? vdjDatabaseIn(vdjRoot) : null);
     else await refreshBrowserVdj();
   }
-  function applyVdjXml(xml: string): boolean {
+  function applyVdjXml(xml: string, silent = false): boolean {
     {
       const tracks = parseVdjDatabaseXml(xml);
-      if (!tracks.length) { toast.error("No tracks found in that VirtualDJ database."); return false; }
+      if (!tracks.length) { if (!silent) toast.error("No tracks found in that VirtualDJ database."); return false; }
       const byName = new Map<string, VdjTrack>();
       for (const t of tracks) byName.set(basename(t.filePath), t);
+      vdjInfo.current = byName;
       let matched = 0;
       setSources(prev => prev.map(source => ({
         ...source,
@@ -158,11 +159,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(VDJ_SYNC_KEY, String(at));
       setVdjTrackCount(tracks.length);
       localStorage.setItem(VDJ_COUNT_KEY, String(tracks.length));
-      toast.success(`Synced ${tracks.length.toLocaleString()} VirtualDJ tracks · ${matched.toLocaleString()} matched in your folders`);
+      if (!silent) toast.success(`Synced ${tracks.length.toLocaleString()} VirtualDJ tracks · ${matched.toLocaleString()} matched in your folders`);
       return true;
     }
   }
   const autoScanned = useRef(false);
+  const autoSynced = useRef(false);
+  /** Last known VirtualDJ info by file name, so rescans keep play counts. */
+  const vdjInfo = useRef(new Map<string, VdjTrack>());
   /** relative path / filename → full on-disk path, from native scans. */
   const nativePaths = useRef(new Map<string, string>());
   function indexNativeFiles(scanned: ReadonlyArray<{ name: string; path: string; relativePath: string }>) {
@@ -189,15 +193,29 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (userId && !loading) void saveMusicLibrary(sources, userId);
   }, [sources, userId, loading]);
   // Desktop app: silently re-read remembered music folders from disk on launch
-  // so nothing has to be reconnected.
+  // and then re-read VirtualDJ so play counts are there without any manual refresh.
   useEffect(() => {
     if (loading || autoScanned.current || !supportsNativeScan()) return;
     const roots = getFolderRoots();
     if (!sources.some(s => roots[s.label])) return;
     autoScanned.current = true;
-    void rescanNative(true);
+    void (async () => {
+      await rescanNative(true);
+      autoSynced.current = true;
+      const root = localStorage.getItem(VDJ_ROOT_KEY);
+      if (root) await syncVirtualDj(vdjDatabaseIn(root), true);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, sources]);
+  // Desktop app with a saved VirtualDJ folder but no scanned music folders.
+  useEffect(() => {
+    if (loading || autoSynced.current || autoScanned.current || !isDesktopApp()) return;
+    const root = localStorage.getItem(VDJ_ROOT_KEY);
+    if (!root) return;
+    autoSynced.current = true;
+    void syncVirtualDj(vdjDatabaseIn(root), true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
   const library = useMemo(() => sources.length ? mergeLibraries(sources.map(s => buildLibrary(s.tracks))) : null, [sources]);
   async function addFolder() {
     // Desktop app: use the native picker so we learn the folder's real
@@ -243,7 +261,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       updates.set(source.label, tracksFromAudioFiles(asFileLike(result.files)));
     }
     if (updates.size) {
-      setSources(prev => prev.map(s => updates.has(s.label) ? { label: s.label, tracks: updates.get(s.label) ?? s.tracks } : s));
+      setSources(prev => prev.map(s => {
+        const fresh = updates.get(s.label);
+        if (!fresh) return s;
+        // Keep play counts, keys and BPM that came from VirtualDJ — audio tags don't carry them.
+        const known = new Map<string, VdjTrack>();
+        for (const t of s.tracks) known.set(basename(t.filePath), t);
+        return { label: s.label, tracks: fresh.map(t => {
+          const old = known.get(basename(t.filePath)) ?? vdjInfo.current.get(basename(t.filePath));
+          if (!old) return t;
+          return {
+            ...t,
+            playCount: t.playCount ?? old.playCount,
+            lastPlayTime: t.lastPlayTime ?? old.lastPlayTime,
+            key: t.key || old.key,
+            bpm: t.bpm || old.bpm,
+            genre: t.genre || old.genre,
+            year: t.year || old.year,
+          };
+        }) };
+      }));
       const total = [...updates.values()].reduce((n, t) => n + t.length, 0);
       if (!silent) toast.success(`${total.toLocaleString()} tracks re-read from your saved folders`);
     }
@@ -252,7 +289,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
   async function rescan() {
     if (!sources.length) { await addFolder(); return; }
-    if (supportsNativeScan() && (await rescanNative())) return;
+    if (supportsNativeScan() && (await rescanNative())) {
+      const root = localStorage.getItem(VDJ_ROOT_KEY);
+      if (root && isDesktopApp()) await syncVirtualDj(vdjDatabaseIn(root), true);
+      return;
+    }
     if (!files.length) { toast.info("Reconnect a music folder to rescan it."); await addFolder(); return; }
     const available = new Map<string, File[]>();
     for (const file of files) {
