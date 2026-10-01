@@ -37,7 +37,7 @@ const compact = (n?: number) => (n ? Intl.NumberFormat("en", { notation: "compac
 
 
 function HomePage() {
-  const { library, sources, loading } = useWorkspace();
+  const { library, sources, files, loading } = useWorkspace();
   const list = useServerFn(listWorkflows);
   const charts = useServerFn(getTrendingCharts);
   const requested = useServerFn(listMostRequested);
