@@ -2810,6 +2810,13 @@ function SectionView(props: SectionViewProps) {
   const statuses = songs.map((s, i) => matches[songKey(section, i, s)]?.status);
   const matchedCount = statuses.filter((st) => st === "Matched" || st === "Manually Matched").length;
   const reviewCount = statuses.filter((st) => st === "Possible Match" || st === "Multiple Matches").length;
+  const unmatchedCountLive = songs.filter((s, i) => matches[songKey(section, i, s)]?.trackIndex == null).length;
+  const filterCounts: Record<string, number> = {
+    all: songs.length,
+    matched: matchedCount,
+    unmatched: unmatchedCountLive,
+    review: reviewCount,
+  };
   return (
     <div className="space-y-5">
        <div className="flex flex-wrap justify-start gap-2 border-b border-border pb-4">
@@ -2855,10 +2862,18 @@ function SectionView(props: SectionViewProps) {
           {reviewCount > 0 && <> · <span className="text-warning">{reviewCount} review</span></>}
         </span>
         <div className="ml-auto flex flex-wrap gap-1">
-          {[["all","All"],["matched","Matched"],["unmatched","Unmatched"],["review","Review"]].map(([value,label])=>(
-            <Button key={value} size="sm" className={`h-7 rounded-full px-3 text-xs ${filter===value?"":"text-muted-foreground"}`} variant={filter===value?"default":"ghost"} onClick={()=>setFilter(value)}>{label}</Button>
-          ))}
+          {[["all","All"],["matched","Matched"],["unmatched","Unmatched"],["review","Review"]].map(([value,label])=>{
+            const n = filterCounts[value] ?? 0;
+            const active = filter === value;
+            return (
+              <Button key={value} size="sm" className={`h-7 gap-1.5 rounded-full px-3 text-xs ${active?"":"text-muted-foreground"}`} variant={active?"default":"ghost"} onClick={()=>setFilter(value)}>
+                {label}
+                <span className={`rounded-full px-1.5 text-[10px] tabular-nums ${active ? "bg-background/25" : value === "review" && n > 0 ? "bg-warning/15 text-warning" : "bg-muted/60"}`}>{n}</span>
+              </Button>
+            );
+          })}
         </div>
+
         {reviewMode === "most" && <p className="w-full text-xs text-warning">Play counts unavailable for folder-only sources; first result is used.</p>}
       </div>
 
@@ -2870,7 +2885,8 @@ function SectionView(props: SectionViewProps) {
           const m = matches[key];
           const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
           const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
-          if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && (isMatched || !m)) return null;
+          const inReview = m?.status === "Possible Match" || m?.status === "Multiple Matches";
+          if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
           const meta = s as BadgeSong;
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
