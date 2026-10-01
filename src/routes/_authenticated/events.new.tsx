@@ -1540,14 +1540,10 @@ function Index() {
     );
   }
 
+  /** TXT download is a reference set list: every song in the list, library or not. */
   async function exportSectionXml(section: SectionKey) {
-    if (!mergedLibrary) {
-      toast.error("Load a VirtualDJ database first");
-      return;
-    }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    if (!confirmUnmatched(exportResult, section)) return;
     const refs = getSectionRefsForResult(exportResult, section);
     const xml = buildTxtPlaylist(refs, mergedLibrary);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
