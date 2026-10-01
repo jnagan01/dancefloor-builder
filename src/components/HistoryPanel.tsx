@@ -37,6 +37,8 @@ export interface WorkflowSnapshot {
     notes: string;
     doNotPlayInput: string;
     vibe?: string;
+    bpmRange?: [number, number];
+    danceRange?: [number, number];
     expand: boolean;
     buffer?: number;
     listType?: "dance" | "cocktail" | "dinner";

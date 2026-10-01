@@ -23,6 +23,8 @@ const inputsSchema = z.object({
   notes: z.string().max(5000),
   doNotPlayInput: z.string().max(20000),
   vibe: z.string().max(40).optional(),
+  bpmRange: z.tuple([z.number().min(60).max(180), z.number().min(60).max(180)]).refine(([a, b]) => a <= b).optional(),
+  danceRange: z.tuple([z.number().min(1).max(10), z.number().min(1).max(10)]).refine(([a, b]) => a <= b).optional(),
   expand: z.boolean(),
   buffer: z.number().int().min(2).max(4).optional(),
   eventName: z.string().max(200),
