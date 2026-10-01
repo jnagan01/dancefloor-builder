@@ -2,11 +2,15 @@ import { Check } from "lucide-react";
 
 export type StepDef = {
   id: number;
+  /** Number shown in the circle; defaults to `id`. Lets a flow skip a step
+   *  (cocktail/dinner skip song expansion) without gaps in the numbering. */
+  num?: number;
   label: string;
   hint?: string;
   done?: boolean;
   disabled?: boolean;
 };
+
 
 export function StepRail({
   steps,
