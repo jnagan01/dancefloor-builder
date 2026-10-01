@@ -2136,7 +2136,16 @@ function Index() {
         <StepPanel
           eyebrow="Step 3"
           title="Review imported songs"
-          description={`${songs.length} song${songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows`}
+          description={
+            background
+              ? `${songs.length} song${songs.length === 1 ? "" : "s"} imported · ${
+                  songs.length >= bgTarget
+                    ? "every uploaded song is kept in the list"
+                    : `about ${Math.max(0, bgTarget - songs.length)} similar song${bgTarget - songs.length === 1 ? "" : "s"} will be added automatically to cover ${minutesNum} min`
+                }`
+              : `${songs.length} song${songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows`
+          }
+
           actions={
             <>
               {duplicateKeys.size > 0 && (
