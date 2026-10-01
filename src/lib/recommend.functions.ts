@@ -319,7 +319,12 @@ The DJ's favorite artists (${safeFavorites.join(", ")}) have already been mined 
         : "";
 
     const prompt = `You are an expert wedding/party DJ. Suggest ${data.count} real released songs for the "${data.section}" portion of a ${background ? "background playlist (one continuous list)" : "dance floor set"}.
-${background ? "IMPORTANT: Stay closely tied to the client's own uploaded artists, genres and decades — pick songs a guest who likes those would enjoy. Ignore any energy-ramp or dance-floor rules below; keep ONE steady relaxed mood and never suggest explicit songs.\n" : ""}
+${background ? "IMPORTANT: Ignore any energy-ramp or dance-floor rules below; keep ONE steady relaxed mood and never suggest explicit songs.\n" : ""}
+CLIENT FIT (top priority): Every pick must be the closest possible match to the client's uploaded songs listed under "Already in the set" (their sound, style and era), AND to the client's requested artists (${safeArtists.join(", ") || "none given"}), genres (${safeGenres.join(", ") || "infer from uploads"}) and decades (${safeDecades.join(", ") || "infer from uploads"}).
+- Decades are a HARD constraint when given: only suggest songs released in those decades.
+- Genres are a strong constraint when given: stay inside them or their closest sub-genres.
+- Prefer songs a guest who loves the uploaded songs would instantly recognize as belonging with them.
+
 Section targets: ${sectionGuide[data.section]}
 ${onlyBrief}${neighborBrief}${crowdBrief}${gapBrief}
 
