@@ -2579,7 +2579,7 @@ function Index() {
                   <TabsContent value="vibe">
                     <VibeBreakdown
                       targets={targets}
-                      sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: (result[sec] ?? []) as RampSong[] }))}
+                      sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: withFileBpm(sec, result[sec] ?? []) }))}
                       onJump={(sec) => { setShowVibe(false); setActiveSection(sec); }}
                     />
                   </TabsContent>
