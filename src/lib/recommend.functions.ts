@@ -316,7 +316,7 @@ The DJ's favorite artists (${safeFavorites.join(", ")}) have already been mined 
     const prompt = `You are an expert wedding/party DJ. Suggest ${data.count} real released songs for the "${data.section}" portion of a dance floor set.
 
 Section targets: ${sectionGuide[data.section]}
-${onlyBrief}${neighborBrief}${gapBrief}
+${onlyBrief}${neighborBrief}${crowdBrief}${gapBrief}
 
 
 
