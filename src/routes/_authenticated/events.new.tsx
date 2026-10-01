@@ -1783,14 +1783,23 @@ function Index() {
   useEffect(() => {
     if (result) setStep(5);
   }, [result]);
+  // Cocktail / dinner lists never use the manual song-expansion step — the
+  // engine fills any time gap on its own. Bounce off it if we ever land there.
+  useEffect(() => {
+    if (background && step === 4) setStep(3);
+  }, [background, step]);
 
+  // Step 4 (song expansion) only exists for dance floor lists.
+  const lastInputStep = background ? 3 : 4;
   const stepDefs: StepDef[] = [
     { id: 1, label: background ? bgLabel : "Dance floor", hint: background ? (minutesNum > 0 ? `${minutesNum} min` : "Set the length") : hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && (background ? minutesNum > 0 : hoursNum > 0)) },
     { id: 2, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
     { id: 3, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
-    { id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result },
-    { id: 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
+    ...(background ? [] : [{ id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result }]),
+    { id: 5, num: background ? 4 : 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
   ];
+  const stepNumber = (id: number) => stepDefs.find((s) => s.id === id)?.num ?? id;
+
 
   return (
     <div className="min-h-dvh bg-background">
@@ -2127,7 +2136,16 @@ function Index() {
         <StepPanel
           eyebrow="Step 3"
           title="Review imported songs"
-          description={`${songs.length} song${songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows`}
+          description={
+            background
+              ? `${songs.length} song${songs.length === 1 ? "" : "s"} imported · ${
+                  songs.length >= bgTarget
+                    ? "every uploaded song is kept in the list"
+                    : `about ${Math.max(0, bgTarget - songs.length)} similar song${bgTarget - songs.length === 1 ? "" : "s"} will be added automatically to cover ${minutesNum} min`
+                }`
+              : `${songs.length} song${songs.length === 1 ? "" : "s"} imported · edit, add, or remove rows`
+          }
+
           actions={
             <>
               {duplicateKeys.size > 0 && (
@@ -2219,8 +2237,9 @@ function Index() {
         )}
 
 
-        {/* Step 4 */}
-        {step === 4 && (
+        {/* Step 4 — dance floor only; cocktail/dinner fill the gap automatically */}
+        {step === 4 && !background && (
+
         <StepPanel
           eyebrow="Step 4"
           title="Song expansion"
@@ -2265,7 +2284,7 @@ function Index() {
         {/* Results */}
         {step === 5 && result && (
           <StepPanel
-            eyebrow="Step 5"
+            eyebrow={`Step ${stepNumber(5)}`}
             title="Review & export"
             description="Each CSV exports with exactly two columns: Artist, Song."
           >
@@ -2415,7 +2434,7 @@ function Index() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setStep((s) => Math.max(1, s - 1))}
+            onClick={() => setStep((s) => (background && s === 5 ? 3 : Math.max(1, s - 1)))}
             disabled={step === 1}
           >
             <ChevronLeft className="mr-1 h-4 w-4" /> Back
@@ -2428,7 +2447,7 @@ function Index() {
               : "Set the dance floor length to see song targets"}
           </p>
           <div className="flex shrink-0 items-center gap-2">
-            {step < 4 && (
+            {step < lastInputStep && (
               <Button
                 size="sm"
                 onClick={() => {
@@ -2439,11 +2458,16 @@ function Index() {
                 Continue <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             )}
-            {step === 4 && (
+            {step === lastInputStep && (
               <Button size="sm" className="glow-gold" onClick={generate} disabled={isGenerating}>
-                {isGenerating ? "Generating with AI…" : "Generate dance floor lists"}
+                {isGenerating
+                  ? "Generating with AI…"
+                  : background
+                    ? `Generate ${bgLabel.toLowerCase()} playlist`
+                    : "Generate dance floor lists"}
               </Button>
             )}
+
             {step === 5 && (
               <>
                 <Button size="sm" variant="outline" onClick={generate} disabled={isGenerating}>
