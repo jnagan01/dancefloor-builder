@@ -20,13 +20,24 @@ function LibraryPage() {
   const [columnsOpen, setColumnsOpen] = useState(false);
   const [editing, setEditing] = useState<{source:number;index:number}|null>(null);
   const [playing, setPlaying] = useState<{artist:string; song:string; filePath:string}|null>(null);
-  const [sortPlays, setSortPlays] = useState(false);
-  const rows = useMemo(() => {
+  const [sort, setSort] = useState<{key:"Title"|"Artist"|"Plays"; dir:"asc"|"desc"}>({key:"Title", dir:"asc"});
+  const [perPage, setPerPage] = useState<number>(100);
+  const [page, setPage] = useState(1);
+  const filtered = useMemo(() => {
     const all = sources.flatMap((s, si) => s.tracks.map((t, ti) => ({t, si, ti})))
       .filter(({t}) => `${t.artist} ${t.title} ${t.filePath} ${resolveExportPath(t.filePath) ?? ""}`.toLowerCase().includes(query.toLowerCase()));
-    if (sortPlays) all.sort((a, b) => (b.t.playCount ?? -1) - (a.t.playCount ?? -1));
-    return all.slice(0, 300);
-  }, [sources, query, sortPlays]);
+    const mul = sort.dir === "asc" ? 1 : -1;
+    all.sort((a, b) => sort.key === "Plays"
+      ? ((a.t.playCount ?? -1) - (b.t.playCount ?? -1)) * mul
+      : (a.t[sort.key === "Artist" ? "artist" : "title"] ?? "").localeCompare(b.t[sort.key === "Artist" ? "artist" : "title"] ?? "", undefined, {sensitivity:"base"}) * mul);
+    return all;
+  }, [sources, query, sort]);
+  const pageSize = perPage === 0 ? Math.max(filtered.length, 1) : perPage;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const rows = useMemo(() => filtered.slice((safePage - 1) * pageSize, safePage * pageSize), [filtered, safePage, pageSize]);
+  const toggleSort = (key:"Title"|"Artist"|"Plays") => { setSort(s => s.key === key ? {key, dir: s.dir === "asc" ? "desc" : "asc"} : {key, dir: key === "Plays" ? "desc" : "asc"}); setPage(1); };
+  const arrow = (key:"Title"|"Artist"|"Plays") => sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : "";
   const current = editing ? sources[editing.source]?.tracks[editing.index] : null;
   const resolveFile = (q:{filePath?:string}) => files.find(f => (f.webkitRelativePath || f.name) === q.filePath || f.name === q.filePath?.split("/").pop());
   return <div className="space-y-5 pb-20">
