@@ -35,6 +35,7 @@ export type EnrichSource =
   | "ReccoBeats+MusicBrainz"
   | "ReccoBeats"
   | "MusicBrainz"
+  | "AI"
   | "cache"
   | "none";
 
@@ -118,33 +119,57 @@ interface ReccoBeatsFeatures {
   camelot?: string;
 }
 
+/**
+ * Strip version/feature noise so ReccoBeats' title-only search can hit.
+ * "Yeah! (feat. Lil Jon) [Clean Radio Edit]" → "Yeah!"
+ */
+export function cleanTitleForSearch(song: string): string {
+  return song
+    .replace(/\s*[([][^)\]]*[)\]]/g, " ")
+    .replace(/\s+(feat\.?|ft\.?|featuring|with)\s+.*$/i, " ")
+    .replace(/\s+-\s+.*(edit|mix|version|remaster|remastered|clean|dirty|live|intro|extended).*$/i, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+type RbItem = {
+  id?: string;
+  trackTitle?: string;
+  artists?: Array<{ name?: string }>;
+  popularity?: number;
+};
+
+async function searchReccoBeats(text: string, page = 0): Promise<RbItem[]> {
+  const q = encodeURIComponent(text);
+  const res = await fetchWithTimeout(
+    `https://api.reccobeats.com/v1/track/search?searchText=${q}&size=25&page=${page}`,
+    { headers: { Accept: "application/json" } },
+  );
+  if (!res.ok) return [];
+  const json = (await res.json()) as { content?: RbItem[] };
+  return json.content ?? [];
+}
+
 async function fetchReccoBeats(
   artist: string,
   song: string,
 ): Promise<ReccoBeatsFeatures | null> {
   try {
-    const q = encodeURIComponent(`${song} ${artist}`.trim());
-    const searchRes = await fetchWithTimeout(
-      `https://api.reccobeats.com/v1/track/search?searchText=${q}&limit=10`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (!searchRes.ok) return null;
-    const searchJson = (await searchRes.json()) as {
-      content?: Array<{
-        id?: string;
-        trackTitle?: string;
-        artists?: Array<{ name?: string }>;
-        popularity?: number;
-      }>;
+    // ReccoBeats indexes titles only — never send "title artist".
+    const clean = cleanTitleForSearch(song) || song.trim();
+    const wantTitle = normalizeKey(clean);
+    const primaryArtist = artist.split(/\s*(?:,|&| x | feat\.?| ft\.?| featuring| and )\s*/i)[0] || artist;
+    const pick = (items: RbItem[]) => {
+      const byArtist = items.filter((it) =>
+        (it.artists ?? []).some((a) => a?.name && (artistLooseMatch(a.name, artist) || artistLooseMatch(a.name, primaryArtist))),
+      );
+      return (
+        byArtist.find((it) => normalizeKey(cleanTitleForSearch(it.trackTitle ?? "")) === wantTitle) ??
+        byArtist[0]
+      );
     };
-    const items = searchJson.content ?? [];
-    // Pick the first result whose artist matches loosely.
-    const match = items.find((it) => {
-      const artistNames = (it.artists ?? [])
-        .map((a) => a?.name ?? "")
-        .filter(Boolean);
-      return artistNames.some((n) => artistLooseMatch(n, artist));
-    });
+    let match = pick(await searchReccoBeats(clean, 0));
+    if (!match) match = pick(await searchReccoBeats(clean, 1));
     if (!match?.id) return null;
 
     const featRes = await fetchWithTimeout(
@@ -237,6 +262,72 @@ async function fetchMusicBrainz(
   }
 }
 
+interface AiEstimate {
+  energy?: number;
+  danceability?: number;
+  valence?: number;
+  bpm?: number;
+  genre?: string;
+  year?: number;
+}
+
+/**
+ * Fallback acoustic profiler: one batched AI call estimating 1–10 Energy,
+ * Danceability and Valence for songs no catalog covers. Returns one entry
+ * per input (null when the model skipped it). Failures return all-null.
+ */
+async function estimateWithAi(
+  songs: Array<{ artist: string; song: string; genre?: string; year?: number; bpm?: number }>,
+): Promise<Array<AiEstimate | null>> {
+  const out: Array<AiEstimate | null> = songs.map(() => null);
+  const key = process.env.LOVABLE_API_KEY;
+  if (!key || !songs.length) return out;
+  try {
+    const { streamText } = await import("ai");
+    const { createLovableAiGatewayProvider } = await import("./ai-gateway.server");
+    const gateway = createLovableAiGatewayProvider(key);
+    const clean = (s: string) => s.replace(/[\u0000-\u001F<>]/g, " ").slice(0, 150);
+    const lines = songs
+      .map((s, i) => `${i}. ${clean(s.artist)} — ${clean(s.song)}${s.genre ? ` | genre: ${clean(s.genre)}` : ""}${s.year ? ` | ${s.year}` : ""}${s.bpm ? ` | ${s.bpm} BPM` : ""}`)
+      .join("\n");
+    const prompt = `You are a DJ audio analyst. For each song, estimate Spotify-style audio features on a 1-10 integer scale: energy, danceability, valence (musical positivity). Also give bpm (integer), a short genre, and release year if you know them. Base it on your knowledge of the actual recording.
+Return ONLY JSON: {"items":[{"i":0,"energy":7,"danceability":8,"valence":6,"bpm":120,"genre":"Pop","year":2004}, ...]} with one item per song.
+
+${lines}`;
+    const result = streamText({
+      model: gateway("openai/gpt-6-astra"),
+      prompt,
+      providerOptions: { lovable: { reasoningEffort: "low" } },
+    });
+    const text = await result.text;
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start < 0 || end <= start) return out;
+    const parsed = JSON.parse(text.slice(start, end + 1)) as { items?: Array<Record<string, unknown>> };
+    const score = (v: unknown) =>
+      typeof v === "number" && Number.isFinite(v)
+        ? v <= 1 ? toScore10(v) : Math.max(1, Math.min(10, Math.round(v)))
+        : undefined;
+    for (const it of parsed.items ?? []) {
+      const i = typeof it.i === "number" ? it.i : -1;
+      if (i < 0 || i >= songs.length) continue;
+      const bpm = typeof it.bpm === "number" && it.bpm > 40 && it.bpm < 250 ? Math.round(it.bpm) : undefined;
+      const year = typeof it.year === "number" && it.year >= 1900 && it.year <= 2099 ? Math.round(it.year) : undefined;
+      out[i] = {
+        energy: score(it.energy),
+        danceability: score(it.danceability),
+        valence: score(it.valence),
+        bpm,
+        genre: typeof it.genre === "string" ? it.genre.slice(0, 60) : undefined,
+        year,
+      };
+    }
+  } catch (err) {
+    console.warn("[enrichSongs] AI estimate failed", err);
+  }
+  return out;
+}
+
 function pickSource(
   hasFeatures: boolean,
   hasMb: boolean,
@@ -300,7 +391,15 @@ export const enrichSongs = createServerFn({ method: "POST" })
       }
     }
 
-    // 2) Determine misses (unique per normalized key).
+    // 2) Determine misses (unique per normalized key). Cache rows without
+    //    energy/danceability are partial hits — re-fetch to upgrade them.
+    const partial = new Map<string, EnrichedSong>();
+    for (const [k, c] of cache) {
+      if (c.energy == null || c.danceability == null) {
+        partial.set(k, c);
+        cache.delete(k);
+      }
+    }
     const missSet = new Set<string>();
     const missOrder: Query[] = [];
     for (const q of queries) {
@@ -313,10 +412,6 @@ export const enrichSongs = createServerFn({ method: "POST" })
     }
 
     // 3) Fetch misses with a bounded worker pool and an overall deadline.
-    //    Previously this ran strictly sequentially with a 1.1s spacer, so a
-    //    single 200-song batch cost 220s+. Providers tolerate modest
-    //    concurrency; anything that fails or runs past the deadline simply
-    //    falls back to VirtualDJ/heuristic data on the caller side.
     const fetched = new Map<string, EnrichedSong>();
     const deadline = Date.now() + FETCH_BUDGET_MS;
     let cursor = 0;
@@ -326,32 +421,70 @@ export const enrichSongs = createServerFn({ method: "POST" })
         if (i >= missOrder.length) return;
         if (Date.now() > deadline) return;
         const q = missOrder[i];
+        const k = `${q.artistKey}\u0000${q.songKey}`;
+        const prev = partial.get(k);
         const [reco, mb] = await Promise.all([
           fetchReccoBeats(q.original.artist, q.original.song),
-          fetchMusicBrainz(q.original.artist, q.original.song),
+          prev && (prev.genre || prev.year)
+            ? Promise.resolve({ genre: prev.genre, year: prev.year } as MusicBrainzInfo)
+            : fetchMusicBrainz(q.original.artist, q.original.song),
         ]);
-        fetched.set(`${q.artistKey}\u0000${q.songKey}`, {
+        fetched.set(k, {
           artist: q.original.artist,
           song: q.original.song,
           energy: reco?.energy,
           danceability: reco?.danceability,
           valence: reco?.valence,
-          popularity: reco?.popularity,
-          bpm: reco?.bpm,
-          camelot: reco?.camelot,
+          popularity: reco?.popularity ?? prev?.popularity,
+          bpm: reco?.bpm ?? prev?.bpm,
+          camelot: reco?.camelot ?? prev?.camelot,
           genre: mb?.genre,
           year: mb?.year,
-          source: pickSource(!!reco, !!mb),
+          source: pickSource(reco?.energy != null, !!(mb?.genre || mb?.year)),
         });
       }
     };
     await Promise.all(
       Array.from({ length: Math.min(FETCH_CONCURRENCY, missOrder.length) }, worker),
     );
-    if (fetched.size < missOrder.length) {
-      console.warn(
-        `[enrichSongs] enriched ${fetched.size}/${missOrder.length} misses before budget (${FETCH_BUDGET_MS}ms)`,
+    // Anything the budget skipped keeps its partial cache data.
+    for (const q of missOrder) {
+      const k = `${q.artistKey}\u0000${q.songKey}`;
+      const prev = partial.get(k);
+      if (!fetched.has(k) && prev) {
+        fetched.set(k, { ...prev, artist: q.original.artist, song: q.original.song, source: "MusicBrainz" });
+      }
+    }
+
+    // 3b) AI acoustic estimate for anything still missing energy/danceability.
+    const needAi = missOrder
+      .map((q) => ({ q, k: `${q.artistKey}\u0000${q.songKey}` }))
+      .filter(({ k }) => {
+        const e = fetched.get(k);
+        return !e || e.energy == null || e.danceability == null;
+      });
+    if (needAi.length) {
+      const est = await estimateWithAi(
+        needAi.map(({ q, k }) => {
+          const e = fetched.get(k);
+          return { artist: q.original.artist, song: q.original.song, genre: e?.genre, year: e?.year, bpm: e?.bpm };
+        }),
       );
+      needAi.forEach(({ q, k }, idx) => {
+        const a = est[idx];
+        if (!a) return;
+        const e = fetched.get(k) ?? { artist: q.original.artist, song: q.original.song, source: "none" as const };
+        fetched.set(k, {
+          ...e,
+          energy: e.energy ?? a.energy,
+          danceability: e.danceability ?? a.danceability,
+          valence: e.valence ?? a.valence,
+          bpm: e.bpm ?? a.bpm,
+          genre: e.genre ?? a.genre,
+          year: e.year ?? a.year,
+          source: e.source === "none" || e.source === "MusicBrainz" ? "AI" : e.source,
+        });
+      });
     }
 
     // 4) Upsert successful fetches into the cache (service role bypasses RLS).

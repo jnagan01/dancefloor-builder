@@ -1209,6 +1209,38 @@ function Index() {
       }
     }
 
+    // Final pass: any song still missing Energy/Danceability (library
+    // top-ups, crate picks, misses) gets looked up online, with the AI
+    // estimate as the server-side fallback, so every card shows metrics.
+    {
+      const missing: ResultSong[] = [];
+      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
+        for (const s of r[k]) if (s.energy == null || s.danceability == null) missing.push(s);
+      });
+      if (missing.length) {
+        const extra = await enrichBatch(missing);
+        (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
+          r[k] = r[k].map((s) => {
+            if (s.energy != null && s.danceability != null) return s;
+            const e = extra.get(`${s.artist}||${s.song}`);
+            if (!e || e.source === "none") return s;
+            return {
+              ...s,
+              energy: s.energy ?? e.energy,
+              danceability: s.danceability ?? e.danceability,
+              valence: s.valence ?? e.valence,
+              popularity: s.popularity ?? e.popularity,
+              bpm: s.bpm ?? e.bpm,
+              camelot: s.camelot ?? e.camelot,
+              genre: s.genre ?? e.genre,
+              year: s.year ?? e.year,
+            };
+          });
+        });
+      }
+    }
+
+
     // A newer generate() (or a workflow reset) started while we were awaiting
     // AI/enrichment — drop this stale result instead of clobbering state.
     if (genTokenRef.current !== myToken) return;
