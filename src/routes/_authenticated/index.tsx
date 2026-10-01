@@ -8,7 +8,18 @@ import { getTrendingCharts, type ChartEntry, type ChartSource, type ConsensusTra
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
+import type { PreviewTarget } from "@/components/PreviewPlayer";
 import { pageHead } from "@/lib/pageHead";
+
+/** Small round play button shown over artwork and on list rows. */
+function PlayButton({ onClick, label, className = "" }: { onClick: () => void; label: string; className?: string }) {
+  return <button type="button" aria-label={`Play ${label}`} title={`Play ${label}`} onClick={onClick}
+    className={`grid size-7 shrink-0 place-items-center rounded-full bg-primary/90 text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${className}`}>
+    <Play size={13} className="translate-x-px"/>
+  </button>;
+}
+
 
 export const Route = createFileRoute("/_authenticated/")({
   component: HomePage,
