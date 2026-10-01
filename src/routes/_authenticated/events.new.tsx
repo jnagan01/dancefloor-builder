@@ -710,6 +710,7 @@ function Index() {
         // asked for, then look through the DJ's own library for songs by those
         // neighbours BEFORE the AI invents anything.
         let neighborArtists: string[] = [];
+        let crowdArtists: Array<{ artist: string; listeners?: number; tags: string[] }> = [];
         try {
           const seedCounts = new Map<string, number>();
           for (const s of uniqueSongs) {
