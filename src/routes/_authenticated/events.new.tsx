@@ -622,10 +622,14 @@ function Index() {
   },[result,matches,songs,hours,artistsInput,genresInput,decades,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
 
   async function generate() {
-    if (!songs.length) {
-      toast.error("Upload at least one song first");
+    // No uploads is fine as long as the client gave artists, genres or decades —
+    // the whole list is then built by the recommender.
+    const noUploads = !songs.some((x) => x.artist.trim() && x.song.trim());
+    if (noUploads && !artistsInput.trim() && !genresInput.trim() && decades.length === 0) {
+      toast.error("Upload songs or enter some artists, genres or decades first");
       return;
     }
+    const fill = expand || noUploads;
     if (background ? minutesNum <= 0 : hoursNum <= 0) {
       toast.error(background ? "Enter how many minutes the list should cover" : "Enter a valid dance floor length");
       return;
@@ -726,7 +730,7 @@ function Index() {
       );
     });
 
-    if (expand || background) {
+    if (fill || background) {
       {
         type FillLabel = "Warm Up" | "Transition" | "Peak" | "Cocktail Hour" | "Dinner";
         const gapSection = (l: FillLabel) => (l === "Cocktail Hour" || l === "Dinner" ? "Warm Up" : l);
@@ -1204,7 +1208,7 @@ function Index() {
       r = collapseBackground({ ...r, warmUp: merged });
     } else {
       r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [] });
-      if (expand && r.finalShortfall && r.finalShortfall.total > 0) {
+      if (fill && r.finalShortfall && r.finalShortfall.total > 0) {
         r = topUpSectionsFromLibrary(r, prefs);
       }
     }
@@ -1907,7 +1911,7 @@ function Index() {
   const lastInputStep = background ? 3 : 4;
   const stepDefs: StepDef[] = [
     { id: 1, label: background ? bgLabel : "Dance floor", hint: background ? (minutesNum > 0 ? `${minutesNum} min` : "Set the length") : hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && (background ? minutesNum > 0 : hoursNum > 0)) },
-    { id: 2, label: "Upload lists", hint: "CSV or TXT", done: songs.length > 0 },
+    { id: 2, label: "Upload lists", hint: "Optional · CSV or TXT", done: songs.length > 0 },
     { id: 3, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
     ...(background ? [] : [{ id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result }]),
     { id: 5, num: background ? 4 : 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
