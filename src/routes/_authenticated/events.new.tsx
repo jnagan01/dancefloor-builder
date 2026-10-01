@@ -180,6 +180,7 @@ function Index() {
   const [isGenerating, setIsGenerating] = useState(false);
   const recommendFn = useServerFn(recommendSongsForSection);
   const neighborsFn = useServerFn(getArtistNeighbors);
+  const crowdFn = useServerFn(getArtistCrowdData);
   const enrichFn = useServerFn(enrichSongs);
   const [dragOver, setDragOver] = useState(false);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
