@@ -1939,6 +1939,14 @@ function Index() {
   ];
   const stepNumber = (id: number) => stepDefs.find((s) => s.id === id)?.num ?? id;
 
+  // Resolve each song's BPM against its matched music file so the flow chart,
+  // vibe breakdown, and track cards all show the file's real BPM, not a guess.
+  const withFileBpm = (sec: SectionKey, songs: Song[]): RampSong[] =>
+    songs.map((s, i) => {
+      const ti = matches[songKey(sec, i, s)]?.trackIndex;
+      const fileBpm = ti != null ? parseBpm(mergedLibrary.tracks[ti]?.bpm) : undefined;
+      return { ...s, bpm: fileBpm ?? s.bpm } as RampSong;
+    });
 
   return (
     <div className="min-h-dvh bg-background">
