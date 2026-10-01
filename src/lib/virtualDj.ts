@@ -540,20 +540,30 @@ export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary, roots: Record
   return lines.join("\r\n") + "\r\n";
 }
 
-/** Plain-text set list: numbered "Artist - Title", extras indented, unmatched flagged. */
-export function buildTxtPlaylist(items: ExportSongRef[], lib?: VdjLibrary): string {
+/**
+ * Plain-text set list: numbered "Artist - Title", extras indented.
+ * `matchedOnly` drops songs with no library match (used for DJ-software exports);
+ * otherwise unmatched songs are kept and flagged "(not in library)".
+ */
+export function buildTxtPlaylist(
+  items: ExportSongRef[],
+  lib?: VdjLibrary,
+  opts: { matchedOnly?: boolean } = {},
+): string {
   const lines: string[] = [];
   let n = 0;
   for (const item of items) {
     if (item.match?.excludedFromVdj) continue;
-    n += 1;
     const label = `${item.song.artist ? `${item.song.artist} - ` : ""}${item.song.song}`;
     const ti = item.match?.trackIndex;
     const main = ti != null && lib ? lib.tracks[ti] : undefined;
     if (!main) {
+      if (opts.matchedOnly) continue;
+      n += 1;
       lines.push(`${n}. ${label} (not in library)`);
       continue;
     }
+    n += 1;
     lines.push(`${n}. ${main.artist ? `${main.artist} - ` : ""}${main.title}`);
     for (const ei of item.match?.extraTrackIndices ?? []) {
       const t = lib?.tracks[ei];
@@ -561,6 +571,17 @@ export function buildTxtPlaylist(items: ExportSongRef[], lib?: VdjLibrary): stri
     }
   }
   return lines.join("\r\n") + "\r\n";
+}
+
+/** Count of songs in a list that resolve to a real library track (what DJ software receives). */
+export function countMatchedForExport(items: ExportSongRef[], lib?: VdjLibrary): number {
+  let n = 0;
+  for (const item of items) {
+    if (item.match?.excludedFromVdj) continue;
+    const ti = item.match?.trackIndex;
+    if (ti != null && lib && lib.tracks[ti]) n += 1;
+  }
+  return n;
 }
 
 // --- File System Access helpers ---
