@@ -3142,7 +3142,7 @@ function SectionView(props: SectionViewProps) {
 
               {expanded.has(key) && (
                 <div className="border-b border-border bg-muted/20 px-3 py-2">
-                  <MetricsDetail song={meta} />
+                  <MetricsDetail song={meta} fileBpm={fileBpm} />
                 </div>
               )}
 
