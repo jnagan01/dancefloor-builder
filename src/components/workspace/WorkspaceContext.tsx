@@ -247,7 +247,26 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       updates.set(source.label, tracksFromAudioFiles(asFileLike(result.files)));
     }
     if (updates.size) {
-      setSources(prev => prev.map(s => updates.has(s.label) ? { label: s.label, tracks: updates.get(s.label) ?? s.tracks } : s));
+      setSources(prev => prev.map(s => {
+        const fresh = updates.get(s.label);
+        if (!fresh) return s;
+        // Keep play counts, keys and BPM that came from VirtualDJ — audio tags don't carry them.
+        const known = new Map<string, VdjTrack>();
+        for (const t of s.tracks) known.set(basename(t.filePath), t);
+        return { label: s.label, tracks: fresh.map(t => {
+          const old = known.get(basename(t.filePath)) ?? vdjInfo.current.get(basename(t.filePath));
+          if (!old) return t;
+          return {
+            ...t,
+            playCount: t.playCount ?? old.playCount,
+            lastPlayTime: t.lastPlayTime ?? old.lastPlayTime,
+            key: t.key || old.key,
+            bpm: t.bpm || old.bpm,
+            genre: t.genre || old.genre,
+            year: t.year || old.year,
+          };
+        }) };
+      }));
       const total = [...updates.values()].reduce((n, t) => n + t.length, 0);
       if (!silent) toast.success(`${total.toLocaleString()} tracks re-read from your saved folders`);
     }
