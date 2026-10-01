@@ -155,6 +155,8 @@ function Index() {
   const [buffer, setBuffer] = useState(2);
   const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
   const [spotifyLink, setSpotifyLink] = useState("");
+  const [spotifyBusy, setSpotifyBusy] = useState(false);
+  const spotifyImportFn = useServerFn(importSpotifyPlaylist);
   const [matchLimit, setMatchLimit] = useState(10);
   const [matcherOn, setMatcherOn] = useState(true);
   const [software, setSoftware] = useState("VirtualDJ");
