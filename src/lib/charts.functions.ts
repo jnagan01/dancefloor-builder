@@ -29,12 +29,35 @@ export type ChartEntry = {
 
 export type SourceRank = { source: ChartSource; rank: number };
 
+/** Broad DJ-facing genre buckets the raw chart metadata is folded into. */
+export type DjGenre =
+  | "pop"
+  | "hiphop"
+  | "dance"
+  | "rnb"
+  | "country"
+  | "latin"
+  | "rock"
+  | "other";
+
+export const DJ_GENRES: Array<{ id: DjGenre; label: string }> = [
+  { id: "pop", label: "Pop" },
+  { id: "hiphop", label: "Hip-Hop / Rap" },
+  { id: "dance", label: "Dance / EDM" },
+  { id: "rnb", label: "R&B / Soul" },
+  { id: "country", label: "Country" },
+  { id: "latin", label: "Latin" },
+  { id: "rock", label: "Rock / Alt" },
+  { id: "other", label: "Other" },
+];
+
 export type ConsensusTrack = {
   rank: number;
   title: string;
   artist: string;
   artwork?: string;
   genre?: string;
+  djGenre?: DjGenre;
   score: number;
   sources: SourceRank[];
 };
@@ -43,12 +66,15 @@ export type ConsensusArtist = {
   rank: number;
   artist: string;
   artwork?: string;
+  genre?: string;
+  djGenre?: DjGenre;
   score: number;
   hits: number;
   topTrack?: string;
   listeners?: number;
   sources: ChartSource[];
 };
+
 
 export type ChartsResult = {
   apple: ChartEntry[];
