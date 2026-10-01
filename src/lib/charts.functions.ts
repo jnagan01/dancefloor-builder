@@ -313,7 +313,9 @@ function buildConsensusTracks(all: ChartEntry[][]): ConsensusTrack[] {
   });
 
   scored.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
-  return scored.slice(0, 40).map((t, i) => ({ ...t, rank: i + 1 }));
+  // Deeper than the 15 shown, so each genre filter still has a full list.
+  return scored.slice(0, 90).map((t, i) => ({ ...t, rank: i + 1 }));
+
 }
 
 function buildConsensusArtists(
