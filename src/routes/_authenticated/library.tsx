@@ -1,6 +1,6 @@
 import { TrackTagEditor } from "@/components/workspace/TrackTagEditor";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { Button } from "@/components/ui/button";
@@ -24,22 +24,38 @@ function LibraryPage() {
   const [sort, setSort] = useState<{key:"Title"|"Artist"|"Plays"; dir:"asc"|"desc"}>({key:"Title", dir:"asc"});
   const [perPage, setPerPage] = useState<number>(100);
   const [page, setPage] = useState(1);
+  const deferredQuery = useDeferredValue(query);
   const filtered = useMemo(() => {
+    const needle = deferredQuery.trim().toLowerCase();
     const all = sources.flatMap((s, si) => s.tracks.map((t, ti) => ({t, si, ti})))
-      .filter(({t}) => `${t.artist} ${t.title} ${t.filePath} ${resolveExportPath(t.filePath) ?? ""}`.toLowerCase().includes(query.toLowerCase()));
+      .filter(({t}) => !needle || `${t.artist} ${t.title} ${t.filePath} ${resolveExportPath(t.filePath) ?? ""}`.toLowerCase().includes(needle));
     const mul = sort.dir === "asc" ? 1 : -1;
     all.sort((a, b) => sort.key === "Plays"
       ? ((a.t.playCount ?? -1) - (b.t.playCount ?? -1)) * mul
       : (a.t[sort.key === "Artist" ? "artist" : "title"] ?? "").localeCompare(b.t[sort.key === "Artist" ? "artist" : "title"] ?? "", undefined, {sensitivity:"base"}) * mul);
     return all;
-  }, [sources, query, sort]);
+  }, [sources, deferredQuery, sort]);
   const pageSize = perPage === 0 ? Math.max(filtered.length, 1) : perPage;
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, pageCount);
   const rows = useMemo(() => filtered.slice((safePage - 1) * pageSize, safePage * pageSize), [filtered, safePage, pageSize]);
   const toggleSort = (key:"Title"|"Artist"|"Plays") => { setSort(s => s.key === key ? {key, dir: s.dir === "asc" ? "desc" : "asc"} : {key, dir: key === "Plays" ? "desc" : "asc"}); setPage(1); };
   const arrow = (key:"Title"|"Artist"|"Plays") => sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : "";
-  const resolveFile = (q:{filePath?:string}) => files.find(f => (f.webkitRelativePath || f.name) === q.filePath || f.name === q.filePath?.split("/").pop());
+  const fileIndex = useMemo(() => {
+    const byPath = new Map<string, File>();
+    const byName = new Map<string, File>();
+    for (const f of files) {
+      const p = f.webkitRelativePath || f.name;
+      if (!byPath.has(p)) byPath.set(p, f);
+      if (!byName.has(f.name)) byName.set(f.name, f);
+    }
+    return { byPath, byName };
+  }, [files]);
+  const resolveFile = (q:{filePath?:string}) => {
+    if (!q.filePath) return undefined;
+    const base = q.filePath.split("/").pop();
+    return fileIndex.byPath.get(q.filePath) ?? (base ? fileIndex.byName.get(base) : undefined);
+  };
   return <div className="space-y-5 pb-20">
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4 border-b border-border pb-5">
       <div className="min-w-0"><p className="text-xs font-semibold uppercase text-primary">Music collection</p><h1 className="mt-2 font-display text-2xl sm:text-3xl">Library</h1></div>

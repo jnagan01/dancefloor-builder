@@ -67,9 +67,20 @@ function HomePage() {
   const [playing, setPlaying] = useState<PreviewTarget | null>(null);
 
   /** Finds a connected local file so charts play the real song when owned. */
+  const fileIndex = useMemo(() => {
+    const byPath = new Map<string, File>();
+    const byName = new Map<string, File>();
+    for (const f of files) {
+      const p = f.webkitRelativePath || f.name;
+      if (!byPath.has(p)) byPath.set(p, f);
+      if (!byName.has(f.name)) byName.set(f.name, f);
+    }
+    return { byPath, byName };
+  }, [files]);
   const resolveFile = (q: { artist?: string; title?: string; filePath?: string }) => {
     if (q.filePath) {
-      const direct = files.find(f => (f.webkitRelativePath || f.name) === q.filePath || f.name === q.filePath!.split("/").pop());
+      const base = q.filePath.split("/").pop();
+      const direct = fileIndex.byPath.get(q.filePath) ?? (base ? fileIndex.byName.get(base) : undefined);
       if (direct) return direct;
     }
     if (!q.title) return undefined;
@@ -98,8 +109,8 @@ function HomePage() {
 
 
   const eventSongs = events.reduce((n, e) => n + e.counts.warmUp + e.counts.transition + e.counts.peak, 0);
-  const topPlayed = sources.flatMap(s => s.tracks).filter(t => (t.playCount ?? 0) > 0)
-    .sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0)).slice(0, 8);
+  const topPlayed = useMemo(() => sources.flatMap(s => s.tracks).filter(t => (t.playCount ?? 0) > 0)
+    .sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0)).slice(0, 8), [sources]);
 
   const platforms = [
     { id: "all", label: "All platforms" },
@@ -127,8 +138,10 @@ function HomePage() {
   const filterEntries = (rows: ChartEntry[], skipGenre = false) =>
     (djOnly ? rows.filter(isDanceable) : rows).filter(e => skipGenre || matchesGenre(e));
 
-  const trackRows = dedicated ? filterTracks(genreData?.topTracks ?? []) : filterTracks(chartData?.topTracks ?? []);
-  const artistRows = dedicated ? filterArtists(genreData?.topArtists ?? []) : filterArtists(chartData?.topArtists ?? []);
+  const rawTracks = (dedicated ? genreData?.topTracks : chartData?.topTracks) ?? [];
+  const rawArtists = (dedicated ? genreData?.topArtists : chartData?.topArtists) ?? [];
+  const trackRows = useMemo(() => filterTracks(rawTracks), [rawTracks, djOnly, genre]);
+  const artistRows = useMemo(() => filterArtists(rawArtists), [rawArtists, genre]);
   const listLoading = dedicated ? genreLoading : chartsLoading;
 
   /** Every DJ genre has its own chart; "Other" only appears when it has songs. */
