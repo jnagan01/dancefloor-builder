@@ -204,18 +204,32 @@ function HomePage() {
 
 }
 
-function ChartList({ rows, loading, error, inLibrary }: { rows: ChartEntry[]; loading: boolean; error?: string; inLibrary: (e: ChartEntry) => boolean }) {
+type PlayFn = (artist: string, song: string, filePath?: string) => void;
+
+/** Artwork thumbnail with a play overlay on hover. */
+function Art({ src, round, onPlay, label }: { src?: string; round?: boolean; onPlay: () => void; label: string }) {
+  const shape = round ? "rounded-full" : "rounded-lg";
+  return <span className="relative block size-11 shrink-0">
+    {src
+      ? <img src={src} alt="" loading="lazy" className={`size-11 object-cover ${shape}`}/>
+      : <span className={`grid size-11 place-items-center bg-muted/60 ${shape}`}><Music2 className="size-4 text-muted-foreground"/></span>}
+    <button type="button" aria-label={`Play ${label}`} title={`Play ${label}`} onClick={onPlay}
+      className={`absolute inset-0 grid place-items-center bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${shape}`}>
+      <Play size={15} className="translate-x-px"/>
+    </button>
+  </span>;
+}
+
+function ChartList({ rows, loading, error, inLibrary, onPlay }: { rows: ChartEntry[]; loading: boolean; error?: string; inLibrary: (e: ChartEntry) => boolean; onPlay: PlayFn }) {
   if (loading) return <p className="py-8 text-sm text-muted-foreground">Loading the latest chart…</p>;
   if (error) return <p className="py-8 text-sm text-muted-foreground">{error}</p>;
   if (!rows.length) return <p className="py-8 text-sm text-muted-foreground">No tracks to show right now.</p>;
   return <ol className="grid gap-1 sm:grid-cols-2">
     {rows.slice(0, 40).map(e => {
       const owned = inLibrary(e);
-      return <li key={`${e.source}-${e.rank}-${e.title}`} className="grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-accent/30">
+      return <li key={`${e.source}-${e.rank}-${e.title}`} className="group grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 py-2 transition-colors hover:bg-accent/30">
         <span className="w-6 text-right tabular-nums text-sm text-muted-foreground">{e.rank}</span>
-        {e.artwork
-          ? <img src={e.artwork} alt="" loading="lazy" className="size-10 rounded-lg object-cover"/>
-          : <span className="grid size-10 place-items-center rounded-lg bg-muted/60"><Music2 className="size-4 text-muted-foreground"/></span>}
+        <Art src={e.artwork} label={e.title} onPlay={() => onPlay(e.artist, e.title)}/>
         <span className="min-w-0">
           <span className="block truncate text-sm font-medium">{e.title}</span>
           <span className="block truncate text-xs text-muted-foreground">{e.artist}{e.genre ? ` · ${e.genre}` : ""}</span>
@@ -228,6 +242,7 @@ function ChartList({ rows, loading, error, inLibrary }: { rows: ChartEntry[]; lo
     })}
   </ol>;
 }
+
 
 function SourcePills({ sources }: { sources: { source: ChartSource; rank: number }[] }) {
   return <span className="flex flex-wrap items-center gap-1">
