@@ -36,6 +36,9 @@ function formatTime(iso: string) {
 
 export async function logAppError(entry: LoggedError): Promise<void> {
   try {
+    // Visitors closing a tab or refreshing mid-request are not app failures.
+    const CLIENT_ABORT = /^(aborted|AbortError|The operation was aborted|.*ECONNRESET.*|socket hang up|.*client (disconnected|closed).*)$/i;
+    if (CLIENT_ABORT.test(String(entry.message ?? "")) || /abortIncoming|socketOnClose/.test(entry.stack ?? "")) return;
     const severity: ErrorSeverity = entry.severity ?? "minor";
     const category = (entry.category ?? "runtime").slice(0, 60);
     const message = String(entry.message ?? "Unknown error").slice(0, MAX_MESSAGE);
