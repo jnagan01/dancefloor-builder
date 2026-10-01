@@ -460,6 +460,29 @@ export function classifyGenre(raw?: string): DjGenre {
   return "other";
 }
 
+/** Fills genre/artwork on raw platform entries that the consensus pass missed. */
+async function backfillEntries(feeds: ChartEntry[][]): Promise<void> {
+  const jobs: Array<() => Promise<void>> = [];
+  for (const feed of feeds)
+    for (const e of feed.slice(0, 60)) {
+      if (e.genre) continue;
+      jobs.push(async () => {
+        const meta = await itunesMeta(`${primaryArtist(e.artist)} ${e.title}`, "song");
+        if (!e.artwork) e.artwork = meta.url;
+        if (!e.genre) e.genre = meta.genre;
+      });
+    }
+  const workers = Array.from({ length: Math.min(8, jobs.length) }, async () => {
+    for (;;) {
+      const job = jobs.shift();
+      if (!job) return;
+      await job();
+    }
+  });
+  await Promise.all(workers);
+}
+
+
 async function backfillMeta(
   tracks: ConsensusTrack[],
   artists: ConsensusArtist[],
