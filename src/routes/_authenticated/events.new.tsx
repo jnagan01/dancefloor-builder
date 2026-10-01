@@ -2759,6 +2759,8 @@ interface SectionViewProps {
   onExportPdf: () => void;
   onExportXml: () => void;
   onExportM3u: () => void;
+  onExportSpotify: () => void;
+
   onExportXmlToVdj: () => void;
   onExportM3uToVdj: () => void;
   canWriteToVdj: boolean;
