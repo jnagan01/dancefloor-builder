@@ -28,6 +28,10 @@ export interface VdjTrack {
   year?: string;
   decade?: string;
   remix?: string;
+  album?: string;
+  comment?: string;
+  /** True when artist/title came from the file's own tags (desktop app scan). */
+  fromTags?: boolean;
   playCount?: number;
   lastPlayTime?: string;
 }
@@ -202,6 +206,11 @@ export interface FileLike {
   name: string;
   size?: number;
   webkitRelativePath?: string;
+  tags?: AudioFileTags | null;
+}
+export interface AudioFileTags {
+  title?: string; artist?: string; album?: string; genre?: string;
+  year?: string; bpm?: string; key?: string; comment?: string;
 }
 export function tracksFromAudioFiles(files: ReadonlyArray<FileLike>): VdjTrack[] {
   const out: VdjTrack[] = [];
@@ -216,13 +225,28 @@ export function tracksFromAudioFiles(files: ReadonlyArray<FileLike>): VdjTrack[]
       artist = parts[0].trim();
       title = parts.slice(1).join(" - ").trim();
     }
+    const tg = f.tags ?? null;
+    const fromTags = Boolean(tg && (tg.title || tg.artist));
+    if (tg?.title) title = tg.title;
+    if (tg?.artist) artist = tg.artist;
     const { remix } = stripRemix(title);
+    const year = tg?.year || undefined;
     out.push({
       filePath: rel,
       fileSize: typeof f.size === "number" ? String(f.size) : undefined,
       artist,
       title,
       remix,
+      ...(tg ? {
+        album: tg.album || undefined,
+        genre: tg.genre || undefined,
+        year,
+        decade: year && /^\d{4}$/.test(year) ? `${year.slice(0, 3)}0s` : undefined,
+        bpm: tg.bpm || undefined,
+        key: tg.key || undefined,
+        comment: tg.comment || undefined,
+        fromTags,
+      } : {}),
     });
   }
   return out;

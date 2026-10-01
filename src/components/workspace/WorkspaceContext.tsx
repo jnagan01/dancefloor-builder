@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { supabase } from "@/integrations/supabase/client";
 import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
 import { loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
-import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle, supportsNativeScan, scanNativeFolder, chooseNativeMusicFolder, readNativeAudioFile } from "@/lib/desktopBridge";
+import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle, supportsNativeScan, scanNativeFolder, chooseNativeMusicFolder, readNativeAudioFile, writeNativeTags } from "@/lib/desktopBridge";
 import { pickDirectoryHandle } from "@/lib/virtualDj";
 import { saveDirHandle, saveDirHandleMeta, loadDirHandle, verifyReadWrite, type AnyHandle } from "@/lib/dirHandleStore";
 import { toast } from "sonner";
@@ -14,6 +14,8 @@ type Workspace = {
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
   /** Loads a remembered file from disk (desktop app) so it can be played. */
   ensureLocalFile: (filePath?: string) => Promise<File | null>;
+  /** Writes edited details into the actual music file (desktop app). */
+  saveTrackTags: (source: number, index: number, patch: Partial<VdjTrack>) => Promise<{ ok: boolean; error?: string }>;
   vdjSyncedAt: number | null; vdjPath: string | null; vdjSyncing: boolean;
   syncVirtualDj: (customPath?: string | null) => Promise<boolean>;
   vdjRoot: string | null; vdjTrackCount: number | null;
@@ -31,8 +33,8 @@ export const VDJ_PATH_KEY = "dancefloor:vdjDatabasePath";
 export const VDJ_SYNC_KEY = "dancefloor:vdjSyncedAt";
 const basename = (p: string) => (p.split(/[\\/]/).pop() ?? p).toLowerCase();
 /** Native scan entries → the shape the track indexer expects. */
-const asFileLike = (files: ReadonlyArray<{ name: string; size?: number; relativePath: string }>) =>
-  files.map(f => ({ name: f.name, size: f.size, webkitRelativePath: f.relativePath }));
+const asFileLike = (files: ReadonlyArray<{ name: string; size?: number; relativePath: string; tags?: import("@/lib/virtualDj").AudioFileTags | null }>) =>
+  files.map(f => ({ name: f.name, size: f.size, webkitRelativePath: f.relativePath, tags: f.tags }));
 const Context = createContext<Workspace | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [sources, setSources] = useState<Source[]>([]);
@@ -307,6 +309,27 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
    * Desktop app: pull a remembered track off disk on demand so it plays
    * without the folder having to be reconnected.
    */
+  async function saveTrackTags(source: number, index: number, patch: Partial<VdjTrack>) {
+    const track = sources[source]?.tracks[index];
+    if (!track) return { ok: false, error: "Song not found." };
+    const full = nativePaths.current.get(track.filePath.toLowerCase()) ?? nativePaths.current.get(basename(track.filePath));
+    if (!full) return { ok: false, error: "Rescan this music folder in the Mac app first." };
+    const fields = ["title", "artist", "album", "genre", "year", "bpm", "key", "comment"] as const;
+    const tags: Record<string, string> = {};
+    for (const k of fields) if (patch[k] !== undefined) tags[k] = String(patch[k] ?? "");
+    const res = await writeNativeTags(full, tags);
+    if (!res.ok) return { ok: false, error: res.error };
+    const t = res.tags ?? {};
+    const year = t.year || undefined;
+    setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((tr, ti) => ti === index ? {
+      ...tr,
+      title: t.title || tr.title, artist: t.artist || tr.artist,
+      album: t.album || undefined, genre: t.genre || undefined, year,
+      decade: year && /^\d{4}$/.test(year) ? `${year.slice(0, 3)}0s` : tr.decade,
+      bpm: t.bpm || undefined, key: t.key || undefined, comment: t.comment || undefined, fromTags: true,
+    } : tr) } : s));
+    return { ok: true };
+  }
   async function ensureLocalFile(filePath?: string): Promise<File | null> {
     if (!filePath) return null;
     const existing = files.find(f => (f.webkitRelativePath || f.name) === filePath || f.name === filePath.split(/[\\/]/).pop());
@@ -327,7 +350,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     });
     setFiles(prev => [...prev.filter(f => f.name !== file.name), file]);
   }
-  return <Context.Provider value={{ sources, files, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ sources, files, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);
