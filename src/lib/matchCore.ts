@@ -20,7 +20,7 @@ const NOISE_RE =
 
 // DJ record-pool / download-site tags that pollute file names and tags.
 const DJ_POOL_RE =
-  /\b(dms|bpm\s*supreme|djcity|dj\s*city|digital\s*dj\s*pool|ddp|mp3\s*pool|club\s*killers|crooklyn\s*clan|zip\s*dj|beatport|traxsource|barbangerz|hood\s*pool|franchise|heavy\s*hits|direct\s*music\s*service|promo\s*only|ultimix|xmix|x\s*mix|dj\s*tools?|quick\s*hit|snipz|dirty|intro|outro|short\s*edit|hype\s*intro|clap\s*intro|transition|redrum|\d{2,3}\s*bpm|[1-9]{1,2}[ab]|\d{1,2}\s*(?:a|b)\s*-?\s*(?:minor|major)?|320\s*kbps|kbps)\b/g;
+  /\b(dms|bpm\s*supreme|djcity|dj\s*city|digital\s*dj\s*pool|ddp|mp3\s*pool|club\s*killers|crooklyn\s*clan|zip\s*dj|barbangerz|hood\s*pool|heavy\s*hits|direct\s*music\s*service|promo\s*only|ultimix|x\s*mix|dj\s*tools?|quick\s*hit|snipz|redrum|\d{2,3}\s*bpm|320\s*kbps|kbps)\b/g;
 
 /** Aggressive normalization for matching. Memoized, bounded. */
 export function normalizeText(input: string): string {

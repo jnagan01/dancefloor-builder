@@ -51,6 +51,7 @@ import {
   type SongMatch,
   type MatchStatus,
   type ExportSongRef,
+  findTrackForPickedFile,
 } from "@/lib/virtualDj";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
