@@ -1454,6 +1454,30 @@ function Index() {
     setMatches((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
+  // Edit a song's title/artist in place; carries its file match over to the new key.
+  function renameSong(section: SectionKey, idx: number, next: { artist: string; song: string }) {
+    if (!result) return;
+    const old = result[section]?.[idx];
+    if (!old) return;
+    const artist = next.artist.trim(), song = next.song.trim();
+    if (!artist && !song) return;
+    if (artist === old.artist && song === old.song) return;
+    const updated = { ...old, artist, song };
+    const oldKey = songKey(section, idx, old);
+    const newKey = songKey(section, idx, updated);
+    const list = [...result[section]];
+    list[idx] = updated;
+    setResult({ ...result, [section]: list });
+    if (oldKey !== newKey) {
+      setMatches((prev) => {
+        if (!prev[oldKey]) return prev;
+        const copy = { ...prev, [newKey]: prev[oldKey] };
+        delete copy[oldKey];
+        return copy;
+      });
+    }
+  }
+
   function confirmMatch(key: string) {
     const m = matches[key];
     if (!m || m.trackIndex == null) return;
@@ -2658,6 +2682,7 @@ function Index() {
                       onConfirm={confirmMatch}
                       onChoose={chooseAlternative}
                       onMarkUnresolved={markUnresolved}
+                      onRename={(idx, next) => renameSong(sec, idx, next)}
                       onToggleExclude={toggleExclude}
                        onToggleExtra={toggleExtraPick}
                        matchLimit={matchLimit}
