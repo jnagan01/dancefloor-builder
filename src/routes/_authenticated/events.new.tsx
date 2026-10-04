@@ -33,7 +33,7 @@ import {
   mergeLibraries,
   matchSong,
   searchLibrary,
-  searchLibraryScored,
+  searchLibraryScored, searchLibraryBySong,
 
   buildTxtPlaylist,
   buildM3u,
