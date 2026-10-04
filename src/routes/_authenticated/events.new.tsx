@@ -1634,13 +1634,17 @@ function Index() {
   }
 
   function exportSectionM3u(section: SectionKey) {
-    if (!mergedLibrary) {
+    if (!mergedLibrary.tracks.length) {
       toast.error("Load a VirtualDJ database first");
       return;
     }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
     const refs = getSectionRefsForResult(exportResult, section);
+    if (countMatchedForExport(refs, mergedLibrary) === 0) {
+      toast.error("No songs in this list are matched to your music files yet — nothing to export");
+      return;
+    }
     const m3u = buildM3u(refs, mergedLibrary);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
@@ -1664,12 +1668,16 @@ function Index() {
 
   /** Direct-to-VirtualDJ set list: matched songs only, so VirtualDJ only sees playable files. */
   async function exportSectionXmlToVdj(section: SectionKey) {
-    if (!mergedLibrary) {
+    if (!mergedLibrary.tracks.length) {
       toast.error("Load a VirtualDJ database first");
       return;
     }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
+    if (countMatchedForExport(getSectionRefsForResult(exportResult, section), mergedLibrary) === 0) {
+      toast.error("No songs in this list are matched to your music files yet — nothing to export");
+      return;
+    }
     if (!confirmUnmatched(exportResult, section)) return;
     const dir = await ensureExportFolder();
     if (!dir) {
@@ -1690,7 +1698,7 @@ function Index() {
   }
 
   async function exportSectionM3uToVdj(section: SectionKey) {
-    if (!mergedLibrary) {
+    if (!mergedLibrary.tracks.length) {
       toast.error("Load a VirtualDJ database first");
       return;
     }
@@ -1702,6 +1710,10 @@ function Index() {
       return;
     }
     const refs = getSectionRefsForResult(exportResult, section);
+    if (countMatchedForExport(refs, mergedLibrary) === 0) {
+      toast.error("No songs in this list are matched to your music files yet — nothing to export");
+      return;
+    }
     const m3u = buildM3u(refs, mergedLibrary);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
@@ -1728,8 +1740,8 @@ function Index() {
   async function exportAllToVdj() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    if (!mergedLibrary) {
-      toast.error("Load a VirtualDJ database first");
+    if (!mergedLibrary.tracks.length) {
+      toast.error("Load a VirtualDJ database first — no music files are connected");
       return;
     }
     const dir = await ensureExportFolder();
@@ -1747,15 +1759,19 @@ function Index() {
     for (const section of sections) {
       const list = exportResult[section];
       if (!list.length) continue;
-      // DJ software only receives playlists of songs matched to real files.
       const refs = getSectionRefsForResult(exportResult, section);
       const matched = countMatchedForExport(refs, mergedLibrary);
       matchedTotal += matched;
       skippedTotal += refs.length - matched;
       unresolvedTotal += countUnresolvedPaths(refs, mergedLibrary);
+      // The .txt is a full reference list; the .m3u DJ playlist only carries
+      // songs matched to real files — and is never written when empty.
       const files: Array<{ name: string; data: string }> = [
-        { name: `${prefix}${sectionFile(section)}.m3u`, data: buildM3u(refs, mergedLibrary) },
+        { name: `${prefix}${sectionFile(section)}.txt`, data: buildTxtPlaylist(refs, mergedLibrary) },
       ];
+      if (matched > 0) {
+        files.unshift({ name: `${prefix}${sectionFile(section)}.m3u`, data: buildM3u(refs, mergedLibrary) });
+      }
       for (const f of files) {
         try {
           await writeFileToDir(dir, f.name, f.data);
@@ -1766,14 +1782,20 @@ function Index() {
       }
     }
     warnUnresolvedPaths(unresolvedTotal);
-    if (failed === 0) {
-      toast.success(
-        `Saved ${written} playlist${written === 1 ? "" : "s"} with ${matchedTotal} matched song${matchedTotal === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}` +
-          (skippedTotal > 0 ? ` — ${skippedTotal} unmatched left out` : ""),
-      );
-    } else {
+    if (failed > 0) {
       toast.error(`Saved ${written}, failed ${failed}. Check folder permissions.`);
+      return;
     }
+    if (matchedTotal === 0) {
+      toast.warning(
+        `Saved reference list${written === 1 ? "" : "s"} only — no songs are matched to music files, so no DJ playlists were written. Load a VirtualDJ database or match songs in Review & Export first.`,
+      );
+      return;
+    }
+    toast.success(
+      `Saved ${written} playlist${written === 1 ? "" : "s"} with ${matchedTotal} matched song${matchedTotal === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}` +
+        (skippedTotal > 0 ? ` — ${skippedTotal} unmatched left out` : ""),
+    );
   }
 
   async function exportAllZip() {
