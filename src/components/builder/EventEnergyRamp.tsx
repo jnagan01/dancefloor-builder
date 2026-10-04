@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { vibeFit, type Targets } from "@/lib/vibes";
+import { keyCompatibility, toCamelot } from "@/lib/musicTheory";
 
 export type RampSong = {
   song: string;
@@ -8,6 +9,7 @@ export type RampSong = {
   danceability?: number;
   bpm?: number;
   key?: string;
+  camelot?: string;
 };
 export type RampSection<K extends string> = { key: K; label: string; songs: RampSong[] };
 
@@ -42,7 +44,9 @@ export function EventEnergyRamp<K extends string>({
   sections,
   onSelect,
   targets,
+  homeKey,
 }: {
+  homeKey?: string;
   sections: RampSection<K>[];
   targets?: Targets | null;
   onSelect?: (section: K, index: number) => void;
@@ -82,6 +86,13 @@ export function EventEnergyRamp<K extends string>({
   const v = targets ?? null;
   const fits = v ? flat.map((f) => vibeFit(f.song, v, f.sec as "warmUp")).filter((r) => r !== "unknown") : [];
   const fit = v && fits.length ? Math.round((fits.filter((r) => r === "inside").length / fits.length) * 100) : null;
+  const keyOf = (t: RampSong) => toCamelot(t.key) ?? toCamelot(t.camelot);
+  const pair = flat.map((f, i) => (i === 0 ? undefined : keyCompatibility(keyOf(flat[i - 1].song), keyOf(f.song))));
+  const pairVals = pair.filter((v): v is number => v != null);
+  const harmony = pairVals.length ? Math.round(pairVals.reduce((a, b) => a + b, 0) / pairVals.length) : null;
+  const clashes = pair.filter((v) => v != null && v < 50).length;
+  const homeVals = homeKey ? flat.map((f) => keyCompatibility(homeKey, keyOf(f.song))).filter((v): v is number => v != null) : [];
+  const homeFit = homeVals.length ? Math.round((homeVals.filter((v) => v >= 85).length / homeVals.length) * 100) : null;
   if (n === 0) return null;
   const h = hover != null ? flat[hover] : null;
   const toggles = [
@@ -96,6 +107,10 @@ export function EventEnergyRamp<K extends string>({
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Event flow</h3>
           {v && <p className="text-xs text-foreground">{v.label ? `Vibe: ${v.label}` : "Custom targets"}{v.energy ? ` · energy ${v.energy[0]}–${v.energy[1]}` : ""}{v.bpm ? ` · ${v.bpm[0]}–${v.bpm[1]} BPM` : ""}{v.dance ? ` · dance ${v.dance[0]}–${v.dance[1]}` : ""}{fit != null ? ` · ${fit}% of songs on target` : ""}</p>}
+          <p className="text-xs text-foreground">
+            Key harmony: {harmony != null ? `${harmony}/100 · ${clashes} key clash${clashes === 1 ? "" : "es"}` : "no key data yet"}
+            {homeKey ? ` · Home key ${homeKey}${homeFit != null ? ` · ${homeFit}% in or next to it` : ""}` : ""}
+          </p>
           <p className="text-xs text-muted-foreground">{n} songs · Energy & danceability (1–10, left) · BPM ({BPM_MIN}–{BPM_MAX}, right)</p>
         </div>
         <div className="flex gap-1.5">
@@ -157,6 +172,9 @@ export function EventEnergyRamp<K extends string>({
         )}
         {show.dance && <path d={path(dPts)} fill="none" stroke="var(--info)" strokeWidth={2} strokeDasharray="6 4" vectorEffect="non-scaling-stroke" />}
         {show.bpm && <path d={path(bPts)} fill="none" stroke="var(--success)" strokeWidth={1.5} strokeOpacity={0.85} vectorEffect="non-scaling-stroke" />}
+        {pair.map((v, i) => v != null && v < 50 ? (
+          <rect key={`k${i}`} x={x(i) - 2} y={H - PAD.b + 4} width={4} height={6} fill="var(--destructive)" fillOpacity={v === 0 ? 0.9 : 0.5}><title>Key clash into song #{i + 1}</title></rect>
+        ) : null)}
         {hover != null && (
           <line x1={x(hover)} x2={x(hover)} y1={PAD.t} y2={H - PAD.b} stroke="var(--foreground)" strokeOpacity={0.4} vectorEffect="non-scaling-stroke" />
         )}
@@ -176,7 +194,7 @@ export function EventEnergyRamp<K extends string>({
       <div className="mt-2 min-h-[1.25rem] text-xs text-muted-foreground">
         {h ? (
           <span>
-            <span className="text-foreground">#{(hover ?? 0) + 1} {h.song.song}</span> — {h.song.artist} · Energy {h.song.energy ?? "—"} · Dance {h.song.danceability ?? "—"} · {h.song.bpm ? `${Math.round(h.song.bpm)} BPM` : "— BPM"}{h.song.key ? ` · ${h.song.key}` : ""}
+            <span className="text-foreground">#{(hover ?? 0) + 1} {h.song.song}</span> — {h.song.artist} · Energy {h.song.energy ?? "—"} · Dance {h.song.danceability ?? "—"} · {h.song.bpm ? `${Math.round(h.song.bpm)} BPM` : "— BPM"}{keyOf(h.song) ? ` · Key ${keyOf(h.song)}` : ""}{hover && pair[hover] != null ? ` · mix from previous ${pair[hover]}/100` : ""}
             {onSelect ? " · click to open" : ""}
           </span>
         ) : (
