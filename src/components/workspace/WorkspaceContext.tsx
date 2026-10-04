@@ -10,7 +10,7 @@ import { toast } from "sonner";
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
   sources: Source[]; files: File[]; library: VdjLibrary | null; loading: boolean;
-  addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => void;
+  addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => string;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
   /** Loads a remembered file from disk (desktop app) so it can be played. */
   ensureLocalFile: (filePath?: string) => Promise<File | null>;
