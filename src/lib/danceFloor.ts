@@ -781,9 +781,18 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
 
 export function generateLists(input: GenerationInput): GenerationResult {
   const { uploaded, prefs, hours, expand } = input;
-  const validUploaded = uploaded.filter((s) => s.artist && s.song);
+  // Every uploaded song is kept regardless of settings: only rows with no
+  // title at all are skipped, a missing artist becomes "Unknown Artist", and
+  // Do Not Play never removes a client's own upload (it only filters fillers).
+  const validUploaded = uploaded
+    .filter((s) => (s.song ?? "").trim() || (s.artist ?? "").trim())
+    .map((s) => ({
+      ...s,
+      artist: (s.artist ?? "").trim() || "Unknown Artist",
+      song: (s.song ?? "").trim() || (s.artist ?? "").trim(),
+    }));
   const dedupedUploaded = dedupeSongs(validUploaded);
-  const cleanUploaded = dedupedUploaded.filter((s) => !isBlocked(s.artist, s.song, prefs.doNotPlay));
+  const cleanUploaded = dedupedUploaded;
 
   const duplicatesRemoved = validUploaded.length - dedupedUploaded.length;
   const blockedCount = dedupedUploaded.length - cleanUploaded.length;
@@ -811,7 +820,11 @@ export function generateLists(input: GenerationInput): GenerationResult {
 
   const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
   const perSectionBase = Math.ceil(totalSongsNeeded / 3);
-  const perSectionTarget = Math.ceil(perSectionBase * (input.buffer ?? SECTION_BUFFER));
+  // Grow sections so all uploads fit evenly instead of piling into one section.
+  const perSectionTarget = Math.max(
+    Math.ceil(perSectionBase * (input.buffer ?? SECTION_BUFFER)),
+    Math.ceil(cleanUploaded.length / 3),
+  );
 
   // Shortfall is computed from uploads only (before expansion fills the gap),
   // so the UI can warn when expansion is OFF.
@@ -1070,7 +1083,8 @@ export function reorderForEnergyProgression(
   opts: { favoriteArtists?: string[] } = {},
 ): GenerationResult {
   const favoriteArtists = opts.favoriteArtists ?? [];
-  const target = result.perSectionTarget;
+  const uploadCount = [...result.warmUp, ...result.transition, ...result.peak].filter((s) => s.fromUpload).length;
+  const target = Math.max(result.perSectionTarget, Math.ceil(uploadCount / 3));
   const all: ResultSong[] = [
     ...result.warmUp.map((s) => ({ ...s })),
     ...result.transition.map((s) => ({ ...s })),

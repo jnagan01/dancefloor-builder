@@ -257,3 +257,26 @@ describe("uploads are never dropped by transition trimming", () => {
     }
   });
 });
+
+describe("uploads always kept", () => {
+  it("keeps uploads on the Do Not Play list and rows missing an artist", async () => {
+    const { generateLists, reorderForEnergyProgression } = await import("../src/lib/danceFloor");
+    const uploaded = [
+      { artist: "Blocked Band", song: "Song A" },
+      { artist: "", song: "Lonely Title" },
+      ...Array.from({ length: 58 }, (_, i) => ({ artist: `Artist ${i}`, song: `Track ${i}` })),
+    ];
+    const base = generateLists({
+      uploaded,
+      prefs: { genres: [], decades: [], artists: [], notes: "", doNotPlay: ["Blocked Band"] } as never,
+      hours: 1,
+      expand: false,
+    } as never);
+    const r = reorderForEnergyProgression(base);
+    const all = [...r.warmUp, ...r.transition, ...r.peak];
+    expect(all.length).toBe(60);
+    expect(all.some((s) => s.artist === "Blocked Band")).toBe(true);
+    expect(all.some((s) => s.song === "Lonely Title")).toBe(true);
+    expect(Math.max(r.warmUp.length, r.transition.length, r.peak.length)).toBeLessThanOrEqual(30);
+  });
+});
