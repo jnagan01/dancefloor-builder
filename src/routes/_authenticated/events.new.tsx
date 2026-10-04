@@ -3015,6 +3015,7 @@ interface SectionViewProps {
   onConfirm: (key: string) => void;
   onChoose: (key: string, trackIndex: number) => void;
   onMarkUnresolved: (key: string) => void;
+  onRename?: (idx: number, next: { artist: string; song: string }) => void;
   onToggleExclude: (key: string) => void;
   onToggleExtra: (key: string, trackIndex: number) => void;
   onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
@@ -3031,6 +3032,18 @@ function SectionView(props: SectionViewProps) {
   const sectionLabel = props.labelOverride ?? (section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter,setFilter] = useState("all");
+  // In-progress Title/Artist edits per card; they drive the file search live
+  // and are saved to the list when the field loses focus or Enter is pressed.
+  const [drafts, setDrafts] = useState<Record<string, Song>>({});
+  const setDraft = (key: string, s: Song, patch: Partial<Song>) =>
+    setDrafts((prev) => ({ ...prev, [key]: { ...(prev[key] ?? s), ...patch } }));
+  const cancelDraft = (key: string) =>
+    setDrafts((prev) => { const c = { ...prev }; delete c[key]; return c; });
+  const commitDraft = (key: string, idx: number) => {
+    const d = drafts[key];
+    if (d) props.onRename?.(idx, { artist: d.artist, song: d.song });
+    cancelDraft(key);
+  };
   const toggleExpanded = (key: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -3148,12 +3161,28 @@ function SectionView(props: SectionViewProps) {
                 <div className="hairline-y min-w-0">
                   <div className="px-3 py-1.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Title</p>
-                    <p className="break-words font-display text-base leading-tight">{s.song}</p>
+                    <input
+                      value={(drafts[key] ?? s).song}
+                      onChange={(e) => setDraft(key, s, { song: e.target.value })}
+                      onBlur={() => commitDraft(key, i)}
+                      onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { cancelDraft(key); } }}
+                      aria-label="Title"
+                      title="Edit title — also searches your music files"
+                      className="w-full rounded-md border border-transparent bg-transparent px-1 -mx-1 font-display text-base leading-tight outline-none hover:border-border focus:border-primary/60 focus:bg-background"
+                    />
                   </div>
                   <div className="px-3 py-1.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Artist</p>
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="break-words text-sm leading-tight">{s.artist}</p>
+                      <input
+                        value={(drafts[key] ?? s).artist}
+                        onChange={(e) => setDraft(key, s, { artist: e.target.value })}
+                        onBlur={() => commitDraft(key, i)}
+                        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") { cancelDraft(key); } }}
+                        aria-label="Artist"
+                        title="Edit artist — also searches your music files"
+                        className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 -mx-1 text-sm leading-tight outline-none hover:border-border focus:border-primary/60 focus:bg-background"
+                      />
                       {s.artist?.trim() && (
                         <a
                           href={`https://www.music-map.com/${encodeURIComponent(s.artist.trim().toLowerCase().replace(/\s+/g, "+"))}`}
@@ -3231,7 +3260,7 @@ function SectionView(props: SectionViewProps) {
               {library && (
                 <div className="px-3 py-3">
                   <InlineMatchSearch
-                    song={s}
+                    song={drafts[key] ?? s}
                     library={library}
                     currentTrackIndex={m?.trackIndex}
                     extraTrackIndices={m?.extraTrackIndices ?? []}
