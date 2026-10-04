@@ -3283,18 +3283,9 @@ function InlineMatchSearch({
   matchLimit: number; matcherOn: boolean;
 }) {
   const localFileRef = useRef<HTMLInputElement>(null);
-  const defaultQuery = `${song.artist} ${song.song}`.trim();
-  const [query, setQuery] = useState(defaultQuery);
+  // The card's editable Title + Artist fields are the search.
+  const query = `${song.artist} ${song.song}`.trim();
   const [showAll, setShowAll] = useState(false);
-  // If this component instance gets reused for a different song (list
-  // regenerated/reordered), reset the query so the results below always
-  // belong to the song shown in the row above.
-  const [trackedSong, setTrackedSong] = useState(defaultQuery);
-  if (trackedSong !== defaultQuery) {
-    setTrackedSong(defaultQuery);
-    setQuery(defaultQuery);
-    setShowAll(false);
-  }
   const debounced = useDebounce(query, 150);
   const limit = showAll ? 200 : matchLimit;
   const allResults = useMemo(() => {
@@ -3360,25 +3351,11 @@ function InlineMatchSearch({
             {totalSelected} selected
           </span>
         )}
-        {query !== defaultQuery && (
-          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setQuery(defaultQuery)}>
-            Reset search
-          </Button>
-        )}
-      </div>
-      <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/20 px-2.5">
-        <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search local files…"
-          className="h-9 border-0 bg-transparent px-0 text-xs shadow-none focus-visible:ring-0"
-        />
       </div>
       {!matcherOn && <p className="text-xs text-muted-foreground">Automatic selection is off; you can still choose files here.</p>}
       {results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          No matches in library. Try editing the search above (artist, title, or part of the file name){onPickLocalFile ? ", or click Add local file to pick one from your computer" : ""}.
+          No matches in library. Try editing the title or artist above{onPickLocalFile ? ", or click Add local file to pick one from your computer" : ""}.
         </p>
       ) : (
         <>
