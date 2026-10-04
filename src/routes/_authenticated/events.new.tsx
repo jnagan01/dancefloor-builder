@@ -83,7 +83,7 @@ import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 import { supabase } from "@/integrations/supabase/client";
 import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
-import { toCamelot, parseBpm } from "@/lib/musicTheory";
+import { toCamelot, parseBpm, KEY_OPTIONS } from "@/lib/musicTheory";
 import type { ResultSong } from "@/lib/danceFloor";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
