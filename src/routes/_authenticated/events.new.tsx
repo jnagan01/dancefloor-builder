@@ -3282,15 +3282,13 @@ function InlineMatchSearch({
   const results = useMemo(() => {
     const pinned: Array<{ i: number; s: number }> = [];
     const seen = new Set(allResults.map((r) => r.i));
-    const minScore = allResults.length ? Math.min(...allResults.map((r) => r.s)) : 0;
-    const pinScore = Math.max(minScore, 0.01);
     if (currentTrackIndex != null && currentTrackIndex >= 0 && !seen.has(currentTrackIndex)) {
-      pinned.push({ i: currentTrackIndex, s: pinScore });
+      pinned.push({ i: currentTrackIndex, s: -1 });
       seen.add(currentTrackIndex);
     }
     for (const ti of extraTrackIndices) {
       if (!seen.has(ti)) {
-        pinned.push({ i: ti, s: pinScore });
+        pinned.push({ i: ti, s: -1 });
         seen.add(ti);
       }
     }
