@@ -340,15 +340,25 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (file) setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name) !== filePath), file]);
     return file;
   }
-  function addFile(file: File) {
+  function addFile(file: File): string {
+    // Files inside a connected music folder join that folder; only files from
+    // anywhere else go to "Manually picked files".
+    const owner = folderForPath(getNativeFilePath(file), getFolderRoots())
+      ?? (file.webkitRelativePath && sources.some(s => s.label === file.webkitRelativePath.split("/")[0])
+        ? { label: file.webkitRelativePath.split("/")[0], relativePath: file.webkitRelativePath } : null);
+    const label = owner?.label ?? "Manually picked files";
+    const rel = owner?.relativePath ?? (file.webkitRelativePath || file.name);
+    const track = tracksFromAudioFiles([{ name: file.name, size: file.size, webkitRelativePath: rel }])[0];
+    if (!track) return rel;
     setSources(prev => {
-      const label = "Manually picked files";
-      const track = tracksFromAudioFiles([file])[0];
-      if (!track) return prev;
       const source = prev.find(s => s.label === label);
-      return [...prev.filter(s => s.label !== label), { label, tracks: [...(source?.tracks ?? []).filter(t => t.filePath !== track.filePath), track] }];
+      const tracks = [...(source?.tracks ?? []).filter(t => t.filePath !== track.filePath), track];
+      return source ? prev.map(s => s.label === label ? { ...s, tracks } : s) : [...prev, { label, tracks }];
     });
-    setFiles(prev => [...prev.filter(f => f.name !== file.name), file]);
+    const wrapped = rel === (file.webkitRelativePath || file.name) ? file : new File([file], file.name, { type: file.type, lastModified: file.lastModified });
+    if (wrapped !== file) Object.defineProperty(wrapped, "webkitRelativePath", { value: rel });
+    setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name) !== rel), wrapped]);
+    return rel;
   }
   return <Context.Provider value={{ sources, files, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
 }
