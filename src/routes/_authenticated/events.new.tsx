@@ -1553,9 +1553,10 @@ function Index() {
       toast.success(`Matched ${file.name} from your music folder`);
       return;
     }
-    pendingFilePick.current = {key, path: file.name};
-    workspace.addFile(file);
-    toast.success(`Added ${file.name} to search results`);
+    const path = workspace.addFile(file);
+    pendingFilePick.current = {key, path};
+    const folder = path.includes("/") && path !== file.webkitRelativePath ? path.split("/")[0] : null;
+    toast.success(folder ? `Matched ${file.name} from ${folder}` : `Added ${file.name} to search results`);
   }
 
   // --- Export helpers ---

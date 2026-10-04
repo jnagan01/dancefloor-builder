@@ -423,6 +423,25 @@ export function searchLibraryScored(query: string, lib: VdjLibrary, limit = 25):
   return scored.slice(0, limit);
 }
 
+/**
+ * Which connected music folder contains this full file path?
+ * Returns the folder label and the folder-relative path ("Label/sub/file.mp3"),
+ * or null when the file sits outside every saved folder.
+ */
+export function folderForPath(fullPath: string, roots: Record<string, string>): { label: string; relativePath: string } | null {
+  if (!fullPath) return null;
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const target = norm(fullPath);
+  let best: { label: string; relativePath: string; len: number } | null = null;
+  for (const [label, root] of Object.entries(roots)) {
+    const r = norm(root);
+    if (!r || !target.toLowerCase().startsWith(r.toLowerCase() + "/")) continue;
+    if (best && best.len >= r.length) continue;
+    best = { label, relativePath: `${label}/${target.slice(r.length + 1)}`, len: r.length };
+  }
+  return best ? { label: best.label, relativePath: best.relativePath } : null;
+}
+
 /** Find a library track that is the same file as a picked one (name + size). */
 export function findTrackForPickedFile(lib: VdjLibrary, name: string, size?: number): number {
   const lower = name.toLowerCase();
