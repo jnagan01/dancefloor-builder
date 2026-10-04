@@ -1510,6 +1510,12 @@ function Index() {
       toast.error("Unsupported audio file type");
       return;
     }
+    const existing = findTrackForPickedFile(mergedLibrary, file.name, file.size);
+    if (existing >= 0) {
+      updateMatch(key, {status:"Manually Matched",confidence:1,trackIndex:existing,alternatives:[],extraTrackIndices:[]});
+      toast.success(`Matched ${file.name} from your music folder`);
+      return;
+    }
     pendingFilePick.current = {key, path: file.name};
     workspace.addFile(file);
     toast.success(`Added ${file.name} to search results`);

@@ -18,6 +18,10 @@ const normCache = new Map<string, string>();
 const NOISE_RE =
   /\b(remaster(ed)?|remastered\s+\d{4}|bonus\s+track|hd|hq|official(\s+(audio|video|music\s+video))?|lyrics?|with\s+lyrics|explicit|clean|album\s+version|single\s+version|stereo|mono)\b/g;
 
+// DJ record-pool / download-site tags that pollute file names and tags.
+const DJ_POOL_RE =
+  /\b(dms|bpm\s*supreme|djcity|dj\s*city|digital\s*dj\s*pool|ddp|mp3\s*pool|club\s*killers|crooklyn\s*clan|zip\s*dj|beatport|traxsource|barbangerz|hood\s*pool|franchise|heavy\s*hits|direct\s*music\s*service|promo\s*only|ultimix|xmix|x\s*mix|dj\s*tools?|quick\s*hit|snipz|dirty|intro|outro|short\s*edit|hype\s*intro|clap\s*intro|transition|redrum|\d{2,3}\s*bpm|[1-9]{1,2}[ab]|\d{1,2}\s*(?:a|b)\s*-?\s*(?:minor|major)?|320\s*kbps|kbps)\b/g;
+
 /** Aggressive normalization for matching. Memoized, bounded. */
 export function normalizeText(input: string): string {
   if (!input) return "";
@@ -28,12 +32,13 @@ export function normalizeText(input: string): string {
   s = s.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   s = s.replace(/&/g, " and ");
   s = s.replace(/\b(feat\.?|ft\.?|featuring|w\/)\s+[^\-\[\]()_]+/g, " ");
+  s = s.replace(DJ_POOL_RE, " ");
   s = s.replace(NOISE_RE, " ");
   s = s.replace(/[_\-–—]+/g, " ");
   s = s.replace(/[^a-z0-9 ]+/g, " ");
   s = s.replace(/\s+/g, " ").trim();
   // Leading track numbers: "01 ", "1-02 ", "103 "
-  s = s.replace(/^\d{1,3}\s+/, "");
+  s = s.replace(/^(\d{1,2}\s+)?\d{1,3}\s+/, "");
 
   if (normCache.size >= NORM_CACHE_LIMIT) {
     const firstKey = normCache.keys().next().value;
