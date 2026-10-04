@@ -51,6 +51,12 @@ export function normalizeKey(s: string): string {
       /\s*[-–—:]\s*(the\s+)?(\d{2,4}\s+)?(re[- ]?master(ed)?|radio edit|edit|extended( (mix|version|edit))?|version|mix|live|mono|stereo|deluxe|single|album version|anniversary( edition)?|bonus track|explicit|clean|instrumental|acoustic|demo|reissue|original( mix| version)?)(\s+\d{2,4})?\s*$/gi,
       " ",
     )
+    // Drop spaced-dash tails that are clearly version/soundtrack qualifiers:
+    // " - Single Version", " - 1993 Remix", " - From "Saturday Night Fever""
+    .replace(
+      /\s+[-–—]\s+(from\s.*|.*\b(version|remix|mix|edit|re-?master(ed)?|live|mono|stereo)\b.*)$/gi,
+      " ",
+    )
     // Drop trailing collaborator lists on artist (& X, and X, x X, vs X)
     .replace(/\s+(&|and|x|vs\.?)\s+.*$/gi, " ")
     // Strip diacritics
@@ -932,12 +938,10 @@ export function applyVarietyReranker(
   // Step 2: drop near-identical duplicates (same normalized artist + title).
   // Previously duplicates were pushed to overflow and re-appended at the end,
   // which caused the same song to appear twice inside the same section.
-  const seenTitle = new Set<string>();
+  const seenKeys = new SongKeySet();
   const unique: ResultSong[] = [];
   for (const s of allowed) {
-    const k = `${normalizeKey(s.artist)}|${normalizeKey(s.song)}`;
-    if (seenTitle.has(k)) continue;
-    seenTitle.add(k);
+    if (!seenKeys.tryAdd(s.artist, s.song)) continue;
     unique.push(s);
   }
 
@@ -972,9 +976,12 @@ export function applyVarietyReranker(
     result.push(prev);
   }
 
-  // Append overflow at the end in ascending intensity to preserve the ramp.
+  // Append overflow at the end in ascending intensity to preserve the ramp —
+  // but never a song that is already in the list (same song, any variant).
   overflow.sort((a, b) => intensityOf(a) - intensityOf(b));
-  result.push(...overflow);
+  for (const s of overflow) {
+    if (seenKeys.tryAdd(s.artist, s.song)) result.push(s);
+  }
   return result;
 }
 
