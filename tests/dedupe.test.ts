@@ -40,3 +40,19 @@ describe("duplicate detection", () => {
     expect(new Set(keys).size).toBe(keys.length);
   });
 });
+
+import { applyVarietyReranker as _rr, dedupeKey as _dk } from "../src/lib/danceFloor";
+describe("duplicate guards", () => {
+  it("reranker overflow never re-adds a song already in the list", () => {
+    const s = { artist: "Bruno Mars", song: "24K Magic", fromUpload: false, energy: 8, danceability: 8 } as any;
+    const out = _rr([s, { ...s }, { artist: "EWF", song: "September", fromUpload: false, energy: 7, danceability: 7 } as any], { artistCap: 1 });
+    expect(out.filter((x) => x.song === "24K Magic").length).toBe(1);
+  });
+  it("treats 'The Killers' and 'Killers' as the same song", () => {
+    expect(_dk("The Killers", "Mr. Brightside")).toBe(_dk("Killers", "Mr. Brightside"));
+  });
+  it("ignores ' - Single Version' and ' - 1993 Remix' tails", () => {
+    expect(_dk("MJ", "Billie Jean - Single Version")).toBe(_dk("MJ", "Billie Jean"));
+    expect(_dk("Gloria Gaynor", "I Will Survive - 1993 Remix")).toBe(_dk("Gloria Gaynor", "I Will Survive"));
+  });
+});

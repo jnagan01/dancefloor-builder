@@ -69,7 +69,7 @@ export function normalizeKey(s: string): string {
 }
 
 export function dedupeKey(artist: string, song: string): string {
-  return `${normalizeKey(artist)}|${normalizeKey(song)}`;
+  return `${normalizeKey(artist).replace(/^(the|a)\s+/, "")}|${normalizeKey(song)}`;
 }
 
 function stripThe(s: string): string {
