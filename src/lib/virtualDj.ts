@@ -407,8 +407,35 @@ export function searchLibraryScored(query: string, lib: VdjLibrary, limit = 25):
     const sim = Math.max(parts.score, similarity(s.artist, q));
     if (sim >= 0.55) scored.push({ i, s: sim });
   }
+  // File-name fallback: match against the file name (DJ pool tags, track
+  // numbers and "feat." stripped) so oddly tagged files still show up.
+  if (scored.length < limit && tokens.length) {
+    const seen = new Set(scored.map((x) => x.i));
+    for (let i = 0; i < lib.tracks.length && scored.length < limit * 2; i++) {
+      if (seen.has(i)) continue;
+      const fp = lib.tracks[i].filePath || "";
+      const base = fp.split(/[\\/]/).pop()?.replace(/\.[a-z0-9]{2,5}$/i, "") || "";
+      const nb = normalizeText(base);
+      if (nb && tokens.every((t) => nb.includes(t))) scored.push({ i, s: 0.6 });
+    }
+  }
   scored.sort((a, b) => b.s - a.s || a.i - b.i);
   return scored.slice(0, limit);
+}
+
+/** Find a library track that is the same file as a picked one (name + size). */
+export function findTrackForPickedFile(lib: VdjLibrary, name: string, size?: number): number {
+  const lower = name.toLowerCase();
+  let fallback = -1;
+  for (let i = 0; i < lib.tracks.length; i++) {
+    const fp = lib.tracks[i].filePath || "";
+    const base = (fp.split(/[\\/]/).pop() || "").toLowerCase();
+    if (base !== lower) continue;
+    const ts = Number(lib.tracks[i].fileSize) || 0;
+    if (size && ts && ts === size) return i;
+    if (fallback < 0) fallback = i;
+  }
+  return fallback;
 }
 
 export function searchLibrary(query: string, lib: VdjLibrary, limit = 25): number[] {

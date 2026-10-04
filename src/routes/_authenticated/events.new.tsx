@@ -51,6 +51,7 @@ import {
   type SongMatch,
   type MatchStatus,
   type ExportSongRef,
+  findTrackForPickedFile,
 } from "@/lib/virtualDj";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1508,6 +1509,12 @@ function Index() {
   function pickLocalFileForMatch(key: string, file: File) {
     if (!/\.(mp3|m4a|wav|flac|ogg|aac|aif{1,2}|wma|opus|alac)$/i.test(file.name)) {
       toast.error("Unsupported audio file type");
+      return;
+    }
+    const existing = findTrackForPickedFile(mergedLibrary, file.name, file.size);
+    if (existing >= 0) {
+      updateMatch(key, {status:"Manually Matched",confidence:1,trackIndex:existing,alternatives:[],extraTrackIndices:[]});
+      toast.success(`Matched ${file.name} from your music folder`);
       return;
     }
     pendingFilePick.current = {key, path: file.name};
