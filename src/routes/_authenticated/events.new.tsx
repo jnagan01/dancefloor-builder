@@ -3382,7 +3382,11 @@ function InlineMatchSearch({
                     </Button>
                    ) : <span />}
                    <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="shrink-0"/>
-                   <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${pct >= 82 ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{pct}%</span>
+                   {score < 0 ? (
+                     <span className="shrink-0 rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold text-success" title="Currently selected file">Selected</span>
+                   ) : (
+                     <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${pct >= 82 ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>{pct}%</span>
+                   )}
                    <div className="min-w-0">
                      <p className="break-words font-medium">{t.title} — {t.artist}</p>
                       <p className="break-all text-[11px] text-muted-foreground">{resolveExportPath(t.filePath) ?? t.filePath}</p>
