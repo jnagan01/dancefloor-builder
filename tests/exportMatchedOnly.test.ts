@@ -42,6 +42,13 @@ describe("DJ-software exports include matched songs only", () => {
     expect(m3u).toContain("/Users/dj/Music/a.mp3");
     expect(m3u).toContain("/Users/dj/Music/b.mp3");
   });
+
+  it("produces only the header when nothing matched, so exports must skip writing it", () => {
+    expect(countMatchedForExport(refs, lib)).toBe(2);
+    const emptyLib = { tracks: [], byKey: new Map(), byArtist: new Map(), subjects: [], tokens: {} } as unknown as VdjLibrary;
+    expect(countMatchedForExport(refs, emptyLib)).toBe(0);
+    expect(buildM3u(refs, emptyLib)).toBe("#EXTM3U\r\n");
+  });
 });
 
 describe("reference exports keep every song", () => {
