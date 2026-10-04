@@ -985,7 +985,7 @@ function Index() {
                 if (r[key].length >= r.perSectionTarget) break;
                 // Artists still under the per-list cap for THIS section.
                 const counts = new Map<string, number>();
-                for (const s of r[key]) {
+                for (const s of [...r.warmUp, ...r.transition, ...r.peak]) {
                   const hit = favoriteArtists.find((f) => isFavoriteArtist(s.artist, [f]));
                   if (hit) counts.set(hit, (counts.get(hit) ?? 0) + 1);
                 }
@@ -1270,6 +1270,16 @@ function Index() {
     // A newer generate() (or a workflow reset) started while we were awaiting
     // AI/enrichment — drop this stale result instead of clobbering state.
     if (genTokenRef.current !== myToken) return;
+
+    // Final safety net: one copy of each song across the whole event. Uploads
+    // win over fillers because they come first in each section.
+    {
+      const finalSeen = new SongKeySet();
+      for (const s of [...r.warmUp, ...r.transition, ...r.peak]) if (s.fromUpload) finalSeen.add(s.artist, s.song);
+      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
+        r[k] = r[k].filter((s) => s.fromUpload || finalSeen.tryAdd(s.artist, s.song));
+      });
+    }
 
     setResult(r);
     setActiveSection("warmUp");
