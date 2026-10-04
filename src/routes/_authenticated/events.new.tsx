@@ -83,7 +83,7 @@ import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 import { supabase } from "@/integrations/supabase/client";
 import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
-import { toCamelot, parseBpm } from "@/lib/musicTheory";
+import { toCamelot, parseBpm, KEY_OPTIONS } from "@/lib/musicTheory";
 import type { ResultSong } from "@/lib/danceFloor";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
@@ -200,6 +200,7 @@ function Index() {
   const [bpmOn, setBpmOn] = useState(false);
   const [bpmRange, setBpmRange] = useState<[number, number]>([110, 128]);
   const [danceOn, setDanceOn] = useState(false);
+  const [homeKey, setHomeKey] = useState<string>("");
   const [danceRange, setDanceRange] = useState<[number, number]>([6, 9]);
   const targets = useMemo(() => resolveTargets(vibe, bpmOn ? bpmRange : null, danceOn ? danceRange : null), [vibe, bpmOn, bpmRange, danceOn, danceRange]);
   const [notes, setNotes] = useState("");
@@ -296,6 +297,7 @@ function Index() {
     setVibe("");
     setBpmOn(false);
     setDanceOn(false);
+    setHomeKey("");
     setNotes("");
     setDoNotPlayInput("");
     setExpand(defaultsRef.current.expand);
@@ -584,7 +586,7 @@ function Index() {
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,vibe,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
+      inputs:{songs:songs.filter(s=>s.artist.trim()&&s.song.trim()),hours,artistsInput,genresInput,decades,vibe,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -596,7 +598,7 @@ function Index() {
       const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
       const lists=row.lists as unknown as WorkflowSnapshot["lists"];
       if(!inputs || !lists)return;
-      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
       // A saved event with only a single list and no dance-floor sections is a
       // cocktail/dinner list even if the stored snapshot predates listType.
       const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
@@ -637,7 +639,7 @@ function Index() {
       setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
     },1000);
     return ()=>{clearTimeout(timer);saveRevision.current+=1};
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,bpmOn,bpmRange,danceOn,danceRange,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
 
   async function generate() {
     // No uploads is fine as long as the client gave artists, genres or decades —
@@ -1983,9 +1985,10 @@ function Index() {
   const withFileBpm = (sec: SectionKey, songs: Song[]): RampSong[] =>
     songs.map((s, i) => {
       const ti = matches[songKey(sec, i, s)]?.trackIndex;
-      const fileBpm = ti != null ? parseBpm(mergedLibrary.tracks[ti]?.bpm) : undefined;
+      const track = ti != null ? (mergedLibrary.tracks[ti] as { bpm?: unknown; key?: string } | undefined) : undefined;
+      const fileBpm = track ? parseBpm(track.bpm) : undefined;
       const base = s as RampSong;
-      return { ...base, bpm: fileBpm ?? base.bpm };
+      return { ...base, bpm: fileBpm ?? base.bpm, key: track?.key || base.key };
     });
 
   return (
@@ -2132,6 +2135,14 @@ function Index() {
                   <Slider className="mt-3" min={1} max={10} step={0.5} minStepsBetweenThumbs={1} disabled={!danceOn} value={danceRange} onValueChange={(v) => setDanceRange([v[0], v[1]])} />
                 </div>
               </div>
+            </div>
+            <div>
+              <Label htmlFor="homeKey">Home key (optional)</Label>
+              <select id="homeKey" value={homeKey} onChange={(e) => setHomeKey(e.target.value)} className="mt-1.5 h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm">
+                <option value="">No preference</option>
+                {KEY_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
+              </select>
+              <p className="mt-1.5 text-xs text-muted-foreground">Camelot key the night centers on. The flow chart scores how well each song mixes into the next and into this key.</p>
             </div>
             <div>
               <Label htmlFor="artists">Favorite artists (comma separated)</Label>
@@ -2573,6 +2584,7 @@ function Index() {
 
               <EventEnergyRamp
                 targets={targets}
+                homeKey={homeKey || undefined}
                 sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: withFileBpm(sec, result[sec] ?? []) }))}
                 onSelect={(sec) => setActiveSection(sec)}
               />
