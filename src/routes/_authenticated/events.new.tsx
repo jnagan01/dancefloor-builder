@@ -3225,9 +3225,9 @@ function SectionView(props: SectionViewProps) {
                 {m && track && <span className="text-[11px] text-muted-foreground">{Math.round(m.confidence * 100)}% confidence</span>}
                 {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected</span>}
                 <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
-                {library && m?.status === "Possible Match" && (
-                  <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
-                    <Check className="mr-1 h-3 w-3" /> Confirm
+                {library && inReview && m?.trackIndex != null && (
+                  <Button size="sm" className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
+                    <Check className="mr-1 h-3 w-3" /> Confirm match
                   </Button>
                 )}
                 {library && (
@@ -3266,6 +3266,8 @@ function SectionView(props: SectionViewProps) {
                     currentTrackIndex={m?.trackIndex}
                     extraTrackIndices={m?.extraTrackIndices ?? []}
                     onPick={(ti) => onChoose(key, ti)}
+                    needsConfirm={inReview}
+                    onConfirm={() => onConfirm(key)}
                     onToggleExtra={(ti) => onToggleExtra(key, ti)}
                     onPreview={onPreview}
                     onPickLocalFile={onPickLocalFile ? (file) => onPickLocalFile(key, file) : undefined}
@@ -3298,10 +3300,14 @@ function InlineMatchSearch({
   currentTrackIndex,
   extraTrackIndices,
   onPick,
+  needsConfirm,
+  onConfirm,
   onToggleExtra,
   onPreview,
   onPickLocalFile, matchLimit, matcherOn,
 }: {
+  needsConfirm?: boolean;
+  onConfirm?: () => void;
   song: Song;
   library: VdjLibrary;
   currentTrackIndex?: number;
@@ -3413,7 +3419,7 @@ function InlineMatchSearch({
                       <Play className="h-3.5 w-3.5 fill-current" />
                     </Button>
                    ) : <span />}
-                   <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? onPick(-1) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="shrink-0"/>
+                   <Checkbox checked={selected} aria-label={`Select ${t.artist} — ${t.title}`} onCheckedChange={() => selected ? (isCurrent ? (needsConfirm && onConfirm ? onConfirm() : onPick(-1)) : onToggleExtra(ti)) : (currentTrackIndex == null ? onPick(ti) : onToggleExtra(ti))} className="shrink-0"/>
                    {score < 0 ? (
                      <span className="shrink-0 rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] font-semibold text-success" title="Currently selected file">Selected</span>
                    ) : (
