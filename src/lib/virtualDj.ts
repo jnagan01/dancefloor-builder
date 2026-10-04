@@ -378,6 +378,24 @@ export function matchSong(song: Song, lib: VdjLibrary): SongMatch {
   };
 }
 
+/** Artist- and title-aware search: ranks by the matcher (artist vs file artist,
+ * title vs file title), then appends plain keyword/file-name hits. */
+export function searchLibraryBySong(artist: string, title: string, lib: VdjLibrary, limit = 25): Array<{ i: number; s: number }> {
+  const out: Array<{ i: number; s: number }> = [];
+  const seen = new Set<number>();
+  if (title.trim() || artist.trim()) {
+    for (const r of rankLibrary(makeSubject(artist, title || artist), lib, limit)) {
+      if (r.score <= 0.2) continue;
+      out.push({ i: r.index, s: r.score }); seen.add(r.index);
+    }
+  }
+  for (const r of searchLibraryScored(`${artist} ${title}`.trim(), lib, limit)) {
+    if (out.length >= limit) break;
+    if (!seen.has(r.i)) { out.push(r); seen.add(r.i); }
+  }
+  return out.slice(0, limit);
+}
+
 export function searchLibraryScored(query: string, lib: VdjLibrary, limit = 25): Array<{ i: number; s: number }> {
   const q = normalizeText(query);
   if (!q) return [];

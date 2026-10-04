@@ -33,7 +33,7 @@ import {
   mergeLibraries,
   matchSong,
   searchLibrary,
-  searchLibraryScored,
+  searchLibraryScored, searchLibraryBySong,
 
   buildTxtPlaylist,
   buildM3u,
@@ -1468,14 +1468,15 @@ function Index() {
     const list = [...result[section]];
     list[idx] = updated;
     setResult({ ...result, [section]: list });
-    if (oldKey !== newKey) {
-      setMatches((prev) => {
-        if (!prev[oldKey]) return prev;
-        const copy = { ...prev, [newKey]: prev[oldKey] };
-        delete copy[oldKey];
-        return copy;
-      });
-    }
+    // Re-run the matcher for the new name so the card picks up the right file.
+    const fresh = mergedLibrary.tracks.length ? matchSong(updated, mergedLibrary) : undefined;
+    setMatches((prev) => {
+      const copy = { ...prev };
+      delete copy[oldKey];
+      if (fresh) copy[newKey] = fresh;
+      else if (prev[oldKey]) copy[newKey] = prev[oldKey];
+      return copy;
+    });
   }
 
   function confirmMatch(key: string) {
@@ -3327,7 +3328,8 @@ function InlineMatchSearch({
   const allResults = useMemo(() => {
     const q = debounced.trim();
     if (!q) return [];
-    return searchLibraryScored(q, library, limit);
+    return searchLibraryBySong(song.artist, song.song, library, limit);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debounced, library, limit]);
   // Always keep the currently matched file(s) visible in the results, even
   // when the search query scores them below the cut. Pinned at the top.
