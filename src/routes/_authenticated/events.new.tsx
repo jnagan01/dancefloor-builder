@@ -3277,7 +3277,25 @@ function InlineMatchSearch({
     if (!q) return [];
     return searchLibraryScored(q, library, limit);
   }, [debounced, library, limit]);
-  const results = allResults;
+  // Always keep the currently matched file(s) visible in the results, even
+  // when the search query scores them below the cut. Pinned at the top.
+  const results = useMemo(() => {
+    const pinned: Array<{ i: number; s: number }> = [];
+    const seen = new Set(allResults.map((r) => r.i));
+    const minScore = allResults.length ? Math.min(...allResults.map((r) => r.s)) : 0;
+    const pinScore = Math.max(minScore, 0.01);
+    if (currentTrackIndex != null && currentTrackIndex >= 0 && !seen.has(currentTrackIndex)) {
+      pinned.push({ i: currentTrackIndex, s: pinScore });
+      seen.add(currentTrackIndex);
+    }
+    for (const ti of extraTrackIndices) {
+      if (!seen.has(ti)) {
+        pinned.push({ i: ti, s: pinScore });
+        seen.add(ti);
+      }
+    }
+    return pinned.length ? [...pinned, ...allResults] : allResults;
+  }, [allResults, currentTrackIndex, extraTrackIndices]);
   const hasMore = !showAll && results.length >= matchLimit;
   const extraSet = new Set(extraTrackIndices);
   const totalSelected = (currentTrackIndex != null ? 1 : 0) + extraTrackIndices.length;
