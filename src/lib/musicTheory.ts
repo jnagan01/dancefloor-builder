@@ -106,3 +106,24 @@ export function parseBpm(v: unknown): number | undefined {
   }
   return undefined;
 }
+
+/** Camelot keys offered in event setup, with the musical name. */
+export const KEY_OPTIONS: { value: string; label: string }[] = Array.from({ length: 12 }, (_, i) => i + 1).flatMap((n) => {
+  const names = Object.entries(CAMELOT_MAP);
+  const nameFor = (c: string) => names.find(([, v]) => v === c)?.[0] ?? "";
+  return [
+    { value: `${n}A`, label: `${n}A · ${nameFor(`${n}A`)}` },
+    { value: `${n}B`, label: `${n}B · ${nameFor(`${n}B`)}` },
+  ];
+});
+
+/**
+ * Key compatibility score 0–100 between two keys.
+ * Same key 100, adjacent/relative 85, two steps 50, three 25, further 0.
+ * Returns undefined when either key is unknown.
+ */
+export function keyCompatibility(a?: string, b?: string): number | undefined {
+  const d = camelotDistance(a, b);
+  if (!Number.isFinite(d)) return undefined;
+  return d === 0 ? 100 : d === 1 ? 85 : d === 2 ? 50 : d === 3 ? 25 : 0;
+}
