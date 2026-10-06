@@ -615,7 +615,15 @@ function Index() {
         shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
         setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
       }
-      savedSelectionsRef.current=lists.selections??null;
+      // Re-key saved selections by section+position so snapshots written with an
+      // older dedupeKey format (e.g. "the weeknd|…") still land on their song.
+      const rekeyed:Record<string,{paths:string[];excluded?:boolean}>={};
+      for(const [k,v] of Object.entries(lists.selections??{})){
+        const m=k.match(/^(warmUp|transition|peak):(\d+):/);
+        const s=m?(lists[m[1] as SectionKey]??[])[Number(m[2])]:undefined;
+        rekeyed[s&&m?songKey(m[1] as SectionKey,Number(m[2]),s):k]=v;
+      }
+      savedSelectionsRef.current=lists.selections?rekeyed:null;
       restoredEvent.current=true;
       saveRevision.current+=1;
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
