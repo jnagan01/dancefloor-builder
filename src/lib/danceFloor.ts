@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { allowedForEventType, getEventType } from "./eventTypes";
 import { getVibe } from "./vibes";
 import { SONG_LIBRARY, type LibrarySong, type Section } from "./songLibrary";
 
@@ -540,8 +541,8 @@ export function effectiveIntensityFor(s: {
   bpm?: number;
   year?: number;
   explicit?: boolean;
-}): number {
-  return placementScore(s) + eraBias(s.year) + explicitBias(s.explicit);
+}, useEra = true): number {
+  return placementScore(s) + (useEra ? eraBias(s.year) : 0) + explicitBias(s.explicit);
 }
 
 /**
@@ -549,11 +550,11 @@ export function effectiveIntensityFor(s: {
  * mid plateau, then a strong finish. Position is 0-based within the full
  * concatenated set. Returns a 1–10 target the sequencer places songs against.
  */
-export function targetCurve(position: number, total: number): number {
-  if (total <= 1) return 4.5;
+export function targetCurve(position: number, total: number, start = 4.5): number {
+  if (total <= 1) return start;
   const p = Math.max(0, Math.min(1, position / (total - 1)));
   const eased = Math.pow(p, 0.85);
-  return 4.5 + eased * 5.0; // 4.5 → 9.5
+  return start + eased * (9.5 - start); // start → 9.5
 }
 
 /**
@@ -1081,9 +1082,13 @@ function transitionCost(
  */
 export function reorderForEnergyProgression(
   result: GenerationResult,
-  opts: { favoriteArtists?: string[] } = {},
+  opts: { favoriteArtists?: string[]; eventType?: string } = {},
 ): GenerationResult {
   const favoriteArtists = opts.favoriteArtists ?? [];
+  const evType = getEventType(opts.eventType);
+  // No event type keeps the original wedding behavior (older songs early).
+  const eraOn = !evType || evType.eraMode === "vintage";
+  const startEnergy = evType?.startEnergy ?? 4.5;
   const uploadCount = [...result.warmUp, ...result.transition, ...result.peak].filter((s) => s.fromUpload).length;
   const target = Math.max(result.perSectionTarget, Math.ceil(uploadCount / 3));
   const all: ResultSong[] = [
@@ -1100,6 +1105,9 @@ export function reorderForEnergyProgression(
   const deduped: ResultSong[] = [];
   const ordered = [...all.filter((s) => s.fromUpload), ...all.filter((s) => !s.fromUpload)];
   for (const s of ordered) {
+    // Event type rules (e.g. clean-only, modern-only) apply to added songs;
+    // the client's own uploads always stay.
+    if (!s.fromUpload && !allowedForEventType(s, evType)) continue;
     if (!normalizeKey(s.song) || !seenAcross.tryAdd(s.artist, s.song)) continue;
     deduped.push(s);
   }
@@ -1108,8 +1116,8 @@ export function reorderForEnergyProgression(
   // raw intensity ramp. Songs without year/explicit metadata get effective ==
   // raw, preserving legacy behavior.
   const sorted = [...deduped].sort((a, b) => {
-    const ai = effectiveIntensityFor(a);
-    const bi = effectiveIntensityFor(b);
+    const ai = effectiveIntensityFor(a, eraOn);
+    const bi = effectiveIntensityFor(b, eraOn);
     if (ai !== bi) return ai - bi;
     return intensityOf(a) - intensityOf(b);
   });
@@ -1125,7 +1133,7 @@ export function reorderForEnergyProgression(
   let curveWarm = 0;
   let curvePeak = 0;
   for (let i = 0; i < n; i++) {
-    const t = targetCurve(i, n);
+    const t = targetCurve(i, n, startEnergy);
     if (t <= 6.5) curveWarm += 1;
     else if (t >= 8) curvePeak += 1;
   }
