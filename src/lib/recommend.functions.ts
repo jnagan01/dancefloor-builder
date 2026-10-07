@@ -1,4 +1,5 @@
 import { targetsNote } from "./vibes";
+import { eventTypeNote } from "./eventTypes";
 import { createServerFn } from "@tanstack/react-start";
 import { generateObject, NoObjectGeneratedError } from "ai";
 import { z } from "zod";
@@ -43,6 +44,7 @@ const InputSchema = z.object({
     decades: z.array(z.string().max(20)).max(20).default([]),
     notes: z.string().max(2000).default(""),
     vibe: z.string().max(40).optional(),
+    eventType: z.string().max(40).optional(),
     bpmRange: z.tuple([z.number().min(60).max(180), z.number().min(60).max(180)]).refine(([a, b]) => a <= b).optional(),
     danceRange: z.tuple([z.number().min(1).max(10), z.number().min(1).max(10)]).refine(([a, b]) => a <= b).optional(),
     doNotPlay: z
@@ -375,6 +377,7 @@ DJ preferences (bias, not hard filter):
 - Preferred decades: <dj_decades>${safeDecades.join(", ") || "(any)"}</dj_decades>
 - Notes from DJ: <dj_notes>${safeNotes || "(none)"}</dj_notes>
 ${targetsNote(data.prefs.vibe, data.prefs.bpmRange, data.prefs.danceRange) ? `- ${targetsNote(data.prefs.vibe, data.prefs.bpmRange, data.prefs.danceRange)}` : ""}
+${eventTypeNote(data.prefs.eventType) ? `- ${eventTypeNote(data.prefs.eventType)} Treat the event type's era and explicit rules as hard constraints.` : ""}
 
 Already in the set (do NOT suggest these or near-duplicates; use their features as neighbors for BPM/key matching):
 <existing_set>

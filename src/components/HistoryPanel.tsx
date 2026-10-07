@@ -37,6 +37,7 @@ export interface WorkflowSnapshot {
     notes: string;
     doNotPlayInput: string;
     vibe?: string;
+    eventType?: string;
     bpmRange?: [number, number];
     homeKey?: string;
     danceRange?: [number, number];
