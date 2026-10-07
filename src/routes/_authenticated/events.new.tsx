@@ -96,6 +96,7 @@ import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
 import { UserCog, Music2 } from "lucide-react";
 import { SpotifyExportDialog, type SpotifyExportJob } from "@/components/SpotifyExportDialog";
 import { VIBES, getVibe, resolveTargets } from "@/lib/vibes";
+import { EVENT_TYPES, getEventType } from "@/lib/eventTypes";
 import { Slider } from "@/components/ui/slider";
 import { VibeBreakdown } from "@/components/builder/VibeBreakdown";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
@@ -197,6 +198,7 @@ function Index() {
   const [genresInput, setGenresInput] = useState("");
   const [decades, setDecades] = useState<string[]>(["2000s", "2010s", "2020s"]);
   const [vibe, setVibe] = useState<string>("");
+  const [eventType, setEventType] = useState<string>("");
   const [bpmOn, setBpmOn] = useState(false);
   const [bpmRange, setBpmRange] = useState<[number, number]>([110, 128]);
   const [danceOn, setDanceOn] = useState(false);
@@ -295,6 +297,7 @@ function Index() {
     setGenresInput("");
     setDecades([...defaultsRef.current.decades]);
     setVibe("");
+    setEventType("");
     setBpmOn(false);
     setDanceOn(false);
     setHomeKey("");
@@ -532,6 +535,7 @@ function Index() {
       decades,
       notes,
       vibe: vibe || undefined,
+      eventType: eventType || undefined,
       bpmRange: bpmOn ? bpmRange : undefined,
       danceRange: danceOn ? danceRange : undefined,
       doNotPlay: parseDoNotPlay(doNotPlayInput),
@@ -586,7 +590,7 @@ function Index() {
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
+      inputs:{songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -598,7 +602,7 @@ function Index() {
       const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
       const lists=row.lists as unknown as WorkflowSnapshot["lists"];
       if(!inputs || !lists)return;
-      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
       // A saved event with only a single list and no dance-floor sections is a
       // cocktail/dinner list even if the stored snapshot predates listType.
       const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
