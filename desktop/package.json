@@ -1,9 +1,9 @@
 {
   "name": "dancefloor-builder-desktop",
-  "productName": "Dancefloor Builder",
+  "productName": "SetArchitect",
   "version": "1.1.0",
   "private": true,
-  "description": "Dancefloor Builder \u2014 playlist builder for DJs",
+  "description": "SetArchitect \u2014 event and set programming for DJs",
   "author": "Exceptional Entertainment",
   "main": "main.cjs",
   "scripts": {
@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.exceptionalentertainment.dancefloorbuilder",
-    "productName": "Dancefloor Builder",
+    "productName": "SetArchitect",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -46,7 +46,7 @@
       "notarize": true
     },
     "dmg": {
-      "title": "Dancefloor Builder",
+      "title": "SetArchitect",
       "contents": [
         {
           "x": 140,

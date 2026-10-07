@@ -1634,8 +1634,8 @@ function Index() {
       return;
     }
     setSpotifyJob({
-      name: `${eventName || "Dancefloor Builder"} — ${sectionName(section)}`,
-      description: `${sectionName(section)} list created with Dancefloor Builder`,
+      name: `${eventName || "SetArchitect"} — ${sectionName(section)}`,
+      description: `${sectionName(section)} list created with SetArchitect`,
       songs: list.map((s) => ({ artist: s.artist, song: s.song })),
     });
   }
@@ -1650,8 +1650,8 @@ function Index() {
       return;
     }
     setSpotifyJob({
-      name: `${eventName || "Dancefloor Builder"} — ${background ? bgLabel : "Full event"}`,
-      description: "Created with Dancefloor Builder",
+      name: `${eventName || "SetArchitect"} — ${background ? bgLabel : "Full event"}`,
+      description: "Created with SetArchitect",
       songs,
     });
   }
@@ -2737,7 +2737,7 @@ function Index() {
         <footer className="space-y-1 py-6 text-center text-xs text-muted-foreground">
           <p>Audio files stay on your computer. Event lists and your library index are saved for your account.</p>
           <p className="text-[11px] opacity-80">
-            Dancefloor Builder v{APP_VERSION} · Updated {formatBuildDate()}
+            SetArchitect v{APP_VERSION} · Updated {formatBuildDate()}
           </p>
         </footer>
         </main>

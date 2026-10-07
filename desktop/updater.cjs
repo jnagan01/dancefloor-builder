@@ -1,4 +1,4 @@
-/* Dancefloor Builder — checks GitHub Releases for a newer Mac build. */
+/* SetArchitect — checks GitHub Releases for a newer Mac build. */
 const { app, dialog, shell, BrowserWindow } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -78,7 +78,7 @@ async function fetchLatest() {
 }
 
 async function runUpdate(latest, parent) {
-  const target = path.join(app.getPath("downloads"), latest.assetName || "DancefloorBuilder.dmg");
+  const target = path.join(app.getPath("downloads"), latest.assetName || "SetArchitect.dmg");
   try {
     await download(latest.url, target);
   } catch (error) {
@@ -97,7 +97,7 @@ async function runUpdate(latest, parent) {
     title: "Almost there",
     message: "The new version has been downloaded and opened.",
     detail:
-      "Drag Dancefloor Builder into your Applications folder, replace the old one, then quit and reopen the app.",
+      "Drag SetArchitect into your Applications folder, replace the old one, then quit and reopen the app.",
     buttons: ["OK"],
   });
 }
@@ -149,7 +149,7 @@ async function checkForUpdates({ silent = true } = {}) {
   const { response } = await dialog.showMessageBox(parent, {
     type: "info",
     title: "Update available",
-    message: `A new version of Dancefloor Builder is available (${latest.name}).`,
+    message: `A new version of SetArchitect is available (${latest.name}).`,
     detail: "It will download to your Downloads folder and open automatically.",
     buttons: ["Update now", "Later"],
     defaultId: 0,

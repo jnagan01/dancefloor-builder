@@ -105,8 +105,8 @@ function createWindow() {
     dialog
       .showMessageBox(mainWindow, {
         type: "warning",
-        title: "Can't reach Dancefloor Builder",
-        message: "Dancefloor Builder couldn't load.",
+        title: "Can't reach SetArchitect",
+        message: "SetArchitect couldn't load.",
         detail: `Check your internet connection and try again.\n\n(${description} — ${failedUrl})`,
         buttons: ["Try again", "Quit"],
         defaultId: 0,
@@ -228,7 +228,7 @@ function registerVirtualDjHandlers() {
         code === "ENOENT"
           ? "No VirtualDJ database found at that location."
           : code === "EPERM" || code === "EACCES"
-            ? "macOS blocked access to that folder. Allow file access for Dancefloor Builder in System Settings › Privacy & Security › Files and Folders."
+            ? "macOS blocked access to that folder. Allow file access for SetArchitect in System Settings › Privacy & Security › Files and Folders."
             : `Couldn't read the VirtualDJ database (${String(code || error)}).`;
       return { ok: false, path: target, error: message };
     }
@@ -325,7 +325,7 @@ function registerVirtualDjHandlers() {
         ok: false,
         error:
           code === "EPERM" || code === "EACCES"
-            ? "macOS blocked access to that folder. Allow file access for Dancefloor Builder in System Settings › Privacy & Security › Files and Folders."
+            ? "macOS blocked access to that folder. Allow file access for SetArchitect in System Settings › Privacy & Security › Files and Folders."
             : `Couldn't read that folder (${String(code || error)}).`,
       };
     }
@@ -360,7 +360,7 @@ function registerVirtualDjHandlers() {
         ok: false,
         error:
           code === "EPERM" || code === "EACCES"
-            ? "macOS blocked writing to that folder. Allow file access for Dancefloor Builder in System Settings › Privacy & Security › Files and Folders."
+            ? "macOS blocked writing to that folder. Allow file access for SetArchitect in System Settings › Privacy & Security › Files and Folders."
             : `Couldn't write to that folder (${String(code || error)}).`,
       };
     }

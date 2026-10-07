@@ -1,6 +1,6 @@
-# Dancefloor Builder — Mac app
+# SetArchitect — Mac app
 
-This folder turns Dancefloor Builder into a real Mac application (Apple Silicon).
+This folder turns SetArchitect into a real Mac application (Apple Silicon).
 
 ## Getting the installer
 
@@ -9,7 +9,7 @@ This folder turns Dancefloor Builder into a real Mac application (Apple Silicon)
 3. Choose **Build macOS app** in the left list, then click **Run workflow**.
 4. Wait about 5 minutes. When it finishes, open the run and download
    **DancefloorBuilder-macOS-AppleSilicon** at the bottom.
-5. Unzip it, open the `.dmg`, and drag **Dancefloor Builder** into Applications.
+5. Unzip it, open the `.dmg`, and drag **SetArchitect** into Applications.
 
 Tagging a release (`v1.0.0`, `v1.1.0`, …) builds it automatically and attaches
 the `.dmg` to that GitHub release.

@@ -12,7 +12,7 @@ import { pageHead } from "@/lib/pageHead";
 
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
-  head: () => pageHead("Sign in", "Sign in to manage your Dancefloor Builder events and music library."),
+  head: () => pageHead("Sign in", "Sign in to manage your SetArchitect events and music library."),
 });
 
 function AuthPage() {

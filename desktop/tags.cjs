@@ -98,7 +98,7 @@ async function writeTags(userDataDir, filePath, patch) {
     return {
       ok: false,
       error: code === "EPERM" || code === "EACCES"
-        ? "macOS blocked changes to that file. Check the file isn't locked and that Dancefloor Builder has folder access."
+        ? "macOS blocked changes to that file. Check the file isn't locked and that SetArchitect has folder access."
         : "Couldn't save the changes to that file.",
     };
   } finally {
