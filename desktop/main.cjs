@@ -1,7 +1,11 @@
-/* Dancefloor Builder — macOS desktop shell (Electron main process) */
+/* SetArchitect — macOS desktop shell (Electron main process) */
 const { app, BrowserWindow, shell, Menu, dialog, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
+
+// Keep the pre-rebrand data folder so window state, tag cache and tag backups carry over.
+app.setPath("userData", path.join(app.getPath("appData"), "Dancefloor Builder"));
+
 const { checkForUpdates } = require("./updater.cjs");
 const { createTagCache, writeTags } = require("./tags.cjs");
 
