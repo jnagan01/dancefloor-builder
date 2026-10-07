@@ -224,6 +224,7 @@ export interface Preferences {
   notes: string;
   doNotPlay?: DoNotPlayEntry[];
   vibe?: string;
+  eventType?: string;
   bpmRange?: [number, number];
   danceRange?: [number, number];
 }
