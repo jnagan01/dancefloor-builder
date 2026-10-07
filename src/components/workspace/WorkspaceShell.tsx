@@ -25,7 +25,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
       <div className="flex h-full flex-col px-3 py-4 lg:px-4 lg:py-6">
         <Link to="/" className="app-no-drag flex items-center gap-3 rounded-xl px-2 py-2 text-sidebar-foreground">
           <span className="h-7 w-1.5 rounded-full bg-primary" />
-          <span className="font-display text-sm font-semibold leading-tight tracking-tight">Dancefloor<br/>Builder</span>
+          <span className="font-display text-sm font-semibold leading-tight tracking-tight">Set<br/>Architect</span>
         </Link>
         <nav aria-label="Main navigation" className="app-no-drag mt-4 flex gap-1 overflow-x-auto lg:mt-8 lg:flex-col lg:overflow-visible">
           {items.map(({ to, label, icon: Icon }) => {
@@ -52,7 +52,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           <Button asChild size="sm" className="w-full justify-start gap-2 rounded-full"><Link to="/events/new"><Plus size={16}/> New event</Link></Button>
         </div>
         <div className="hidden pt-4 text-[11px] text-muted-foreground lg:mt-auto lg:block">
-          <p className="font-medium text-sidebar-foreground">Dancefloor Builder</p>
+          <p className="font-medium text-sidebar-foreground">SetArchitect</p>
           <p className="mt-1">Version {APP_VERSION}</p>
         </div>
       </div>

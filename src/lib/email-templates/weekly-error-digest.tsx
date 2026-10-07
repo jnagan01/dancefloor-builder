@@ -46,7 +46,7 @@ const Email = ({
       </Preview>
       <Body style={main}>
         <Container style={container}>
-          <Text style={eyebrow}>Dancefloor Builder</Text>
+          <Text style={eyebrow}>SetArchitect</Text>
           <Heading style={heading}>Weekly status report</Heading>
           <Text style={muted}>{weekLabel}</Text>
 
@@ -85,7 +85,7 @@ const Email = ({
 
           <Hr style={hr} />
           <Text style={footer}>
-            Sent automatically every Monday morning by Dancefloor Builder.
+            Sent automatically every Monday morning by SetArchitect.
           </Text>
         </Container>
       </Body>
@@ -97,8 +97,8 @@ export const template = {
   component: Email,
   subject: (data: Record<string, any>) =>
     (data["total"] ?? 0) === 0
-      ? "Dancefloor Builder — weekly report: all clear"
-      : `Dancefloor Builder — weekly report: ${data["total"]} issue${data["total"] === 1 ? "" : "s"}`,
+      ? "SetArchitect — weekly report: all clear"
+      : `SetArchitect — weekly report: ${data["total"]} issue${data["total"] === 1 ? "" : "s"}`,
   displayName: "Weekly error digest",
   to: "joe@exceptional-entertainment.com",
   previewData: {

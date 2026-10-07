@@ -32,7 +32,7 @@ const Email = ({
     <Preview>{`Major issue: ${message}`}</Preview>
     <Body style={main}>
       <Container style={container}>
-        <Text style={eyebrow}>Dancefloor Builder</Text>
+        <Text style={eyebrow}>SetArchitect</Text>
         <Heading style={heading}>Major issue detected</Heading>
 
         <Section style={alertBox}>
@@ -74,7 +74,7 @@ const Email = ({
 export const template = {
   component: Email,
   subject: (data: Record<string, any>) =>
-    `Dancefloor Builder — major issue: ${String(data["message"] ?? "unexpected error").slice(0, 80)}`,
+    `SetArchitect — major issue: ${String(data["message"] ?? "unexpected error").slice(0, 80)}`,
   displayName: "Critical error alert",
   to: "joe@exceptional-entertainment.com",
   previewData: {

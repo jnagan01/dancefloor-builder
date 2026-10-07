@@ -148,7 +148,7 @@ export const createSpotifyPlaylist = createServerFn({ method: "POST" })
       body: JSON.stringify({
         name: data.name,
         public: true,
-        description: data.description ?? "Created with Dancefloor Builder",
+        description: data.description ?? "Created with SetArchitect",
       }),
     });
     if (!res.ok) return { error: "Spotify could not create the playlist." };
