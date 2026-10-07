@@ -647,7 +647,7 @@ function Index() {
       setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
     },1000);
     return ()=>{clearTimeout(timer);saveRevision.current+=1};
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
 
   async function generate() {
     // No uploads is fine as long as the client gave artists, genres or decades —
@@ -1239,7 +1239,7 @@ function Index() {
       }
       r = collapseBackground({ ...r, warmUp: merged });
     } else {
-      r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [] });
+      r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [], eventType: prefs.eventType });
       if (fill && r.finalShortfall && r.finalShortfall.total > 0) {
         r = topUpSectionsFromLibrary(r, prefs);
       }
@@ -2136,6 +2136,25 @@ function Index() {
                 )}
               </div>
             </div>
+            {!background && (
+              <div>
+                <Label>Event type</Label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {EVENT_TYPES.map((t) => (
+                    <button key={t.id} type="button" title={t.description}
+                      onClick={() => {
+                        const next = eventType === t.id ? "" : t.id;
+                        setEventType(next);
+                        if (next && t.defaultDecades.length) setDecades([...t.defaultDecades]);
+                      }}
+                      className={`rounded-full border px-3 py-1 text-xs transition ${eventType === t.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs text-muted-foreground">{getEventType(eventType)?.description ?? "Optional · sets the crowd's era flow, starting energy and clean/explicit rules. None = traditional wedding."}</p>
+              </div>
+            )}
             <div>
               <Label>Music style / vibe</Label>
               <div className="mt-2 flex flex-wrap gap-2">
