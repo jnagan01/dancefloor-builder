@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { allowedForEventType, getEventType } from "./eventTypes";
+import { allowedForEventType, getEventType, libraryAllowedForEventType } from "./eventTypes";
 import { getVibe } from "./vibes";
 import { SONG_LIBRARY, type LibrarySong, type Section } from "./songLibrary";
 
@@ -762,7 +762,10 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
   };
   const allSeen = new SongKeySet();
   for (const s of [...next.warmUp, ...next.transition, ...next.peak]) allSeen.add(s.artist, s.song);
-  const unblockedLibrary = SONG_LIBRARY.filter((l) => !isBlocked(l.artist, l.song, prefs.doNotPlay));
+  const evType = getEventType(prefs.eventType);
+  const unblockedLibrary = SONG_LIBRARY.filter(
+    (l) => !isBlocked(l.artist, l.song, prefs.doNotPlay) && libraryAllowedForEventType(l, evType),
+  );
 
   for (const key of ["warmUp", "transition", "peak"] as SectionKey[]) {
     const assignedSection = KEY_TO_SECTION[key];
