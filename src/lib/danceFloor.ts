@@ -423,6 +423,8 @@ export interface GenerationInput {
   hours: number;
   expand: boolean;
   buffer?: number;
+  /** Custom minutes per section; omit for equal thirds. */
+  split?: { warmUp: number; transition: number; peak: number };
 }
 
 export interface ResultSong extends Song {
@@ -612,6 +614,8 @@ export interface GenerationResult {
    * Populated by `reorderForEnergyProgression`.
    */
   finalShortfall?: { warmUp: number; transition: number; peak: number; total: number };
+  /** Per-section song targets when the DJ set custom section lengths. */
+  sectionTargets?: { warmUp: number; transition: number; peak: number };
   duplicatesRemoved: number;
   blockedCount: number;
 }
@@ -620,7 +624,34 @@ export interface GenerationResult {
 const SONGS_PER_HOUR = 15; // ~4 min/song
 export const SECTION_BUFFER = 2;
 
-type SectionKey = "warmUp" | "transition" | "peak";
+export type SectionKey = "warmUp" | "transition" | "peak";
+
+/** Minutes per dance-floor section. */
+export type SectionSplit = { warmUp: number; transition: number; peak: number };
+
+/** Equal thirds of the total length, in whole minutes (remainder goes to Peak). */
+export function equalSplit(hours: number): SectionSplit {
+  const total = Math.max(0, Math.round(hours * 60));
+  const third = Math.floor(total / 3);
+  return { warmUp: third, transition: third, peak: total - third * 2 };
+}
+
+/** Song target per section from its minutes, with buffer, growing to fit uploads by time share. */
+export function sectionTargetsFromSplit(split: SectionSplit, buffer: number, uploadCount = 0): SectionSplit {
+  const sum = split.warmUp + split.transition + split.peak || 1;
+  const one = (k: SectionKey) => {
+    const m = Math.max(0, split[k]);
+    if (m === 0) return 0;
+    const base = Math.ceil((m / 60) * SONGS_PER_HOUR);
+    return Math.max(Math.ceil(base * buffer), Math.ceil((uploadCount * m) / sum));
+  };
+  return { warmUp: one("warmUp"), transition: one("transition"), peak: one("peak") };
+}
+
+/** Song target for one section (custom length when set, else the even per-section target). */
+export function sectionTargetFor(r: Pick<GenerationResult, "perSectionTarget" | "sectionTargets">, key: SectionKey): number {
+  return r.sectionTargets?.[key] ?? r.perSectionTarget;
+}
 
 const KEY_TO_SECTION: Record<SectionKey, Section> = {
   warmUp: "Warm Up",
@@ -702,11 +733,11 @@ function librarySongToResult(lib: LibrarySong, assignedSection: Section, reused 
 }
 
 function sectionShortfall(result: GenerationResult): GenerationResult["finalShortfall"] {
-  const target = result.perSectionTarget;
+  const t = (k: SectionKey) => sectionTargetFor(result, k);
   const finalShortfall = {
-    warmUp: Math.max(0, target - result.warmUp.length),
-    transition: Math.max(0, target - result.transition.length),
-    peak: Math.max(0, target - result.peak.length),
+    warmUp: Math.max(0, t("warmUp") - result.warmUp.length),
+    transition: Math.max(0, t("transition") - result.transition.length),
+    peak: Math.max(0, t("peak") - result.peak.length),
     total: 0,
   };
   finalShortfall.total = finalShortfall.warmUp + finalShortfall.transition + finalShortfall.peak;
@@ -767,7 +798,7 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
     // runs out of unique fits, the section stays short (surfaced as a
     // shortfall) rather than repeating songs.
     for (const { lib } of ranked) {
-      if (list.length >= next.perSectionTarget) break;
+      if (list.length >= sectionTargetFor(next, key)) break;
       if (!underCap(lib.artist) || allSeen.has(lib.artist, lib.song)) continue;
       allSeen.add(lib.artist, lib.song);
       bump(lib.artist);
@@ -827,13 +858,17 @@ export function generateLists(input: GenerationInput): GenerationResult {
     Math.ceil(perSectionBase * (input.buffer ?? SECTION_BUFFER)),
     Math.ceil(cleanUploaded.length / 3),
   );
+  const sectionTargets = input.split
+    ? sectionTargetsFromSplit(input.split, input.buffer ?? SECTION_BUFFER, cleanUploaded.length)
+    : undefined;
+  const tgt = (k: SectionKey) => sectionTargets?.[k] ?? perSectionTarget;
 
   // Shortfall is computed from uploads only (before expansion fills the gap),
   // so the UI can warn when expansion is OFF.
   const shortfall = {
-    warmUp: Math.max(0, perSectionTarget - warmUp.length),
-    transition: Math.max(0, perSectionTarget - transition.length),
-    peak: Math.max(0, perSectionTarget - peak.length),
+    warmUp: Math.max(0, tgt("warmUp") - warmUp.length),
+    transition: Math.max(0, tgt("transition") - transition.length),
+    peak: Math.max(0, tgt("peak") - peak.length),
     total: 0,
   };
   shortfall.total = shortfall.warmUp + shortfall.transition + shortfall.peak;
@@ -867,9 +902,9 @@ export function generateLists(input: GenerationInput): GenerationResult {
       }
     };
 
-    padTo(warmUp, "Warm Up", perSectionTarget);
-    padTo(transition, "Transition", perSectionTarget);
-    padTo(peak, "Peak", perSectionTarget);
+    padTo(warmUp, "Warm Up", tgt("warmUp"));
+    padTo(transition, "Transition", tgt("transition"));
+    padTo(peak, "Peak", tgt("peak"));
   }
 
   // Sort each section ascending by intensity for a smooth energy ramp.
@@ -886,9 +921,10 @@ export function generateLists(input: GenerationInput): GenerationResult {
     warmUp: toResult(warmUp),
     transition: toResult(transition),
     peak: toResult(peak),
-    targetTotal: perSectionTarget * 3,
+    targetTotal: sectionTargets ? sectionTargets.warmUp + sectionTargets.transition + sectionTargets.peak : perSectionTarget * 3,
     perSectionTarget,
     perSectionBase,
+    ...(sectionTargets ? { sectionTargets } : {}),
     shortfall,
     duplicatesRemoved,
     blockedCount,
@@ -1137,8 +1173,21 @@ export function reorderForEnergyProgression(
     if (t <= 6.5) curveWarm += 1;
     else if (t >= 8) curvePeak += 1;
   }
-  const warmCount = Math.min(target, Math.max(1, curveWarm || Math.ceil(n / 3)));
-  const peakCount = Math.min(target, Math.max(1, curvePeak || Math.ceil(n / 3)));
+  let warmCount = Math.min(target, Math.max(1, curveWarm || Math.ceil(n / 3)));
+  let peakCount = Math.min(target, Math.max(1, curvePeak || Math.ceil(n / 3)));
+  let transitionTarget = target;
+  // Custom section lengths: split by the DJ's chosen time shares instead of
+  // the curve, with each section capped at its own target.
+  const st = result.sectionTargets;
+  if (st) {
+    const sum = st.warmUp + st.transition + st.peak || 1;
+    const floor = (k: SectionKey) => Math.max(st[k], Math.ceil((uploadCount * st[k]) / sum));
+    const shareW = Math.round((n * st.warmUp) / sum);
+    const shareP = Math.round((n * st.peak) / sum);
+    warmCount = st.warmUp > 0 ? Math.min(floor("warmUp"), Math.max(1, shareW)) : 0;
+    peakCount = st.peak > 0 ? Math.min(floor("peak"), Math.max(1, shareP)) : 0;
+    transitionTarget = floor("transition");
+  }
   // Guard against overlap when n < warmCount + peakCount (very small sets).
   const warmEnd = Math.min(warmCount, n);
   const peakStart = Math.max(warmEnd, n - peakCount);
@@ -1148,7 +1197,7 @@ export function reorderForEnergyProgression(
   let transitionRaw = sorted.slice(warmEnd, peakStart);
   const peakRaw = sorted.slice(peakStart);
 
-  // Cap transition at perSectionTarget. Without this, when AI/library
+  // Cap transition at its target. Without this, when AI/library
   // over-supply mid-intensity songs the middle slice grows unbounded while
   // warm/peak stay capped at `target`, leaving transition much longer than
   // the other two sections.
@@ -1158,8 +1207,8 @@ export function reorderForEnergyProgression(
   // ends so what remains stays centered on the true transition band. If the
   // uploads alone exceed the target, the section is allowed to run long
   // rather than losing the user's own tracks.
-  if (transitionRaw.length > target) {
-    const excess = transitionRaw.length - target;
+  if (transitionRaw.length > transitionTarget) {
+    const excess = transitionRaw.length - transitionTarget;
     const fillerIdx = transitionRaw
       .map((s, i) => (s.fromUpload ? -1 : i))
       .filter((i) => i >= 0);

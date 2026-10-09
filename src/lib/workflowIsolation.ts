@@ -76,6 +76,7 @@ export interface WorkflowScopedState {
   doNotPlayInput: string;
   vibe?: string;
   eventType?: string;
+  split?: { warmUp: number; transition: number; peak: number };
   bpmRange?: [number, number];
   danceRange?: [number, number];
   expand: boolean;
