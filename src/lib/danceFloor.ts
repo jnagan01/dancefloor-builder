@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { allowedForEventType, getEventType } from "./eventTypes";
+import { allowedForEventType, getEventType, libraryAllowedForEventType } from "./eventTypes";
 import { getVibe } from "./vibes";
 import { SONG_LIBRARY, type LibrarySong, type Section } from "./songLibrary";
 
