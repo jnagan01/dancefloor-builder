@@ -69,6 +69,20 @@ export function allowedForEventType(s: { year?: number; explicit?: boolean }, t?
   return true;
 }
 
+/**
+ * Library songs only know their decade. Treat the decade's last year as the
+ * latest possible release: "1990s" passes a 1995 cutoff, "1980s" does not.
+ */
+export function libraryAllowedForEventType(
+  s: { decade?: string; year?: number; explicit?: boolean },
+  t?: EventType,
+): boolean {
+  if (!t) return true;
+  const start = s.decade ? parseInt(s.decade, 10) : NaN;
+  const year = typeof s.year === "number" ? s.year : Number.isFinite(start) ? start + 9 : undefined;
+  return allowedForEventType({ year, explicit: s.explicit }, t);
+}
+
 export function eventTypeNote(id?: string | null): string {
   const t = getEventType(id);
   return t ? `EVENT TYPE: ${t.label}. ${t.prompt}` : "";
