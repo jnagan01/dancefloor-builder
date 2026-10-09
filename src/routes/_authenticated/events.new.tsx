@@ -25,6 +25,10 @@ import {
   buildGapProfile,
   isFavoriteArtist,
   FAVORITE_ARTIST_CAP,
+  equalSplit,
+  sectionTargetFor,
+  sectionTargetsFromSplit,
+  type SectionSplit,
 } from "@/lib/danceFloor";
 
 import {
@@ -185,6 +189,8 @@ function Index() {
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
   const [songs, setSongs] = useState<Song[]>([]);
   const [hours, setHours] = useState<string>("3");
+  const [splitOn, setSplitOn] = useState(false);
+  const [split, setSplit] = useState<SectionSplit>(() => equalSplit(3));
   const [listType, setListType] = useState<ListType>("dance");
   const [minutes, setMinutes] = useState<string>("60");
   const background = listType !== "dance";
@@ -525,6 +531,8 @@ function Index() {
 
   const hoursNum = parseFloat(hours) || 0;
   const sectionMinutes = formatMinutes(hoursNum);
+  const activeSplit: SectionSplit | undefined = splitOn && !background ? split : undefined;
+  const splitTotal = split.warmUp + split.transition + split.peak;
 
   const doNotPlayEntries = useMemo(() => parseDoNotPlay(doNotPlayInput), [doNotPlayInput]);
 
@@ -590,7 +598,7 @@ function Index() {
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes},
+      inputs:{songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,split:splitOn?split:undefined},
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -602,7 +610,7 @@ function Index() {
       const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
       const lists=row.lists as unknown as WorkflowSnapshot["lists"];
       if(!inputs || !lists)return;
-      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(Number(inputs.hours)||3));
       // A saved event with only a single list and no dance-floor sections is a
       // cocktail/dinner list even if the stored snapshot predates listType.
       const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
@@ -617,7 +625,7 @@ function Index() {
         const per=Math.ceil((Math.max(0,Number(inputs.hours) || 0)*15/3)*(inputs.buffer??2));
         const shortfall={warmUp:Math.max(0,per-lists.warmUp.length),transition:Math.max(0,per-lists.transition.length),peak:Math.max(0,per-lists.peak.length),total:0};
         shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
-        setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
+        setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),...(inputs.split?{sectionTargets:sectionTargetsFromSplit(inputs.split,inputs.buffer??2,(inputs.songs??[]).length)}:{}),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
       }
       // Re-key saved selections by section+position so snapshots written with an
       // older dedupeKey format (e.g. "the weeknd|…") still land on their song.
@@ -651,7 +659,7 @@ function Index() {
       setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
     },1000);
     return ()=>{clearTimeout(timer);saveRevision.current+=1};
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,savedEventId]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId]);
 
   async function generate() {
     // No uploads is fine as long as the client gave artists, genres or decades —
@@ -678,6 +686,7 @@ function Index() {
       hours: background ? 24 : hoursNum,
       expand: false,
       buffer: background ? 1 : buffer,
+      split: activeSplit,
       prefs,
     });
     // Cocktail / dinner: one continuous list that must cover the time.
@@ -972,7 +981,7 @@ function Index() {
                   while (
                     cursor < crateFinds.length &&
                     placed < quota &&
-                    r[key].length < r.perSectionTarget
+                    r[key].length < sectionTargetFor(r, key)
                   ) {
                     const pick = crateFinds[cursor++];
                     if (!pick) break;
@@ -996,7 +1005,7 @@ function Index() {
             if (favoriteArtists.length) {
               const FAV_ATTEMPTS = 3;
               for (let favAttempt = 0; favAttempt < FAV_ATTEMPTS; favAttempt++) {
-                if (r[key].length >= r.perSectionTarget) break;
+                if (r[key].length >= sectionTargetFor(r, key)) break;
                 // Artists still under the per-list cap for THIS section.
                 const counts = new Map<string, number>();
                 for (const s of [...r.warmUp, ...r.transition, ...r.peak]) {
@@ -1007,7 +1016,7 @@ function Index() {
                   (f) => (counts.get(f) ?? 0) < FAVORITE_ARTIST_CAP,
                 );
                 if (!eligible.length) break;
-                const need = r.perSectionTarget - r[key].length;
+                const need = sectionTargetFor(r, key) - r[key].length;
                 const requestCount = Math.min(
                   need,
                   MAX_AI_RECOMMENDATION_BATCH_SIZE,
@@ -1036,7 +1045,7 @@ function Index() {
                   for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                   let added = 0;
                   for (const sug of res.suggestions) {
-                    if (r[key].length >= r.perSectionTarget) break;
+                    if (r[key].length >= sectionTargetFor(r, key)) break;
                     if (seen.has(sug.artist, sug.song)) continue;
                     // Enforce the per-list cap client-side too.
                     const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
@@ -1068,14 +1077,14 @@ function Index() {
             // songs.
             const MAX_ATTEMPTS = Math.max(
               4,
-              Math.ceil(r.perSectionTarget / MAX_AI_RECOMMENDATION_BATCH_SIZE) + 3,
+              Math.ceil(sectionTargetFor(r, key) / MAX_AI_RECOMMENDATION_BATCH_SIZE) + 3,
             );
             let attempt = 0;
             let lastErr: unknown = null;
             let gotAny = false;
-            while (r[key].length < r.perSectionTarget && attempt < MAX_ATTEMPTS) {
+            while (r[key].length < sectionTargetFor(r, key) && attempt < MAX_ATTEMPTS) {
               attempt += 1;
-              const need = r.perSectionTarget - r[key].length;
+              const need = sectionTargetFor(r, key) - r[key].length;
               const requestCount = Math.min(need, MAX_AI_RECOMMENDATION_BATCH_SIZE);
               try {
                 // Rebuild `existing` each attempt so the AI sees everything
@@ -1117,7 +1126,7 @@ function Index() {
                 for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                 let addedThisAttempt = 0;
                 for (const sug of res.suggestions) {
-                  if (r[key].length >= r.perSectionTarget) break;
+                  if (r[key].length >= sectionTargetFor(r, key)) break;
                   if (!seen.tryAdd(sug.artist, sug.song)) continue;
                   r[key].push({
                     artist: sug.artist,
@@ -1154,7 +1163,7 @@ function Index() {
             // sections finish (see enrichBatch call below) so we do it once.
             // Mark section as failed only when AI produced nothing at all
             // AND we still have a gap — that's when we need library fallback.
-            if (!gotAny && r[key].length < r.perSectionTarget) {
+            if (!gotAny && r[key].length < sectionTargetFor(r, key)) {
               if (lastErr) failed.push(key);
               else failed.push(key);
             }
@@ -1163,13 +1172,14 @@ function Index() {
 
         // Top up any sections still short (even after successful AI calls)
         // from the built-in library so we always hit the buffered target.
-        const stillShort = sectionMap.filter(({ key }) => r[key].length < r.perSectionTarget);
+        const stillShort = sectionMap.filter(({ key }) => r[key].length < sectionTargetFor(r, key));
         if (stillShort.length) {
           const fallback = generateLists({
             uploaded: uniqueSongs,
             hours: hoursNum,
             expand: true,
             buffer,
+            split: activeSplit,
             prefs,
           });
           // Track keys across ALL sections so a library song can't be added
@@ -1179,7 +1189,7 @@ function Index() {
           for (const { key } of stillShort) {
             const pool = background ? [...fallback.warmUp, ...fallback.transition, ...fallback.peak] : fallback[key];
             for (const s of pool) {
-              if (r[key].length >= r.perSectionTarget) break;
+              if (r[key].length >= sectionTargetFor(r, key)) break;
               if (!globalHave.tryAdd(s.artist, s.song)) continue;
               r[key].push({ ...s, metaSource: "Library" });
             }
@@ -1974,10 +1984,11 @@ function Index() {
       hours: safeHours,
       expand: false,
       buffer,
+      split: activeSplit,
       prefs: { artists: [], genres: [], decades: [], notes: "" },
     });
     return {
-      total: r.perSectionTarget * 3,
+      total: r.targetTotal,
       perSection: r.perSectionTarget,
       perSectionBase: r.perSectionBase,
       shortfall: r.shortfall,
@@ -1994,7 +2005,7 @@ function Index() {
     });
     // debouncedExpand is intentionally part of deps for visual pending state only
     void debouncedExpand;
-  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer]);
+  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer, splitOn, split, background]);
 
 
   const [step, setStep] = useState(1);
@@ -2112,8 +2123,47 @@ function Index() {
                 />
                 {hoursNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
-                    Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min · Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs (<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section, {buffer}× buffer)
+                    {splitOn
+                      ? <>Warm Up {split.warmUp} min · Transition {split.transition} min · Peak {split.peak} min</>
+                      : <>Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min (equal thirds)</>}
+                    {" "}· Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs ({buffer}× buffer)
                   </p>
+                )}
+                {hoursNum > 0 && (
+                  <div className="mt-2">
+                    {!splitOn ? (
+                      <Button type="button" variant="outline" size="sm" onClick={() => { setSplit(equalSplit(hoursNum)); setSplitOn(true); }}>
+                        Customize section times
+                      </Button>
+                    ) : (
+                      <div className="rounded-md border border-border p-3">
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["warmUp", "transition", "peak"] as const).map((k) => (
+                            <div key={k}>
+                              <Label htmlFor={`split-${k}`} className="text-xs">{k === "warmUp" ? "Warm Up" : k === "transition" ? "Transition" : "Peak"} (min)</Label>
+                              <Input
+                                id={`split-${k}`}
+                                type="number"
+                                min="0"
+                                step="5"
+                                value={split[k]}
+                                onChange={(e) => setSplit({ ...split, [k]: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                                className="mt-1"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <p className={`mt-2 text-xs ${splitTotal === Math.round(hoursNum * 60) ? "text-muted-foreground" : "text-warning"}`}>
+                          {split.warmUp} + {split.transition} + {split.peak} = {splitTotal} min
+                          {splitTotal !== Math.round(hoursNum * 60) ? ` · doesn't match the ${Math.round(hoursNum * 60)}-min dance floor; songs follow these section times` : ""}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" size="sm" onClick={() => setSplit(equalSplit(hoursNum))}>Reset to equal thirds</Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setSplitOn(false)}>Use equal thirds</Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
               )}
@@ -2617,23 +2667,23 @@ function Index() {
                     {!background && <div className="mt-1.5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Warm Up</div>
-                        <div>{result.warmUp.length} / {result.perSectionTarget}</div>
+                        <div>{result.warmUp.length} / {sectionTargetFor(result, "warmUp")}</div>
                          <div className="text-warning">-{result.finalShortfall.warmUp} short</div>
                       </div>
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Transition</div>
-                        <div>{result.transition.length} / {result.perSectionTarget}</div>
+                        <div>{result.transition.length} / {sectionTargetFor(result, "transition")}</div>
                          <div className="text-warning">-{result.finalShortfall.transition} short</div>
                       </div>
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Peak</div>
-                        <div>{result.peak.length} / {result.perSectionTarget}</div>
+                        <div>{result.peak.length} / {sectionTargetFor(result, "peak")}</div>
                          <div className="text-warning">-{result.finalShortfall.peak} short</div>
                       </div>
                     </div>}
 
                     {!background && <div className="mt-1.5 text-xs">
-                      Target {result.perSectionTarget} songs per section. The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
+                      Target {result.sectionTargets ? `${result.sectionTargets.warmUp} / ${result.sectionTargets.transition} / ${result.sectionTargets.peak} songs (Warm Up / Transition / Peak)` : `${result.perSectionTarget} songs per section`}. The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
                     </div>}
                   </div>
                 </div>
@@ -2656,7 +2706,7 @@ function Index() {
                        <TabsTrigger key={sec} value={sec} className="h-auto min-w-0 whitespace-normal rounded-none border-b-2 border-transparent px-3 py-2 text-left leading-tight data-[state=active]:border-primary data-[state=active]:bg-sidebar-accent">
                         <span className="flex flex-col gap-0.5">
                           <span>
-                            {label} ({result[sec].length}{shortfall > 0 ? ` / ${result.perSectionTarget}, -${shortfall}` : ""})
+                            {label} ({result[sec].length}{shortfall > 0 ? ` / ${sectionTargetFor(result, sec)}, -${shortfall}` : ""})
                           </span>
                           {ps && (
                             <span className="flex flex-wrap items-center gap-1 text-[10px] font-normal">
