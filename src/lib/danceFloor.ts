@@ -817,9 +817,9 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
 
 export function generateLists(input: GenerationInput): GenerationResult {
   const { uploaded, prefs, hours, expand } = input;
-  // Every uploaded song is kept regardless of settings: only rows with no
-  // title at all are skipped, a missing artist becomes "Unknown Artist", and
-  // Do Not Play never removes a client's own upload (it only filters fillers).
+  // Every uploaded song is kept regardless of filter settings (event type,
+  // vibe, sliders, artist caps). Only Do Not Play removes an upload. Rows with
+  // no title are skipped and a missing artist becomes "Unknown Artist".
   const validUploaded = uploaded
     .filter((s) => (s.song ?? "").trim() || (s.artist ?? "").trim())
     .map((s) => ({
@@ -828,7 +828,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
       song: (s.song ?? "").trim() || (s.artist ?? "").trim(),
     }));
   const dedupedUploaded = dedupeSongs(validUploaded);
-  const cleanUploaded = dedupedUploaded;
+  const cleanUploaded = dedupedUploaded.filter((s) => !isBlocked(s.artist, s.song, prefs.doNotPlay));
 
   const duplicatesRemoved = validUploaded.length - dedupedUploaded.length;
   const blockedCount = dedupedUploaded.length - cleanUploaded.length;
