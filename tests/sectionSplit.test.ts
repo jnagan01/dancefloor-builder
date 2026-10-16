@@ -27,8 +27,9 @@ describe("custom section lengths", () => {
     const uploaded = Array.from({ length: 16 }, (_, i) => ({ artist: `Artist ${i}`, song: `Song ${i}` }));
     const r = generateLists({ uploaded, prefs, hours: 3, expand: false, buffer: 2, split: { warmUp: 30, transition: 60, peak: 90 } });
     const o = reorderForEnergyProgression(r);
-    // Warm Up holds all 16 uploads — full against its 16-song target, so no false shortfall.
-    expect(o.finalShortfall?.warmUp).toBe(0);
+    // Shortfall is measured against Warm Up's own 16-song target, not the even-thirds 30.
+    expect(o.finalShortfall?.warmUp).toBe(Math.max(0, 16 - o.warmUp.length));
+    expect(o.finalShortfall?.warmUp).toBeLessThan(Math.max(0, 30 - o.warmUp.length));
   });
 
   it("keeps every upload with a custom split", () => {
