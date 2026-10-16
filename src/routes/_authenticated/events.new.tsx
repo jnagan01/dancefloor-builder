@@ -623,9 +623,11 @@ function Index() {
         setResult({warmUp:lists.warmUp,transition:[],peak:[],targetTotal:t,perSectionTarget:t,perSectionBase:t,shortfall:sf,finalShortfall:sf,duplicatesRemoved:0,blockedCount:0});
       } else {
         const per=Math.ceil((Math.max(0,Number(inputs.hours) || 0)*15/3)*(inputs.buffer??2));
-        const shortfall={warmUp:Math.max(0,per-lists.warmUp.length),transition:Math.max(0,per-lists.transition.length),peak:Math.max(0,per-lists.peak.length),total:0};
+        const secTargets=inputs.split?sectionTargetsFromSplit(inputs.split,inputs.buffer??2,(inputs.songs??[]).length):undefined;
+        const tFor=(k:SectionKey)=>secTargets?.[k]??per;
+        const shortfall={warmUp:Math.max(0,tFor("warmUp")-lists.warmUp.length),transition:Math.max(0,tFor("transition")-lists.transition.length),peak:Math.max(0,tFor("peak")-lists.peak.length),total:0};
         shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
-        setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),...(inputs.split?{sectionTargets:sectionTargetsFromSplit(inputs.split,inputs.buffer??2,(inputs.songs??[]).length)}:{}),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
+        setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:secTargets?secTargets.warmUp+secTargets.transition+secTargets.peak:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),...(secTargets?{sectionTargets:secTargets}:{}),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
       }
       // Re-key saved selections by section+position so snapshots written with an
       // older dedupeKey format (e.g. "the weeknd|…") still land on their song.
