@@ -867,13 +867,21 @@ export function generateLists(input: GenerationInput): GenerationResult {
   const tgt = (k: SectionKey) => sectionTargets?.[k] ?? perSectionTarget;
 
   // Shortfall is computed from uploads only (before expansion fills the gap),
-  // so the UI can warn when expansion is OFF.
-  const shortfall = {
-    warmUp: Math.max(0, tgt("warmUp") - warmUp.length),
-    transition: Math.max(0, tgt("transition") - transition.length),
-    peak: Math.max(0, tgt("peak") - peak.length),
-    total: 0,
-  };
+  // so the UI can warn when expansion is OFF. The energy ramp later spreads
+  // uploads across all sections, so surplus songs in one section cover gaps in
+  // another — only the true overall deficit is reported.
+  const shortfall = { warmUp: 0, transition: 0, peak: 0, total: 0 };
+  {
+    const keys: SectionKey[] = ["warmUp", "transition", "peak"];
+    const have: Record<SectionKey, number> = { warmUp: warmUp.length, transition: transition.length, peak: peak.length };
+    let surplus = keys.reduce((n, k) => n + Math.max(0, have[k] - tgt(k)), 0);
+    for (const k of keys) {
+      const gap = Math.max(0, tgt(k) - have[k]);
+      const covered = Math.min(gap, surplus);
+      surplus -= covered;
+      shortfall[k] = gap - covered;
+    }
+  }
   shortfall.total = shortfall.warmUp + shortfall.transition + shortfall.peak;
 
   if (expand) {
