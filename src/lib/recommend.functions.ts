@@ -1,3 +1,4 @@
+import { stripArtistFromTitle } from "./danceFloor";
 import { targetsNote } from "./vibes";
 import { eventTypeNote } from "./eventTypes";
 import { createServerFn } from "@tanstack/react-start";
@@ -207,7 +208,10 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
           : parsed && typeof parsed === "object" && Array.isArray((parsed as { suggestions?: unknown }).suggestions)
             ? (parsed as { suggestions: unknown[] }).suggestions
             : [];
-        const normalized = rows.map(normalizeSuggestion).filter((s): s is RecommendedSong => !!s);
+        const normalized = rows
+          .map(normalizeSuggestion)
+          .filter((s): s is RecommendedSong => !!s)
+          .map((s) => ({ ...s, song: stripArtistFromTitle(s.artist, s.song) }));
         return normalized.length ? normalized.slice(0, data.count) : null;
       } catch {
         return null;
@@ -226,7 +230,7 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
     };
     const existingList = data.existing
       .slice(0, 200)
-      .map((s) => `${sanitize(s.artist, 200)} — ${sanitize(s.song, 200)}${fmtFeat(s)}`)
+      .map((s) => `${sanitize(s.artist, 200)} — ${sanitize(stripArtistFromTitle(s.artist, s.song), 200)}${fmtFeat(s)}`)
       .join("\n");
     const blockList = data.prefs.doNotPlay
       .slice(0, 100)
@@ -392,6 +396,7 @@ ${blockList || "(none)"}
 Rules:
 - Return ONLY one JSON object with this exact top-level shape: {"suggestions":[...]}.
 - Every item inside suggestions MUST use the field name "song" for the title. Do not use "title", "track", or a raw array.
+- The "song" field holds ONLY the song title — never include the artist name in it (write "September", not "Earth, Wind & Fire - September").
 - Suggest REAL released songs you are confident exist; no fabrications.
 - energy, danceability, popularity, valence are integers 1–10 inside the section target band.
 - popularity MUST be 6 or higher for every suggestion — recommend only songs a general wedding/party crowd will recognize. If a track scores below 6, replace it with a more widely-known song even if the obscure track fit the energy/BPM/key targets better.
