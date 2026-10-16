@@ -1265,9 +1265,9 @@ export function reorderForEnergyProgression(
 
 
   const finalShortfall = {
-    warmUp: Math.max(0, target - warmUp.length),
-    transition: Math.max(0, target - transition.length),
-    peak: Math.max(0, target - peak.length),
+    warmUp: Math.max(0, sectionTargetFor(result, "warmUp") - warmUp.length),
+    transition: Math.max(0, sectionTargetFor(result, "transition") - transition.length),
+    peak: Math.max(0, sectionTargetFor(result, "peak") - peak.length),
     total: 0,
   };
   finalShortfall.total = finalShortfall.warmUp + finalShortfall.transition + finalShortfall.peak;
