@@ -69,8 +69,28 @@ export function normalizeKey(s: string): string {
     .trim();
 }
 
+/**
+ * Remove a redundant artist name embedded in a title:
+ * "Earth, Wind & Fire - September" / "September - Earth, Wind & Fire" -> "September".
+ * Only strips when the embedded part matches the track's artist.
+ */
+export function stripArtistFromTitle(artist: string, song: string): string {
+  const s = (song || "").trim();
+  const a = normalizeKey(artist).replace(/^(the|a)\s+/, "");
+  if (!s || !a) return s;
+  const m = s.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+  if (!m) return s;
+  const left = normalizeKey(m[1]).replace(/^(the|a)\s+/, "");
+  const right = normalizeKey(m[2]).replace(/^(the|a)\s+/, "");
+  const parts = new Set(artistParts(artist));
+  const isArtist = (x: string) => x === a || parts.has(x);
+  if (isArtist(left) && m[2].trim()) return m[2].trim();
+  if (isArtist(right) && m[1].trim()) return m[1].trim();
+  return s;
+}
+
 export function dedupeKey(artist: string, song: string): string {
-  return `${normalizeKey(artist).replace(/^(the|a)\s+/, "")}|${normalizeKey(song)}`;
+  return `${normalizeKey(artist).replace(/^(the|a)\s+/, "")}|${normalizeKey(stripArtistFromTitle(artist, song))}`;
 }
 
 function stripThe(s: string): string {
@@ -98,7 +118,7 @@ export function artistParts(artist: string): string[] {
 
 /** All identity keys for a song; two songs are the same if any key overlaps. */
 export function songKeys(artist: string, song: string): string[] {
-  const title = stripThe(normalizeKey(song));
+  const title = stripThe(normalizeKey(stripArtistFromTitle(artist, song)));
   if (!title) return [];
   const keys = new Set<string>([`${stripThe(normalizeKey(artist))}|${title}`]);
   for (const a of artistParts(artist)) keys.add(`${a}|${title}`);
