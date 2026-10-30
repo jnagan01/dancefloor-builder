@@ -11,3 +11,9 @@
 - [x] Fail incomplete desktop scans and preserve existing source tracks, with mocked filesystem tests.
 - [x] Enforce exact desktop origin/main-frame IPC, navigation and requester permission checks, with regression tests.
 - [x] Run regressions and inspect harness typecheck/build results; report revision and any existing failures. No publishing, releases, migrations or production/data mutations.
+
+# Reviewed file-identity fixes
+- [ ] Make playback and tag resolution exact-path first, with globally safe legacy fallback.
+- [ ] Preserve duplicate-named folder identities, saved selections, and export locations.
+- [ ] Match VirtualDJ and rescan metadata by exact track identity.
+- [ ] Run mock regressions and the full suite; inspect automatic build/typecheck and report changed files/revision.
