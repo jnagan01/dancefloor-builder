@@ -33,7 +33,7 @@ export function WaveformPlayer({
 
   const file = resolved ?? (diskFile?.target === target ? diskFile.file : undefined);
 
-  const [url, setUrl] = useState<string | null>(null);
+  const [url, setUrl] = useState<{ file: File; value: string } | null>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -46,7 +46,7 @@ export function WaveformPlayer({
   useEffect(() => {
     if (!file) { setUrl(null); setBars([]); return; }
     const next = URL.createObjectURL(file);
-    setUrl(next);
+    setUrl({ file, value: next });
     setPlaying(false);
     setProgress(0);
     return () => URL.revokeObjectURL(next);
@@ -95,7 +95,8 @@ export function WaveformPlayer({
     return () => { cancelled = true; };
   }, [file]);
 
-  const src = url ?? clipUrl ?? undefined;
+  const localUrl = url?.file === file ? url?.value : undefined;
+  const src = localUrl ?? (!target?.filePath ? clipUrl : null) ?? undefined;
 
   // Auto-start whichever source became available.
   useEffect(() => {
@@ -112,7 +113,7 @@ export function WaveformPlayer({
   };
   const ytUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${target.artist} ${target.song}`)}`;
 
-  const note = url
+  const note = localUrl
     ? null
     : clipUrl
       ? "30-second preview — not in your music folders."

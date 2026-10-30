@@ -4,6 +4,7 @@ import { buildAudioIndex, resolveAudioFile } from "@/lib/audioMatch";
 import { readNativeAudioFile, rememberNativeFilePath, getNativeFilePath, writeNativeTags } from "@/lib/desktopBridge";
 import { buildLibrary, findTrackForPickedFile, folderForPath, resolveExportPath, tracksFromAudioFiles, buildM3u } from "@/lib/virtualDj";
 import { metadataResolver, mergeTrackMetadata } from "@/lib/trackMetadataIdentity";
+import { withoutSourceFiles } from "@/lib/workspaceFileCache";
 
 const roots = { Music: "/Volumes/A/Music", "Music (2)": "/Volumes/B/Music" };
 const paths = ["Music/Song.mp3", "Music (2)/Song.mp3"];
@@ -111,6 +112,19 @@ describe("stable folder labels", () => {
     expect(trackIdentity(saved.selectedPath, restored)).toBe("/Volumes/A/Music/Song.mp3");
     expect(normalizeFilePath("/Volumes/A/Music/./House/../Song.mp3")).toBe("/Volumes/A/Music/Song.mp3");
     expect(resolveExportPath("Music/../Song.mp3", restored)).toBeNull();
+  });
+  it("removes stale relative and native aliases without evicting the sibling folder", () => {
+    const a = audio(paths[0]), b = audio(paths[1]), absolute = audio("/Volumes/A/Music/Deleted.mp3");
+    rememberNativeFilePath(absolute, "/Volumes/A/Music/Deleted.mp3");
+    expect(withoutSourceFiles([a, b, absolute], "Music", paths.slice(0, 1), roots)).toEqual([b]);
+    expect(resolveExportPath(paths[0], roots)).toBe("/Volumes/A/Music/Song.mp3");
+  });
+  it("successful rescan invalidation leaves the other source playable", () => {
+    const a = audio(paths[0]), b = audio(paths[1]);
+    const retained = withoutSourceFiles([a, b], "Music", [], roots);
+    const index = buildAudioIndex(retained, [], paths, roots);
+    expect(resolveAudioFile(index, { filePath: paths[0] })).toBeUndefined();
+    expect(resolveAudioFile(index, { filePath: paths[1] })).toBe(b);
   });
 });
 

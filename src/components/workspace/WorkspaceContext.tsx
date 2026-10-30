@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { allocateSourceLabel, relabelScan, normalizeFilePath, trackIdentity, createIdentityIndex } from "@/lib/fileIdentity";
 import { metadataResolver, mergeTrackMetadata } from "@/lib/trackMetadataIdentity";
+import { withoutSourceFiles, cachedFileIdentity } from "@/lib/workspaceFileCache";
 import { nativeScanProblem } from "@/lib/nativeScanSafety";
 
 type Source = { label: string; tracks: VdjTrack[] };
@@ -163,9 +164,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const vdjInfo = useRef<VdjTrack[]>([]);
   /** Native indexes are atomic and source-scoped; no basename aliases. */
   const nativePaths = useRef(new Map<string, Map<string, string>>());
+  const fileCacheRevision = useRef(0);
   function indexNativeFiles(label: string, scanned: ReadonlyArray<{ path: string; relativePath: string }>) {
+    fileCacheRevision.current += 1;
     nativePaths.current.set(label, new Map(scanned.map(f => [normalizeFilePath(f.relativePath), f.path])));
-    setFiles(prev => prev.filter(f => (f.webkitRelativePath || f.name).split("/")[0] !== label));
+    setFiles(prev => withoutSourceFiles(prev, label, [], getFolderRoots()));
   }
   useEffect(() => {
     let active = true;
@@ -326,8 +329,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (existing) return existing;
     const full = exactNativePath(filePath);
     if (!full) return null;
+    const revision = fileCacheRevision.current;
     const file = await readNativeAudioFile(full, filePath);
-    if (file) setFiles(prev => [...prev.filter(f => trackIdentity(getNativeFilePath(f) || f.webkitRelativePath || f.name, getFolderRoots()) !== trackIdentity(full, getFolderRoots())), file]);
+    if (revision !== fileCacheRevision.current) return null;
+    if (file) setFiles(prev => [...prev.filter(f => cachedFileIdentity(f, getFolderRoots()) !== trackIdentity(full, getFolderRoots())), file]);
     return file;
   }
   function wrapFile(file: File, rel: string): File {
@@ -340,9 +345,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   function removeSource(index: number) {
     const source = sources[index];
     if (!source) return;
+    fileCacheRevision.current += 1;
     nativePaths.current.delete(source.label);
-    const ids = new Set(source.tracks.map(t => trackIdentity(t.filePath, getFolderRoots())));
-    setFiles(prev => prev.filter(f => !ids.has(trackIdentity(getNativeFilePath(f) || f.webkitRelativePath || f.name, getFolderRoots()))));
+    setFiles(prev => withoutSourceFiles(prev, source.label, source.tracks.map(t => t.filePath), getFolderRoots()));
     setSources(prev => prev.filter((_, i) => i !== index));
     // Keep the retired root mapping reserved for existing saved-event references.
   }
