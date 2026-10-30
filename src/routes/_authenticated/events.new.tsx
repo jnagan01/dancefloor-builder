@@ -174,6 +174,7 @@ function Index() {
     onError: () => toast.error("Could not save event changes. Retry when your connection is available."),
   }));
   const restoredEvent = useRef(false);
+  const resultBoundary = useRef<{ eventId: string | undefined } | null>(null);
   const [buffer, setBuffer] = useState(2);
   const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
   const [showVibe, setShowVibe] = useState(false);
@@ -307,6 +308,7 @@ function Index() {
   // setup (connected music folders, VirtualDJ export folder) is intentionally
   // left alone — those represent the DJ's machine, not workflow content.
   function clearWorkflowState() {
+    resultBoundary.current = null;
     setSongs([]);
     setHours(defaultsRef.current.hours);
     setArtistsInput("");
@@ -613,12 +615,8 @@ function Index() {
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
-    autosave.reset();
-    genTokenRef.current += 1;
-    setSavedEventId(null);
-    setSaveState("idle");
-    restoredEvent.current = false;
-    if(!openedEventId) { clearWorkflowState(); return; }
+    clearWorkflowState();
+    if(!openedEventId) return;
     let cancelled=false;
     getEventFn({data:{id:openedEventId}}).then(row=>{
       if(cancelled)return;
@@ -653,6 +651,7 @@ function Index() {
         rekeyed[s&&m?songKey(m[1] as SectionKey,Number(m[2]),s):k]=v;
       }
       savedSelectionsRef.current=lists.selections?rekeyed:null;
+      resultBoundary.current={eventId:openedEventId};
       restoredEvent.current=true;
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
     }).catch(()=>{if(!cancelled)toast.error("Could not open this event")});
@@ -660,7 +659,7 @@ function Index() {
   },[openedEventId]);
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean}>|null>(null);
   useEffect(()=>{
-    if(!result || !workspace.library || !savedSelectionsRef.current)return;
+    if(!result || !workspace.library || !savedSelectionsRef.current || resultBoundary.current?.eventId!==openedEventId)return;
     const selections=savedSelectionsRef.current;
     setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(selections)){
       const indices=value.paths.map(path=>mergedLibrary.tracks.findIndex(t=>t.filePath===path)).filter(i=>i>=0);
@@ -668,7 +667,7 @@ function Index() {
     }return next});
   },[result,workspace.library]);
   useEffect(()=>{
-    if(!result || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
+    if(!result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
     const boundary=openedEventId;
     autosave.schedule(eventSnapshot(result,matches),savedEventId,()=>openedEventIdRef.current===boundary);
   },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId]);
@@ -1322,6 +1321,7 @@ function Index() {
       });
     }
 
+    resultBoundary.current={eventId:openedEventId};
     setResult(r);
     setActiveSection("warmUp");
     setSaveState("saving");
