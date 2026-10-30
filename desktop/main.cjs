@@ -92,18 +92,20 @@ function createWindow() {
     return { action: "deny" };
   });
   const guardNavigation = (event, url) => {
-    const action = security.navigation(url);
+    const target = event.url ?? url;
+    const action = security.navigation(target);
     if (action !== "app") {
       event.preventDefault();
-      if (action === "external") openExternal(url);
+      if (action === "external" && event.isMainFrame !== false) openExternal(target);
     }
   };
   mainWindow.webContents.on("will-navigate", guardNavigation);
   mainWindow.webContents.on("will-redirect", guardNavigation);
-  mainWindow.webContents.on("will-frame-navigate", (event, details) => {
+  mainWindow.webContents.on("will-frame-navigate", event => {
     // Subframes may not navigate to untrusted content, even though IPC also
     // rejects all subframe senders. Do not launch browsers for iframe links.
-    if (!security.isAppUrl(details?.url ?? event.url)) event.preventDefault();
+    if (event.isMainFrame) guardNavigation(event, event.url);
+    else if (!security.isAppUrl(event.url)) event.preventDefault();
   });
   mainWindow.webContents.on("will-attach-webview", event => event.preventDefault());
 
