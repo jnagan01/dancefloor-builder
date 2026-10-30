@@ -61,6 +61,8 @@ export interface ScannedNativeFile {
 
 export interface NativeScanResult {
   ok: boolean;
+  complete?: boolean;
+  truncated?: boolean;
   root?: string;
   label?: string;
   files?: ScannedNativeFile[];

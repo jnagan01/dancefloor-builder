@@ -6,6 +6,7 @@ import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDef
 import { pickDirectoryHandle } from "@/lib/virtualDj";
 import { saveDirHandle, saveDirHandleMeta, loadDirHandle, verifyReadWrite, type AnyHandle } from "@/lib/dirHandleStore";
 import { toast } from "sonner";
+import { nativeScanProblem } from "@/lib/nativeScanSafety";
 
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
@@ -226,11 +227,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const root = await chooseNativeMusicFolder();
       if (!root) return;
       const result = await scanNativeFolder(root);
-      if (!result.ok || !result.files?.length) {
-        toast.error(result.error ?? "No audio files found in that folder");
+      const label = result.label ?? root.split("/").filter(Boolean).pop() ?? "Music";
+      const problem = nativeScanProblem(result, sources.find(s=>s.label===label)?.tracks.length ?? 0);
+      if (problem || !result.files?.length) {
+        toast.error(problem ?? "No audio files found in that folder");
         return;
       }
-      const label = result.label ?? root.split("/").filter(Boolean).pop() ?? "Music";
       setFolderRoot(label, result.root ?? root);
       indexNativeFiles(result.files);
       setSources(prev => [...prev.filter(s => s.label !== label), { label, tracks: tracksFromAudioFiles(asFileLike(result.files ?? [])) }]);
@@ -258,7 +260,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const problems: string[] = [];
     for (const source of targets) {
       const result = await scanNativeFolder(roots[source.label]);
-      if (!result.ok || !result.files) { problems.push(`${source.label}: ${result.error ?? "couldn't be read"}`); continue; }
+      const problem = nativeScanProblem(result, source.tracks.length);
+      if (problem || !result.files) { problems.push(`${source.label}: ${problem ?? "couldn't be read"}`); continue; }
       indexNativeFiles(result.files);
       updates.set(source.label, tracksFromAudioFiles(asFileLike(result.files)));
     }
@@ -286,14 +289,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const total = [...updates.values()].reduce((n, t) => n + t.length, 0);
       if (!silent) toast.success(`${total.toLocaleString()} tracks re-read from your saved folders`);
     }
-    if (problems.length && !silent) toast.error(problems[0]);
+    if (problems.length) toast.error(problems[0]);
     return updates.size > 0;
   }
   async function rescan() {
     if (!sources.length) { await addFolder(); return; }
-    if (supportsNativeScan() && (await rescanNative())) {
+    if (supportsNativeScan()) {
+      const updated = await rescanNative();
       const root = localStorage.getItem(VDJ_ROOT_KEY);
-      if (root && isDesktopApp()) await syncVirtualDj(vdjDatabaseIn(root), true);
+      if (updated && root && isDesktopApp()) await syncVirtualDj(vdjDatabaseIn(root), true);
       return;
     }
     if (!files.length) { toast.info("Reconnect a music folder to rescan it."); await addFolder(); return; }

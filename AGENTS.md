@@ -6,3 +6,6 @@
 - Read and write song metadata tags only inside the Mac app (desktop/tags.cjs via node-taglib-sharp, cached by size+mtime in userData), because browsers cannot modify local files and edits must land in the music files themselves.
 - Keep event-type presets in `src/lib/eventTypes.ts`, separate from vibes, and apply their era/explicit rules only to added songs in `reorderForEnergyProgression`, because client uploads must always stay in the list.
 - Keep the Mac app's bundle id and data folder from before the rebrand (main.cjs pins userData), because changing them would drop saved tag cache, backups, folder permissions and update continuity.
+- Route all event snapshot writes through the latest-only single-flight autosave coordinator, resetting queued work at event boundaries, because concurrent or stale saves can overwrite newer edits.
+- Treat native scans as atomic source replacements and retain saved tracks on failed, partial or unexpectedly empty rescans, because inaccessible folders must not erase library indexes.
+- Apply desktop/security.cjs to every native IPC handler and navigation/permission boundary; trust only the exact app origin and owning main frame, because untrusted pages and subframes must never inherit native access. Include desktop helpers in package build.files.

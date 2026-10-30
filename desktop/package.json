@@ -26,6 +26,8 @@
       "preload.cjs",
       "updater.cjs",
       "tags.cjs",
+      "security.cjs",
+      "scan.cjs",
       "build-info.json",
       "package.json",
       "node_modules/**/*"

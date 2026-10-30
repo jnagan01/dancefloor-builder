@@ -104,6 +104,7 @@ import { EVENT_TYPES, getEventType } from "@/lib/eventTypes";
 import { Slider } from "@/components/ui/slider";
 import { VibeBreakdown } from "@/components/builder/VibeBreakdown";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
+import { createEventAutosave } from "@/lib/eventAutosave";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
 
@@ -162,8 +163,18 @@ function Index() {
   const getEventFn = useServerFn(getWorkflow);
   const [savedEventId, setSavedEventId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
-  const saveRevision = useRef(0);
+  const saveFunctions = useRef({ saveEventFn, updateEventFn });
+  saveFunctions.current = { saveEventFn, updateEventFn };
+  const [autosave] = useState(() => createEventAutosave<ReturnType<typeof eventSnapshot>>({
+    write: (id, snapshot) => id
+      ? saveFunctions.current.updateEventFn({ data: { id, ...snapshot } })
+      : saveFunctions.current.saveEventFn({ data: snapshot }),
+    onState: setSaveState,
+    onId: setSavedEventId,
+    onError: () => toast.error("Could not save event changes. Retry when your connection is available."),
+  }));
   const restoredEvent = useRef(false);
+  const resultBoundary = useRef<{ eventId: string | undefined } | null>(null);
   const [buffer, setBuffer] = useState(2);
   const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
   const [showVibe, setShowVibe] = useState(false);
@@ -297,6 +308,7 @@ function Index() {
   // setup (connected music folders, VirtualDJ export folder) is intentionally
   // left alone — those represent the DJ's machine, not workflow content.
   function clearWorkflowState() {
+    resultBoundary.current = null;
     setSongs([]);
     setHours(defaultsRef.current.hours);
     setArtistsInput("");
@@ -326,7 +338,8 @@ function Index() {
     setSpotifyLink("");
     restoredEvent.current = false;
     savedSelectionsRef.current = null;
-    saveRevision.current += 1;
+    autosave.reset();
+    genTokenRef.current += 1;
     setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
 
@@ -602,9 +615,9 @@ function Index() {
       lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
+    clearWorkflowState();
     if(!openedEventId) return;
     let cancelled=false;
-    restoredEvent.current = false;
     getEventFn({data:{id:openedEventId}}).then(row=>{
       if(cancelled)return;
       const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
@@ -638,15 +651,15 @@ function Index() {
         rekeyed[s&&m?songKey(m[1] as SectionKey,Number(m[2]),s):k]=v;
       }
       savedSelectionsRef.current=lists.selections?rekeyed:null;
+      resultBoundary.current={eventId:openedEventId};
       restoredEvent.current=true;
-      saveRevision.current+=1;
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
-    }).catch(()=>toast.error("Could not open this event"));
-    return ()=>{cancelled=true};
+    }).catch(()=>{if(!cancelled)toast.error("Could not open this event")});
+    return ()=>{cancelled=true;autosave.reset();genTokenRef.current+=1};
   },[openedEventId]);
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean}>|null>(null);
   useEffect(()=>{
-    if(!result || !workspace.library || !savedSelectionsRef.current)return;
+    if(!result || !workspace.library || !savedSelectionsRef.current || resultBoundary.current?.eventId!==openedEventId)return;
     const selections=savedSelectionsRef.current;
     setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(selections)){
       const indices=value.paths.map(path=>mergedLibrary.tracks.findIndex(t=>t.filePath===path)).filter(i=>i>=0);
@@ -654,14 +667,15 @@ function Index() {
     }return next});
   },[result,workspace.library]);
   useEffect(()=>{
-    if(!result || !savedEventId || saveState==="error" || (!restoredEvent.current && !!openedEventId))return;
-    const revision=++saveRevision.current;
-    const timer=setTimeout(async()=>{
-      if(revision!==saveRevision.current)return;
-      setSaveState("saving");try{const snap=eventSnapshot(result,matches);await updateEventFn({data:{id:savedEventId,...snap}});if(revision===saveRevision.current)setSaveState("saved")}catch{if(revision===saveRevision.current){setSaveState("error");toast.error("Could not save event changes")}}
-    },1000);
-    return ()=>{clearTimeout(timer);saveRevision.current+=1};
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId]);
+    if(!result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
+    const boundary=openedEventId;
+    autosave.schedule(eventSnapshot(result,matches),savedEventId,()=>openedEventIdRef.current===boundary);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId]);
+  useEffect(()=>{
+    const recover=()=>autosave.retry();
+    window.addEventListener("online",recover);
+    return ()=>{window.removeEventListener("online",recover);autosave.reset()};
+  },[autosave]);
 
   async function generate() {
     // No uploads is fine as long as the client gave artists, genres or decades —
@@ -1307,10 +1321,9 @@ function Index() {
       });
     }
 
+    resultBoundary.current={eventId:openedEventId};
     setResult(r);
     setActiveSection("warmUp");
-    const existingEventId = savedEventId;
-    setSavedEventId(null);
     setSaveState("saving");
     setMatches({});
     if (mergedLibrary) {
@@ -1326,11 +1339,7 @@ function Index() {
     } else {
       matchesRef.current = {};
     }
-    try {
-      const snapshot = eventSnapshot(r, matchesRef.current);
-      const saved = existingEventId ? await updateEventFn({data:{id:existingEventId,...snapshot}}) : await saveEventFn({data:snapshot});
-      if(genTokenRef.current === myToken){setSavedEventId(saved.id);setSaveState("saved");}
-    }catch{if(genTokenRef.current === myToken){setSaveState("error");toast.error("Lists generated, but the event could not be saved. Try regenerating.");}}
+    // Generation and subsequent edits share the same single-flight autosave queue.
     const fs = r.finalShortfall;
     if (fs && fs.total > 0) {
       const parts: string[] = [];
@@ -2048,7 +2057,7 @@ function Index() {
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <div className="min-w-0"><p className="eyebrow">Events / Builder</p><h1 className="mt-2 break-words font-display text-3xl tracking-tight sm:text-4xl">{eventName||"New event"}</h1></div>
-        <div className="text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}</div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}{saveState==="error" && <Button variant="outline" size="sm" onClick={()=>autosave.retry()}>Retry save</Button>}</div>
       </header>
       <div className="space-y-6 pb-32 pt-6">
         <div className="sticky top-3 z-30">
