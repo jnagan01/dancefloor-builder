@@ -3,7 +3,7 @@ import { allocateSourceLabel, relabelScan, createIdentityIndex, trackIdentity, n
 import { buildAudioIndex, resolveAudioFile } from "@/lib/audioMatch";
 import { readNativeAudioFile, rememberNativeFilePath, getNativeFilePath, writeNativeTags } from "@/lib/desktopBridge";
 import { buildLibrary, findTrackForPickedFile, folderForPath, resolveExportPath, tracksFromAudioFiles, buildM3u } from "@/lib/virtualDj";
-import { metadataResolver, mergeTrackMetadata } from "@/lib/trackMetadataIdentity";
+import { metadataResolver, mergeTrackMetadata, carryRescanMetadata } from "@/lib/trackMetadataIdentity";
 import { withoutSourceFiles } from "@/lib/workspaceFileCache";
 
 const roots = { Music: "/Volumes/A/Music", "Music (2)": "/Volumes/B/Music" };
@@ -148,6 +148,11 @@ describe("VirtualDJ and rescan metadata identity", () => {
     const resolver = metadataResolver(old, old, roots);
     expect(mergeTrackMetadata(track("Music/Slow/Song.mp3"), resolver.resolve("Music/Slow/Song.mp3"))).toMatchObject({ bpm: "90", key: "1A", playCount: 10 });
     expect(resolver.resolve("Music/New/Song.mp3")).toBeUndefined();
+  });
+  it("rescanning keeps an existing absolute saved filePath unchanged", () => {
+    const old = track("/Volumes/B/Music/Song.mp3", "128", "9B", 20);
+    const resolver = metadataResolver([old], [old], roots);
+    expect(carryRescanMetadata(track(paths[1]), resolver.resolve(paths[1]))).toMatchObject({ filePath: old.filePath, bpm: "128", key: "9B", playCount: 20 });
   });
   it("only supports globally unique legacy metadata, never known conflicting paths", () => {
     const vdj = [track(paths[0], "90")];

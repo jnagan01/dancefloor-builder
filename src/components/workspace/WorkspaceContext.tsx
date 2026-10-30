@@ -8,7 +8,7 @@ import { saveDirHandle, saveDirHandleMeta, loadDirHandle, verifyReadWrite, type 
 import { toast } from "sonner";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { allocateSourceLabel, relabelScan, normalizeFilePath, trackIdentity, createIdentityIndex } from "@/lib/fileIdentity";
-import { metadataResolver, mergeTrackMetadata } from "@/lib/trackMetadataIdentity";
+import { metadataResolver, mergeTrackMetadata, carryRescanMetadata } from "@/lib/trackMetadataIdentity";
 import { withoutSourceFiles, cachedFileIdentity } from "@/lib/workspaceFileCache";
 import { nativeScanProblem } from "@/lib/nativeScanSafety";
 
@@ -228,7 +228,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setSources(prev => {
         const old = prev.find(s => s.label === label);
         const resolver = metadataResolver(old?.tracks ?? [], old?.tracks ?? [], getFolderRoots());
-        const tracks = tracksFromAudioFiles(asFileLike(scanned)).map(t => mergeTrackMetadata(t, resolver.resolve(t.filePath)));
+        const tracks = tracksFromAudioFiles(asFileLike(scanned)).map(t => carryRescanMetadata(t, resolver.resolve(t.filePath)));
         return old ? prev.map(s => s.label === label ? { label, tracks } : s) : [...prev, { label, tracks }];
       });
       toast.success(`${scanned.length} tracks indexed from ${label}`);
@@ -266,7 +266,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (!fresh) return s;
         const known = metadataResolver(s.tracks, prev.flatMap(source => source.tracks), roots);
         const vdj = metadataResolver(vdjInfo.current, prev.flatMap(source => source.tracks), roots);
-        return { label: s.label, tracks: fresh.map(t => mergeTrackMetadata(t, known.resolve(t.filePath) ?? vdj.resolve(t.filePath))) };
+        return { label: s.label, tracks: fresh.map(t => carryRescanMetadata(t, known.resolve(t.filePath), vdj.resolve(t.filePath))) };
       }));
       const total = [...updates.values()].reduce((n, t) => n + t.length, 0);
       if (!silent) toast.success(`${total.toLocaleString()} tracks re-read from your saved folders`);

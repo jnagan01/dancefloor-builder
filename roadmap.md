@@ -13,7 +13,7 @@
 - [x] Run regressions and inspect harness typecheck/build results; report revision and any existing failures. No publishing, releases, migrations or production/data mutations.
 
 # Reviewed file-identity fixes
-- [ ] Make playback and tag resolution exact-path first, with globally safe legacy fallback.
-- [ ] Preserve duplicate-named folder identities, saved selections, and export locations.
-- [ ] Match VirtualDJ and rescan metadata by exact track identity.
-- [ ] Run mock regressions and the full suite; inspect automatic build/typecheck and report changed files/revision.
+- [x] Make playback and tag resolution exact-path first, with globally safe legacy fallback.
+- [x] Preserve duplicate-named folder identities, saved selections, and export locations.
+- [x] Match VirtualDJ and rescan metadata by exact track identity.
+- [x] Run mock regressions and the full suite; inspect automatic build/typecheck and report changed files/revision.

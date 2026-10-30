@@ -20,3 +20,9 @@ export function mergeTrackMetadata(track: VdjTrack, info: VdjTrack | undefined, 
     year: first.year || second.year,
   };
 }
+
+/** Keep saved selected-path spelling when the scan still points to that same file. */
+export function carryRescanMetadata(track: VdjTrack, old: VdjTrack | undefined, vdj?: VdjTrack): VdjTrack {
+  const merged = mergeTrackMetadata(track, old ?? vdj);
+  return old ? { ...merged, filePath: old.filePath } : merged;
+}
