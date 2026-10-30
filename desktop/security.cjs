@@ -1,6 +1,7 @@
 /* Shared policy for native IPC, navigation and Chromium permission requests. */
 function parseWebUrl(value) {
-  if (typeof value !== "string" || !value || value !== value.trim() || /[\\\u0000-\u0020\u007f]/.test(value)) return null;
+  if (typeof value !== "string" || !/^https?:\/\/[^/]/i.test(value) || value !== value.trim() || /[\\\u0000-\u0020\u007f]/.test(value)) return null;
+  if (value.split("/")[2]?.includes("@")) return null;
   try {
     const url = new URL(value);
     if (!["https:", "http:"].includes(url.protocol) || !url.hostname || url.username || url.password) return null;

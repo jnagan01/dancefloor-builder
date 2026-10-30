@@ -13,6 +13,7 @@ function setup() {
   return { policy, wc, mainFrame, event: { sender: wc, senderFrame: mainFrame } };
 }
 const bad = [
+  "https:dancefloor-builder.lovable.app", "https:///dancefloor-builder.lovable.app", "https://@dancefloor-builder.lovable.app/",
   `${APP}.evil.example/events`, `${APP}@evil.example`, "https://user:password@dancefloor-builder.lovable.app/",
   "https://dancefloor-builder.lovable.app:444/", "http://dancefloor-builder.lovable.app/", "https://dancefloor-builder.lovable.app.evil/",
   "https://dancefloor-builder.lovable.app\\@evil.example", `${APP}\n`, "not a url", "/events/new", "https://", 

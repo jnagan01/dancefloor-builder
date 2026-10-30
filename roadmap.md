@@ -7,7 +7,7 @@
 - [x] Validate core flows and build diagnostics.
 
 # Reviewed high-priority fixes
-- [ ] Recover and serialize event autosaves with event-boundary isolation and mocked regression tests.
-- [ ] Fail incomplete desktop scans and preserve existing source tracks, with mocked filesystem tests.
-- [ ] Enforce exact desktop origin/main-frame IPC, navigation and requester permission checks, with regression tests.
-- [ ] Run regressions and inspect harness typecheck/build results; report revision and any existing failures. No publishing, releases, migrations or production/data mutations.
+- [x] Recover and serialize event autosaves with event-boundary isolation and mocked regression tests.
+- [x] Fail incomplete desktop scans and preserve existing source tracks, with mocked filesystem tests.
+- [x] Enforce exact desktop origin/main-frame IPC, navigation and requester permission checks, with regression tests.
+- [x] Run regressions and inspect harness typecheck/build results; report revision and any existing failures. No publishing, releases, migrations or production/data mutations.
