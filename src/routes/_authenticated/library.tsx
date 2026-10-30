@@ -1,3 +1,4 @@
+import { resolveAudioFile } from "@/lib/audioMatch";
 import { TrackTagEditor } from "@/components/workspace/TrackTagEditor";
 import { createFileRoute } from "@tanstack/react-router";
 import { useDeferredValue, useMemo, useState } from "react";
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/_authenticated/library")({ component: Lib
 const fields = ["Title", "Artist", "Album", "BPM", "Year", "Genre", "Key", "Comment", "Plays", "File path"] as const;
 type Field = typeof fields[number];
 function LibraryPage() {
-  const { sources, library, files, addFolder, rescan } = useWorkspace();
+  const { sources, library, audioIndex, addFolder, rescan } = useWorkspace();
   const [query, setQuery] = useState("");
   const [columns, setColumns] = useState<Field[]>(["Title", "Artist", "BPM", "Year", "Genre", "Key", "Plays", "File path"]);
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -41,21 +42,7 @@ function LibraryPage() {
   const rows = useMemo(() => filtered.slice((safePage - 1) * pageSize, safePage * pageSize), [filtered, safePage, pageSize]);
   const toggleSort = (key:"Title"|"Artist"|"Plays") => { setSort(s => s.key === key ? {key, dir: s.dir === "asc" ? "desc" : "asc"} : {key, dir: key === "Plays" ? "desc" : "asc"}); setPage(1); };
   const arrow = (key:"Title"|"Artist"|"Plays") => sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : "";
-  const fileIndex = useMemo(() => {
-    const byPath = new Map<string, File>();
-    const byName = new Map<string, File>();
-    for (const f of files) {
-      const p = f.webkitRelativePath || f.name;
-      if (!byPath.has(p)) byPath.set(p, f);
-      if (!byName.has(f.name)) byName.set(f.name, f);
-    }
-    return { byPath, byName };
-  }, [files]);
-  const resolveFile = (q:{filePath?:string}) => {
-    if (!q.filePath) return undefined;
-    const base = q.filePath.split("/").pop();
-    return fileIndex.byPath.get(q.filePath) ?? (base ? fileIndex.byName.get(base) : undefined);
-  };
+  const resolveFile = (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioFile(audioIndex, q);
   return <div className="space-y-5 pb-20">
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4 border-b border-border pb-5">
       <div className="min-w-0"><p className="text-xs font-semibold uppercase text-primary">Music collection</p><h1 className="mt-2 font-display text-2xl sm:text-3xl">Library</h1></div>
@@ -78,7 +65,7 @@ function LibraryPage() {
       </div>
     </div>
     <p className="text-xs text-muted-foreground">Full paths appear for folders with a saved location. In a browser, reconnect a folder after reopening to play its audio.</p>
-    <div className="overflow-x-auto border border-border"><table className="w-full text-left text-sm"><thead className="border-b border-border"><tr><th scope="col">Play</th>{fields.filter(f=>columns.includes(f)).map(f=><th scope="col" key={f}>{f==="Plays"||f==="Title"||f==="Artist"?<button type="button" className="hover:text-primary" onClick={()=>toggleSort(f as "Title"|"Artist"|"Plays")} title={`Sort by ${f.toLowerCase()}`}>{f}{arrow(f as "Title"|"Artist"|"Plays")}</button>:f}</th>)}<th scope="col">Edit</th></tr></thead><tbody className="divide-y divide-border">{rows.map(({t,si,ti})=>{const file=resolveFile({filePath:t.filePath});return <tr key={`${si}:${ti}`}><td><Button size="icon" variant="ghost" disabled={!file} title={file?"Play local file":"Reconnect music folder to play"} aria-label={`Play ${t.title}`} onClick={()=>setPlaying({artist:t.artist,song:t.title,filePath:t.filePath})}><Play size={15}/></Button></td>{fields.filter(f=>columns.includes(f)).map(f=><td key={f} className={f==="File path"?"min-w-52 max-w-sm break-all text-xs text-muted-foreground":f==="Title"?"min-w-44 font-medium":f==="Plays"||f==="BPM"?"whitespace-nowrap tabular-nums":"whitespace-nowrap"}>{f==="Artist"?t.artist:f==="Title"?t.title:f==="BPM"?(cleanBpm(t.bpm) ?? "—"):f==="File path"?(resolveExportPath(t.filePath) ?? t.filePath):f==="Plays"?(t.playCount!=null?t.playCount.toLocaleString():"—"):(t as unknown as Record<string,unknown>)[f.toLowerCase()]?.toString()||"—"}</td>)}<td><Button size="icon" variant="ghost" aria-label={`Edit ${t.title}`} title="View and edit song details" onClick={()=>setEditing({source:si,index:ti})}><Pencil size={15}/></Button></td></tr>})}</tbody></table>{!rows.length && <p className="py-10 text-center text-sm text-muted-foreground">{sources.length?"No tracks match your search":"Add a music folder to start your library"}</p>}</div>
+    <div className="overflow-x-auto border border-border"><table className="w-full text-left text-sm"><thead className="border-b border-border"><tr><th scope="col">Play</th>{fields.filter(f=>columns.includes(f)).map(f=><th scope="col" key={f}>{f==="Plays"||f==="Title"||f==="Artist"?<button type="button" className="hover:text-primary" onClick={()=>toggleSort(f as "Title"|"Artist"|"Plays")} title={`Sort by ${f.toLowerCase()}`}>{f}{arrow(f as "Title"|"Artist"|"Plays")}</button>:f}</th>)}<th scope="col">Edit</th></tr></thead><tbody className="divide-y divide-border">{rows.map(({t,si,ti})=>{const file=resolveFile({filePath:t.filePath});return <tr key={`${si}:${ti}`}><td><Button size="icon" variant="ghost" disabled={!file && !resolveExportPath(t.filePath)} title={file || resolveExportPath(t.filePath)?"Play local file":"Reconnect music folder to play"} aria-label={`Play ${t.title}`} onClick={()=>setPlaying({artist:t.artist,song:t.title,filePath:t.filePath})}><Play size={15}/></Button></td>{fields.filter(f=>columns.includes(f)).map(f=><td key={f} className={f==="File path"?"min-w-52 max-w-sm break-all text-xs text-muted-foreground":f==="Title"?"min-w-44 font-medium":f==="Plays"||f==="BPM"?"whitespace-nowrap tabular-nums":"whitespace-nowrap"}>{f==="Artist"?t.artist:f==="Title"?t.title:f==="BPM"?(cleanBpm(t.bpm) ?? "—"):f==="File path"?(resolveExportPath(t.filePath) ?? t.filePath):f==="Plays"?(t.playCount!=null?t.playCount.toLocaleString():"—"):(t as unknown as Record<string,unknown>)[f.toLowerCase()]?.toString()||"—"}</td>)}<td><Button size="icon" variant="ghost" aria-label={`Edit ${t.title}`} title="View and edit song details" onClick={()=>setEditing({source:si,index:ti})}><Pencil size={15}/></Button></td></tr>})}</tbody></table>{!rows.length && <p className="py-10 text-center text-sm text-muted-foreground">{sources.length?"No tracks match your search":"Add a music folder to start your library"}</p>}</div>
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
       <p className="text-xs text-muted-foreground">{filtered.length ? `Showing ${((safePage-1)*pageSize+1).toLocaleString()}–${Math.min(safePage*pageSize, filtered.length).toLocaleString()} of ${filtered.length.toLocaleString()} tracks` : "No tracks to show"}</p>
       <div className="flex items-center gap-2">
