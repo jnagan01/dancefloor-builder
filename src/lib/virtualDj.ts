@@ -2,6 +2,7 @@
 import type { Song } from "./danceFloor";
 import { normalizeKey } from "./danceFloor";
 import { supportsNativeFolders, chooseNativeFolder } from "./desktopBridge";
+import { fullFilePath, normalizeFilePath, createIdentityIndex, qualifiedFilePath } from "./fileIdentity";
 import {
   makeSubject,
   scorePair,
@@ -448,12 +449,12 @@ export function searchLibraryScored(query: string, lib: VdjLibrary, limit = 25):
  */
 export function folderForPath(fullPath: string, roots: Record<string, string>): { label: string; relativePath: string } | null {
   if (!fullPath) return null;
-  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  const norm = normalizeFilePath;
   const target = norm(fullPath);
   let best: { label: string; relativePath: string; len: number } | null = null;
   for (const [label, root] of Object.entries(roots)) {
     const r = norm(root);
-    if (!r || !target.toLowerCase().startsWith(r.toLowerCase() + "/")) continue;
+    if (!r || !target.startsWith(r + "/")) continue;
     if (best && best.len >= r.length) continue;
     best = { label, relativePath: `${label}/${target.slice(r.length + 1)}`, len: r.length };
   }
@@ -461,18 +462,11 @@ export function folderForPath(fullPath: string, roots: Record<string, string>): 
 }
 
 /** Find a library track that is the same file as a picked one (name + size). */
-export function findTrackForPickedFile(lib: VdjLibrary, name: string, size?: number): number {
-  const lower = name.toLowerCase();
-  let fallback = -1;
-  for (let i = 0; i < lib.tracks.length; i++) {
-    const fp = lib.tracks[i].filePath || "";
-    const base = (fp.split(/[\\/]/).pop() || "").toLowerCase();
-    if (base !== lower) continue;
-    const ts = Number(lib.tracks[i].fileSize) || 0;
-    if (size && ts && ts === size) return i;
-    if (fallback < 0) fallback = i;
-  }
-  return fallback;
+export function findTrackForPickedFile(lib: VdjLibrary, name: string, size?: number, identity?: string, roots = getFolderRoots()): number {
+  const requested = identity || name;
+  const hit = createIdentityIndex(lib.tracks, t => t.filePath, roots).resolve(requested);
+  if (!hit || (!qualifiedFilePath(requested) && size && hit.fileSize && Number(hit.fileSize) !== size)) return -1;
+  return lib.tracks.indexOf(hit);
 }
 
 export function searchLibrary(query: string, lib: VdjLibrary, limit = 25): number[] {
@@ -555,15 +549,7 @@ export const isAbsolutePath = (p: string) => /^(\/|[A-Za-z]:[\\/]|\\\\)/.test(p)
  * path using the saved location of that folder. Returns null when unknown.
  */
 export function resolveExportPath(filePath: string, roots: Record<string, string> = getFolderRoots()): string | null {
-  if (!filePath || isAbsolutePath(filePath)) return filePath || null;
-  const parts = filePath.split(/[\\/]/);
-  const root = roots[parts[0]];
-  if (!root) return null;
-  const sep = /^[A-Za-z]:\\/.test(root) ? "\\" : "/";
-  const cleanRoot = root.replace(/[\\/]+$/, "");
-  const rootName = cleanRoot.split(/[\\/]/).pop();
-  const rest = rootName === parts[0] ? parts.slice(1) : parts;
-  return [cleanRoot, ...rest].join(sep);
+  return fullFilePath(filePath, roots);
 }
 
 /** Number of exported tracks whose full location isn't known. */

@@ -1,5 +1,10 @@
 // Bridge to the macOS desktop shell. Everything here is feature-detected so
 // the same code keeps working in the browser (where these features are off).
+const nativeFilePaths = new WeakMap<File, string>();
+
+export function rememberNativeFilePath(file: File, path: string): void {
+  if (path) nativeFilePaths.set(file, path);
+}
 
 export interface VdjReadResult {
   ok: boolean;
@@ -119,6 +124,7 @@ export async function readNativeAudioFile(filePath: string, relativePath?: strin
     if (!res.ok || !res.data) return null;
     const name = filePath.split(/[\\/]/).pop() || "track";
     const file = new File([res.data], name);
+    rememberNativeFilePath(file, filePath);
     if (relativePath) {
       Object.defineProperty(file, "webkitRelativePath", { value: relativePath, configurable: true });
     }
@@ -185,6 +191,8 @@ export async function chooseNativeFolder(): Promise<NativeDirHandle | null> {
 
 /** Full on-disk path of a picked file (desktop app only), or "" when unknown. */
 export function getNativeFilePath(file: File): string {
+  const remembered = nativeFilePaths.get(file);
+  if (remembered) return remembered;
   try {
     return filesBridge()?.getPathForFile?.(file) ?? "";
   } catch {
