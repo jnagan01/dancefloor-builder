@@ -10,7 +10,9 @@ const { checkForUpdates } = require("./updater.cjs");
 const { createTagCache, writeTags } = require("./tags.cjs");
 
 const APP_URL = process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app";
-const APP_ORIGIN = new URL(APP_URL).origin;
+const { createDesktopSecurity, parseWebUrl } = require("./security.cjs");
+const { scanFolder } = require("./scan.cjs");
+const security = createDesktopSecurity(APP_URL, () => mainWindow);
 
 const stateFile = path.join(app.getPath("userData"), "window-state.json");
 
@@ -60,18 +62,12 @@ function createWindow() {
     },
   });
 
-  // The app reads local music folders and writes playlists back to VirtualDJ,
-  // so grant the file-system / media permissions it asks for without prompting.
   const session = mainWindow.webContents.session;
-  // Some requests (notably "fileSystem" from the folder picker) arrive without
-  // requestingUrl, so fall back to the page's own URL before deciding.
-  const isAppUrl = (u) => typeof u === "string" && u.startsWith(APP_ORIGIN);
-  session.setPermissionRequestHandler((wc, _permission, callback, details) => {
-    const from = (details && details.requestingUrl) || (wc && wc.getURL()) || "";
-    callback(isAppUrl(from));
+  session.setPermissionRequestHandler((wc, permission, callback, details) => {
+    callback(security.permissionRequest(wc, permission, details));
   });
-  session.setPermissionCheckHandler((wc, _permission, origin) =>
-    isAppUrl(origin) || isAppUrl(wc && wc.getURL()),
+  session.setPermissionCheckHandler((wc, permission, origin, details) =>
+    security.permissionCheck(wc, permission, origin, details),
   );
 
   mainWindow.once("ready-to-show", () => {
@@ -86,19 +82,30 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Keep the app inside its own window; send everything else to the browser.
+  // Only the app origin may navigate in this bridged window. Login and other
+  // web links open in the system browser, never in a bridge-bearing child.
+  const openExternal = url => {
+    if (parseWebUrl(url)) shell.openExternal(url).catch(() => {});
+  };
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith(APP_ORIGIN)) return { action: "allow" };
-    shell.openExternal(url);
+    openExternal(url);
     return { action: "deny" };
   });
-
-  mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (!url.startsWith(APP_ORIGIN)) {
+  const guardNavigation = (event, url) => {
+    const action = security.navigation(url);
+    if (action !== "app") {
       event.preventDefault();
-      shell.openExternal(url);
+      if (action === "external") openExternal(url);
     }
+  };
+  mainWindow.webContents.on("will-navigate", guardNavigation);
+  mainWindow.webContents.on("will-redirect", guardNavigation);
+  mainWindow.webContents.on("will-frame-navigate", (event, details) => {
+    // Subframes may not navigate to untrusted content, even though IPC also
+    // rejects all subframe senders. Do not launch browsers for iframe links.
+    if (!security.isAppUrl(details?.url ?? event.url)) event.preventDefault();
   });
+  mainWindow.webContents.on("will-attach-webview", event => event.preventDefault());
 
   mainWindow.webContents.on("did-fail-load", (_e, code, description, failedUrl, isMainFrame) => {
     if (!isMainFrame || code === -3) return;
@@ -202,9 +209,10 @@ function defaultVdjPath() {
 }
 
 function registerVirtualDjHandlers() {
-  ipcMain.handle("vdj:default-path", () => defaultVdjPath());
-  ipcMain.handle("vdj:default-root", () => defaultVdjRoot());
-  ipcMain.handle("vdj:choose-root", async () => {
+  const handle = (channel, handler) => ipcMain.handle(channel, security.guard(handler));
+  handle("vdj:default-path", () => defaultVdjPath());
+  handle("vdj:default-root", () => defaultVdjRoot());
+  handle("vdj:choose-root", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: "Choose your VirtualDJ folder",
       defaultPath: defaultVdjRoot(),
@@ -217,7 +225,7 @@ function registerVirtualDjHandlers() {
     return { ok: true, path: root, hasDatabase };
   });
 
-  ipcMain.handle("vdj:read-database", async (_event, customPath) => {
+  handle("vdj:read-database", async (_event, customPath) => {
     const target = typeof customPath === "string" && customPath.trim() ? customPath : defaultVdjPath();
     try {
       const xml = await fs.promises.readFile(target, "utf8");
@@ -236,7 +244,7 @@ function registerVirtualDjHandlers() {
 
   // Native folder picking / writing. The browser File System Access API is
   // unreliable inside Electron, so the desktop shell does this natively.
-  ipcMain.handle("fs:choose-folder", async () => {
+  handle("fs:choose-folder", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: "Choose export folder",
       defaultPath: path.join(defaultVdjRoot(), "Playlists"),
@@ -248,7 +256,7 @@ function registerVirtualDjHandlers() {
   });
 
   // Pick a music folder (separate default from the export/VirtualDJ picker).
-  ipcMain.handle("fs:choose-music-folder", async () => {
+  handle("fs:choose-music-folder", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: "Choose your music folder",
       defaultPath: app.getPath("music"),
@@ -261,10 +269,9 @@ function registerVirtualDjHandlers() {
 
   // Re-read a remembered music folder straight from disk, so the app never has
   // to ask the user to reconnect it after a restart.
-  const AUDIO_RE = /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus|alac)$/i;
   const tagCache = createTagCache(app.getPath("userData"));
   // Save edited tags straight into the music file (a backup of the old values is kept).
-  ipcMain.handle("fs:write-tags", async (_event, payload) => {
+  handle("fs:write-tags", async (_event, payload) => {
     const result = await writeTags(app.getPath("userData"), payload && payload.filePath, payload && payload.tags);
     if (result.ok) {
       tagCache.forget(payload.filePath);
@@ -272,68 +279,13 @@ function registerVirtualDjHandlers() {
     }
     return result;
   });
-  ipcMain.handle("fs:scan-folder", async (_event, dirPath) => {
-    if (typeof dirPath !== "string" || !dirPath.trim()) {
-      return { ok: false, error: "No folder location saved." };
-    }
-    const root = dirPath.replace(/[\\/]+$/, "");
-    const rootName = path.basename(root);
-    const files = [];
-    const MAX_FILES = 200000;
-    async function walk(dir) {
-      let entries;
-      try {
-        entries = await fs.promises.readdir(dir, { withFileTypes: true });
-      } catch {
-        return;
-      }
-      for (const entry of entries) {
-        if (files.length >= MAX_FILES) return;
-        if (entry.name.startsWith(".")) continue;
-        const full = path.join(dir, entry.name);
-        if (entry.isDirectory()) {
-          await walk(full);
-        } else if (entry.isFile() && AUDIO_RE.test(entry.name)) {
-          let size;
-          let tags = null;
-          try {
-            const stat = await fs.promises.stat(full);
-            size = stat.size;
-            tags = tagCache.get(full, stat);
-          } catch {
-            size = undefined;
-          }
-          files.push({
-            name: entry.name,
-            path: full,
-            relativePath: path.join(rootName, path.relative(root, full)),
-            size,
-            tags,
-          });
-          if (files.length % 200 === 0) await new Promise((r) => setImmediate(r));
-        }
-      }
-    }
-    try {
-      if (!fs.existsSync(root)) return { ok: false, error: "That folder no longer exists on this Mac." };
-      await walk(root);
-      await tagCache.flush();
-      return { ok: true, root, label: rootName, files };
-    } catch (error) {
-      const code = error && error.code;
-      return {
-        ok: false,
-        error:
-          code === "EPERM" || code === "EACCES"
-            ? "macOS blocked access to that folder. Allow file access for SetArchitect in System Settings › Privacy & Security › Files and Folders."
-            : `Couldn't read that folder (${String(code || error)}).`,
-      };
-    }
-  });
+  handle("fs:scan-folder", async (_event, dirPath) =>
+    scanFolder(dirPath, { fs, tagCache }),
+  );
 
   // Read one audio file from disk so it can be played inside the app without
   // reconnecting the folder.
-  ipcMain.handle("fs:read-audio", async (_event, filePath) => {
+  handle("fs:read-audio", async (_event, filePath) => {
     if (typeof filePath !== "string" || !filePath.trim()) return { ok: false, error: "No file path." };
     try {
       const data = await fs.promises.readFile(filePath);
@@ -343,7 +295,7 @@ function registerVirtualDjHandlers() {
     }
   });
 
-  ipcMain.handle("fs:write-file", async (_event, payload) => {
+  handle("fs:write-file", async (_event, payload) => {
     const dirPath = payload && payload.dirPath;
     const name = payload && payload.name;
     const contents = (payload && payload.contents) ?? "";
@@ -366,7 +318,7 @@ function registerVirtualDjHandlers() {
     }
   });
 
-  ipcMain.handle("vdj:choose-database", async () => {
+  handle("vdj:choose-database", async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       title: "Choose your VirtualDJ database",
       defaultPath: defaultVdjPath(),
