@@ -20,18 +20,18 @@ export function WaveformPlayer({
     () => (target && resolve ? resolve({ artist: target.artist, title: target.song, filePath: target.filePath }) : undefined),
     [target, resolve],
   );
-  const [diskFile, setDiskFile] = useState<File | null>(null);
+  const [diskFile, setDiskFile] = useState<{ target: PreviewTarget; file: File } | null>(null);
 
   // Desktop app: read the remembered file straight off disk when it isn't loaded.
   useEffect(() => {
     let active = true;
     setDiskFile(null);
     if (!target || resolved) return;
-    void ensureLocalFile(target.filePath).then(f => { if (active) setDiskFile(f); });
+    void ensureLocalFile(target.filePath).then(f => { if (active && f) setDiskFile({ target, file: f }); });
     return () => { active = false; };
   }, [target, resolved, ensureLocalFile]);
 
-  const file = resolved ?? diskFile ?? undefined;
+  const file = resolved ?? (diskFile?.target === target ? diskFile.file : undefined);
 
   const [url, setUrl] = useState<string | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -57,7 +57,7 @@ export function WaveformPlayer({
     let active = true;
     setClipUrl(null);
     setClipState("idle");
-    if (!target || file) return;
+    if (!target || file || target.filePath) return;
     // Give the on-disk lookup a moment before reaching out to the network.
     setClipState("loading");
     const term = encodeURIComponent(`${target.artist} ${target.song}`.trim());

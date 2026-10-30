@@ -9,3 +9,5 @@
 - Route all event snapshot writes through the latest-only single-flight autosave coordinator, resetting queued work at event boundaries, because concurrent or stale saves can overwrite newer edits.
 - Treat native scans as atomic source replacements and retain saved tracks on failed, partial or unexpectedly empty rescans, because inaccessible folders must not erase library indexes.
 - Apply desktop/security.cjs to every native IPC handler and navigation/permission boundary; trust only the exact app origin and owning main frame, because untrusted pages and subframes must never inherit native access. Include desktop helpers in package build.files.
+- Use the shared case-sensitive file-identity index for playback, picked-file selection and metadata carry-forward; selected paths never fall through to another basename or scored song, because duplicate filenames may refer to different audio.
+- Reserve existing source labels and root mappings, allocate new labels for different roots, and strip the virtual label on export; native rescans relabel atomically, because saved track references must keep their original disk identity.

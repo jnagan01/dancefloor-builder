@@ -83,7 +83,7 @@ import { getArtistCrowdData, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
 import { importSpotifyPlaylist } from "@/lib/spotify.functions";
 import { type PreviewTarget } from "@/components/PreviewPlayer";
-import { buildAudioIndex, resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
+import { resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 import { supabase } from "@/integrations/supabase/client";

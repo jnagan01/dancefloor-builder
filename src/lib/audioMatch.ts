@@ -23,7 +23,7 @@ import {
   type MatchSubject,
   type TokenIndex,
 } from "./matchCore";
-import { createIdentityIndex, trackIdentity } from "./fileIdentity";
+import { createIdentityIndex } from "./fileIdentity";
 import { getNativeFilePath } from "./desktopBridge";
 
 export interface AudioIndex {
