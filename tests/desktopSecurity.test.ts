@@ -96,9 +96,12 @@ async function loadMain() {
   return { handlers, listeners, windowOpen: (url: string) => windowOpen({ url }), external, showOpenDialog, fs, scanFolder, writeTags, wc };
 }
 describe("real main process wiring with mocks", () => {
-  it("guards ALL 12 native channels against untrusted contents and subframes before side effects", async () => {
+  it("guards all native channels against untrusted contents and subframes before side effects", async () => {
     const { handlers, wc, showOpenDialog, fs, scanFolder, writeTags } = await loadMain();
-    expect(handlers.size).toBe(12);
+    expect([...handlers.keys()].sort()).toEqual([
+      "vdj:default-path", "vdj:default-root", "vdj:choose-root", "vdj:read-database", "vdj:choose-database",
+      "fs:choose-folder", "fs:choose-music-folder", "fs:write-tags", "fs:scan-folder", "fs:read-audio", "fs:write-file",
+    ].sort());
     for (const handler of handlers.values()) {
       expect(() => handler({ sender: wc, senderFrame: { url: APP } }, "/mock/music")).toThrow("Native access denied");
       expect(() => handler({ sender: { ...wc }, senderFrame: wc.mainFrame }, "/mock/music")).toThrow("Native access denied");
