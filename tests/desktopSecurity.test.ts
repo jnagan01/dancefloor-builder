@@ -148,6 +148,15 @@ describe("real main process wiring with mocks", () => {
     const preventDefault = vi.fn();
     listeners.get("will-frame-navigate")?.({ preventDefault, url: "https://evil.example", isMainFrame: false });
     expect(preventDefault).toHaveBeenCalledTimes(1);
+    expect(external).not.toHaveBeenCalled();
+    // Electron 33 passes navigation details on the event itself.
+    listeners.get("will-frame-navigate")?.({ preventDefault, url: "https://accounts.google.com/login", isMainFrame: true });
+    expect(external).toHaveBeenLastCalledWith("https://accounts.google.com/login");
+    external.mockClear();
+    listeners.get("will-redirect")?.({ preventDefault, url: "https://evil.example", isMainFrame: false });
+    expect(external).not.toHaveBeenCalled();
+    listeners.get("will-redirect")?.({ preventDefault, url: "https://accounts.spotify.com/authorize", isMainFrame: true });
+    expect(external).toHaveBeenLastCalledWith("https://accounts.spotify.com/authorize");
   });
   it("includes extracted main-process helpers in installed desktop builds", () => {
     const pkg = require("../desktop/package.json");
