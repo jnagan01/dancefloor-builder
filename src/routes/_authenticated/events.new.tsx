@@ -1,3 +1,4 @@
+import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -82,7 +83,7 @@ import { getArtistCrowdData, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
 import { importSpotifyPlaylist } from "@/lib/spotify.functions";
 import { type PreviewTarget } from "@/components/PreviewPlayer";
-import { buildAudioIndex, resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
+import { resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 import { supabase } from "@/integrations/supabase/client";
@@ -392,8 +393,8 @@ function Index() {
   }, [workspace.sources.length, vdjDirHandle, musicSetupCompleted]);
 
   const audioIndex = useMemo<AudioIndex>(() => {
-    return buildAudioIndex(workspace.files, []);
-  }, [workspace.files]);
+    return workspace.audioIndex;
+  }, [workspace.audioIndex]);
 
   async function addAudioFolder() { await workspace.addFolder(); }
   function removeAudioSource(id: string) { const i = workspace.sources.findIndex(s => s.label === id); if(i>=0) workspace.removeSource(i); }
@@ -1581,7 +1582,7 @@ function Index() {
       toast.error("Unsupported audio file type");
       return;
     }
-    const existing = findTrackForPickedFile(mergedLibrary, file.name, file.size);
+    const existing = findTrackForPickedFile(mergedLibrary, file.name, file.size, getNativeFilePath(file) || file.webkitRelativePath || undefined);
     if (existing >= 0) {
       updateMatch(key, {status:"Manually Matched",confidence:1,trackIndex:existing,alternatives:[],extraTrackIndices:[]});
       toast.success(`Matched ${file.name} from your music folder`);

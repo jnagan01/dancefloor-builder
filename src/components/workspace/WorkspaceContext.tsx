@@ -1,16 +1,20 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, folderForPath, cleanBpm, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
+import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, folderForPath, resolveExportPath, cleanBpm, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
 import { loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
-import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle, supportsNativeScan, scanNativeFolder, chooseNativeMusicFolder, readNativeAudioFile, writeNativeTags } from "@/lib/desktopBridge";
+import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle, supportsNativeScan, scanNativeFolder, chooseNativeMusicFolder, readNativeAudioFile, writeNativeTags, rememberNativeFilePath } from "@/lib/desktopBridge";
 import { pickDirectoryHandle } from "@/lib/virtualDj";
 import { saveDirHandle, saveDirHandleMeta, loadDirHandle, verifyReadWrite, type AnyHandle } from "@/lib/dirHandleStore";
 import { toast } from "sonner";
+import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
+import { allocateSourceLabel, relabelScan, normalizeFilePath, trackIdentity, createIdentityIndex } from "@/lib/fileIdentity";
+import { metadataResolver, mergeTrackMetadata, carryRescanMetadata } from "@/lib/trackMetadataIdentity";
+import { withoutSourceFiles, cachedFileIdentity } from "@/lib/workspaceFileCache";
 import { nativeScanProblem } from "@/lib/nativeScanSafety";
 
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
-  sources: Source[]; files: File[]; library: VdjLibrary | null; loading: boolean;
+  sources: Source[]; files: File[]; audioIndex: AudioIndex; library: VdjLibrary | null; loading: boolean;
   addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => string;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
   /** Loads a remembered file from disk (desktop app) so it can be played. */
@@ -32,7 +36,6 @@ type BrowserDir = AnyHandle & {
 };
 export const VDJ_PATH_KEY = "dancefloor:vdjDatabasePath";
 export const VDJ_SYNC_KEY = "dancefloor:vdjSyncedAt";
-const basename = (p: string) => (p.split(/[\\/]/).pop() ?? p).toLowerCase();
 /** Native scan entries → the shape the track indexer expects. */
 const asFileLike = (files: ReadonlyArray<{ name: string; size?: number; relativePath: string; tags?: import("@/lib/virtualDj").AudioFileTags | null }>) =>
   files.map(f => ({ name: f.name, size: f.size, webkitRelativePath: f.relativePath, tags: f.tags }));
@@ -136,27 +139,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     {
       const tracks = parseVdjDatabaseXml(xml);
       if (!tracks.length) { if (!silent) toast.error("No tracks found in that VirtualDJ database."); return false; }
-      const byName = new Map<string, VdjTrack>();
-      for (const t of tracks) byName.set(basename(t.filePath), t);
-      vdjInfo.current = byName;
+      vdjInfo.current = tracks;
+      const roots = getFolderRoots();
       let matched = 0;
-      setSources(prev => prev.map(source => ({
-        ...source,
-        tracks: source.tracks.map(track => {
-          const info = byName.get(basename(track.filePath));
-          if (!info) return track;
-          matched += 1;
-          return {
-            ...track,
-            playCount: info.playCount ?? track.playCount,
-            lastPlayTime: info.lastPlayTime ?? track.lastPlayTime,
-            key: info.key || track.key,
-            bpm: info.bpm || track.bpm,
-            genre: info.genre || track.genre,
-            year: info.year || track.year,
-          };
-        }),
-      })));
+      setSources(prev => {
+        const resolver = metadataResolver(tracks, prev.flatMap(s => s.tracks), roots);
+        return prev.map(source => ({ ...source, tracks: source.tracks.map(track => {
+          const info = resolver.resolve(track.filePath);
+          if (info) matched += 1;
+          return mergeTrackMetadata(track, info, true);
+        }) }));
+      });
       const at = Date.now();
       setVdjSyncedAt(at);
       localStorage.setItem(VDJ_SYNC_KEY, String(at));
@@ -168,15 +161,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
   const autoScanned = useRef(false);
   const autoSynced = useRef(false);
-  /** Last known VirtualDJ info by file name, so rescans keep play counts. */
-  const vdjInfo = useRef(new Map<string, VdjTrack>());
-  /** relative path / filename → full on-disk path, from native scans. */
-  const nativePaths = useRef(new Map<string, string>());
-  function indexNativeFiles(scanned: ReadonlyArray<{ name: string; path: string; relativePath: string }>) {
-    for (const f of scanned) {
-      nativePaths.current.set(f.relativePath.toLowerCase(), f.path);
-      nativePaths.current.set(f.name.toLowerCase(), f.path);
-    }
+  const vdjInfo = useRef<VdjTrack[]>([]);
+  /** Native indexes are atomic and source-scoped; no basename aliases. */
+  const nativePaths = useRef(new Map<string, Map<string, string>>());
+  const fileCacheRevision = useRef(0);
+  function indexNativeFiles(label: string, scanned: ReadonlyArray<{ path: string; relativePath: string }>) {
+    fileCacheRevision.current += 1;
+    nativePaths.current.set(label, new Map(scanned.map(f => [normalizeFilePath(f.relativePath), f.path])));
+    setFiles(prev => withoutSourceFiles(prev, label, [], getFolderRoots()));
   }
   useEffect(() => {
     let active = true;
@@ -220,35 +212,37 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
   const library = useMemo(() => sources.length ? mergeLibraries(sources.map(s => buildLibrary(s.tracks))) : null, [sources]);
+  const audioIndex = useMemo(() => buildAudioIndex(files, [], sources.flatMap(s => s.tracks.map(t => t.filePath)), getFolderRoots()), [files, sources]);
   async function addFolder() {
-    // Desktop app: use the native picker so we learn the folder's real
-    // location and can re-read it later without asking again.
     if (supportsNativeScan()) {
       const root = await chooseNativeMusicFolder();
       if (!root) return;
       const result = await scanNativeFolder(root);
-      const label = result.label ?? root.split("/").filter(Boolean).pop() ?? "Music";
-      const problem = nativeScanProblem(result, sources.find(s=>s.label===label)?.tracks.length ?? 0);
-      if (problem || !result.files?.length) {
-        toast.error(problem ?? "No audio files found in that folder");
-        return;
-      }
-      setFolderRoot(label, result.root ?? root);
-      indexNativeFiles(result.files);
-      setSources(prev => [...prev.filter(s => s.label !== label), { label, tracks: tracksFromAudioFiles(asFileLike(result.files ?? [])) }]);
-      toast.success(`${result.files.length} tracks indexed from ${label}`);
+      const actualRoot = result.root ?? root;
+      const label = allocateSourceLabel(result.label ?? root.split("/").filter(Boolean).pop() ?? "Music", actualRoot, sources.map(s => s.label), getFolderRoots());
+      const problem = nativeScanProblem(result, sources.find(s => s.label === label)?.tracks.length ?? 0);
+      if (problem || !result.files?.length) { toast.error(problem ?? "No audio files found in that folder"); return; }
+      const scanned = relabelScan(result.files, label);
+      setFolderRoot(label, actualRoot);
+      indexNativeFiles(label, scanned);
+      setSources(prev => {
+        const old = prev.find(s => s.label === label);
+        const resolver = metadataResolver(old?.tracks ?? [], old?.tracks ?? [], getFolderRoots());
+        const tracks = tracksFromAudioFiles(asFileLike(scanned)).map(t => carryRescanMetadata(t, resolver.resolve(t.filePath)));
+        return old ? prev.map(s => s.label === label ? { label, tracks } : s) : [...prev, { label, tracks }];
+      });
+      toast.success(`${scanned.length} tracks indexed from ${label}`);
       return;
     }
     const picked = await pickDirectoryFiles();
     const audio = picked.filter(f => /\.(mp3|m4a|wav|flac|ogg|aac|aiff?|wma|opus|alac)$/i.test(f.name));
     if (!audio.length) { toast.error("No audio files found in that folder"); return; }
-    const label = (audio[0].webkitRelativePath || audio[0].name).split("/")[0];
-    // Desktop app: learn the folder's full location so exports use full paths.
-    const abs = getNativeFilePath(audio[0]);
-    const rel = audio[0].webkitRelativePath || audio[0].name;
-    if (abs && abs.replace(/\\/g, "/").endsWith(rel)) setFolderRoot(label, abs.slice(0, abs.length - rel.length) + label);
-    setSources(prev => [...prev.filter(s => s.label !== label), { label, tracks: tracksFromAudioFiles(audio) }]);
-    setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name).split("/")[0] !== label), ...audio]);
+    const name = (audio[0].webkitRelativePath || audio[0].name).split("/")[0];
+    // Without absolute roots the browser cannot prove two same-named folders are identical.
+    const label = allocateSourceLabel(name, null, sources.map(s => s.label), getFolderRoots());
+    const wrapped = audio.map(file => wrapFile(file, `${label}/${(file.webkitRelativePath || file.name).split("/").slice(1).join("/") || file.name}`));
+    setSources(prev => [...prev, { label, tracks: tracksFromAudioFiles(wrapped) }]);
+    setFiles(prev => [...prev, ...wrapped]);
     toast.success(`${audio.length} tracks indexed from ${label}`);
   }
   /** Re-reads every remembered folder from disk (desktop app only). */
@@ -262,29 +256,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const result = await scanNativeFolder(roots[source.label]);
       const problem = nativeScanProblem(result, source.tracks.length);
       if (problem || !result.files) { problems.push(`${source.label}: ${problem ?? "couldn't be read"}`); continue; }
-      indexNativeFiles(result.files);
-      updates.set(source.label, tracksFromAudioFiles(asFileLike(result.files)));
+      const scanned = relabelScan(result.files, source.label);
+      indexNativeFiles(source.label, scanned);
+      updates.set(source.label, tracksFromAudioFiles(asFileLike(scanned)));
     }
     if (updates.size) {
       setSources(prev => prev.map(s => {
         const fresh = updates.get(s.label);
         if (!fresh) return s;
-        // Keep play counts, keys and BPM that came from VirtualDJ — audio tags don't carry them.
-        const known = new Map<string, VdjTrack>();
-        for (const t of s.tracks) known.set(basename(t.filePath), t);
-        return { label: s.label, tracks: fresh.map(t => {
-          const old = known.get(basename(t.filePath)) ?? vdjInfo.current.get(basename(t.filePath));
-          if (!old) return t;
-          return {
-            ...t,
-            playCount: t.playCount ?? old.playCount,
-            lastPlayTime: t.lastPlayTime ?? old.lastPlayTime,
-            key: t.key || old.key,
-            bpm: t.bpm || old.bpm,
-            genre: t.genre || old.genre,
-            year: t.year || old.year,
-          };
-        }) };
+        const known = metadataResolver(s.tracks, prev.flatMap(source => source.tracks), roots);
+        const vdj = metadataResolver(vdjInfo.current, prev.flatMap(source => source.tracks), roots);
+        return { label: s.label, tracks: fresh.map(t => carryRescanMetadata(t, known.resolve(t.filePath), vdj.resolve(t.filePath))) };
       }));
       const total = [...updates.values()].reduce((n, t) => n + t.length, 0);
       if (!silent) toast.success(`${total.toLocaleString()} tracks re-read from your saved folders`);
@@ -316,7 +298,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   async function saveTrackTags(source: number, index: number, patch: Partial<VdjTrack>) {
     const track = sources[source]?.tracks[index];
     if (!track) return { ok: false, error: "Song not found." };
-    const full = nativePaths.current.get(track.filePath.toLowerCase()) ?? nativePaths.current.get(basename(track.filePath));
+    const full = exactNativePath(track.filePath);
     if (!full) return { ok: false, error: "Rescan this music folder in the Mac app first." };
     const fields = ["title", "artist", "album", "genre", "year", "bpm", "key", "comment"] as const;
     const tags: Record<string, string> = {};
@@ -334,15 +316,40 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     } : tr) } : s));
     return { ok: true };
   }
+  function exactNativePath(filePath: string): string | null {
+    const roots = getFolderRoots();
+    const indexed = [...nativePaths.current.values()].flatMap(map => [...map].map(([relative, path]) => ({ relative, path })));
+    const selected = createIdentityIndex(indexed, f => f.relative, roots, sources.flatMap(s => s.tracks.map(t => t.filePath))).resolve(filePath);
+    if (selected) return selected.path;
+    return resolveExportPath(filePath, roots);
+  }
   async function ensureLocalFile(filePath?: string): Promise<File | null> {
     if (!filePath) return null;
-    const existing = files.find(f => (f.webkitRelativePath || f.name) === filePath || f.name === filePath.split(/[\\/]/).pop());
+    const existing = resolveAudioFile(audioIndex, { filePath });
     if (existing) return existing;
-    const full = nativePaths.current.get(filePath.toLowerCase()) ?? nativePaths.current.get(basename(filePath));
+    const full = exactNativePath(filePath);
     if (!full) return null;
+    const revision = fileCacheRevision.current;
     const file = await readNativeAudioFile(full, filePath);
-    if (file) setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name) !== filePath), file]);
+    if (revision !== fileCacheRevision.current) return null;
+    if (file) setFiles(prev => [...prev.filter(f => cachedFileIdentity(f, getFolderRoots()) !== trackIdentity(full, getFolderRoots())), file]);
     return file;
+  }
+  function wrapFile(file: File, rel: string): File {
+    if (rel === (file.webkitRelativePath || file.name)) return file;
+    const wrapped = new File([file], file.name, { type: file.type, lastModified: file.lastModified });
+    Object.defineProperty(wrapped, "webkitRelativePath", { value: rel });
+    rememberNativeFilePath(wrapped, getNativeFilePath(file));
+    return wrapped;
+  }
+  function removeSource(index: number) {
+    const source = sources[index];
+    if (!source) return;
+    fileCacheRevision.current += 1;
+    nativePaths.current.delete(source.label);
+    setFiles(prev => withoutSourceFiles(prev, source.label, source.tracks.map(t => t.filePath), getFolderRoots()));
+    setSources(prev => prev.filter((_, i) => i !== index));
+    // Keep the retired root mapping reserved for existing saved-event references.
   }
   function addFile(file: File): string {
     // Files inside a connected music folder join that folder; only files from
@@ -351,7 +358,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       ?? (file.webkitRelativePath && sources.some(s => s.label === file.webkitRelativePath.split("/")[0])
         ? { label: file.webkitRelativePath.split("/")[0], relativePath: file.webkitRelativePath } : null);
     const label = owner?.label ?? "Manually picked files";
-    const rel = owner?.relativePath ?? (file.webkitRelativePath || file.name);
+    const rel = owner?.relativePath ?? (getNativeFilePath(file) || file.webkitRelativePath || file.name);
     const track = tracksFromAudioFiles([{ name: file.name, size: file.size, webkitRelativePath: rel }])[0];
     if (!track) return rel;
     setSources(prev => {
@@ -359,12 +366,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const tracks = [...(source?.tracks ?? []).filter(t => t.filePath !== track.filePath), track];
       return source ? prev.map(s => s.label === label ? { ...s, tracks } : s) : [...prev, { label, tracks }];
     });
-    const wrapped = rel === (file.webkitRelativePath || file.name) ? file : new File([file], file.name, { type: file.type, lastModified: file.lastModified });
-    if (wrapped !== file) Object.defineProperty(wrapped, "webkitRelativePath", { value: rel });
+    const wrapped = wrapFile(file, rel);
     setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name) !== rel), wrapped]);
     return rel;
   }
-  return <Context.Provider value={{ sources, files, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource: i => setSources(prev => prev.filter((_, j) => i !== j)), editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ sources, files, audioIndex, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);

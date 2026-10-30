@@ -78,7 +78,7 @@ describe("local file resolution", () => {
 
   it("returns a confidence score and exact flag", () => {
     const idx = buildAudioIndex([file("Avicii - Levels.mp3")]);
-    const m = resolveAudioMatch(idx, { artist: "Avicii", title: "Levels", filePath: "D:/x/Avicii - Levels.mp3" });
+    const m = resolveAudioMatch(idx, { artist: "Avicii", title: "Levels", filePath: "Avicii - Levels.mp3" });
     expect(m?.exact).toBe(true);
     expect(m?.score).toBe(1);
   });

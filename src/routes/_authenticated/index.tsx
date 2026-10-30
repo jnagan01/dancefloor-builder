@@ -1,3 +1,4 @@
+import { resolveAudioFile } from "@/lib/audioMatch";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
@@ -37,7 +38,7 @@ const compact = (n?: number) => (n ? Intl.NumberFormat("en", { notation: "compac
 
 
 function HomePage() {
-  const { library, sources, files, loading } = useWorkspace();
+  const { library, sources, audioIndex, loading } = useWorkspace();
   const list = useServerFn(listWorkflows);
   const charts = useServerFn(getTrendingCharts);
   const genreCharts = useServerFn(getGenreCharts);
@@ -67,30 +68,7 @@ function HomePage() {
   const [playing, setPlaying] = useState<PreviewTarget | null>(null);
 
   /** Finds a connected local file so charts play the real song when owned. */
-  const fileIndex = useMemo(() => {
-    const byPath = new Map<string, File>();
-    const byName = new Map<string, File>();
-    for (const f of files) {
-      const p = f.webkitRelativePath || f.name;
-      if (!byPath.has(p)) byPath.set(p, f);
-      if (!byName.has(f.name)) byName.set(f.name, f);
-    }
-    return { byPath, byName };
-  }, [files]);
-  const resolveFile = (q: { artist?: string; title?: string; filePath?: string }) => {
-    if (q.filePath) {
-      const base = q.filePath.split("/").pop();
-      const direct = fileIndex.byPath.get(q.filePath) ?? (base ? fileIndex.byName.get(base) : undefined);
-      if (direct) return direct;
-    }
-    if (!q.title) return undefined;
-    const want = norm(q.title);
-    const artist = q.artist ? norm(q.artist) : "";
-    return files.find(f => {
-      const name = norm(f.name.replace(/\.[a-z0-9]+$/i, ""));
-      return name.includes(want) && (!artist || name.includes(artist));
-    });
-  };
+  const resolveFile = (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioFile(audioIndex, q);
   const play = (artist: string, song: string, filePath?: string) => setPlaying({ artist, song, filePath });
 
 

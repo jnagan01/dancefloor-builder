@@ -19,19 +19,17 @@ import {
   buildTokenIndex,
   candidatesFor,
   normalizeText,
-  parseTitle,
   FILE_MATCH_FLOOR,
   type MatchSubject,
   type TokenIndex,
 } from "./matchCore";
+import { createIdentityIndex } from "./fileIdentity";
+import { getNativeFilePath } from "./desktopBridge";
 
 export interface AudioIndex {
   files: File[];
   variantCount: number;
-  /** exact basename (lowercased, with extension) */
-  byBasename: Map<string, File>;
-  /** basename without extension, lowercased */
-  byBasenameNoExt: Map<string, File>;
+  identity: ReturnType<typeof createIdentityIndex<File>>;
   /** one entry per (file, name variant) */
   entries: Array<{ file: File; subject: MatchSubject; path: string; size: number; weight: number }>;
   tokens: TokenIndex;
@@ -70,10 +68,9 @@ function filePath(f: File): string {
   return (f as File & { webkitRelativePath?: string }).webkitRelativePath || f.name;
 }
 
-export function buildAudioIndex(rawFiles: File[], extraEntries: ExtraEntry[] = []): AudioIndex {
+export function buildAudioIndex(rawFiles: File[], extraEntries: ExtraEntry[] = [], knownPaths: readonly string[] = [], roots: Record<string, string> = {}): AudioIndex {
   const files = rawFiles.filter((f) => AUDIO_EXT_RE.test(f.name));
-  const byBasename = new Map<string, File>();
-  const byBasenameNoExt = new Map<string, File>();
+  const identity = createIdentityIndex(files, f => getNativeFilePath(f) || filePath(f), roots, knownPaths);
   const entries: AudioIndex["entries"] = [];
 
   // weight < 1 marks a speculative variant (e.g. the reversed "Title - Artist"
@@ -85,12 +82,7 @@ export function buildAudioIndex(rawFiles: File[], extraEntries: ExtraEntry[] = [
   };
 
   for (const f of files) {
-    const baseLower = f.name.toLowerCase();
-    if (!byBasename.has(baseLower)) byBasename.set(baseLower, f);
-
     const noExt = stripExt(f.name);
-    const noExtLower = noExt.toLowerCase();
-    if (!byBasenameNoExt.has(noExtLower)) byBasenameNoExt.set(noExtLower, f);
 
     const parts = splitFileName(noExt);
     if (parts) {
@@ -117,8 +109,7 @@ export function buildAudioIndex(rawFiles: File[], extraEntries: ExtraEntry[] = [
   return {
     files,
     variantCount: entries.length,
-    byBasename,
-    byBasenameNoExt,
+    identity,
     entries,
     tokens,
   };
@@ -183,30 +174,12 @@ function rank(idx: AudioIndex, q: ResolveQuery): AudioResolution | undefined {
 function resolveUncached(idx: AudioIndex, q: ResolveQuery): AudioResolution | undefined {
   if (!idx.entries.length && !idx.files.length) return undefined;
 
-  // 1) Exact filename from the original library path.
+  // A selected identity must not be replaced by a scored or basename match.
   if (q.filePath) {
-    const base = baseName(q.filePath).toLowerCase();
-    const exact = idx.byBasename.get(base);
-    if (exact) return { file: exact, score: 1, versionMatch: true, exact: true };
-    const noExtHit = idx.byBasenameNoExt.get(stripExt(base));
-    if (noExtHit) return { file: noExtHit, score: 1, versionMatch: true, exact: true };
+    const exact = idx.identity.resolve(q.filePath);
+    return exact ? { file: exact, score: 1, versionMatch: true, exact: true } : undefined;
   }
-
-  // 2) Scored match over the token-index candidates.
-  const scored = rank(idx, q);
-  if (scored) return scored;
-
-  // 3) Last resort: the original path's own name, matched loosely.
-  if (q.filePath) {
-    const noExt = stripExt(baseName(q.filePath));
-    const parsed = parseTitle(noExt);
-    if (parsed.base) {
-      const alt = rank(idx, { title: noExt });
-      if (alt) return alt;
-    }
-  }
-
-  return undefined;
+  return rank(idx, q);
 }
 
 /** Best local file for a track, with confidence. Cached per AudioIndex. */
