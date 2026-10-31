@@ -52,5 +52,5 @@
 - [x] Snapshot-bound export readiness, read-only availability and packaged reports.
 - [x] Account-isolated versioned backups, required pre-rescan/update checkpoint and non-destructive preview/restore.
 - [x] Isolated offline/crash/disk-failure checks with synthetic profiles and backend.
-- [x] Release-blocking Electron end-to-end CI on macos-15 with artifact inspection.
+- [ ] Release-blocking Electron CI is wired and seven checks pass; remaining Electron cases: six-row partial import, late-save recovery, abrupt process kill, fresh update capture and restore preview. CI execution/signing requires GitHub runner.
 - [x] Full regression/adversarial/build checks and exact results/limits.
