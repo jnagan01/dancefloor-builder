@@ -34,8 +34,10 @@ describe('actual mounted event route recovery and ownership',()=>{
   h.interact(n=>n.props?.children==='Retry save');await h.flush();expect(h.requests[1].writeRevision).toBe(marker);expect(h.current.saveState).toBe('saved');expect(h.memory.has(key('owner','A'))).toBe(false);h.unmount();
  });
  it('committed review song rename marks dirty immediately and saves the changed song',async()=>{
-  vi.useFakeTimers();const h=harness({rows:{A:row()}});await h.flush();h.interact(n=>n.props?.onRename,'onRename',0);
-  h.unmount();
+  vi.useFakeTimers();const h=harness({rows:{A:row()}});await h.flush();
+  h.tree.props.onClickCapture?.({target:{closest:()=>({})}});
+  const section=h.nodes().find((n:any)=>n.props?.onRename);section.props.onRename(0,{artist:song.artist,song:'Renamed'});h.render();expect(h.current.saveState).toBe('idle');
+  await vi.advanceTimersByTimeAsync(1000);await h.flush();expect(h.requests[0].lists.warmUp[0].song).toBe('Renamed');expect(h.current.saveState).toBe('saved');h.unmount();
  });
  it('same-value input is not an edit; real custom split and removed upload mark immediately and save',async()=>{
   vi.useFakeTimers();const h=harness({rows:{A:{...row(),inputs:{...row().inputs,listType:'dance',songs:[song,{artist:'B',song:'Other'}]}}}});await h.flush();h.edit('Original');expect(h.current.saveState).toBe('saved');
