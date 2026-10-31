@@ -134,11 +134,11 @@ function fakeEventDb() {
   return { rows, db: { from: () => {
     let mode = 'read', payload: any, filters: Record<string, unknown> = {};
     const chain: any = {
-      upsert: async (value: any) => { if (!rows.has(value.id)) rows.set(value.id, { ...value, updated_at: `v${++serial}` }); return { error: null }; },
+      upsert: async (value: any) => { if (!rows.has(value.id)) rows.set(value.id, { ...value, updated_at: new Date(++serial).toISOString() }); return { error: null }; },
       update: (value: any) => { mode = 'update'; payload = value; return chain; },
       select: () => chain, eq: (k: string, v: unknown) => { filters[k] = v; return chain; },
-      maybeSingle: async () => { const row = rows.get(filters.id as string); if (!row || Object.entries(filters).some(([k,v]) => row[k] !== v)) return { data: null, error: null };
-        if (mode === 'update') Object.assign(row, payload, { updated_at: `v${++serial}` }); return { data: { ...row }, error: null }; },
+      maybeSingle: async () => { const row = rows.get(filters.id as string); if (!row || Object.entries(filters).some(([k,v]) => ['inputs','lists'].includes(k) ? JSON.stringify(row[k]) !== v : row[k] !== v)) return { data: null, error: null };
+        if (mode === 'update') Object.assign(row, payload, { updated_at: new Date(++serial).toISOString() }); return { data: { ...row }, error: null }; },
     }; return chain;
   } } };
 }
