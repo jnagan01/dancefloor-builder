@@ -3,15 +3,15 @@ const path=require('node:path'), crypto=require('node:crypto');
 const MAX=32*1024*1024;
 const policy=require('./backup-policy.json');
 const privateProperty=new RegExp(policy.privatePropertyPattern,'i');
-function inspectBackupValues(value,parts=[],depth=0){
+function inspectBackupValues(value,parts=[],depth=0,identifierValue=false){
  if(depth>policy.maxDepth)throw Error('Backup nesting is too deep.');
  if(typeof value==='number'&&!Number.isFinite(value))throw Error('Unsafe numeric value.');
  if(typeof value==='string'&&(value.length>policy.maxStringLength||value.includes('\0')))throw Error('Unsafe backup value.');
  if(!value||typeof value!=='object')return;
- const dictionary=policy.dictionaryPaths.some(pattern=>{const expected=pattern.split('.');return expected.length===parts.length&&expected.every((part,i)=>part==='*'||part===parts[i]);})||(['events','sources'].includes(parts[0])&&policy.metadataDictionaryProperties.includes(parts.at(-1)));
+ const dictionary=policy.dictionaryPaths.some(pattern=>{const expected=pattern.split('.');return expected.length===parts.length&&expected.every((part,i)=>part==='*'||part===parts[i]);})||(!identifierValue&&['events','sources'].includes(parts[0])&&policy.metadataDictionaryProperties.includes(parts.at(-1)));
  for(const[key,child]of Object.entries(value)){
   if(key.length>policy.maxStringLength||key.includes('\0')||policy.dangerousKeys.includes(key.toLowerCase())||(!dictionary&&privateProperty.test(key)))throw Error('Backup contains unsafe or private fields.');
-  inspectBackupValues(child,[...parts,key],depth+1);
+  inspectBackupValues(child,[...parts,key],depth+1,dictionary);
  }
 }
 function validate(raw,account){
