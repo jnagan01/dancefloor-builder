@@ -33,7 +33,7 @@ describe('actual mounted event route recovery and ownership',()=>{
   h.interact(n=>n.props?.children==='Retry save');await h.flush();expect(h.requests[1].writeRevision).toBe(marker);expect(h.current.saveState).toBe('saved');expect(h.memory.has(key('owner','A'))).toBe(false);h.unmount();
  });
  it('same-value input is not an edit; real custom split and removed upload mark immediately and save',async()=>{
-  vi.useFakeTimers();const h=harness({rows:{A:{...row(),inputs:{...row().inputs,songs:[song,{artist:'B',song:'Other'}]}}}});await h.flush();h.edit('Original');expect(h.current.saveState).toBe('saved');
+  vi.useFakeTimers();const h=harness({rows:{A:{...row(),inputs:{...row().inputs,listType:'dance',songs:[song,{artist:'B',song:'Other'}]}}}});await h.flush();h.edit('Original');expect(h.current.saveState).toBe('saved');
   h.interact(n=>n.props?.children==='Customize section times');expect(h.current.saveState).toBe('idle');await vi.advanceTimersByTimeAsync(1000);await h.flush();expect(h.requests).toHaveLength(1);expect(h.requests[0].inputs.split).toBeDefined();
   h.interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',3);h.interact(n=>n.props?.['aria-label']==='Remove song');expect(h.current.saveState).toBe('idle');await vi.advanceTimersByTimeAsync(1000);await h.flush();expect(h.requests[1].inputs.songs).toEqual([{artist:'B',song:'Other'}]);h.unmount();
  });
@@ -80,7 +80,7 @@ describe('actual mounted event route recovery and ownership',()=>{
   memory.set(key('owner','A'),'{bad');s.setItem=()=>{throw Error('quota');};expect(()=>drafts.archiveEventDraft('owner','A',s)).toThrow('quota');expect(memory.get(key('owner','A'))).toBe('{bad');
  });
  it('delayed library and legacy selections never autosave opening-time defaults',async()=>{
-  vi.useFakeTimers();const h=harness({rows:{A:row()}});await h.flush();h.library(vdj.buildLibrary([{filePath:'Music/Song.mp3',title:'Song',artist:'The Artist'}]));await h.flush();await vi.advanceTimersByTimeAsync(2000);expect(h.requests).toHaveLength(0);h.edit('User edit');await vi.advanceTimersByTimeAsync(1000);expect(h.requests).toHaveLength(1);expect(Object.values(h.requests[0].lists.selections)[0]).toMatchObject({paths:['Music/Song.mp3'],excluded:true});h.unmount();
+  vi.useFakeTimers();const h=harness({rows:{A:row()}});await h.flush();h.interact(n=>n.props?.onPreview,'onPreview',{artist:'A',song:'Song'});h.library(vdj.buildLibrary([{filePath:'Music/Song.mp3',title:'Song',artist:'The Artist'}]));await h.flush();await vi.advanceTimersByTimeAsync(2000);expect(h.requests).toHaveLength(0);expect(h.current.saveState).toBe('saved');h.edit('User edit');await vi.advanceTimersByTimeAsync(1000);expect(h.requests).toHaveLength(1);expect(Object.values(h.requests[0].lists.selections)[0]).toMatchObject({paths:['Music/Song.mp3'],excluded:true});h.unmount();
  });
  it.each([0,0.5])('legacy buffer %s remains read-only with finite live targets',async(buffer)=>{
   const h=harness({rows:{A:row(buffer)}});await h.flush();expect(h.current.snapshotReadOnly.current).toBe(true);expect(Number.isFinite(h.current.result.perSectionBase)).toBe(true);expect(()=>h.current.computeLiveTargets([],3)).not.toThrow();expect(h.requests).toHaveLength(0);h.unmount();

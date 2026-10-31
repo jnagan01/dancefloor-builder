@@ -201,6 +201,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       id: id ?? attempt.createId, create: attempt.create, expectedUpdatedAt: attempt.expectedUpdatedAt, expectedRevision: attempt.expectedRevision, writeRevision: attempt.writeRevision, ...snapshot,
     }, signal: attempt.signal }),
     onConfirmed: (snapshot, saved) => {
+      userEdited.current = false;
       const draft = draftTokens.current.get(snapshot);
       if (draft && accountRef.current === draft.account) {
         try { confirmEventDraft(draft.account, draft.event, draft.token); } catch { toast.error("Saved online, but local recovery cleanup failed."); }
@@ -2244,11 +2245,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         <div className="min-w-0"><p className="eyebrow">Events / Builder</p><h1 className="mt-2 break-words font-display text-3xl tracking-tight sm:text-4xl">{eventName||"New event"}</h1></div>
         {draftProblem && <div role="alert"><p>{draftProblem}</p><Button variant="outline" size="sm" onClick={() => {
           if (!account) return;
-          try { archiveEventDraft(account, openedEventId ?? "new"); draftBlocked.current=false; setDraftProblem(null); autosave.dirty(); }
+          try { archiveEventDraft(account, openedEventId ?? "new"); draftBlocked.current=false; setDraftProblem(null); if (userEdited.current) { restoredFingerprint.current=null; autosave.retry(); } }
           catch { toast.error("Could not preserve the unreadable recovery copy. Saving remains blocked."); }
         }}>Preserve unreadable copy and enable saving</Button></div>}
         {snapshotProblem && <div role="alert" className="text-warning"><p>{snapshotProblem}</p>{result && <Button size="sm" variant="outline" onClick={() => {
-          try { validateTiming(hours, buffer, splitOn ? split : undefined); if(background)boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); snapshotReadOnly.current=false; restoredFingerprint.current="corrected"; setSnapshotProblem(null); autosave.dirty(); setResult({...result}); }
+          try { validateTiming(hours, buffer, splitOn ? split : undefined); if(background)boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); snapshotReadOnly.current=false; restoredFingerprint.current="corrected"; setSnapshotProblem(null); markPersistedEdit(); setResult({...result}); }
           catch(e) { toast.error((e as Error).message); }
         }}>Use corrected settings</Button>}</div>}
         {recovery && <div role="alert" className="flex flex-wrap items-center gap-2 border border-border p-3"><span>Unsaved recovery copy from {formatSavedAt(recovery.savedAt)}</span><Button size="sm" onClick={() => restoreRecovery(false)} disabled={recovery.baseVersion !== remoteVersion.current}>Restore recovery copy</Button><Button size="sm" variant="outline" onClick={() => restoreRecovery(true)}>Save recovery as new event</Button></div>}
