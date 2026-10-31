@@ -40,3 +40,9 @@ Native backup preview now attempts restore with each native-only new/pending-edi
 Final local commands: `bunx vitest run` (352 tests); `LD_LIBRARY_PATH="$(printf '%s:' /nix/store/*/lib)" xvfb-run -a node tests/native/run.mjs` (13 flows); `NODE_PATH=/dev-server/node_modules bun /tmp/setarchitect-stress/adversarial.cjs` (33 checks) and the corresponding `more.cjs` (16 checks). The temporary legacy adversarial scripts were updated to expect current fail-closed rejection of invalid timing, newline paths and corrupt indexes, rather than their obsolete permissive behavior. Automatic build/typecheck reported build OK. No dependency installation or production operations occurred.
 
 The user reported GitHub run 41160767318 frozen installs and full regression passing, with native execution still running. That run and final-revision macOS completion were not inspected here.
+
+## Build26 identifier regression
+
+The shared `desktop/backup-policy.json` differentiates snapshot selection/root/metadata identifiers from structural credential properties. The desktop package includes it. The fourteenth isolated Electron flow exercises real startup pre-rescan backup and manual rescan, Settings backup preview/download/import, native credential refusal preserving last-good bytes, and restore-as-new recovery. Exact reported selection keys and confirmed/uncertain values survive without a backend row change. Native store roundtrip/verifyAll and browser/native policy agreement are covered in the full suite.
+
+Build26 may reject the required pre-update backup using its old validator; once the signed installer is available, a direct installer may be necessary. No backup requirement was bypassed. This work did not inspect production data, run installers, install dependencies, publish, or trigger GitHub jobs.

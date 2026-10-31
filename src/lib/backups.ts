@@ -1,6 +1,7 @@
 import { validSavedLibrary, type SavedLibrarySource } from "./libraryStore";
 import { readEventSnapshot } from "./snapshotSafety";
 import { EVENT_REVISION_FIELD } from "./eventRevision";
+import { inspectBackupValues } from "./backupPolicy";
 export const MAX_BACKUP_BYTES = 32 * 1024 * 1024;
 export interface Backup {
   format: "setarchitect-backup"; version: 1; account: string; createdAt: string;
@@ -11,15 +12,7 @@ export function validateBackup(raw: string, account: string): Backup {
   if (new TextEncoder().encode(raw).length > MAX_BACKUP_BYTES) throw Error("Backup exceeds 32 MB; original preserved.");
   const b = JSON.parse(raw);
   if (!b || b.format !== "setarchitect-backup" || b.version !== 1 || b.account !== account || typeof b.createdAt !== "string" || !Number.isFinite(Date.parse(b.createdAt)) || !Array.isArray(b.events) || b.events.length > 500 || !validSavedLibrary({ version: 1, savedAt: Date.now(), sources: b.sources }) || b.sources.reduce((n: number, s: SavedLibrarySource) => n + s.tracks.length, 0) > 100000) throw Error("Backup version, account or contents are invalid; original preserved.");
-  const inspect = (v: unknown, depth = 0) => {
-    if (depth > 30) throw Error("Backup nesting is too deep.");
-    if (typeof v === "string" && (v.length > 100000 || /\u0000/.test(v))) throw Error("Unsafe backup value.");
-    if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) {
-      if (/^(?:__proto__|constructor|prototype|.*password.*|.*credential.*|.*session.*|.*access.?token.*|.*refresh.?token.*|.*secret.*|.*api.?key.*)$/i.test(k)) throw Error("Backup contains unsafe or private fields.");
-      inspect(x, depth + 1);
-    }
-  };
-  inspect(b);
+  inspectBackupValues(b);
   if (!b.roots || Array.isArray(b.roots) || typeof b.roots !== "object") throw Error("Invalid source mappings.");
   for (const [label, path] of Object.entries(b.roots)) if (!label || /[\\/\r\n]/.test(label) || typeof path !== "string" || path.length > 4000 || /[\r\n\u0000]/.test(path) || path.split(/[\\/]/).includes("..") || !(/^(?:\/|[A-Za-z]:[\\/])/.test(path))) throw Error("Unsafe source mapping.");
   const labels = new Set<string>();

@@ -1,0 +1,8 @@
+{
+  "dangerousKeys": ["__proto__", "constructor", "prototype"],
+  "privatePropertyPattern": "^(?:(?:access|refresh|id|auth|oauth|bearer|session|csrf)[_-]?token|token|tokens|password(?:[_-]?(?:hash|salt))?|passwd|credentials?|session(?:s|[_-]?(?:id|key|cookie|token|data))?|auth(?:entication|orization)?|cookies?|secret(?:s|[_-]?key)?|(?:client|consumer|api|app|application|service|private|signing|encryption)[_-]?(?:secret|key|token|password)|supabase[_-]?(?:key|session)|service[_-]?role[_-]?key)$",
+  "dictionaryPaths": ["roots", "events.*.snapshot.lists.selections"],
+  "metadataDictionaryProperties": ["metadata", "songMetadata", "artistMetadata", "sourceMetadata", "metadataBySong", "metadataByArtist", "metadataBySource", "bySong", "byArtist", "bySource"],
+  "maxDepth": 30,
+  "maxStringLength": 100000
+}

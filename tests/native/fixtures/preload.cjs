@@ -4,5 +4,6 @@ contextBridge.exposeInMainWorld('electronAvailability',{check:paths=>ipcRenderer
 contextBridge.exposeInMainWorld('electronBackups',{save:(raw,account)=>ipcRenderer.invoke('test:backup',raw,account),latest:account=>ipcRenderer.invoke('test:latest',account)});
 
 contextBridge.exposeInMainWorld('electronVirtualDJ',{isAvailable:true});
+contextBridge.exposeInMainWorld('electronFiles',{isAvailable:true,scanFolder:folder=>ipcRenderer.invoke('test:scan',folder)});
 
 const journal=(action,key,raw)=>{const r=ipcRenderer.sendSync('recovery:journal',action,key,raw);if(!r?.ok)throw Error(r?.error||'Journal unavailable');return r.value??null;};contextBridge.exposeInMainWorld('electronRecovery',{get:key=>journal('get',key),set:(key,raw)=>journal('set',key,raw),remove:key=>journal('remove',key)});

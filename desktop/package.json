@@ -29,6 +29,7 @@
       "security.cjs",
       "scan.cjs",
       "backups.cjs",
+      "backup-policy.json",
       "recovery.cjs",
       "build-info.json",
       "package.json",

@@ -11,7 +11,7 @@ const key='warmUp:0:test artist|test song live';
 fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));
 fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Test',updated_at:'2026-10-31T01:59:00Z',inputs:{eventName:'Test',songs:[song],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[],selections:{[key]:{paths:[tracks[0].filePath],confirmed:false}}}}}));
 let app,page,count=0;const diagnostics=path.join(root,'test-results/native');fs.mkdirSync(diagnostics,{recursive:true});
-async function launch(){app=await electron.launch({executablePath:path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));await page.waitForSelector('[role="status"]');await page.waitForTimeout(800);}
+async function launch(){app=await electron.launch({executablePath:path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));await page.locator('[role="status"], #backups').first().waitFor();await page.waitForTimeout(800);}
 async function check(name,f){await f();count++;await page.screenshot({path:path.join(diagnostics,`check-${count}.png`)});console.log(`PASS ${name}`);}
 try{
  await launch();
@@ -121,6 +121,39 @@ try{
    expect(await page.getByRole('tab',{name:/Transition/}).getAttribute('data-state')).toBe('active');
    await page.getByRole('button',{name:'Unselect all',exact:true}).click();
    await page.waitForTimeout(100);expect(await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed recording',exact:true}).count()).toBe(0);
+ });
+ await check('build26 identifiers survive actual startup/rescan backup, Settings preview and restore',async()=>{
+   await app.close();
+   const exact='transition:32:the allamerican rejects|the allamerican rejects dirty little secret';
+   const songs=['Secrets','Password','Session'].map(song=>({artist:'The Secret Session',song}));
+   const label='Secret Session Password';
+   const selected={[exact]:{paths:[label+'/most.mp3'],confirmed:true},'warmUp:1:the secret session|password':{paths:[label+'/correct.mp3'],confirmed:false}};
+   const snapshot={name:'Secret Session',inputs:{songs,eventName:'Secret Session',hours:'0.25',buffer:2,expand:false,songMetadata:{Secrets:{energy:7},Password:{bpm:120},Session:{comment:'kept'}},sessionNotes:'ordinary saved notes'},lists:{warmUp:songs,transition:[{artist:'The All-American Rejects',song:'Dirty Little Secret'}],peak:[],selections:selected,metadata:{Secrets:{comment:'unknown retained'}}}};
+   const rows={A:{id:'A',name:snapshot.name,inputs:snapshot.inputs,lists:snapshot.lists,updated_at:'2026-10-31T02:51:00Z'}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(rows));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({startBackups:true,sources:[{label,tracks:tracks.map(t=>({...t,filePath:label+'/'+path.basename(t.filePath)}))}]}));
+   await launch();await page.evaluate(({label,root})=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({[label]:root})),{label,root:library});
+   await page.reload();await page.waitForTimeout(1100);
+   expect(fs.readFileSync(path.join(temp,'scan-count'),'utf8')).toBe('1');
+   const originalRows=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   const startup=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);
+   expect(JSON.parse(startup).events[0].snapshot).toEqual(snapshot);
+   expect(await page.evaluate(()=>window.__errors)).toEqual([]);
+   await page.getByRole('button',{name:'Fixture rescan',exact:true}).click();await page.waitForTimeout(700);
+   expect(fs.readFileSync(path.join(temp,'scan-count'),'utf8')).toBe('2');
+   await page.getByRole('button',{name:'Back up now',exact:true}).click();await page.waitForTimeout(500);
+   expect(await page.getByRole('combobox',{name:'Event to restore'}).inputValue()).toBe('A');
+   const raw=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);
+   expect(JSON.parse(raw).events[0].snapshot).toEqual(snapshot);
+   await page.getByRole('button',{name:'Download backup',exact:true}).click();await page.waitForTimeout(500);const artifact=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('setarchitect-backup-')).sort().at(-1);expect(artifact).toBeTruthy();expect(JSON.parse(fs.readFileSync(path.join(temp,'exports',artifact),'utf8')).events[0].snapshot).toEqual(snapshot);
+   const bad=JSON.parse(raw);bad.events[0].snapshot.inputs.access_token='synthetic credential';
+   expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),bad)).ok).toBe(false);
+   expect(await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw)).toBe(raw);
+   const imported=path.join(temp,'identifier-roundtrip.json');fs.writeFileSync(imported,raw);await page.locator('input[type=file]').setInputFiles(imported);await page.waitForTimeout(200);
+   await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await page.waitForTimeout(300);
+   const queued=await page.evaluate(()=>JSON.parse(window.electronRecovery.get('setarchitect:recovery:synthetic-owner:new')));
+   expect(queued.snapshot).toEqual(snapshot);expect(queued.snapshot.lists.selections).toEqual(selected);
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(originalRows);
  });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
 }catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});throw e;}finally{await app?.close().catch(()=>{});}
