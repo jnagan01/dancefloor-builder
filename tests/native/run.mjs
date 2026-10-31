@@ -11,7 +11,7 @@ const key='warmUp:0:test artist|test song live';
 fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));
 fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Test',updated_at:'2026-10-31T01:59:00Z',inputs:{eventName:'Test',songs:[song],hours:'0.25',buffer:2,expand:false},lists:{warmUp:[song],transition:[],peak:[],selections:{[key]:{paths:[tracks[0].filePath],confirmed:false}}}}}));
 let app,page,count=0;const diagnostics=path.join(root,'test-results/native');fs.mkdirSync(diagnostics,{recursive:true});
-async function launch(){app=await electron.launch({executablePath:path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();await page.waitForSelector('[role="status"]');await page.waitForTimeout(500);}
+async function launch(){app=await electron.launch({executablePath:path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();await page.waitForSelector('[role="status"]');await page.waitForTimeout(800);console.log((await page.locator('body').innerText()).slice(0,1800));}
 async function check(name,f){await f();count++;console.log(`PASS ${name}`);}
 try{
  await launch();
