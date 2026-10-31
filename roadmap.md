@@ -24,4 +24,4 @@
 - [x] Partial CSV/TXT preservation, root/library/snapshot validation and visible storage failures.
 - [x] Bounded duration validation and preflight-safe newline handling for every DJ export.
 - [x] Linear browser scan buckets, shared native merge indexes, cached native/audio identities and single library construction.
-- [ ] Tracked regressions for every finding, full suite and automatic build checks, isolated mock flow and monitored benchmarks.
+- [x] Tracked regressions for every finding, full suite and automatic build checks, isolated mock flow and monitored benchmarks. Real Mac/live server operations intentionally not exercised.

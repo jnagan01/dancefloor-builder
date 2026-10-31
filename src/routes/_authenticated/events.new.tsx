@@ -731,10 +731,11 @@ function Index() {
   },[autosave]);
 
   const latestSnapshot = useRef<ReturnType<typeof eventSnapshot> | null>(null);
+  const latestSaveState = useRef(saveState); latestSaveState.current = saveState;
   latestSnapshot.current = result ? eventSnapshot(result, matches) : null;
   const persistOnExit = () => {
     const account = accountRef.current, snapshot = latestSnapshot.current;
-    if (!account || !snapshot || snapshotReadOnly.current || recovery) return;
+    if (!account || !snapshot || latestSaveState.current === "saved" || snapshotReadOnly.current || recovery) return;
     const token = crypto.randomUUID(), event = openedEventIdRef.current ?? "new";
     storeEventDraft({ version: 1, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now() });
   };
@@ -2166,7 +2167,10 @@ function Index() {
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <div className="min-w-0"><p className="eyebrow">Events / Builder</p><h1 className="mt-2 break-words font-display text-3xl tracking-tight sm:text-4xl">{eventName||"New event"}</h1></div>
-        {snapshotProblem && <p role="alert" className="text-warning">{snapshotProblem}</p>}
+        {snapshotProblem && <div role="alert" className="text-warning"><p>{snapshotProblem}</p>{result && <Button size="sm" variant="outline" onClick={() => {
+          try { validateTiming(hours, buffer, splitOn ? split : undefined); if(background)boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); snapshotReadOnly.current=false; restoredFingerprint.current="corrected"; setSnapshotProblem(null); autosave.dirty(); setResult({...result}); }
+          catch(e) { toast.error((e as Error).message); }
+        }}>Use corrected settings</Button>}</div>}
         {recovery && <div role="alert" className="flex flex-wrap items-center gap-2 border border-border p-3"><span>Unsaved recovery copy from {formatSavedAt(recovery.savedAt)}</span><Button size="sm" onClick={() => restoreRecovery(false)} disabled={recovery.baseVersion !== remoteVersion.current}>Restore recovery copy</Button><Button size="sm" variant="outline" onClick={() => restoreRecovery(true)}>Save recovery as new event</Button></div>}
         <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}{saveState==="error" && <Button variant="outline" size="sm" onClick={()=>autosave.retry()}>Retry save</Button>}</div>
       </header>

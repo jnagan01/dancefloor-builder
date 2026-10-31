@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { createRequire } from "node:module";
 import { parseFile, generateLists, equalSplit } from "@/lib/danceFloor";
 import { folderRootsProblem, getFolderRoots, setFolderRoot, resolveExportPath, buildM3u, buildLibrary } from "@/lib/virtualDj";
 import { readEventSnapshot } from "@/lib/snapshotSafety";
@@ -8,8 +7,6 @@ import { storeEventDraft, loadEventDraft, confirmEventDraft } from "@/lib/eventD
 import { createEventAutosave } from "@/lib/eventAutosave";
 import { writeEventConditionally } from "@/lib/eventWriteContract";
 import { validSavedLibrary, loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
-const require = createRequire(import.meta.url);
-// Bun resolves TypeScript dependencies in this actual-closure helper; Vitest uses the same VM via a loader below.
 const track = (filePath: string, title = "Old") => ({ filePath, artist: "A", title, bpm: "90" });
 const prefs = { artists: [], genres: [], decades: [], notes: "" };
 function storage() {
@@ -87,6 +84,13 @@ describe("finding 3: durable account/event recovery", () => {
     const s = storage(); s.setItem("sentinel", "original"); s.setItem = () => { throw new Error("QuotaExceededError"); };
     expect(() => storeEventDraft({ version: 1, account: "A", event: "E", token: "one", createId: "stable", baseVersion: null, snapshot: {}, savedAt: 1 }, s)).toThrow("Quota");
     expect(s.getItem("sentinel")).toBe("original");
+  });
+  it("draft persists when the coordinator resets before debounce completes", async () => {
+    vi.useFakeTimers(); const s=storage(); const snapshot={ name:"unsaved" };
+    storeEventDraft({ version:1, account:"A", event:"E", token:"t", createId:"id", baseVersion:"v1", snapshot, savedAt:1 },s);
+    const write=vi.fn(async()=>({id:"E"})); const q=createEventAutosave({write,onState:vi.fn(),onId:vi.fn(),onError:vi.fn()});
+    q.schedule(snapshot,"E",()=>true);q.reset();await vi.advanceTimersByTimeAsync(1000);
+    expect(write).not.toHaveBeenCalled();expect(loadEventDraft("A","E",s)?.snapshot).toEqual(snapshot);
   });
 });
 

@@ -33,4 +33,7 @@ describe('actual workspace closures: findings 1 and 4',()=>{
  it('shares native old/VDJ indexes once across sources',async()=>{
   const h=harness([{label:'Music',tracks:[track('Music/Song.mp3')]},{label:'Other',tracks:[track('Other/Song.mp3')]}]);vdj.setFolderRoot('Music','/mock/Music');vdj.setFolderRoot('Other','/mock/Other');const p=h.render().rescan();await tick();h.pendingScans[0].resolve(scan('/mock/Music'));await tick();h.pendingScans[1].resolve(scan('/mock/Other'));await p;expect(h.resolverCalls).toHaveLength(2);expect(h.render().sources).toHaveLength(2);
  });
+ it('preserves completed tag edits while a stale rescan is in flight',async()=>{
+  const h=harness([{label:'Music',tracks:[track('Music/Song.mp3')]}]);vdj.setFolderRoot('Music','/mock/Music');const w=h.render();const scanPending=w.rescan();await tick();const tags=w.saveTrackTags(0,0,{title:'Tag edit'});h.pendingTags[0].resolve({ok:true,tags:{title:'Tag edit',bpm:'133'}});await tags;h.pendingScans[0].resolve(scan('/mock/Music'));await scanPending;expect(h.render().sources[0].tracks[0]).toMatchObject({title:'Tag edit',bpm:'133'});
+ });
 });
