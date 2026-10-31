@@ -61,6 +61,7 @@ export function createEventAutosave<T>(options: {
       ready = false; options.onState("idle"); clearTimer();
       timer = setTimeout(() => { timer = undefined; ready = true; void drain(); }, delay);
     },
+    dirty() { options.onState("idle"); },
     retry() { if (!pending || !valid(pending)) return; clearTimer(); ready = true; void drain(); },
     configure(eventId: string | null, updatedAt: string | null, stableCreateId?: string) {
       id = eventId; version = updatedAt; createId = stableCreateId ?? crypto.randomUUID(); key = id ?? createId;

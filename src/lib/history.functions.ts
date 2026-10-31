@@ -15,7 +15,7 @@ const songSchema = z.object({
   stretched: z.boolean().optional(), naturalSection: z.string().optional(), reused: z.boolean().optional(),
   waveRole: z.string().optional(), placementReason: z.string().optional(), aiSuggestion: z.boolean().optional(),
   aiReason: z.string().optional(), fromLibrary: z.boolean().optional(),
-});
+}).passthrough();
 
 export const inputsSchema = z.object({
   songs: z.array(songSchema).max(2000),
@@ -45,7 +45,7 @@ const listsSchema = z.object({
   transition: z.array(songSchema).max(2000),
   peak: z.array(songSchema).max(2000),
   selections: z.record(z.string(), z.object({ paths: z.array(z.string().max(2000)).max(100), excluded: z.boolean().optional() })).optional(),
-});
+}).passthrough();
 
 function dbError(op: string, error: { message: string; code?: string }): Error {
   console.error(`[history.functions] ${op} failed:`, error.message, error.code ?? "");
@@ -118,7 +118,7 @@ export const saveWorkflow = createServerFn({ method: "POST" })
         user_id: userId,
         name: data.name,
         inputs: JSON.parse(JSON.stringify(data.inputs)) as Json,
-        lists: data.lists,
+        lists: JSON.parse(JSON.stringify(data.lists)) as Json,
       })
       .select("id")
       .single();
@@ -133,7 +133,7 @@ export const updateWorkflow = createServerFn({ method: "POST" })
   }).parse(data))
   .handler(async ({ data, context }) => {
     const { data: row, error } = await context.supabase.from("workflow_history")
-      .update({ name: data.name, inputs: JSON.parse(JSON.stringify(data.inputs)) as Json, lists: data.lists, updated_at: new Date().toISOString() })
+      .update({ name: data.name, inputs: JSON.parse(JSON.stringify(data.inputs)) as Json, lists: JSON.parse(JSON.stringify(data.lists)) as Json, updated_at: new Date().toISOString() })
       .eq("id", data.id).eq("user_id", context.userId).select("id").maybeSingle();
     if (error) throw dbError("updateWorkflow", error);
     if (!row) throw new Error("Event not found.");
