@@ -194,6 +194,18 @@ try{
    await page.evaluate(()=>window.testBackend.autoUpdate('start'));await page.evaluate(()=>window.testBackend.autoUpdate('cancel'));await page.evaluate(()=>window.testBackend.autoUpdate('release'));
    await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'cancelled'});expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);
  });
+ await check('uncertain staging failure updates the locked overlay without releasing guards',async()=>{
+   fs.writeFileSync(path.join(temp,'fault'),'STAGING_ERROR');
+   await page.evaluate(()=>window.testBackend.autoUpdate('start'));await page.evaluate(()=>window.testBackend.autoUpdate('release'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'staging-failed'});
+   const cover=page.locator('#update-preservation-lock');await expect(cover).toHaveAttribute('role','alert');await expect(cover).toContainText('Synthetic uncertain staging');
+   expect(await page.evaluate(()=>Array.from(document.body.children).filter(el=>el.id!=='update-preservation-lock').every(el=>el.inert))).toBe(true);
+   expect((await page.evaluate(()=>window.testBackend.autoUpdate('quit'))).blocked).toBe(true);
+   expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);
+   await cover.screenshot({path:path.join(root,'test-results/native/staging-failure-overlay.png')});
+   // Test-only cleanup: production controller deliberately exposes no unlock for uncertain staging.
+   await page.evaluate(()=>window.testBackend.autoUpdate('unlock'));fs.unlinkSync(path.join(temp,'fault'));
+ });
  await check('actual appearance controls follow System only, persist and render both themes',async()=>{
    await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});
    const theme=page.getByRole('group',{name:'Appearance'});

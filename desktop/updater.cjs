@@ -30,17 +30,18 @@ function getController() {
 async function checkForUpdates({ silent = true } = {}) {
   if (checkingDialog) return;
   checkingDialog = true;
+  let installRequested = false;
   const parent = BrowserWindow.getAllWindows()[0] || null;
   try {
     const c = getController();
     const state = await c.check();
     if (state.phase === 'available') {
       const { response } = await dialog.showMessageBox(parent, { type: 'info', title: 'Update available', message: `SetArchitect ${state.version} is available.`, detail: 'Download, preserve your current work, then install and restart automatically.', buttons: ['Update now', 'Later'], defaultId: 0, cancelId: 1 });
-      if (response === 0) { const result = await c.install(); if (['failed','staging-failed','preservation-failed'].includes(result.phase)) throw Error(result.error); }
+      if (response === 0) { installRequested = true; const result = await c.install(); if (['failed','staging-failed','preservation-failed'].includes(result.phase)) throw Error(result.error); }
     } else if (!silent && ['failed','current'].includes(state.phase)) {
       await dialog.showMessageBox(parent, { type: state.phase === 'failed' ? 'warning' : 'info', message: state.phase === 'failed' ? "Couldn't check for an update." : "You're running the latest version.", detail: state.error || `Installed: ${app.getVersion()}`, buttons: ['OK'] });
     }
-  } catch (error) { if (!silent) await dialog.showMessageBox(parent, { type: 'error', message: 'Update stopped. Your work has not been discarded.', detail: error.message, buttons: ['OK'] }); }
+  } catch (error) { if (!silent || installRequested) await dialog.showMessageBox(parent, { type: 'error', message: 'Update stopped. Your work has not been discarded.', detail: error.message, buttons: ['OK'] }); }
   finally { checkingDialog = false; }
 }
 // Real preservation, with only installer effects injected for isolated Electron checks.
