@@ -269,7 +269,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const host = window as unknown as { __setarchitectBeforeUpdate?: () => Promise<void> };
     const capture = async () => {
       const lock = lockUpdateEditing();
-      try { await backup(); lock.checkpoint(); } catch (error) { lock.release(); throw error; }
+      try {
+        const saved = await backup();
+        if (JSON.stringify(backupSession.current.sources) !== JSON.stringify(saved.sources) || JSON.stringify(getFolderRoots()) !== JSON.stringify(saved.roots)) throw Error("Library changed while preparing the update. Try again; nothing installed.");
+        lock.checkpoint();
+      } catch (error) { lock.release(); throw error; }
     };
     host.__setarchitectBeforeUpdate = capture;
     return () => { if (host.__setarchitectBeforeUpdate === capture) delete host.__setarchitectBeforeUpdate; };

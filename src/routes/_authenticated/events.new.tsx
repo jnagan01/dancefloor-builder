@@ -803,7 +803,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   useEffect(() => {
     const host = window as Window & { __setarchitectPreserveEvent?: () => void };
     const preserve = () => {
-      if (userEdited.current && (draftBlocked.current || snapshotReadOnly.current)) throw Error("Resolve event recovery before updating. Your data has not been changed.");
+      if (draftBlocked.current || (userEdited.current && (snapshotReadOnly.current || !latestSnapshot.current))) throw Error("Resolve or save event recovery before updating. Your data has not been changed.");
       exitGuard.current(); // Throws on native journal or Chromium storage failure.
     };
     host.__setarchitectPreserveEvent = preserve;
