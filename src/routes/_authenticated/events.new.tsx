@@ -2010,6 +2010,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try { buildM3u(getSectionRefsForResult(exportResult, section), files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
     const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     const dir = await ensureExportFolder();
+    if (files.generation !== readinessEpoch.current.generation) { toast.error("Event changed during folder selection. Export stopped."); return; }
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
@@ -2040,6 +2041,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try { buildM3u(getSectionRefsForResult(exportResult, section), files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
     const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     const dir = await ensureExportFolder();
+    if (files.generation !== readinessEpoch.current.generation) { toast.error("Event changed during folder selection. Export stopped."); return; }
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
@@ -2096,6 +2098,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     try { for (const section of sections) buildM3u(captured[section], files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
     const dir = await ensureExportFolder();
+    if (files.generation !== readinessEpoch.current.generation) { toast.error("Event changed during folder selection. Export stopped."); return; }
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
@@ -2182,6 +2185,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
     if (includeCombined) zip.file(`${prefix}combined-dance-floor-lists.csv`, combinedCsv(exportResult));
     const blob = await zip.generateAsync({ type: "blob" });
+    if (files.generation !== readinessEpoch.current.generation) { toast.error("Event changed during export. Export stopped."); return; }
     downloadBlob(blob, `${prefix}dance-floor-lists.zip`);
   }
 
