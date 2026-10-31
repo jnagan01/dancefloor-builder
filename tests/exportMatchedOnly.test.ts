@@ -64,3 +64,34 @@ describe("reference exports keep every song", () => {
     expect(txt.trim().split("\r\n")).toHaveLength(3);
   });
 });
+
+describe("reference TXT warning labels match the real reason", () => {
+  const labeledRefs: ExportSongRef[] = [
+    // Valid library candidate the user never confirmed.
+    { song: { artist: "Artist A", song: "Song A" } as never, match: { status: "Possible Match", trackIndex: 0, confirmed: false } as never },
+    // Valid candidate explicitly excluded from DJ-software exports.
+    { song: { artist: "Artist B", song: "Song B" } as never, match: { status: "Matched", trackIndex: 1, excludedFromVdj: true } as never },
+    // Confirmed, valid, non-excluded match: no warning.
+    { song: { artist: "Artist A", song: "Song A Again" } as never, match: { status: "Matched", trackIndex: 0, confirmed: true } as never },
+    // Candidate index points at nothing: genuinely unresolvable.
+    { song: { artist: "Ghost", song: "Gone" } as never, match: { status: "Possible Match", trackIndex: 99 } as never },
+  ];
+
+  it("labels unconfirmed, excluded, and missing songs accurately", () => {
+    const txt = buildTxtPlaylist(labeledRefs, lib);
+    expect(txt).toContain("1. Artist A - Song A (match not confirmed)");
+    expect(txt).toContain("2. Artist B - Song B (excluded from DJ export)");
+    expect(txt).toContain("3. Artist A - Song A Again\r\n");
+    expect(txt).not.toContain("Song A Again (");
+    expect(txt).toContain("4. Ghost - Gone (not in library)");
+    expect(txt).not.toContain("(not in library)\r\n1.");
+  });
+
+  it("matched-only DJ output still omits unconfirmed and excluded songs", () => {
+    const txt = buildTxtPlaylist(labeledRefs, lib, { matchedOnly: true });
+    expect(txt).toContain("1. Artist A - Song A");
+    expect(txt).not.toContain("Song B");
+    expect(txt).not.toContain("Gone");
+    expect(txt).not.toContain("match not confirmed");
+  });
+});

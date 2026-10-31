@@ -621,7 +621,8 @@ export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary, roots: Record
 /**
  * Plain-text set list: numbered "Artist - Title", extras indented.
  * `matchedOnly` drops songs with no library match (used for DJ-software exports);
- * otherwise unmatched songs are kept and flagged "(not in library)".
+ * otherwise unmatched songs are kept and flagged with the actual reason:
+ * "(excluded from DJ export)", "(match not confirmed)", or "(not in library)".
  */
 export function buildTxtPlaylist(
   items: ExportSongRef[],
@@ -637,7 +638,14 @@ export function buildTxtPlaylist(
     if (opts.matchedOnly && !main) continue;
     n += 1;
     // Reference exports always describe the intended song, never a candidate's metadata.
-    lines.push(`${n}. ${opts.matchedOnly && main ? `${main.artist ? `${main.artist} - ` : ""}${main.title}` : label}${!main && !opts.matchedOnly ? " (not in library)" : ""}`);
+    let warning = "";
+    if (!main && !opts.matchedOnly) {
+      const candidate = ti != null && lib ? lib.tracks[ti] : undefined;
+      if (item.match?.excludedFromVdj) warning = " (excluded from DJ export)";
+      else if (candidate) warning = " (match not confirmed)";
+      else warning = " (not in library)";
+    }
+    lines.push(`${n}. ${opts.matchedOnly && main ? `${main.artist ? `${main.artist} - ` : ""}${main.title}` : label}${warning}`);
     if (opts.matchedOnly) for (const ei of item.match?.extraTrackIndices ?? []) {
       const t = lib?.tracks[ei];
       if (t) lines.push(`   + ${t.artist ? `${t.artist} - ` : ""}${t.title}`);
