@@ -22,10 +22,26 @@ export function validateBackup(raw: string, account: string): Backup {
   inspect(b);
   if (!b.roots || Array.isArray(b.roots) || typeof b.roots !== "object") throw Error("Invalid source mappings.");
   for (const [label, path] of Object.entries(b.roots)) if (!label || /[\\/\r\n]/.test(label) || typeof path !== "string" || path.length > 4000 || /[\r\n\u0000]/.test(path) || path.split(/[\\/]/).includes("..") || !(/^(?:\/|[A-Za-z]:[\\/])/.test(path))) throw Error("Unsafe source mapping.");
+  const labels = new Set<string>();
+  for (const source of b.sources) {
+    if (!source.label || /[\\/\r\n]/.test(source.label) || labels.has(source.label)) throw Error("Duplicate source label; original preserved.");
+    labels.add(source.label);
+    const paths = new Set<string>();
+    for (const track of source.tracks) {
+      if (paths.has(track.filePath) || /[\r\n]/.test(track.filePath) || track.filePath.split(/[\\/]/).includes("..")) throw Error("Duplicate or unsafe track path.");
+      paths.add(track.filePath);
+    }
+  }
+  const rootPaths = new Set<string>();
+  for (const root of Object.values(b.roots) as string[]) { if (rootPaths.has(root)) throw Error("One root has conflicting labels."); rootPaths.add(root); }
   const ids = new Set<string>();
   for (const event of b.events) {
     if (typeof event.id !== "string" || !event.id || event.id.length > 200 || ids.has(event.id)) throw Error("Invalid event identity.");
-    ids.add(event.id); readEventSnapshot(event.snapshot);
+    ids.add(event.id); const checked = readEventSnapshot(event.snapshot).snapshot;
+    if (checked.inputs.songs.length > 2000) throw Error("Event too large.");
+    for (const selection of Object.values(checked.lists.selections ?? {})) for (const path of selection.paths) {
+      if (path.length > 4000 || /[\r\n\u0000]/.test(path) || path.split(/[\\/]/).includes("..")) throw Error("Unsafe selected recording path.");
+    }
     for (const section of ["warmUp", "transition", "peak"]) if ((event.snapshot.lists[section]?.length ?? 0) > 2000) throw Error("Event too large.");
   }
   return b;
@@ -40,18 +56,22 @@ export function recoveryFromBackup(backup: Backup, eventId: string) {
 /** Preserve conflicting existing rows and roots; metadata import is never a replacement. */
 export function previewMetadataRestore(backup: Backup, current: SavedLibrarySource[], roots: Record<string, string>) {
   const conflicts: string[] = [], additions: SavedLibrarySource[] = [], mappings: Record<string, string> = {};
+  let conflictCount = 0;
+  const conflict = (text: string) => { conflictCount++; if (conflicts.length < 100) conflicts.push(text); };
+  const existingSources = new Map(current.map(source => [source.label, source]));
+  const rootOwners = new Map(Object.entries(roots).map(([label, root]) => [root, label]));
   for (const source of backup.sources) {
-    const existing = current.find(s => s.label === source.label);
-    const root = backup.roots[source.label];
-    if (roots[source.label] && roots[source.label] !== root) { conflicts.push(`${source.label}: different folder location`); continue; }
+    const existing = existingSources.get(source.label), root = backup.roots[source.label];
+    if ((roots[source.label] && roots[source.label] !== root) || (root && rootOwners.has(root) && rootOwners.get(root) !== source.label)) { conflict(`${source.label}: different folder location`); continue; }
     if (existing) {
+      const oldTracks = new Map(existing.tracks.map(track => [track.filePath, track]));
       for (const track of source.tracks) {
-        const old = existing.tracks.find(t => t.filePath === track.filePath);
-        if (!old || JSON.stringify(old) !== JSON.stringify(track)) conflicts.push(`${source.label}: ${track.filePath}`);
+        const old = oldTracks.get(track.filePath);
+        if (!old || JSON.stringify(old) !== JSON.stringify(track)) conflict(`${source.label}: ${track.filePath}`);
       }
       continue;
     }
     additions.push(source); if (root) mappings[source.label] = root;
   }
-  return { conflicts, additions, mappings };
+  return { conflicts, conflictCount, additions, mappings };
 }

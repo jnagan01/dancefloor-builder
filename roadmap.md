@@ -52,5 +52,14 @@
 - [x] Snapshot-bound export readiness, read-only availability and packaged reports.
 - [x] Account-isolated versioned backups, required pre-rescan/update checkpoint and non-destructive preview/restore.
 - [x] Isolated offline/crash/disk-failure checks with synthetic profiles and backend.
-- [ ] Release-blocking Electron CI is wired and seven checks pass; remaining Electron cases: six-row partial import, late-save recovery, abrupt process kill, fresh update capture and restore preview. CI execution/signing requires GitHub runner.
+- [x] Release-blocking reusable read-only macos-15 gates; all twelve isolated Electron flows pass locally.
 - [x] Full regression/adversarial/build checks and exact results/limits.
+
+# Final six-improvement review
+- [x] Fence backup/restore by captured account session and source/root revision; linear bounded conflict preview.
+- [x] Real Electron crash/import/late-save/backup/update/partial-write flows with synthetic faults.
+- [x] Consistent tracked locks, clean pinned frozen installs, read-only source/PR gates reused before release.
+- [x] Full/native/adversarial/build validation and exact final results.
+
+# External verification
+- [ ] Run read-only regression job on GitHub/macOS; blocked here by unavailable GitHub CLI/token and runner.

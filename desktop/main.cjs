@@ -8,6 +8,7 @@ app.setPath("userData", path.join(app.getPath("appData"), "Dancefloor Builder"))
 
 const { createBackupStore } = require("./backups.cjs");
 const backups = createBackupStore(app.getPath("userData"));
+const recovery = require("./recovery.cjs").createRecoveryStore(app.getPath("userData"));
 const { checkForUpdates } = require("./updater.cjs");
 const { createTagCache, writeTags } = require("./tags.cjs");
 
@@ -213,6 +214,10 @@ function defaultVdjPath() {
 }
 
 function registerVirtualDjHandlers() {
+  ipcMain.on("recovery:journal", (event, action, key, raw) => {
+    try { security.guard(() => { const value = action === "get" ? recovery.get(key) : action === "set" ? recovery.set(key, raw) : action === "remove" ? recovery.remove(key) : (() => { throw Error("Invalid recovery action"); })(); event.returnValue = { ok: true, value }; })(event); }
+    catch(e) { event.returnValue = { ok: false, error: e.message }; }
+  });
   const handle = (channel, handler) => ipcMain.handle(channel, security.guard(handler));
   handle("backup:save", async (_event, raw, account) => { try { await backups.save(raw, account); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } });
   handle("backup:latest", async (_event, account) => { try { return { ok: true, raw: await backups.latest(account) }; } catch (e) { return { ok: false, error: e.message }; } });
