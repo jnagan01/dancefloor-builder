@@ -27,7 +27,7 @@
 - [x] Tracked regressions for every finding, full suite and automatic build checks, isolated mock flow and monitored benchmarks. Real Mac/live server operations intentionally not exercised.
 
 # Independent recovery review
-- [ ] Correct save-as-new, stable creation IDs, account/event boundaries and malformed-draft lockout with actual route regressions.
-- [ ] Prevent opening-time writes and invalid legacy calculations; harden conditional writes against timestamp collisions.
-- [ ] Preserve tag completion during scans and fail closed on null library records/migration failures.
-- [ ] Run full regressions and inspect automatic build; report any constraint-limited guarantees.
+- [x] Correct save-as-new, stable creation IDs, account/event boundaries and malformed-draft lockout with actual route regressions.
+- [x] Prevent opening-time writes and invalid legacy calculations; harden conditional writes with original-payload comparison because the existing database trigger overrides proposed timestamps. Strict database token monotonicity remains migration-constrained.
+- [x] Preserve tag completion during scans and fail closed on null library records/migration failures.
+- [x] Run full regressions and inspect automatic build; report any constraint-limited guarantees. Only mocked services/files were exercised.

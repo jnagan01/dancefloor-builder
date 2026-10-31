@@ -40,6 +40,12 @@ describe('actual mounted event route recovery and ownership',()=>{
  it('pending old-account save cannot update the new account editor or draft',async()=>{
   vi.useFakeTimers();let resolve:(v:any)=>void=()=>{};const h=harness({rows:{A:row(),B:row()},write:()=>new Promise(r=>resolve=r)});await h.flush();h.edit('Old account');await vi.advanceTimersByTimeAsync(1000);h.switchTo('other','B');await h.flush();resolve({id:'A',updatedAt:'2026-10-31T00:00:02Z'});await h.flush();expect(h.current.savedEventId).toBe('B');expect(h.memory.has(key('other','A'))).toBe(false);expect(h.memory.has(key('owner','A'))).toBe(true);h.unmount();
  });
+ it('edits during an in-flight save retain the newest recovery draft and unsaved indicator',async()=>{
+  vi.useFakeTimers();let resolve:(v:any)=>void=()=>{};const h=harness({rows:{A:row()},write:()=>new Promise(r=>resolve=r)});await h.flush();h.edit('First');await vi.advanceTimersByTimeAsync(1000);h.edit('Second');resolve({id:'A',updatedAt:'2026-10-31T00:00:02Z'});await h.flush();expect(h.current.saveState).not.toBe('saved');expect(JSON.parse(h.memory.get(key('owner','A'))).snapshot.inputs.eventName).toBe('Second');h.unmount();
+ });
+ it('older recovery without original contents cannot overwrite an existing event',async()=>{
+  vi.useFakeTimers();const h=harness({memory:new Map([[key('owner','A'),JSON.stringify(recovery())]]),rows:{A:row()}});await h.flush();h.current.restoreRecovery(false);await h.flush();await vi.advanceTimersByTimeAsync(1000);expect(h.requests).toHaveLength(0);expect(h.errors.some((e:string)=>e.includes('original version'))).toBe(true);expect(h.memory.has(key('owner','A'))).toBe(true);h.unmount();
+ });
  it('malformed draft blocks saves and exit replacement until explicit archive',async()=>{
   vi.useFakeTimers();const raw='{invalid';const h=harness({memory:new Map([[key('owner','A'),raw]]),rows:{A:row()}});await h.flush();h.edit('Changed');h.pagehide();await vi.advanceTimersByTimeAsync(1000);expect(h.current.draftBlocked.current).toBe(true);expect(h.requests).toHaveLength(0);expect(h.memory.get(key('owner','A'))).toBe(raw);h.unmount();
  });

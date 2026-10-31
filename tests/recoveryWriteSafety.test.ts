@@ -3,6 +3,9 @@ import { nextEventVersion, writeEventConditionally } from '@/lib/eventWriteContr
 import { loadMusicLibrary } from '@/lib/libraryStore';
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 describe('timestamp collision with the existing overriding trigger',()=>{
+ it('rejects unsafe updates without original payload rather than re-reading a potentially newer row',async()=>{
+  const from=vi.fn();await expect(writeEventConditionally({from},'owner',{id:'E',create:false,expectedUpdatedAt:'2026-10-31T00:00:00Z',name:'old draft',inputs:{},lists:{}})).rejects.toThrow('original version');expect(from).not.toHaveBeenCalled();
+ });
  it('proposes an advancing token with frozen or lagging clock',()=>{
   const expected='2026-10-31T00:00:00.123456Z';
   expect(nextEventVersion(expected,Date.parse(expected))).toBe('2026-10-31T00:00:00.124Z');
