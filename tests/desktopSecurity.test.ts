@@ -8,6 +8,8 @@ const APP = "https://dancefloor-builder.lovable.app";
 function setup() {
   const mainFrame = { url: `${APP}/events/new` };
   const wc = { mainFrame, getURL: () => mainFrame.url, isDestroyed: () => false };
+  const windowListeners = new Map<string, Function>();
+  const appListeners = new Map<string, Function>();
   const win = { webContents: wc, isDestroyed: () => false };
   const policy = createDesktopSecurity(APP, () => win);
   return { policy, wc, mainFrame, event: { sender: wc, senderFrame: mainFrame } };
@@ -74,7 +76,7 @@ describe("desktop URL, sender and permission policy", () => {
 });
 
 /** Load the real main process with in-memory Electron/fs mocks; never access music. */
-async function loadMain() {
+async function loadMain(update = { blocked: false, authorized: false }) {
   const handlers = new Map<string, Function>();
   const listeners = new Map<string, Function>();
   let windowOpen: Function = () => {};
@@ -86,22 +88,24 @@ async function loadMain() {
   const session: Record<string, Function> = { setPermissionRequestHandler: vi.fn(), setPermissionCheckHandler: vi.fn() };
   const wc = { mainFrame: { url: APP }, getURL: () => wc.mainFrame.url, isDestroyed: () => false, session,
     setWindowOpenHandler: (fn: Function) => { windowOpen = fn; }, on: (name: string, fn: Function) => listeners.set(name, fn) };
-  const win = { webContents: wc, isDestroyed: () => false, once: vi.fn(), on: vi.fn(), loadURL: vi.fn(), show: vi.fn() };
-  const app = { setPath: vi.fn(), getPath: () => "/mock", requestSingleInstanceLock: () => true, on: vi.fn(), whenReady: async () => {}, quit: vi.fn() };
+  const windowListeners = new Map<string, Function>();
+  const appListeners = new Map<string, Function>();
+  const win = { webContents: wc, isDestroyed: () => false, once: vi.fn(), on: (name: string, fn: Function) => windowListeners.set(name,fn), loadURL: vi.fn(), show: vi.fn() };
+  const app = { setPath: vi.fn(), getPath: () => "/mock", requestSingleInstanceLock: () => true, on: (name: string, fn: Function) => appListeners.set(name,fn), whenReady: async () => {}, quit: vi.fn() };
   const electron = { app, BrowserWindow: function () { return win; }, shell: { openExternal: external }, Menu: { buildFromTemplate: () => [], setApplicationMenu: vi.fn() }, dialog: { showOpenDialog }, ipcMain: { on: (name: string, fn: Function) => handlers.set(name, fn), handle: (name: string, fn: Function) => handlers.set(name, fn) } };
   runInNewContext(readFileSync(new URL("../desktop/main.cjs", import.meta.url), "utf8"), {
-    require: (name: string) => name === "electron" ? electron : name === "node:fs" ? fs : name === "./security.cjs" ? require("../desktop/security.cjs") : name === "./scan.cjs" ? { scanFolder } : name === "./tags.cjs" ? { createTagCache: () => ({ forget: vi.fn(), flush: async () => {} }), writeTags } : name === "./backups.cjs" ? { createBackupStore: () => ({ save: async () => {}, latest: async () => null }) } : name === "./recovery.cjs" ? { createRecoveryStore: () => ({ get: () => null, set: () => {}, remove: () => {} }) } : name === "./updater.cjs" ? { checkForUpdates: async () => {} } : require(name),
+    require: (name: string) => name === "electron" ? electron : name === "node:fs" ? fs : name === "./security.cjs" ? require("../desktop/security.cjs") : name === "./scan.cjs" ? { scanFolder } : name === "./tags.cjs" ? { createTagCache: () => ({ forget: vi.fn(), flush: async () => {} }), writeTags } : name === "./backups.cjs" ? { createBackupStore: () => ({ save: async () => {}, latest: async () => null }) } : name === "./recovery.cjs" ? { createRecoveryStore: () => ({ get: () => null, set: () => {}, remove: () => {} }) } : name === "./updater.cjs" ? { checkForUpdates: async () => {}, getController: () => ({status:()=>({phase:"idle"}),check:async()=>{},install:async()=>{},cancel:()=>{}}), updateBlocksQuit:()=>update.blocked, updateBlocksNavigation:()=>update.blocked, updateInstallAuthorized:()=>update.authorized } : require(name),
     process: { env: {}, platform: "darwin" }, __dirname: "/mock/desktop", setTimeout: vi.fn(), console,
   });
   await Promise.resolve();
-  return { handlers, listeners, windowOpen: (url: string) => windowOpen({ url }), external, showOpenDialog, fs, scanFolder, writeTags, wc };
+  return { handlers, listeners, windowListeners, appListeners, windowOpen: (url: string) => windowOpen({ url }), external, showOpenDialog, fs, scanFolder, writeTags, wc };
 }
 describe("real main process wiring with mocks", () => {
   it("guards all native channels against untrusted contents and subframes before side effects", async () => {
     const { handlers, wc, showOpenDialog, fs, scanFolder, writeTags } = await loadMain();
     expect([...handlers.keys()].sort()).toEqual([
       "vdj:default-path", "vdj:default-root", "vdj:choose-root", "vdj:read-database", "vdj:choose-database",
-      "recovery:journal", "backup:save", "backup:latest", "fs:availability", "fs:choose-folder", "fs:choose-music-folder", "fs:write-tags", "fs:scan-folder", "fs:read-audio", "fs:write-file",
+      "update:check", "update:install", "update:cancel", "update:status", "recovery:journal", "backup:save", "backup:latest", "fs:availability", "fs:choose-folder", "fs:choose-music-folder", "fs:write-tags", "fs:scan-folder", "fs:read-audio", "fs:write-file",
     ].sort());
     for (const [name, handler] of handlers) {
       if(name === "recovery:journal") { const denied={ sender: wc, senderFrame: { url: APP },returnValue:null as any }; handler(denied,"get","setarchitect:recovery:synthetic:A"); expect(denied.returnValue.ok).toBe(false); continue; }
@@ -160,10 +164,26 @@ describe("real main process wiring with mocks", () => {
     listeners.get("will-redirect")?.({ preventDefault, url: "https://accounts.spotify.com/authorize", isMainFrame: true });
     expect(external).toHaveBeenLastCalledWith("https://accounts.spotify.com/authorize");
   });
+  it("blocks native quit/close/navigation until preservation; only authorized update accepts unload", async () => {
+    const update = { blocked: true, authorized: false };
+    const { appListeners, windowListeners, listeners } = await loadMain(update);
+    const preventDefault = vi.fn();
+    appListeners.get("before-quit")?.({preventDefault});
+    windowListeners.get("close")?.({preventDefault});
+    listeners.get("will-navigate")?.({preventDefault}, `${APP}/settings`);
+    expect(preventDefault).toHaveBeenCalledTimes(3);
+    preventDefault.mockClear();
+    listeners.get("will-prevent-unload")?.({preventDefault});
+    expect(preventDefault).not.toHaveBeenCalled();
+    update.blocked=false; update.authorized=true;
+    listeners.get("will-prevent-unload")?.({preventDefault});
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+  });
   it("includes extracted main-process helpers in installed desktop builds", () => {
     const pkg = require("../desktop/package.json");
     expect(pkg.build.files).toContain("security.cjs");
     expect(pkg.build.files).toContain("scan.cjs");
+    expect(pkg.build.files).toContain("update-controller.cjs");
     expect(pkg.build.appId).toBe("com.exceptionalentertainment.dancefloorbuilder");
   });
 });
