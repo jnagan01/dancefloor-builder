@@ -38,5 +38,5 @@
 - [x] Run full tests, automatic build diagnostics and existing isolated adversarial checks; report revision and limits. Live data and Mac operations were not exercised.
 
 # Dirty-state regression
-- [ ] Remove broad capture, mark actual changed persisted controls and song changes, and baseline passive restoration.
-- [ ] Verify actual benign UI handlers, Retry, immediate edits, full suite/build and adversarial checks.
+- [x] Remove broad capture, mark actual changed persisted controls and song changes, and baseline passive restoration.
+- [x] Verify actual benign UI handlers, Retry, immediate edits, full suite/build and adversarial checks. Existing review has no manual move control; tested its actual rename/removal and regeneration paths without adding unrelated UI.
