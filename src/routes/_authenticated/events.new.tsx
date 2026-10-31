@@ -759,12 +759,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Opening an event (including legacy defaults) is not an edit and must not write it back.
     if (fingerprint === restoredFingerprint.current) return;
     restoredFingerprint.current = fingerprint;
-    const account = accountRef.current, event = openedEventId ?? "new", token = crypto.randomUUID();
+    const owner = accountRef.current, event = openedEventId ?? "new", token = crypto.randomUUID();
     logicalWrite.current = recoveredWrite.current ?? crypto.randomUUID(); recoveredWrite.current = null;
-    const draft = { version: 1 as const, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, writeRevision: logicalWrite.current, savedId: savedEventId ?? undefined, snapshot, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined };
+    const draft = { version: 1 as const, account: owner, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, writeRevision: logicalWrite.current, savedId: savedEventId ?? undefined, snapshot, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined };
     try { storeEventDraft(draft); } catch { toast.error("Local recovery could not be saved. Do not close this event until saving is confirmed."); }
-    draftTokens.current.set(snapshot, { account, event, token });
-    autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===account, 1000, logicalWrite.current);
+    draftTokens.current.set(snapshot, { account: owner, event, token });
+    autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===owner, 1000, logicalWrite.current);
   },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,account,saveState]);
   useEffect(()=>{
     const recover=()=>autosave.retry();
