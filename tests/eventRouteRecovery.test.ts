@@ -29,7 +29,7 @@ describe('actual mounted event route recovery and ownership',()=>{
   const resetId=h.current.stableCreate;h.current.setSongs([song]);await h.flush();await h.current.generate();await h.flush();await vi.advanceTimersByTimeAsync(1000);
   expect(h.requests[0].id).toBe(resetId);expect(JSON.parse(memory.get(key('owner','new'))).createId).toBe(resetId);h.unmount();
   const b=harness({eventId:null,memory,write:()=>new Promise(()=>{})});await b.flush();b.current.restoreRecovery(false);await b.flush();await vi.advanceTimersByTimeAsync(1000);const id=b.requests[0].id; expect(JSON.parse(memory.get(key('owner','new'))).createId).toBe(id);b.unmount();
-  const c=harness({eventId:null,memory});await c.flush();c.current.restoreRecovery(false);await c.flush();await vi.advanceTimersByTimeAsync(1000);expect(c.requests[0].id).toBe(id);c.unmount();
+  const c=harness({eventId:null,memory});await c.flush();c.current.restoreRecovery(false);await c.flush();await vi.advanceTimersByTimeAsync(1000);expect(c.requests[0].id).toBe(id);expect(c.requests[0].writeRevision).toBe(b.requests[0].writeRevision);expect(c.requests[0].writeRevision).toBe(h.requests[0].writeRevision);c.unmount();
  });
  it('captures A edits before same-component A to B navigation under one second',async()=>{
   vi.useFakeTimers();const h=harness({rows:{A:row(),B:{...row(),id:'B'}}});await h.flush();h.edit('Latest A');h.switchTo('owner','B');await h.flush();
@@ -43,6 +43,12 @@ describe('actual mounted event route recovery and ownership',()=>{
  });
  it('edits during an in-flight save retain the newest recovery draft and unsaved indicator',async()=>{
   vi.useFakeTimers();let resolve:(v:any)=>void=()=>{};const h=harness({rows:{A:row()},write:()=>new Promise(r=>resolve=r)});await h.flush();h.edit('First');await vi.advanceTimersByTimeAsync(1000);h.edit('Second');resolve({id:'A',updatedAt:'2026-10-31T00:00:02Z'});await h.flush();expect(h.current.saveState).not.toBe('saved');expect(JSON.parse(h.memory.get(key('owner','A'))).snapshot.inputs.eventName).toBe('Second');h.unmount();
+ });
+ it('earlier create confirmation carries marker and ID into newer pending draft and its reload',async()=>{
+  vi.useFakeTimers();const memory=new Map();let resolve:(v:any)=>void=()=>{};const h=harness({eventId:null,memory,write:()=>new Promise(r=>resolve=r)});await h.flush();h.current.setSongs([song]);await h.flush();await h.current.generate();await h.flush();await vi.advanceTimersByTimeAsync(1000);
+  const first=h.requests[0];h.edit('Newer');resolve({id:first.id,updatedAt:'2026-10-31T00:00:00Z',revision:first.writeRevision});await h.flush();
+  const draft=JSON.parse(memory.get(key('owner','new')));expect(draft.baseRevision).toBe(first.writeRevision);expect(draft.savedId).toBe(first.id);expect(draft.writeRevision).not.toBe(first.writeRevision);expect(h.current.saveState).not.toBe('saved');h.unmount();
+  const next=harness({eventId:null,memory});await next.flush();next.current.restoreRecovery(false);await next.flush();await vi.advanceTimersByTimeAsync(1000);expect(next.requests[0]).toMatchObject({id:first.id,create:false,expectedRevision:first.writeRevision,writeRevision:draft.writeRevision});next.unmount();
  });
  it('older recovery without original contents cannot overwrite an existing event',async()=>{
   vi.useFakeTimers();const h=harness({memory:new Map([[key('owner','A'),JSON.stringify(recovery())]]),rows:{A:row()}});await h.flush();h.current.restoreRecovery(false);await h.flush();await vi.advanceTimersByTimeAsync(1000);expect(h.requests).toHaveLength(0);expect(h.errors.some((e:string)=>e.includes('saved event changed')||e.includes('original version'))).toBe(true);expect(h.memory.has(key('owner','A'))).toBe(true);h.unmount();
