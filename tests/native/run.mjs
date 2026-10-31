@@ -31,13 +31,25 @@ try{
    fs.unlinkSync(path.join(temp,'fault'));
  });
  await check('late-save navigation away/back reconciles exact recovery',async()=>{
-   fs.writeFileSync(path.join(temp,'fault'),'late');await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
-   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Late native save');await page.waitForTimeout(1100);
+   await page.evaluate(()=>window.testBackend.lateWrite('arm','A'));await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Late native save');
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName,{timeout:15000}).toBe('Late native save');
+   const held=await page.evaluate(()=>window.testBackend.lateWrite('status','A'));
+   expect(held).toMatchObject({armed:false,held:true,replied:false,name:'Late native save'});
+   expect(held.revision).toBe(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.__setarchitect_write_revision_v1);
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Late native save');
-   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await page.waitForTimeout(2100);
-   await page.evaluate(()=>{window.__testState.page='event';window.__testState.eventId='A';window.__rerender();});await page.waitForTimeout(800);
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await expect(page.getByRole('heading',{name:'Backups',exact:true})).toBeVisible({timeout:15000});
+   expect(await page.evaluate(()=>window.testBackend.lateWrite('status','A'))).toMatchObject({held:true,replied:false,revision:held.revision});
+   const pending=await page.evaluate(()=>JSON.parse(window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A')));
+   expect(pending.snapshot.inputs.eventName).toBe('Late native save');expect(pending.writeRevision).toBe(held.revision);
+   await page.evaluate(()=>window.testBackend.lateWrite('release','A'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.lateWrite('status','A')),{timeout:15000}).toMatchObject({held:false,replied:true,revision:held.revision});
+   await page.evaluate(()=>{window.__testState.page='event';window.__testState.eventId='A';window.__rerender();});
+   await expect(page.getByText('Event saved automatically',{exact:false})).toBeVisible({timeout:15000});
    expect(await page.getByText('Unsaved recovery copy',{exact:false}).count()).toBe(0);
-   expect(await page.getByText('Event saved automatically',{exact:false}).count()).toBe(1);fs.unlinkSync(path.join(temp,'fault'));
+   expect(await page.getByText('Event saved automatically',{exact:false}).count()).toBe(1);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Late native save');
+   expect(Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')))).toEqual(['A']);
  });
  await check('production backup UI previews single-event restore and preserves additive conflicts',async()=>{
    await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await page.getByRole('button',{name:'Back up now',exact:true}).click();

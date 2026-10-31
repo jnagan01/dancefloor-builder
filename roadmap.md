@@ -73,3 +73,7 @@
 - [x] Context-aware shared browser/native private-field policy without modifying saved data.
 - [x] Exact identifier, secret rejection, roundtrip, startup/rescan UI and native-store regressions.
 - [x] Full and isolated Electron suites, automatic build/typecheck, final revision and updater limitation.
+
+# Build28 deterministic native synchronization
+- [ ] Prove late commit with held reply, navigate, release and verify exact recovery reconciliation using observable waits.
+- [ ] Replace timing-sensitive backup-case waits; run full/native suites and report final revision without production operations.
