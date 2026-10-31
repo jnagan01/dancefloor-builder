@@ -791,7 +791,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     if (!recovery || recovery.account !== accountRef.current) return;
     try {
       const recoveredId = openedEventId ?? recovery.savedId ?? null;
-      if (!asNew && openedEventId && (recovery.baseVersion !== remoteVersion.current || (recovery.baseRevision !== remoteRevision.current && recovery.writeRevision !== remoteRevision.current))) throw new Error("The saved event changed. Save this recovery copy as a new event instead.");
+      if (!asNew && openedEventId && recovery.writeRevision !== remoteRevision.current && (recovery.baseRevision !== remoteRevision.current || (recovery.baseRevision === null && recovery.baseVersion !== remoteVersion.current))) throw new Error("The saved event changed. Save this recovery copy as a new event instead.");
       const { snapshot, problem } = readEventSnapshot(recovery.snapshot);
       if (problem) throw new Error(problem);
       if (asNew && openedEventId) {

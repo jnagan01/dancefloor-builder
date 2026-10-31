@@ -11,6 +11,7 @@ export interface EventDraft<T> {
 export function checkpointEventDraft(account: string, event: string, saved: { id: string; updatedAt?: string; revision?: string | null }, storage: Storage = localStorage) {
   const draft = loadEventDraft(account, event, storage);
   if (!draft) return;
+  if (draft.writeRevision === saved.revision) return; // Exact-write retry must retain its original expected marker.
   storeEventDraft({ ...draft, baseRevision: saved.revision, baseVersion: saved.updatedAt ?? draft.baseVersion, savedId: saved.id, baseSnapshot: undefined }, storage);
 }
 const key = (account: string, event: string) => `setarchitect:recovery:${encodeURIComponent(account)}:${encodeURIComponent(event)}`;
@@ -21,7 +22,10 @@ export function loadEventDraft<T>(account: string, event: string, storage: Stora
   const raw = storage.getItem(key(account, event));
   if (raw === null) return null;
   const value = JSON.parse(raw) as EventDraft<T>;
-  if (!value || value.version !== 1 || value.account !== account || value.event !== event || typeof value.token !== "string" || typeof value.createId !== "string" || !value.snapshot || (value.origin && (value.origin.account !== account || typeof value.origin.event !== "string" || typeof value.origin.token !== "string"))) throw new Error("Local recovery data could not be read. It has been preserved.");
+  if (!value || value.version !== 1 || value.account !== account || value.event !== event || typeof value.token !== "string" || typeof value.createId !== "string" || !value.snapshot ||
+    (value.baseRevision !== undefined && value.baseRevision !== null && (typeof value.baseRevision !== "string" || !/^[0-9a-f-]{36}$/i.test(value.baseRevision))) ||
+    (value.writeRevision !== undefined && (typeof value.writeRevision !== "string" || !/^[0-9a-f-]{36}$/i.test(value.writeRevision))) ||
+    (value.origin && (value.origin.account !== account || typeof value.origin.event !== "string" || typeof value.origin.token !== "string"))) throw new Error("Local recovery data could not be read. It has been preserved.");
   return value;
 }
 /** Explicit user recovery: retain the unreadable bytes before removing the blocked slot. */

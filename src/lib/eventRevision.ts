@@ -8,6 +8,7 @@ export function eventRevision(inputs: unknown): string | null {
   return value;
 }
 export function withEventRevision(inputs: unknown, revision: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(revision)) throw new Error("Invalid event write revision; nothing was overwritten.");
   eventRevision(inputs); // Fail closed if a preexisting value conflicts with the reserved namespace.
   return { ...(inputs as Record<string, unknown>), [EVENT_REVISION_FIELD]: revision };
 }
