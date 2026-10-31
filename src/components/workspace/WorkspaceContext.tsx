@@ -1,5 +1,5 @@
 import { saveBackup } from "@/lib/backupClient";
-import { previewMetadataRestore, type Backup } from "@/lib/backups";
+import { previewMetadataRestore, validateBackup, type Backup } from "@/lib/backups";
 import { readEventSnapshot } from "@/lib/snapshotSafety";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -234,17 +234,34 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const library = useMemo(() => sources.length ? indexes.library(sources) : null, [sources, indexes]);
   const knownPaths = indexes.paths(sources);
   const audioIndex = indexes.audio(files, knownPaths, getFolderRoots());
+  const backupSession = useRef({ account: userId, generation: 0, sources });
+  if (backupSession.current.account !== userId) backupSession.current.generation++;
+  backupSession.current.account = userId; backupSession.current.sources = sources;
+  useEffect(() => {
+    const subscription = supabase.auth.onAuthStateChange?.(() => { backupSession.current.generation++; });
+    return () => { backupSession.current.generation++; subscription?.data.subscription.unsubscribe(); };
+  }, []);
+  function captureBackupOwner() {
+    if (!userId || loading || persistenceBlocked.current || backupSession.current.account !== userId) throw Error("Sign in and resolve unreadable library data before backup.");
+    const owner = { account: userId, generation: backupSession.current.generation, sources: structuredClone(sources), roots: structuredClone(getFolderRoots()) };
+    const check = () => {
+      if (backupSession.current.account !== owner.account || backupSession.current.generation !== owner.generation) throw Error("Account/session changed; operation stopped.");
+    };
+    check(); return { ...owner, check };
+  }
   async function backup(): Promise<Backup> {
-    if (!userId || loading || persistenceBlocked.current) throw Error("Sign in and resolve unreadable library data before backup.");
+    const owner = captureBackupOwner();
     // Read-only owner-scoped collection. No remote writes, credentials or audio.
-    const { data, error } = await supabase.from("workflow_history").select("id,name,inputs,lists").eq("user_id", userId).limit(501);
+    const { data, error } = await supabase.from("workflow_history").select("id,name,inputs,lists").eq("user_id", owner.account).limit(501);
+    owner.check();
     if (error || !data || data.length > 500) throw Error("Could not read all events for backup. Operation stopped.");
     const events = data.map(row => {
       const snapshot = { name: row.name, inputs: row.inputs, lists: row.lists };
       readEventSnapshot(snapshot); return { id: row.id, snapshot };
     });
-    const b = { format: "setarchitect-backup" as const, version: 1 as const, account: userId, createdAt: new Date().toISOString(), events, sources: structuredClone(sources), roots: getFolderRoots() } as Backup;
-    await saveBackup(b); return b;
+    const b = { format: "setarchitect-backup" as const, version: 1 as const, account: owner.account, createdAt: new Date().toISOString(), events, sources: owner.sources, roots: owner.roots } as Backup;
+    validateBackup(JSON.stringify(b), owner.account); owner.check();
+    await saveBackup(b); owner.check(); return b;
   }
   useEffect(() => {
     if (!isDesktopApp()) return;
@@ -254,12 +271,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => { if (host.__setarchitectBeforeUpdate === capture) delete host.__setarchitectBeforeUpdate; };
   }, [userId, loading, sources]);
   async function restoreMetadata(b: Backup) {
-    if (!userId || b.account !== userId || loading || persistenceBlocked.current) throw Error("Backup account does not match the active library.");
-    await backup();
-    const plan = previewMetadataRestore(b, sources, getFolderRoots());
-    // Never overwrite an existing label, root or track. Conflicts are previewed in Settings.
+    const owner = captureBackupOwner();
+    const imported = validateBackup(JSON.stringify(b), owner.account);
+    await backup(); owner.check();
+    if (JSON.stringify(backupSession.current.sources) !== JSON.stringify(owner.sources) || JSON.stringify(getFolderRoots()) !== JSON.stringify(owner.roots)) throw Error("Library changed during restore; preview again. Nothing replaced.");
+    const plan = previewMetadataRestore(imported, owner.sources, owner.roots);
+    owner.check();
     for (const [label, root] of Object.entries(plan.mappings)) setFolderRoot(label, root);
-    setSources(prev => [...prev, ...plan.additions.filter(source => !prev.some(s => s.label === source.label))]);
+    setSources(prev => { owner.check(); return [...prev, ...plan.additions.filter(source => !prev.some(s => s.label === source.label))]; });
   }
   async function addFolder() {
     const rootProblem = folderRootsProblem();
