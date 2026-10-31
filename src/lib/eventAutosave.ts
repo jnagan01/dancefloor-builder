@@ -12,6 +12,7 @@ export function createEventAutosave<T>(options: {
   let createId: string = crypto.randomUUID(), key: string = createId, pending: Job | null = null, ready = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const flights = new Map<string, { controller: AbortController; uncertain: boolean }>();
+  const uncertainKeys = new Set<string>();
   const valid = (job: Job) => job.epoch === epoch && job.current();
   const clearTimer = () => { clearTimeout(timer); timer = undefined; };
   const rekeyPending = () => { if (pending) pending.key = key; };
@@ -26,6 +27,7 @@ export function createEventAutosave<T>(options: {
     let timedOut = false;
     const timeout = setTimeout(() => {
       timedOut = true; flight.uncertain = true; controller.abort();
+      uncertainKeys.add(job.key);
       if (options.safeWriteContract) flights.delete(job.key);
       if (valid(job)) {
         if (job.revision === revision) pending = job;
@@ -39,6 +41,7 @@ export function createEventAutosave<T>(options: {
         id = saved.id; version = saved.updatedAt ?? version; key = id;
         rekeyPending();
         options.onId(saved.id);
+        uncertainKeys.delete(job.key);
         if (job.revision === revision) { options.onConfirmed?.(job.snapshot, saved); options.onState("saved"); }
       }
     } catch {
@@ -48,7 +51,7 @@ export function createEventAutosave<T>(options: {
     } finally {
       clearTimeout(timeout);
       if (flights.get(job.key) === flight) flights.delete(job.key);
-      if (!timedOut) void drain();
+      if (!timedOut && !uncertainKeys.has(job.key)) void drain();
     }
   }
   return {

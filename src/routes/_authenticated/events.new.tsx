@@ -174,6 +174,8 @@ function Index() {
   const remoteVersion = useRef<string | null>(null);
   const stableCreate = useRef<string>(crypto.randomUUID());
   const snapshotReadOnly = useRef(false);
+  const restoredFingerprint = useRef<string | null>(null);
+  const recoveryOrigin = useRef<{ account: string; event: string; token: string } | null>(null);
   const snapshotExtras = useRef<{ inputs: Record<string, unknown>; lists: Record<string, unknown> }>({ inputs: {}, lists: {} });
   const [recovery, setRecovery] = useState<EventDraft<ReturnType<typeof eventSnapshot>> | null>(null);
   const [snapshotProblem, setSnapshotProblem] = useState<string | null>(null);
@@ -190,6 +192,10 @@ function Index() {
       const draft = draftTokens.current.get(snapshot);
       if (draft && accountRef.current === draft.account) {
         try { confirmEventDraft(draft.account, draft.event, draft.token); } catch { toast.error("Saved online, but local recovery cleanup failed."); }
+      }
+      if (recoveryOrigin.current && accountRef.current === recoveryOrigin.current.account) {
+        const origin = recoveryOrigin.current;
+        try { confirmEventDraft(origin.account, origin.event, origin.token); recoveryOrigin.current = null; } catch { /* Original stays available. */ }
       }
     },
     onState: setSaveState,
@@ -363,6 +369,7 @@ function Index() {
     savedSelectionsRef.current = null;
     autosave.reset();
     snapshotReadOnly.current = false; snapshotExtras.current = { inputs: {}, lists: {} };
+    restoredFingerprint.current = null;
     setSnapshotProblem(null); setRecovery(null); remoteVersion.current = null;
     stableCreate.current = crypto.randomUUID();
     genTokenRef.current += 1;
@@ -651,6 +658,7 @@ function Index() {
       const inputs=checked.snapshot.inputs as unknown as WorkflowSnapshot["inputs"];
       const lists=checked.snapshot.lists as unknown as WorkflowSnapshot["lists"];
       snapshotExtras.current = { inputs: checked.snapshot.inputs, lists: checked.snapshot.lists };
+      restoredFingerprint.current = null;
       snapshotReadOnly.current = !!checked.problem;
       setSnapshotProblem(checked.problem);
       remoteVersion.current = row.updated_at;
@@ -705,6 +713,11 @@ function Index() {
     if(snapshotReadOnly.current || recovery || !accountRef.current || !result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
     const boundary=openedEventId;
     const snapshot = eventSnapshot(result,matches);
+    const fingerprint = JSON.stringify(snapshot);
+    // Opening an event (including legacy defaults) is not an edit and must not write it back.
+    if (openedEventId && restoredFingerprint.current === null) { restoredFingerprint.current = fingerprint; return; }
+    if (fingerprint === restoredFingerprint.current) return;
+    restoredFingerprint.current = fingerprint;
     const account = accountRef.current, event = openedEventId ?? "new", token = crypto.randomUUID();
     const draft = { version: 1 as const, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now() };
     try { storeEventDraft(draft); } catch { toast.error("Local recovery could not be saved. Do not close this event until saving is confirmed."); }
@@ -727,6 +740,7 @@ function Index() {
   function restoreRecovery(asNew: boolean) {
     if (!recovery || recovery.account !== accountRef.current) return;
     try {
+      if (!asNew && recovery.baseVersion !== remoteVersion.current) throw new Error("The saved event changed. Save this recovery copy as a new event instead.");
       const { snapshot, problem } = readEventSnapshot(recovery.snapshot);
       if (problem) throw new Error(problem);
       const inputs = snapshot.inputs;
@@ -738,8 +752,8 @@ function Index() {
       savedSelectionsRef.current = snapshot.lists.selections ?? null; snapshotExtras.current = { inputs, lists: snapshot.lists };
       const r = generateLists({ uploaded: [], hours: Number(inputs.hours), buffer: inputs.buffer ?? 2, split: inputs.split, prefs: { artists: [], genres: [], decades: [], notes: "" }, expand: false });
       setResult({ ...r, warmUp: snapshot.lists.warmUp, transition: snapshot.lists.transition, peak: snapshot.lists.peak });
-      const sameVersion = recovery.baseVersion === remoteVersion.current;
-      if (!asNew && !sameVersion) throw new Error("The saved event changed. Save this recovery copy as a new event instead.");
+      recoveryOrigin.current = { account: recovery.account, event: recovery.event, token: recovery.token };
+      restoredFingerprint.current = "recovered";
       autosave.reset();
       if (asNew) { stableCreate.current = crypto.randomUUID(); setSavedEventId(null); autosave.configure(null, null, stableCreate.current); }
       else { stableCreate.current = recovery.createId; autosave.configure(savedEventId, recovery.baseVersion, recovery.createId); }

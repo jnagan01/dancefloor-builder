@@ -40,6 +40,7 @@ function openDb(): Promise<IDBDatabase | null> {
 }
 
 export async function saveMusicLibrary(sources: SavedLibrarySource[], userId: string): Promise<number | null> {
+  if (!validSavedLibrary({ version: 1, savedAt: Date.now(), sources })) return null;
   const db = await openDb();
   if (!db) return null;
   const savedAt = Date.now();
