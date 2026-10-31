@@ -3,6 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { validateTiming, boundedNumber, MAX_EVENT_MINUTES } from "./inputSafety";
 import { writeEventConditionally } from "./eventWriteContract";
+import type { Json } from "@/integrations/supabase/types";
 
 const songSchema = z.object({
   artist: z.string().max(300),
@@ -116,7 +117,7 @@ export const saveWorkflow = createServerFn({ method: "POST" })
       .insert({
         user_id: userId,
         name: data.name,
-        inputs: data.inputs,
+        inputs: JSON.parse(JSON.stringify(data.inputs)) as Json,
         lists: data.lists,
       })
       .select("id")
@@ -132,7 +133,7 @@ export const updateWorkflow = createServerFn({ method: "POST" })
   }).parse(data))
   .handler(async ({ data, context }) => {
     const { data: row, error } = await context.supabase.from("workflow_history")
-      .update({ name: data.name, inputs: data.inputs, lists: data.lists, updated_at: new Date().toISOString() })
+      .update({ name: data.name, inputs: JSON.parse(JSON.stringify(data.inputs)) as Json, lists: data.lists, updated_at: new Date().toISOString() })
       .eq("id", data.id).eq("user_id", context.userId).select("id").maybeSingle();
     if (error) throw dbError("updateWorkflow", error);
     if (!row) throw new Error("Event not found.");

@@ -9,11 +9,12 @@ export function createEventAutosave<T>(options: {
 }) {
   type Job = { epoch: number; revision: number; snapshot: T; current: () => boolean; key: string };
   let epoch = 0, revision = 0, id: string | null = null, version: string | null = null;
-  let createId = crypto.randomUUID(), key = createId, pending: Job | null = null, ready = false;
+  let createId: string = crypto.randomUUID(), key: string = createId, pending: Job | null = null, ready = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const flights = new Map<string, { controller: AbortController; uncertain: boolean }>();
   const valid = (job: Job) => job.epoch === epoch && job.current();
   const clearTimer = () => { clearTimeout(timer); timer = undefined; };
+  const rekeyPending = () => { if (pending) pending.key = key; };
   async function drain() {
     if (!ready || !pending || flights.has(pending.key)) return;
     const job = pending;
@@ -36,7 +37,7 @@ export function createEventAutosave<T>(options: {
       const saved = await options.write(id, job.snapshot, { signal: controller.signal, expectedUpdatedAt: version, createId, create: !id });
       if (!timedOut && valid(job)) {
         id = saved.id; version = saved.updatedAt ?? version; key = id;
-        if (pending) pending.key = key;
+        rekeyPending();
         options.onId(saved.id);
         if (job.revision === revision) { options.onConfirmed?.(job.snapshot, saved); options.onState("saved"); }
       }

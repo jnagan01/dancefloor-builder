@@ -5,7 +5,7 @@ type Source = { label: string; tracks: VdjTrack[] };
 
 /** Reuse identity-only indexes across tag edits; library subjects still refresh with metadata. */
 export function createWorkspaceIndexes() {
-  let paths: string[] = [], rootsKey = "", lastFiles: File[] | undefined, audio: AudioIndex | undefined;
+  let paths: string[] = [], audioRootsKey = "", nativeRootsKey = "", lastFiles: File[] | undefined, audio: AudioIndex | undefined;
   let nativeVersion = -1;
   let native: ReturnType<typeof createIdentityIndex<{ relative: string; path: string }>> | undefined;
   return {
@@ -16,16 +16,16 @@ export function createWorkspaceIndexes() {
     },
     audio(files: File[], known: string[], roots: Record<string, string>) {
       const key = JSON.stringify(roots);
-      if (!audio || files !== lastFiles || rootsKey !== key) {
-        audio = buildAudioIndex(files, [], known, roots); lastFiles = files; rootsKey = key;
+      if (!audio || files !== lastFiles || audioRootsKey !== key) {
+        audio = buildAudioIndex(files, [], known, roots); lastFiles = files; audioRootsKey = key;
       }
       return audio;
     },
     native(version: number, maps: Map<string, Map<string, string>>, known: string[], roots: Record<string, string>) {
       const key = JSON.stringify(roots);
-      if (!native || nativeVersion !== version || rootsKey !== key) {
+      if (!native || nativeVersion !== version || nativeRootsKey !== key) {
         const entries = [...maps.values()].flatMap(map => [...map].map(([relative, path]) => ({ relative, path })));
-        native = createIdentityIndex(entries, f => f.relative, roots, known); nativeVersion = version; rootsKey = key;
+        native = createIdentityIndex(entries, f => f.relative, roots, known); nativeVersion = version; nativeRootsKey = key;
       }
       return native;
     },

@@ -172,7 +172,7 @@ function Index() {
   const { user: draftUser } = useAuth();
   const accountRef = useRef<string | null>(null); accountRef.current = draftUser?.id ?? null;
   const remoteVersion = useRef<string | null>(null);
-  const stableCreate = useRef(crypto.randomUUID());
+  const stableCreate = useRef<string>(crypto.randomUUID());
   const snapshotReadOnly = useRef(false);
   const snapshotExtras = useRef<{ inputs: Record<string, unknown>; lists: Record<string, unknown> }>({ inputs: {}, lists: {} });
   const [recovery, setRecovery] = useState<EventDraft<ReturnType<typeof eventSnapshot>> | null>(null);
@@ -2071,8 +2071,8 @@ function Index() {
       uploaded: songsArg,
       hours: safeHours,
       expand: false,
-      buffer,
-      split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined,
+      buffer: displayNumber(buffer, 4) || 2,
+      split: safeSplit && !snapshotReadOnly.current ? safeSplit : undefined,
       prefs: { artists: [], genres: [], decades: [], notes: "" },
     });
     return {
