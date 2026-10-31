@@ -1,8 +1,8 @@
 import { exportApproved, resolveExportPath, type ExportSongRef, type VdjLibrary } from "./virtualDj";
 export type Availability = "available" | "unavailable" | "unknown";
-export function exportReadiness(refs: ExportSongRef[], library: VdjLibrary, availability: Record<string, Availability> = {}) {
+export function exportReadiness(refs: ExportSongRef[], library: VdjLibrary, availability: Record<string, Availability> = {}, roots?: Record<string, string>) {
   const recordings = new Set<string>();
-  const problems: { index: number; title: string; reason: string }[] = [];
+  const problems: { index: number; identity?: ExportSongRef["identity"]; title: string; reason: string }[] = [];
   let omitted = 0;
   for (const [index, ref] of refs.entries()) {
     const ids = exportApproved(ref.match) && ref.match?.trackIndex != null
@@ -10,12 +10,12 @@ export function exportReadiness(refs: ExportSongRef[], library: VdjLibrary, avai
     const tracks = ids.map(i => library.tracks[i]).filter(Boolean);
     if (!tracks.length) {
       omitted++;
-      problems.push({ index, title: `${ref.song.artist} — ${ref.song.song}`, reason: ref.match?.excludedFromVdj ? "Excluded from DJ export" : "No confirmed recording" });
+      problems.push({ index, identity: ref.identity, title: `${ref.song.artist} — ${ref.song.song}`, reason: ref.match?.excludedFromVdj ? "Excluded from DJ export" : "No confirmed recording" });
     }
     for (const track of tracks) {
-      const path = resolveExportPath(track.filePath) ?? track.filePath;
+      const path = resolveExportPath(track.filePath, roots) ?? track.filePath;
       recordings.add(path);
-      if (availability[path] !== "available") problems.push({ index, title: `${ref.song.artist} — ${ref.song.song}`, reason: availability[path] === "unavailable" ? "File unavailable" : "File availability unknown" });
+      if (availability[path] !== "available") problems.push({ index, identity: ref.identity, title: `${ref.song.artist} — ${ref.song.song}`, reason: availability[path] === "unavailable" ? "File unavailable" : "File availability unknown" });
     }
   }
   const unavailable = [...recordings].filter(p => availability[p] === "unavailable").length;

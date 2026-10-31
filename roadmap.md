@@ -62,4 +62,9 @@
 - [x] Full/native/adversarial/build validation and exact final results.
 
 # External verification
-- [ ] Run read-only regression job on GitHub/macOS; blocked here by unavailable GitHub CLI/token and runner.
+- [ ] Confirm completion of the GitHub/macOS native job for the final revision; user reported run 41160767318 frozen installs/full suite passed, native job running. This sandbox cannot inspect GitHub.
+
+# Final integration review
+- [x] Preserve native-only new-event and pending-conflict drafts during backup restore, with native regression.
+- [x] Bind readiness issues to songs, invalidate stale previews, and freeze export library/root paths across awaits.
+- [x] Run full/native/adversarial checks and inspect automatic build results; report final revision.

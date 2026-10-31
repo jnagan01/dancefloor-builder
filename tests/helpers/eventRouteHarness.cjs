@@ -4,7 +4,7 @@ const ts = require(path.join(root, 'node_modules/typescript'));
 function createEventRouteHarness(actual) {
   let source = fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
   // Expose actual closures in the test VM only; no production test seam or replacement logic.
-  source = source.replace('  const withFileBpm =', '  capture({ applyReviewMode, withAnalysis: (sec, songs) => withFileBpm(sec, songs), songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
+  source = source.replace('  const withFileBpm =', '  capture({ applyReviewMode, withAnalysis: (sec, songs) => withFileBpm(sec, songs), songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, exportSectionM3u, previewReadiness, readiness, activeSection, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   source += '\nexport { SectionView };';
     const readiness = require(path.join(root, "node_modules/typescript"));
   const readinessModule = { exports: {} };
@@ -50,8 +50,9 @@ function createEventRouteHarness(actual) {
       '@/lib/desktopBridge':{getNativeFilePath:()=>null,isDesktopApp:()=>false},
     };
     const module={exports:{}};
+    const testWindow={addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k),confirm:()=>true};
     const events=new Map();
-    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,structuredClone,File,Blob,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:{addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k),confirm:()=>true},setTimeout,clearTimeout,Date});
+    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,structuredClone,File,Blob,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:testWindow,setTimeout,clearTimeout,Date});
     const cleanup=old=>{for(const slot of old)slot?.cleanup?.();};
     function render() {
       slots=rootSlots;cursor=0;renderingRoot=true;
@@ -66,7 +67,7 @@ function createEventRouteHarness(actual) {
     function nodes(){return walk(tree);}
     function interact(predicate,handler='onClick',argument){const node=nodes().find(predicate);if(!node)throw Error('No matching rendered control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});node.props[handler]?.(argument);render();}
     function sectionClick(predicate){const child=nodes().find(n=>n.props?.onPreview&&n.props?.songs);if(!child)throw Error('No review section');const parentSlots=slots;slots=[];cursor=0;const sectionTree=module.exports.SectionView(child.props);const control=walk(sectionTree).find(predicate);if(!control)throw Error('No section control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});control.props.onClick?.();slots=parentSlots;render();}
-    return {render,flush,memory,requests,loads,errors,navigations,downloads,files,warnings,nodes,interact,sectionClick,leave(){return blocker?.shouldBlockFn();}, async invoke(prop){const n=nodes().find(n=>typeof n.props?.[prop]==='function');if(!n)throw Error(prop); await n.props[prop]();render();}, get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
+    return {testWindow,render,flush,memory,requests,loads,errors,navigations,downloads,files,warnings,nodes,interact,sectionClick,leave(){return blocker?.shouldBlockFn();}, async invoke(prop){const n=nodes().find(n=>typeof n.props?.[prop]==='function');if(!n)throw Error(prop); await n.props[prop]();render();}, get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
   }
   return harness;
 }
