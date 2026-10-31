@@ -79,7 +79,7 @@
 - [x] Replace timing-sensitive backup-case waits; run full/native suites and report final revision without production operations.
 
 ## Appearance and guarded automatic Mac updates
-- [ ] Correct verbose signature capture and ZIP/DMG inner-app notarization gates; test fail-closed command behavior without macOS/live installs.
+- [x] Correct verbose signature capture and ZIP/DMG inner-app notarization gates; 417 full tests passed including five command-gate cases, workflow YAML/shell syntax verified, automatic build OK; Apple execution awaits GitHub.
 - [x] Explicit startup update consent surfaces failures; uncertain staging retains lock with recovery guidance; 412 unit, 17 native (repeated), 49 adversarial checks and automatic build passed.
 - [x] Incorporate exact uploaded RGBA icon at 1024 and matching favicon; lossless local ICNS roundtrip, source/ICNS/ZIP/DMG transparency release gates, 406 unit + 16 Electron + 49 adversarial checks passed, automatic build OK.
 - [x] Locally persisted Light/Dark/System, first paint, system changes, semantic contrast and synthetic UI checks.
