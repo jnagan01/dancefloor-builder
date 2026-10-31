@@ -70,6 +70,6 @@
 - [x] Run full/native/adversarial checks and inspect automatic build results; report final revision.
 
 # Build26 backup identifier regression
-- [ ] Context-aware shared browser/native private-field policy without modifying saved data.
-- [ ] Exact identifier, secret rejection, roundtrip, startup/rescan UI and native-store regressions.
-- [ ] Full and isolated Electron suites, automatic build/typecheck, final revision and updater limitation.
+- [x] Context-aware shared browser/native private-field policy without modifying saved data.
+- [x] Exact identifier, secret rejection, roundtrip, startup/rescan UI and native-store regressions.
+- [x] Full and isolated Electron suites, automatic build/typecheck, final revision and updater limitation.
