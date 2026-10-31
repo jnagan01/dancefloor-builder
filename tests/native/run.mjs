@@ -74,9 +74,9 @@ try{
    await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);await page.waitForTimeout(400);
    await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
    const rows=page.locator('tbody tr');expect(await rows.count()).toBe(6);
-   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(300);
+   await page.getByRole('button',{name:'Continue',exact:false}).click();await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(300);
    expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('missing a song title');expect(await rows.count()).toBe(6);
-   await rows.nth(5).locator('input').nth(1).fill('Corrected Song');
+   await rows.nth(5).locator('input').nth(1).fill('Corrected Song');await page.getByRole('button',{name:'Continue',exact:false}).click();
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(1800);
    expect(await page.getByRole('button',{name:'Export All Files as ZIP',exact:false}).count()).toBe(1);
    await page.getByRole('button',{name:'Export All Files as ZIP',exact:false}).click();await page.waitForTimeout(700);
