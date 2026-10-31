@@ -44,6 +44,7 @@ import {
   buildM3u,
   countMatchedForExport,
   exportApproved,
+  musicalMatchApproved,
   countUnresolvedPaths,
   resolveExportPath,
   cleanBpm,
@@ -239,14 +240,25 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   function applyReviewMode(mode: "first" | "most" | "all" | "none", section: SectionKey) {
     setReviewMode(mode);
     if (!result || !mergedLibrary) return;
+    const next = { ...matchesRef.current };
     result[section].forEach((song, index) => {
       const key = songKey(section, index, song);
-      if (mode === "none") { markUnresolved(key); return; }
-      const found = searchLibrary(`${song.artist} ${song.song}`, mergedLibrary, mode === "all" ? matchLimit : 1);
-      if (!found.length) return;
-      const automatic = matchSong(song, mergedLibrary);
-      updateMatch(key, { status: "Manually Matched", confidence: automatic.confidence, trackIndex: found[0], alternatives: [], extraTrackIndices: mode === "all" ? found.slice(1) : [] });
+      const previous = next[key];
+      if (mode === "none") {
+        next[key] = { ...previous, status: "Missing From Library", confidence: 0, confirmed: false, trackIndex: undefined, alternatives: [], extraTrackIndices: [] };
+        return;
+      }
+      const candidates = searchLibraryBySong(song, mergedLibrary, matchLimit);
+      if (!candidates.length) return;
+      const ranked = mode === "most" ? [...candidates].sort((a, b) => {
+        const count = (i: number) => { const n = mergedLibrary.tracks[i]?.playCount; return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0; };
+        return count(b.i) - count(a.i) || b.s - a.s || a.i - b.i;
+      }) : candidates;
+      next[key] = { ...previous, status: "Manually Matched", confidence: 1, confirmed: true, trackIndex: ranked[0].i, alternatives: [], extraTrackIndices: mode === "all" ? ranked.slice(1).map(c => c.i) : [] };
     });
+    if (JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, matchesRef.current))) markPersistedEdit();
+    matchesRef.current = next;
+    setMatches(next);
   }
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -919,7 +931,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
       const m = matchSong({ artist: s.artist, song: s.song }, mergedLibrary);
-      if (!exportApproved(m) || m.trackIndex == null) return s;
+      if (!musicalMatchApproved(m) || m.trackIndex == null) return s;
       const t = mergedLibrary.tracks[m.trackIndex];
       if (!t) return s;
       const bpmNum = parseBpm(t.bpm);
@@ -1667,10 +1679,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // --- Match controls ---
 
   function updateMatch(key: string, patch: Partial<SongMatch>) {
-    const next = { ...matches, [key]: { ...matches[key], ...patch } };
-    if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, matches))) markPersistedEdit();
+    const previous = matchesRef.current;
+    const next = { ...previous, [key]: { ...previous[key], ...patch } };
+    if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, previous))) markPersistedEdit();
     matchesRef.current = next;
-    setMatches((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setMatches(next);
   }
 
   // Edit a song's title/artist in place; carries its file match over to the new key.
@@ -1694,8 +1707,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setMatches((prev) => {
       const copy = { ...prev };
       delete copy[oldKey];
-      if (fresh) copy[newKey] = fresh;
+      if (fresh) copy[newKey] = { ...fresh, confirmed: false };
       else copy[newKey] = {status:"Missing From Library",confidence:0,alternatives:[]};
+      matchesRef.current = copy;
       return copy;
     });
   }
@@ -1714,7 +1728,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (extras.length) {
         updateMatch(key,{status:"Manually Matched",confidence:1,confirmed:true,trackIndex:extras[0],alternatives:m.alternatives,extraTrackIndices:extras.slice(1)});
       } else {
-        updateMatch(key,{status:"Missing From Library",confidence:0,trackIndex:undefined,alternatives:m.alternatives??[],extraTrackIndices:[]});
+        updateMatch(key,{status:"Missing From Library",confidence:0,confirmed:false,trackIndex:undefined,alternatives:m.alternatives??[],extraTrackIndices:[]});
       }
       return;
     }
@@ -1724,7 +1738,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   function markUnresolved(key: string) {
-    updateMatch(key, { status: "Missing From Library", confidence: 0, trackIndex: undefined, alternatives: [], extraTrackIndices: [] });
+    updateMatch(key, { status: "Missing From Library", confidence: 0, confirmed: false, trackIndex: undefined, alternatives: [], extraTrackIndices: [] });
   }
 
   function toggleExtraPick(key: string, trackIndex: number) {
@@ -2250,7 +2264,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // vibe breakdown, and track cards all show the file's real BPM, not a guess.
   const withFileBpm = (sec: SectionKey, songs: Song[]): RampSong[] =>
     songs.map((s, i) => {
-      const ti = matches[songKey(sec, i, s)]?.trackIndex;
+      const match = matches[songKey(sec, i, s)];
+      const ti = musicalMatchApproved(match) ? match?.trackIndex : undefined;
       const track = ti != null ? (mergedLibrary.tracks[ti] as { bpm?: unknown; key?: string } | undefined) : undefined;
       const fileBpm = track ? parseBpm(track.bpm) : undefined;
       const base = s as RampSong;
@@ -3466,7 +3481,8 @@ function SectionView(props: SectionViewProps) {
           const inReview = m?.status === "Possible Match" || m?.status === "Multiple Matches";
           if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
           const meta = s as BadgeSong;
-          const fileBpm = track ? parseBpm(track.bpm) : undefined;
+          const musicalTrack = musicalMatchApproved(m) ? track : undefined;
+          const fileBpm = musicalTrack ? parseBpm(musicalTrack.bpm) : undefined;
           const estimatedBpm = typeof meta.bpm === "number" ? Math.round(meta.bpm) : null;
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
@@ -3531,7 +3547,7 @@ function SectionView(props: SectionViewProps) {
                   <Hud label="Energy" value={meta.energy != null ? Math.round(meta.energy) : "—"} />
                   <Hud label="Dance" value={meta.danceability != null ? Math.round(meta.danceability) : "—"} />
                   <Hud label="Mood" value={meta.valence != null ? Math.round(meta.valence) : "—"} />
-                  <Hud label="Key" value={track?.key || meta.camelot || "—"} />
+                  <Hud label="Key" value={musicalTrack?.key || (meta.camelot ? `≈${meta.camelot}` : "—")} />
                   <Hud
                     label="BPM"
                     value={fileBpm != null ? Math.round(fileBpm) : estimatedBpm != null ? `≈${estimatedBpm}` : "—"}

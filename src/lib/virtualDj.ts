@@ -492,10 +492,15 @@ export interface ExportSongRef {
   match?: SongMatch;
 }
 
+/** Musical identity approval is independent of whether the recording is exported. */
+export function musicalMatchApproved(match?: SongMatch): boolean {
+  return !!match && match.confirmed !== false &&
+    (match.confirmed === true || match.status === "Matched" || match.status === "Manually Matched");
+}
+
 /** Missing approval never grants a tentative/ambiguous candidate export permission. */
 export function exportApproved(match?: SongMatch): boolean {
-  return !!match && !match.excludedFromVdj && match.confirmed !== false &&
-    (match.confirmed === true || match.status === "Matched" || match.status === "Manually Matched");
+  return !!match && !match.excludedFromVdj && musicalMatchApproved(match);
 }
 
 export function buildVirtualDjXml(items: ExportSongRef[], lib?: VdjLibrary): string {
