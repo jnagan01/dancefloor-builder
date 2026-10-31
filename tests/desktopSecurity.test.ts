@@ -88,9 +88,9 @@ async function loadMain() {
     setWindowOpenHandler: (fn: Function) => { windowOpen = fn; }, on: (name: string, fn: Function) => listeners.set(name, fn) };
   const win = { webContents: wc, isDestroyed: () => false, once: vi.fn(), on: vi.fn(), loadURL: vi.fn(), show: vi.fn() };
   const app = { setPath: vi.fn(), getPath: () => "/mock", requestSingleInstanceLock: () => true, on: vi.fn(), whenReady: async () => {}, quit: vi.fn() };
-  const electron = { app, BrowserWindow: function () { return win; }, shell: { openExternal: external }, Menu: { buildFromTemplate: () => [], setApplicationMenu: vi.fn() }, dialog: { showOpenDialog }, ipcMain: { handle: (name: string, fn: Function) => handlers.set(name, fn) } };
+  const electron = { app, BrowserWindow: function () { return win; }, shell: { openExternal: external }, Menu: { buildFromTemplate: () => [], setApplicationMenu: vi.fn() }, dialog: { showOpenDialog }, ipcMain: { on: (name: string, fn: Function) => handlers.set(name, fn), handle: (name: string, fn: Function) => handlers.set(name, fn) } };
   runInNewContext(readFileSync(new URL("../desktop/main.cjs", import.meta.url), "utf8"), {
-    require: (name: string) => name === "electron" ? electron : name === "node:fs" ? fs : name === "./security.cjs" ? require("../desktop/security.cjs") : name === "./scan.cjs" ? { scanFolder } : name === "./tags.cjs" ? { createTagCache: () => ({ forget: vi.fn(), flush: async () => {} }), writeTags } : name === "./backups.cjs" ? { createBackupStore: () => ({ save: async () => {}, latest: async () => null }) } : name === "./updater.cjs" ? { checkForUpdates: async () => {} } : require(name),
+    require: (name: string) => name === "electron" ? electron : name === "node:fs" ? fs : name === "./security.cjs" ? require("../desktop/security.cjs") : name === "./scan.cjs" ? { scanFolder } : name === "./tags.cjs" ? { createTagCache: () => ({ forget: vi.fn(), flush: async () => {} }), writeTags } : name === "./backups.cjs" ? { createBackupStore: () => ({ save: async () => {}, latest: async () => null }) } : name === "./recovery.cjs" ? { createRecoveryStore: () => ({ get: () => null, set: () => {}, remove: () => {} }) } : name === "./updater.cjs" ? { checkForUpdates: async () => {} } : require(name),
     process: { env: {}, platform: "darwin" }, __dirname: "/mock/desktop", setTimeout: vi.fn(), console,
   });
   await Promise.resolve();
@@ -101,14 +101,15 @@ describe("real main process wiring with mocks", () => {
     const { handlers, wc, showOpenDialog, fs, scanFolder, writeTags } = await loadMain();
     expect([...handlers.keys()].sort()).toEqual([
       "vdj:default-path", "vdj:default-root", "vdj:choose-root", "vdj:read-database", "vdj:choose-database",
-      "backup:save", "backup:latest", "fs:availability", "fs:choose-folder", "fs:choose-music-folder", "fs:write-tags", "fs:scan-folder", "fs:read-audio", "fs:write-file",
+      "recovery:journal", "backup:save", "backup:latest", "fs:availability", "fs:choose-folder", "fs:choose-music-folder", "fs:write-tags", "fs:scan-folder", "fs:read-audio", "fs:write-file",
     ].sort());
-    for (const handler of handlers.values()) {
+    for (const [name, handler] of handlers) {
+      if(name === "recovery:journal") { const denied={ sender: wc, senderFrame: { url: APP },returnValue:null as any }; handler(denied,"get","setarchitect:recovery:synthetic:A"); expect(denied.returnValue.ok).toBe(false); continue; }
       expect(() => handler({ sender: wc, senderFrame: { url: APP } }, "/mock/music")).toThrow("Native access denied");
       expect(() => handler({ sender: { ...wc }, senderFrame: wc.mainFrame }, "/mock/music")).toThrow("Native access denied");
     }
     wc.mainFrame.url = `${APP}.evil.example`;
-    for (const handler of handlers.values()) expect(() => handler({ sender: wc, senderFrame: wc.mainFrame })).toThrow();
+    for (const [name, handler] of handlers) { if(name !== "recovery:journal") expect(() => handler({ sender: wc, senderFrame: wc.mainFrame })).toThrow(); }
     expect(showOpenDialog).not.toHaveBeenCalled();
     expect(fs.promises.readFile).not.toHaveBeenCalled();
     expect(fs.promises.writeFile).not.toHaveBeenCalled();

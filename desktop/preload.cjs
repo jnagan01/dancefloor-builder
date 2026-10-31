@@ -28,3 +28,6 @@ contextBridge.exposeInMainWorld("electronBackups", {
   latest: account => ipcRenderer.invoke("backup:latest", account),
 });
 contextBridge.exposeInMainWorld("electronAvailability", { check: paths => ipcRenderer.invoke("fs:availability", paths) });
+
+const journal = (action, key, raw) => { const result = ipcRenderer.sendSync("recovery:journal", action, key, raw); if (!result?.ok) throw Error(result?.error || "Recovery journal unavailable."); return result.value ?? null; };
+contextBridge.exposeInMainWorld("electronRecovery", { get: key => journal("get", key), set: (key, raw) => journal("set", key, raw), remove: key => journal("remove", key) });

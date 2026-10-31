@@ -18,6 +18,7 @@ app.whenReady().then(()=>{
 server=http.createServer((req,res)=>{const asset=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js'].includes(asset)){res.writeHead(404).end();return;}res.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':'text/html');res.end(fs.readFileSync(path.join(process.env.SETARCHITECT_TEST_BUNDLE,asset)));});
 const portFile=path.join(profile,'port');const port=fs.existsSync(portFile)?Number(fs.readFileSync(portFile,'utf8')):0;server.listen(port,'127.0.0.1',()=>{fs.writeFileSync(portFile,String(server.address().port));
 const origin=`http://127.0.0.1:${server.address().port}`;const security=createDesktopSecurity(origin,()=>win);
+const recovery=require('../../../desktop/recovery.cjs').createRecoveryStore(profile);ipcMain.on('recovery:journal',(event,action,key,raw)=>{try{security.guard(()=>{const value=action==='get'?recovery.get(key):action==='set'?recovery.set(key,raw):recovery.remove(key);event.returnValue={ok:true,value};})(event);}catch(e){event.returnValue={ok:false,error:e.message};}});
 const handle=(name,fn)=>ipcMain.handle(name,security.guard(fn));
 handle('test:fixture',()=>fixture);
 handle('test:list',async(_e,account)=>{if(account!=='synthetic-owner')throw Error('Real account blocked');return {data:Object.values(read()),error:null};});
