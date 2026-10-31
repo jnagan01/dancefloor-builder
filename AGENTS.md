@@ -21,7 +21,7 @@
 - Reconcile recovery only with both the unique write marker and semantic snapshot equality; keep conflict-time edits in a separate owned recovery slot and archive conflicts explicitly, because late saves must not force duplicates or discard new edits.
 - Use generateLists for dance target rounding in restore and display and block missing-title uploads before full generation, because partial imports must never become invented songs or silently disappear.
 
-- Keep backup imports account-scoped and additive, and require a fresh validated backup before native rescans or updates, because recoverability must not overwrite existing data.
+- Keep backup imports additive and account-scoped; share the JSON private-field policy across browser/native validators, distinguish dictionary IDs from properties, and require backups before rescans/updates to preserve recoverability.
 - Run the real event route in a separately fenced synthetic Electron profile before packaging; replace network/storage services only in test fixtures, because release checks must never reach user data.
 
 - Fence backup/restore after every asynchronous boundary using account-session generation and captured sources/roots; compute conflict previews with identity maps and bounded samples, because late operations must not mix account data or stall large libraries.
