@@ -24,7 +24,7 @@ describe('actual export route snapshot integration',()=>{
    const h=harness({rows:{A:row()}});await h.flush();h.library(vdj.buildLibrary([{filePath:'Synthetic/song.mp3',artist:'A',title:'Song'}]));await h.flush();
    await h.current.exportSectionM3u('transition');h.render();
    const issue=h.current.readiness.problems.find((p:any)=>p.title==='B — Missing');expect(issue.identity).toMatchObject({section:'transition',index:1});
-   h.interact((n:any)=>n.props?.children==='B — Missing — No confirmed recording');expect(h.current.activeSection).toBe('transition');
+   h.interact((n:any)=>Array.isArray(n.props?.children)&&n.props.children.join('')==='B — Missing — No confirmed recording');expect(h.current.activeSection).toBe('transition');
    h.current.applyReviewMode('none','transition');await h.flush();expect(h.current.readiness).toBe(null);h.unmount();
  });
  it('mapping and library changes during availability cannot emit unchecked paths',async()=>{
