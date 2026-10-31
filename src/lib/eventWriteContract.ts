@@ -17,15 +17,16 @@ export async function writeEventConditionally(db: any, owner: string, request: {
     let baseline = request.expectedSnapshot as typeof payload | undefined;
     if (!baseline) {
       const { data: previous, error } = await db.from("workflow_history").select("name, inputs, lists").eq("id", request.id).eq("user_id", owner).eq("updated_at", request.expectedUpdatedAt).maybeSingle();
-      if (error || !previous) throw new Error("The saved event changed. Reopen it before saving.");
+      if (error) throw new Error("Could not read the saved event. Keep the recovery copy.");
       baseline = previous;
     }
-    if (!baseline) throw new Error("Could not read the saved event version.");
+    if (baseline) {
     const { data, error } = await db.from("workflow_history").update({ ...payload, updated_at: nextEventVersion(request.expectedUpdatedAt) })
       .eq("id", request.id).eq("user_id", owner).eq("updated_at", request.expectedUpdatedAt)
       .eq("name", baseline.name).eq("inputs", JSON.stringify(baseline.inputs)).eq("lists", JSON.stringify(baseline.lists)).select("id, updated_at").maybeSingle();
     if (error) throw new Error("Could not confirm event changes. Keep the local recovery copy and retry.");
     if (data) return { id: data.id as string, updatedAt: data.updated_at as string };
+    }
   }
   const { data: row, error } = await db.from("workflow_history").select("id, updated_at, name, inputs, lists").eq("id", request.id).eq("user_id", owner).maybeSingle();
   if (error || !row) throw new Error("Save outcome is unknown. The local recovery copy has been kept.");

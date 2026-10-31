@@ -24,11 +24,11 @@ describe('actual mounted event route recovery and ownership',()=>{
   await vi.advanceTimersByTimeAsync(1000);expect(h.requests).toHaveLength(1);expect(h.requests[0].id).toBe(draft.createId);expect(h.requests[0].create).toBe(true);expect(h.requests[0].lists.selections['warmUp:0:old'].paths).toEqual(['Music/Song.mp3']);h.unmount();
  });
  it('every manual reset uses one UUID for draft and interrupted first request across reload',async()=>{
-  vi.useFakeTimers();const memory=new Map();const h=harness({eventId:undefined,memory,write:()=>new Promise(()=>{})});await h.flush();h.current.clearWorkflowState();await h.flush();
+  vi.useFakeTimers();const memory=new Map();const h=harness({eventId:null,memory,write:()=>new Promise(()=>{})});await h.flush();h.current.clearWorkflowState();await h.flush();
   // Drive actual generation result boundary through explicit new-event recovery.
   memory.set(key('owner','new'),JSON.stringify({...recovery('owner','new'),createId:h.current.stableCreate,baseVersion:null}));h.unmount();
-  const b=harness({eventId:undefined,memory,write:()=>new Promise(()=>{})});await b.flush();b.current.restoreRecovery(false);await b.flush();await vi.advanceTimersByTimeAsync(1000);const id=b.requests[0].id; b.unmount();
-  const c=harness({eventId:undefined,memory});await c.flush();c.current.restoreRecovery(false);await c.flush();await vi.advanceTimersByTimeAsync(1000);expect(c.requests[0].id).toBe(id);expect(id).toBe(JSON.parse(memory.get(key('owner','new'))??'null')?.createId??id);c.unmount();
+  const b=harness({eventId:null,memory,write:()=>new Promise(()=>{})});await b.flush();b.current.restoreRecovery(false);await b.flush();await vi.advanceTimersByTimeAsync(1000);const id=b.requests[0].id; expect(JSON.parse(memory.get(key('owner','new'))).createId).toBe(id);b.unmount();
+  const c=harness({eventId:null,memory});await c.flush();c.current.restoreRecovery(false);await c.flush();await vi.advanceTimersByTimeAsync(1000);expect(c.requests[0].id).toBe(id);c.unmount();
  });
  it('captures A edits before same-component A to B navigation under one second',async()=>{
   vi.useFakeTimers();const h=harness({rows:{A:row(),B:{...row(),id:'B'}}});await h.flush();h.edit('Latest A');h.switchTo('owner','B');await h.flush();

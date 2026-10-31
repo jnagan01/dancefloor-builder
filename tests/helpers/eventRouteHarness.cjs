@@ -23,7 +23,7 @@ function createEventRouteHarness(actual) {
     const no = () => undefined;
     const stub = new Proxy({}, {get: (_t,k) => k==='__esModule'?true: k==='supportsDirectoryWrite'?()=>false : k==='APP_VERSION'?'test': k==='KEY_OPTIONS'||k==='VIBES'||k==='EVENT_TYPES'?[] : no});
     const history = { getWorkflow: async r => { loads.push(r.data.id); return await rows[r.data.id]; }, saveWorkflowSafely: async r => { requests.push({account, ...r.data}); return write(r); } };
-    const route = { useSearch: () => ({eventId}) };
+    const route = { useSearch: () => ({eventId:eventId ?? undefined}) };
     const navigate = async r => { navigations.push(r); eventId=r.search?.eventId; };
     const modules = {
       react, 'react/jsx-runtime': {jsx,jsxs:jsx}, '@tanstack/react-router': {createFileRoute:()=>opts=>({...route,...opts}),useNavigate:()=>navigate,useBlocker:no},
