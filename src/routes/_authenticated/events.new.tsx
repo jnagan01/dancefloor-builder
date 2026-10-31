@@ -2344,6 +2344,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
 
   function markPersistedEdit() {
+    readinessEpoch.current.generation++;
+    setReadiness(null);
     userEdited.current = true;
     if (result) autosave.dirty();
   }
