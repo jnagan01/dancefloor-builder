@@ -53,15 +53,15 @@ try{
  });
  await check('production backup UI previews single-event restore and preserves additive conflicts',async()=>{
    await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await page.getByRole('button',{name:'Back up now',exact:true}).click();
-   await page.waitForTimeout(500);expect(await page.getByRole('combobox',{name:'Event to restore'}).count()).toBe(1);
+   await expect(page.getByRole('combobox',{name:'Event to restore'})).toBeVisible({timeout:15000});await expect(page.getByRole('button',{name:'Back up now',exact:true})).toBeEnabled({timeout:15000});
    const raw=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw); const b=JSON.parse(raw);
    const original=JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8'));
    b.sources[0].tracks[0].title='Conflicting title';b.sources.push({label:'Added source',tracks:[{filePath:'Added source/new.mp3',artist:'Added',title:'New'}]});
    b.roots['Added source']=path.join(library,'added');
    const imported=path.join(temp,'import-backup.json');fs.writeFileSync(imported,JSON.stringify(b));
-   await page.locator('input[type=file]').setInputFiles(imported);await page.waitForTimeout(300);
-   expect(await page.getByText('Library restore: 1 new sources · 1 conflicts left unchanged',{exact:false}).count()).toBe(1);
-   await page.getByRole('button',{name:'Add non-conflicting metadata sources',exact:true}).click();await page.waitForTimeout(500);
+   await page.locator('input[type=file]').setInputFiles(imported);
+   await expect(page.getByText('Library restore: 1 new sources · 1 conflicts left unchanged',{exact:false})).toBeVisible({timeout:15000});
+   await page.getByRole('button',{name:'Add non-conflicting metadata sources',exact:true}).click();await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8')).at(-1).label,{timeout:15000}).toBe('Added source');await expect(page.getByRole('button',{name:'Back up now',exact:true})).toBeEnabled({timeout:15000});
    const restored=JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8'));
    expect(restored[0]).toEqual(original[0]);expect(restored.at(-1).label).toBe('Added source');
    // Only the fsynced native journal contains these drafts, as after Chromium loss.
@@ -70,22 +70,22 @@ try{
      const rawDraft=JSON.stringify({version:1,account:'synthetic-owner',event:slot,token:'native-pending',createId:'native-only',baseVersion:null,snapshot:b.events[0].snapshot,savedAt:1});
      const beforeRows=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
      await page.evaluate(({key,raw})=>{localStorage.removeItem(key);window.electronRecovery.set(key,raw);},{key:recoveryKey,raw:rawDraft});
-     await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await page.waitForTimeout(250);
+     const errorsBefore=await page.evaluate(()=>window.__errors.length);await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.__errors.length),{timeout:15000}).toBe(errorsBefore+1);
      expect(await page.evaluate(key=>localStorage.getItem(key),recoveryKey)).toBe(null);
      expect(await page.evaluate(key=>window.electronRecovery.get(key),recoveryKey)).toBe(rawDraft);
      expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(beforeRows);
      expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('Resolve it first');
      await page.evaluate(key=>window.electronRecovery.remove(key),recoveryKey);
    }
-   await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await page.waitForTimeout(500);
-   await page.getByRole('button',{name:'Restore recovery copy',exact:true}).click();await page.waitForTimeout(2200);
+   await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await expect(page.getByRole('button',{name:'Restore recovery copy',exact:true})).toBeVisible({timeout:15000});
+   await page.getByRole('button',{name:'Restore recovery copy',exact:true}).click();await expect.poll(()=>Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).length,{timeout:15000}).toBe(2);await expect(page.getByText('Event saved automatically',{exact:false})).toBeVisible({timeout:15000});
    const rows=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'));expect(Object.keys(rows)).toHaveLength(2);
    expect(rows.A.inputs.eventName).toBe('Late native save');const newId=Object.keys(rows).find(id=>id!=='A');expect(rows[newId].lists.warmUp).toEqual(b.events[0].snapshot.lists.warmUp);
  });
  await check('update handoff captures fresh production workspace state and aborts on backup rename failure',async()=>{
-   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await page.waitForTimeout(300);
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await expect(page.getByRole('button',{name:'Back up now',exact:true})).toBeEnabled({timeout:15000});
    const prior=await page.evaluate(async()=>JSON.parse((await window.electronBackups.latest('synthetic-owner')).raw));
-   await new Promise(resolve=>setTimeout(resolve,20));const outcome=await page.evaluate(()=>window.testBackend.update());expect(outcome.ok).toBe(true);
+   await expect.poll(()=>Date.now(),{timeout:15000}).toBeGreaterThan(Date.parse(prior.createdAt));const outcome=await page.evaluate(()=>window.testBackend.update());expect(outcome.ok).toBe(true);
    const fresh=await page.evaluate(async()=>JSON.parse((await window.electronBackups.latest('synthetic-owner')).raw));
    expect(Date.parse(fresh.createdAt)).toBeGreaterThan(Date.parse(prior.createdAt));expect(fresh.sources.some(source=>source.label==='Added source')).toBe(true);expect(fresh.events).toHaveLength(2);
    fs.unlinkSync(path.join(temp,'handoff'));fs.writeFileSync(path.join(temp,'fault'),'RENAME_EACCES');
@@ -145,24 +145,23 @@ try{
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(rows));
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({startBackups:true,sources:[{label,tracks:tracks.map(t=>({...t,filePath:label+'/'+path.basename(t.filePath)}))}]}));
    await launch();await page.evaluate(({label,root})=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({[label]:root})),{label,root:library});
-   await page.reload();await page.waitForTimeout(1100);
-   expect(fs.readFileSync(path.join(temp,'scan-count'),'utf8')).toBe('1');
+   await page.reload();await expect.poll(()=>fs.existsSync(path.join(temp,'scan-count'))?fs.readFileSync(path.join(temp,'scan-count'),'utf8'):null,{timeout:15000}).toBe('1');
    const originalRows=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
    const startup=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);
    expect(JSON.parse(startup).events[0].snapshot).toEqual(snapshot);
    expect(await page.evaluate(()=>window.__errors)).toEqual([]);
-   await page.getByRole('button',{name:'Fixture rescan',exact:true}).click();await page.waitForTimeout(700);
+   await page.getByRole('button',{name:'Fixture rescan',exact:true}).click();await expect.poll(()=>fs.readFileSync(path.join(temp,'scan-count'),'utf8'),{timeout:15000}).toBe('2');
    expect(fs.readFileSync(path.join(temp,'scan-count'),'utf8')).toBe('2');
-   await page.getByRole('button',{name:'Back up now',exact:true}).click();await page.waitForTimeout(500);
+   await page.getByRole('button',{name:'Back up now',exact:true}).click();await expect(page.getByRole('combobox',{name:'Event to restore'})).toHaveValue('A',{timeout:15000});await expect(page.getByRole('button',{name:'Back up now',exact:true})).toBeEnabled({timeout:15000});
    expect(await page.getByRole('combobox',{name:'Event to restore'}).inputValue()).toBe('A');
    const raw=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);
    expect(JSON.parse(raw).events[0].snapshot).toEqual(snapshot);
-   await page.getByRole('button',{name:'Download backup',exact:true}).click();await page.waitForTimeout(500);const artifact=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('setarchitect-backup-')).sort().at(-1);expect(artifact).toBeTruthy();expect(JSON.parse(fs.readFileSync(path.join(temp,'exports',artifact),'utf8')).events[0].snapshot).toEqual(snapshot);
+   await page.getByRole('button',{name:'Download backup',exact:true}).click();await expect.poll(()=>fs.readdirSync(path.join(temp,'exports')).some(n=>n.startsWith('setarchitect-backup-')),{timeout:15000}).toBe(true);const artifact=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('setarchitect-backup-')).sort().at(-1);expect(artifact).toBeTruthy();expect(JSON.parse(fs.readFileSync(path.join(temp,'exports',artifact),'utf8')).events[0].snapshot).toEqual(snapshot);
    const bad=JSON.parse(raw);bad.events[0].snapshot.inputs.access_token='synthetic credential';
    expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),bad)).ok).toBe(false);
    expect(await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw)).toBe(raw);
-   const imported=path.join(temp,'identifier-roundtrip.json');fs.writeFileSync(imported,raw);await page.locator('input[type=file]').setInputFiles(imported);await page.waitForTimeout(200);
-   await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await page.waitForTimeout(300);
+   const imported=path.join(temp,'identifier-roundtrip.json');fs.writeFileSync(imported,raw);await page.locator('input[type=file]').setInputFiles(imported);await expect(page.getByRole('button',{name:'Restore selected event as new',exact:true})).toBeEnabled({timeout:15000});
+   await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await expect(page.getByRole('button',{name:'Restore recovery copy',exact:true})).toBeVisible({timeout:15000});
    const queued=await page.evaluate(()=>JSON.parse(window.electronRecovery.get('setarchitect:recovery:synthetic-owner:new')));
    expect(queued.snapshot).toEqual(snapshot);expect(queued.snapshot.lists.selections).toEqual(selected);
    expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(originalRows);
