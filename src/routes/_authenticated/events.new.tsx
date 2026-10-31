@@ -2119,13 +2119,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       unresolvedTotal += countUnresolvedPaths(refs, files.library, files.roots);
       // The .txt is a full reference list; the .m3u DJ playlist only carries
       // songs matched to real files — and is never written when empty.
-      const files: Array<{ name: string; data: string }> = [
+      const outputs: Array<{ name: string; data: string }> = [
         { name: `${prefix}${sectionFile(section)}.txt`, data: buildTxtPlaylist(refs, files.library) },
       ];
       if (matched > 0) {
-        files.unshift({ name: `${prefix}${sectionFile(section)}.m3u`, data: buildM3u(refs, files.library, files.roots) });
+        outputs.unshift({ name: `${prefix}${sectionFile(section)}.m3u`, data: buildM3u(refs, files.library, files.roots) });
       }
-      for (const f of files) {
+      for (const f of outputs) {
         try {
           await writeFileToDir(dir, f.name, f.data);
           written += 1;
