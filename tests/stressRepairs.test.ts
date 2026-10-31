@@ -125,3 +125,59 @@ describe("performance caches retain collision invariants", () => {
     expect(cache.native(2, maps, paths, roots)).not.toBe(native);
   });
 });
+function fakeEventDb() {
+  const rows = new Map<string, any>(); let serial = 0;
+  return { rows, db: { from: () => {
+    let mode = 'read', payload: any, filters: Record<string, unknown> = {};
+    const chain: any = {
+      upsert: async (value: any) => { if (!rows.has(value.id)) rows.set(value.id, { ...value, updated_at: `v${++serial}` }); return { error: null }; },
+      update: (value: any) => { mode = 'update'; payload = value; return chain; },
+      select: () => chain, eq: (k: string, v: unknown) => { filters[k] = v; return chain; },
+      maybeSingle: async () => { const row = rows.get(filters.id as string); if (!row || Object.entries(filters).some(([k,v]) => row[k] !== v)) return { data: null, error: null };
+        if (mode === 'update') Object.assign(row, payload, { updated_at: `v${++serial}` }); return { data: { ...row }, error: null }; },
+    }; return chain;
+  } } };
+}
+describe('atomic existing-schema save contract', () => {
+  it('stable create UUID deduplicates a lost creation response', async () => {
+    const { db, rows } = fakeEventDb(); const request = { id: 'stable', create: true, expectedUpdatedAt: null, name: 'A', inputs: { nested: 1 }, lists: {} };
+    const first = await writeEventConditionally(db, 'owner', request); const second = await writeEventConditionally(db, 'owner', request);
+    expect(rows.size).toBe(1); expect(second).toEqual(first);
+  });
+  it('late timed-out same-version update cannot overwrite a newer committed snapshot', async () => {
+    const { db, rows } = fakeEventDb(); const base = { id: 'A', create: true, expectedUpdatedAt: null, name: 'initial', inputs: {}, lists: {} };
+    const first = await writeEventConditionally(db, 'owner', base);
+    const fresh = { ...base, create: false, expectedUpdatedAt: first.updatedAt, name: 'newer' };
+    await writeEventConditionally(db, 'owner', fresh);
+    await expect(writeEventConditionally(db, 'owner', { ...fresh, name: 'late older' })).rejects.toThrow('changed elsewhere');
+    expect(rows.get('A').name).toBe('newer');
+  });
+  it('lost update response is acknowledged only if payload still matches', async () => {
+    const { db } = fakeEventDb(); const base = { id: 'A', create: true, expectedUpdatedAt: null, name: 'initial', inputs: {}, lists: {} };
+    const first = await writeEventConditionally(db, 'owner', base); const update = { ...base, create: false, expectedUpdatedAt: first.updatedAt, name: 'latest' };
+    const saved = await writeEventConditionally(db, 'owner', update);
+    expect(await writeEventConditionally(db, 'owner', update)).toEqual(saved);
+    await expect(writeEventConditionally(db, 'other-owner', update)).rejects.toThrow();
+  });
+});
+function mockIdb(value: unknown, failWrite = false) {
+  const puts = vi.fn(); const deletes = vi.fn();
+  const db = { close: vi.fn(), transaction: (_store: string, mode: string) => {
+    const tx: any = { objectStore: () => ({
+      get: () => { const req: any = {}; queueMicrotask(() => { req.result = value; req.onsuccess(); }); return req; },
+      put: (...args: any[]) => { puts(...args); if (failWrite) throw new Error('QuotaExceededError'); queueMicrotask(() => tx.oncomplete?.()); }, delete: deletes,
+    }) }; return tx;
+  } };
+  vi.stubGlobal('indexedDB', { open: () => { const req: any = {}; queueMicrotask(() => { req.result = db; req.onsuccess(); }); return req; } });
+  return { puts, deletes };
+}
+describe('saved library storage failures preserve original', () => {
+  it('corrupted account record fails closed without fallback/write/delete', async () => {
+    const { puts, deletes } = mockIdb({ version: 1, savedAt: 1, sources: [null] });
+    await expect(loadMusicLibrary('owner')).rejects.toThrow('preserved'); expect(puts).not.toHaveBeenCalled(); expect(deletes).not.toHaveBeenCalled();
+  });
+  it('quota write failure returns explicit failure without deleting old index', async () => {
+    const { deletes } = mockIdb(undefined, true);
+    expect(await saveMusicLibrary([{ label: 'Music', tracks: [track('Music/Song.mp3')] }], 'owner')).toBeNull(); expect(deletes).not.toHaveBeenCalled();
+  });
+});
