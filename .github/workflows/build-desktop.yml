@@ -59,15 +59,7 @@ jobs:
         id: stamp
         working-directory: desktop
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            TAG="${GITHUB_REF_NAME}"
-          else
-            TAG="v${VERSION}-build.${GITHUB_RUN_NUMBER}"
-          fi
-          printf '{"repository":"%s","tag":"%s"}\n' "${GITHUB_REPOSITORY}" "$TAG" > build-info.json
-          cat build-info.json
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          node release-version.cjs
 
       - name: Check signing secrets are present
         env:
@@ -102,18 +94,39 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npx electron-builder --mac --arm64 --publish never
 
+      - name: Verify signed ZIP, DMG, and coherent update feed
+        working-directory: desktop
+        run: |
+          set -euo pipefail
+          node verify-release.cjs
+          mkdir -p "$RUNNER_TEMP/update-zip"
+          ditto -x -k release/*.zip "$RUNNER_TEMP/update-zip"
+          APP="$RUNNER_TEMP/update-zip/SetArchitect.app"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          codesign -dv "$APP" 2>&1 | grep 'Authority=Developer ID Application:'
+          xcrun stapler validate "$APP"
+          xcrun stapler validate release/*.dmg
+          VERSION=$(node -p "require('./package.json').version")
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = 'com.exceptionalentertainment.dancefloorbuilder'
+          test "${{ steps.stamp.outputs.tag }}" = "v$VERSION"
+
       - name: Save the installer
         uses: actions/upload-artifact@v6
         with:
           name: DancefloorBuilder-macOS-AppleSilicon
-          path: desktop/release/*.dmg
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*.zip
+            desktop/release/latest-mac.yml
+            desktop/release/*.blockmap
           if-no-files-found: error
 
       - name: Publish the release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ steps.stamp.outputs.tag }}" desktop/release/*.dmg \
+          gh release create "${{ steps.stamp.outputs.tag }}" desktop/release/*.dmg desktop/release/*.zip desktop/release/latest-mac.yml desktop/release/*.blockmap \
             --repo "$GITHUB_REPOSITORY" \
             --title "Dancefloor Builder ${{ steps.stamp.outputs.tag }}" \
             --latest \

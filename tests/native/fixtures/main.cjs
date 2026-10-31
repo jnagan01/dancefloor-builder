@@ -27,7 +27,7 @@ handle('test:scan',async(_e,folder)=>{if(!fixture.startBackups||folder!==root)th
 handle('test:list',async(_e,account)=>{if(account!=='synthetic-owner')throw Error('Real account blocked');return {data:Object.values(read()),error:null};});
 handle('test:library',(_e,sources,account)=>{if(account!=='synthetic-owner')throw Error('Real account blocked');fs.writeFileSync(path.join(profile,'library-index.json'),JSON.stringify(sources));});
 handle('test:latest',async(_e,account)=>({ok:true,raw:await backups.latest(account)}));
-handle('test:update',async()=>{const {runUpdate}=require('../../../desktop/updater.cjs');process.env.DANCEFLOOR_URL=origin;await runUpdate({url:'https://synthetic.invalid/installer.dmg',assetName:'synthetic.dmg'},win,{download:async()=>{fs.writeFileSync(path.join(profile,'handoff'),'downloaded');},open:async()=>{fs.appendFileSync(path.join(profile,'handoff'),' opened');},message:async(_p,m)=>{fs.writeFileSync(path.join(profile,'update-message.json'),JSON.stringify(m));}});return {ok:fs.existsSync(path.join(profile,'handoff'))};});
+handle('test:update',async()=>{const {runUpdate}=require('../../../desktop/updater.cjs');process.env.DANCEFLOOR_URL=origin;const result=await runUpdate({url:'https://synthetic.invalid/installer.dmg',assetName:'synthetic.dmg'},win,{download:async()=>{fs.writeFileSync(path.join(profile,'update-download'),'downloaded');},open:async()=>{fs.writeFileSync(path.join(profile,'handoff'),'staged and relaunched');},message:async(_p,m)=>{fs.writeFileSync(path.join(profile,'update-message.json'),JSON.stringify(m));}});return {ok:result.phase==='installing'};});
 handle('test:read' ,(_e,id)=>read()[id]);
 handle('test:late-write',(_e,action,id)=>{
  if(id!=='A')throw Error('Synthetic event required');

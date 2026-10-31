@@ -28,3 +28,7 @@
 - Mirror native event recovery in an fsynced, account/event-key-hashed journal behind exact-origin main-frame IPC; keep existing browser recovery keys, because Chromium localStorage alone did not survive an abrupt process kill.
 - Check both durable new-event recovery slots before backup restore, and capture section/song identity plus library/root mappings for export readiness and output, because native-only drafts and asynchronous path changes must never bypass preservation or availability checks.
 - Reuse the read-only macOS regression workflow as a required release dependency; web-only changes trigger checks but not installer publication, because every release must pass the same synthetic gates.
+
+- Apply appearance before first paint and share semantic theme tokens through a single provider; System alone follows OS changes, because SSR and every workspace surface must agree.
+- Keep electron-updater autoDownload and autoInstallOnAppQuit disabled; only invoke Squirrel after a fresh backup and fsynced draft with editing frozen, because Mac staging can install on ordinary quit.
+- Stamp real app semver and release tags from the single release workflow run counter, and verify ZIP/DMG/feed checksums plus Developer ID/notarization before release, because cached updates and legacy bootstrap must identify the same increasing version.

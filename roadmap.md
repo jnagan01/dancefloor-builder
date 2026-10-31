@@ -77,3 +77,10 @@
 # Build28 deterministic native synchronization
 - [x] Prove late commit with held reply, navigate, release and verify exact recovery reconciliation using observable waits.
 - [x] Replace timing-sensitive backup-case waits; run full/native suites and report final revision without production operations.
+
+## Appearance and guarded automatic Mac updates
+- [ ] Locally persisted Light/Dark/System, first paint, system changes, semantic contrast and synthetic UI checks.
+- [ ] Pinned signed ZIP updater, explicit consent, fresh backup/draft preservation before Squirrel staging, quit/cancel/failure gates.
+- [ ] Monotonic semver and coherent signed ZIP/DMG/feed artifacts; retain macos-15 regression release prerequisite.
+- [ ] Full existing suite, isolated Electron, adversarial and automatic build checks.
+- [ ] Signed macOS update/relaunch and release artifact execution (requires GitHub/macOS signing runner; no live installs allowed here).
