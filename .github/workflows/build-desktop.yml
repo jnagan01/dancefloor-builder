@@ -15,7 +15,13 @@ permissions:
   contents: write
 
 jobs:
+  regression:
+    uses: ./.github/workflows/native-regression.yml
+    permissions:
+      contents: read
+
   build-mac:
+    needs: regression
     runs-on: macos-15 # Apple Silicon runner
 
     steps:
@@ -45,25 +51,9 @@ jobs:
         with:
           bun-version: 1.3.5
 
-      - name: Install isolated test tools
-        run: bun install --frozen-lockfile
-
       - name: Install build tools
         working-directory: desktop
         run: bun install --frozen-lockfile
-
-      - name: Regression and real Electron release gates
-        run: |
-          bunx vitest run
-          node tests/native/run.mjs
-
-      - name: Save synthetic native diagnostics
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: isolated-native-diagnostics
-          path: test-results/native/
-          if-no-files-found: ignore
 
       - name: Stamp the build with its release tag
         id: stamp
