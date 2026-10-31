@@ -249,7 +249,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         next[key] = { ...previous, status: "Missing From Library", confidence: 0, confirmed: false, trackIndex: undefined, alternatives: [], extraTrackIndices: [] };
         return;
       }
-      const candidates = searchLibraryBySong(song, mergedLibrary, matchLimit);
+      const candidates = searchLibraryBySong(song.artist, song.song, mergedLibrary, matchLimit);
       if (!candidates.length) return;
       const ranked = mode === "most" ? [...candidates].sort((a, b) => {
         const count = (i: number) => { const n = mergedLibrary.tracks[i]?.playCount; return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0; };
@@ -2320,7 +2320,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const track = ti != null ? (mergedLibrary.tracks[ti] as { bpm?: unknown; key?: string } | undefined) : undefined;
       const fileBpm = track ? parseBpm(track.bpm) : undefined;
       const base = s as RampSong;
-      return { ...base, bpm: fileBpm ?? base.bpm, key: track?.key || base.key };
+      return { ...base, bpm: fileBpm ?? base.bpm, key: track?.key || base.key || (base as Song & {camelot?: string}).camelot };
     });
 
   function markPersistedEdit() {
