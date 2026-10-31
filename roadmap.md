@@ -31,3 +31,8 @@
 - [x] Prevent opening-time writes and invalid legacy calculations; harden conditional writes with original-payload comparison because the existing database trigger overrides proposed timestamps. Strict database token monotonicity remains migration-constrained.
 - [x] Preserve tag completion during scans and fail closed on null library records/migration failures.
 - [x] Run full regressions and inspect automatic build; report any constraint-limited guarantees. Only mocked services/files were exercised.
+
+# Compact event revisions
+- [x] Replace full-payload filters with unique compact markers; cover legacy initialization, ABA, and large snapshots.
+- [x] Carry marker lifecycle through pending autosaves, durable drafts, recovery, creation and other event writers.
+- [x] Run full tests, automatic build diagnostics and existing isolated adversarial checks; report revision and limits. Live data and Mac operations were not exercised.

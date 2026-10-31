@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { validateTiming, boundedNumber, MAX_EVENT_MINUTES } from "./inputSafety";
-import { writeEventConditionally } from "./eventWriteContract";
+import { writeEventConditionally, renameEventConditionally } from "./eventWriteContract";
+import { withEventRevision } from "./eventRevision";
 import type { Json } from "@/integrations/supabase/types";
 
 const songSchema = z.object({
@@ -44,7 +45,7 @@ const listsSchema = z.object({
   warmUp: z.array(songSchema).max(2000),
   transition: z.array(songSchema).max(2000),
   peak: z.array(songSchema).max(2000),
-  selections: z.record(z.string(), z.object({ paths: z.array(z.string().max(2000)).max(100), excluded: z.boolean().optional() })).optional(),
+  selections: z.record(z.string(), z.object({ paths: z.array(z.string().max(2000)).max(100), excluded: z.boolean().optional() }).passthrough()).optional(),
 }).passthrough();
 
 function dbError(op: string, error: { message: string; code?: string }): Error {
@@ -117,7 +118,7 @@ export const saveWorkflow = createServerFn({ method: "POST" })
       .insert({
         user_id: userId,
         name: data.name,
-        inputs: JSON.parse(JSON.stringify(data.inputs)) as Json,
+        inputs: JSON.parse(JSON.stringify(withEventRevision(data.inputs, crypto.randomUUID()))) as Json,
         lists: JSON.parse(JSON.stringify(data.lists)) as Json,
       })
       .select("id")
@@ -132,12 +133,8 @@ export const updateWorkflow = createServerFn({ method: "POST" })
     id: z.string().uuid(), name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
   }).parse(data))
   .handler(async ({ data, context }) => {
-    const { data: row, error } = await context.supabase.from("workflow_history")
-      .update({ name: data.name, inputs: JSON.parse(JSON.stringify(data.inputs)) as Json, lists: JSON.parse(JSON.stringify(data.lists)) as Json, updated_at: new Date().toISOString() })
-      .eq("id", data.id).eq("user_id", context.userId).select("id").maybeSingle();
-    if (error) throw dbError("updateWorkflow", error);
-    if (!row) throw new Error("Event not found.");
-    return { id: row.id };
+    // Obsolete endpoint has no expected revision; never allow it to bypass the safe writer.
+    throw new Error("Reopen this event and use automatic saving. This older save action cannot safely update it.");
   });
 
 export const renameWorkflow = createServerFn({ method: "POST" })
@@ -146,11 +143,7 @@ export const renameWorkflow = createServerFn({ method: "POST" })
     z.object({ id: z.string().uuid(), name: z.string().min(1).max(200) }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
-      .from("workflow_history")
-      .update({ name: data.name })
-      .eq("id", data.id);
-    if (error) throw dbError("renameWorkflow", error);
+    await renameEventConditionally(context.supabase, context.userId, data.id, data.name);
     return { ok: true };
   });
 
@@ -200,7 +193,7 @@ export const saveWorkflowSafely = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => z.object({
     id: z.string().uuid(), create: z.boolean(), expectedUpdatedAt: z.string().nullable(),
-    expectedSnapshot: z.object({ name: z.string(), inputs: z.unknown(), lists: z.unknown() }).optional(),
+    expectedRevision: z.string().uuid().nullable(), writeRevision: z.string().uuid(),
     name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
   }).parse(data))
   .handler(async ({ data, context }) => writeEventConditionally(context.supabase, context.userId, data));
