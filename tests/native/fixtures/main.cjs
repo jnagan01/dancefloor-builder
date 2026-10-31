@@ -1,4 +1,4 @@
-const {app,BrowserWindow,ipcMain}=require('../../../desktop/node_modules/electron');
+const {app,BrowserWindow,ipcMain}=require('electron');
 const path=require('node:path'),fs=require('node:fs'),http=require('node:http');
 const profile=process.env.SETARCHITECT_TEST_PROFILE;
 if(!profile||!profile.includes('setarchitect-native-')||!fs.existsSync(path.join(profile,'ISOLATED')))throw Error('Separate synthetic profile required.');
