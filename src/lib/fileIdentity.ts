@@ -19,8 +19,8 @@ export function fullFilePath(path: string, roots: Record<string, string>): strin
   if (!path) return null;
   if (absoluteFilePath(path)) return path;
   const [label, ...rest] = path.split(/[\\/]/);
-  const root = roots[label];
-  if (!root || !rest.length || rest.some(p => p === "..")) return null;
+  const root = roots && Object.hasOwn(roots, label) ? roots[label] : undefined;
+  if (typeof root !== "string" || !root || !rest.length || rest.some(p => p === "..")) return null;
   const separator = /^[A-Za-z]:\\/.test(root) ? "\\" : "/";
   return [root.replace(/[\\/]+$/, ""), ...rest].join(separator);
 }

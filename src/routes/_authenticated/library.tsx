@@ -16,7 +16,7 @@ export const Route = createFileRoute("/_authenticated/library")({ component: Lib
 const fields = ["Title", "Artist", "Album", "BPM", "Year", "Genre", "Key", "Comment", "Plays", "File path"] as const;
 type Field = typeof fields[number];
 function LibraryPage() {
-  const { sources, library, audioIndex, addFolder, rescan } = useWorkspace();
+  const { sources, library, audioIndex, addFolder, rescan, persistenceError } = useWorkspace();
   const [query, setQuery] = useState("");
   const [columns, setColumns] = useState<Field[]>(["Title", "Artist", "BPM", "Year", "Genre", "Key", "Plays", "File path"]);
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -44,6 +44,7 @@ function LibraryPage() {
   const arrow = (key:"Title"|"Artist"|"Plays") => sort.key === key ? (sort.dir === "asc" ? " ↑" : " ↓") : "";
   const resolveFile = (q: { artist?: string; title?: string; filePath?: string }) => resolveAudioFile(audioIndex, q);
   return <div className="space-y-5 pb-20">
+    {persistenceError && <p role="alert" className="text-warning">{persistenceError}</p>}
     <header className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4 border-b border-border pb-5">
       <div className="min-w-0"><p className="text-xs font-semibold uppercase text-primary">Music collection</p><h1 className="mt-2 font-display text-2xl sm:text-3xl">Library</h1></div>
       <Button size="sm" onClick={addFolder}><Plus size={16} className="mr-1.5"/> <span className="hidden sm:inline">Add music source</span><span className="sm:hidden">Add source</span></Button>

@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { boundedNumber, validateTiming, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "./inputSafety";
 import { allowedForEventType, getEventType, libraryAllowedForEventType } from "./eventTypes";
 import { getVibe } from "./vibes";
 import { SONG_LIBRARY, type LibrarySong, type Section } from "./songLibrary";
@@ -193,13 +194,13 @@ function parseCsv(text: string): Song[] {
   if (aKey && sKey) {
     return result.data
       .map((r) => ({ artist: (r[aKey] || "").trim(), song: (r[sKey] || "").trim() }))
-      .filter((r) => r.artist && r.song);
+      .filter((r) => r.artist || r.song);
   }
   // Fallback: parse without headers, two columns
   const rows = Papa.parse<string[]>(text, { skipEmptyLines: true }).data;
   return rows
-    .map((r) => guessArtistSong((r[0] || "") + " - " + (r[1] || "")))
-    .filter((r): r is Song => !!r);
+    .map((r) => ({ artist: (r[0] || "").trim(), song: (r[1] || "").trim() }))
+    .filter((r) => r.artist || r.song);
 }
 
 function parseTxt(text: string): Song[] {
@@ -215,7 +216,8 @@ function guessArtistSong(line: string): Song | null {
   const seps = [" - ", " – ", " — ", " : ", ", ", "\t", "|"];
   for (const sep of seps) {
     if (line.includes(sep)) {
-      const [a, b] = line.split(sep).map((s) => s.trim());
+      const at = line.indexOf(sep);
+      const a = line.slice(0, at).trim(), b = line.slice(at + sep.length).trim();
       if (a && b) {
         // Heuristic: if "song by artist"
         const byMatch = line.match(/^(.+?)\s+by\s+(.+)$/i);
@@ -651,6 +653,7 @@ export type SectionSplit = { warmUp: number; transition: number; peak: number };
 
 /** Equal thirds of the total length, in whole minutes (remainder goes to Peak). */
 export function equalSplit(hours: number): SectionSplit {
+  boundedNumber(hours, MAX_EVENT_HOURS, "Event hours");
   const total = Math.max(0, Math.round(hours * 60));
   const third = Math.floor(total / 3);
   return { warmUp: third, transition: third, peak: total - third * 2 };
@@ -658,6 +661,7 @@ export function equalSplit(hours: number): SectionSplit {
 
 /** Song target per section from its minutes, with buffer, growing to fit uploads by time share. */
 export function sectionTargetsFromSplit(split: SectionSplit, buffer: number, uploadCount = 0): SectionSplit {
+  validateTiming(0, buffer, split);
   const sum = split.warmUp + split.transition + split.peak || 1;
   const one = (k: SectionKey) => {
     const m = Math.max(0, split[k]);
@@ -836,6 +840,7 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
 }
 
 export function generateLists(input: GenerationInput): GenerationResult {
+  validateTiming(input.hours, input.buffer ?? SECTION_BUFFER, input.split);
   const { uploaded, prefs, hours, expand } = input;
   // Every uploaded song is kept regardless of filter settings (event type,
   // vibe, sliders, artist caps). Only Do Not Play removes an upload. Rows with

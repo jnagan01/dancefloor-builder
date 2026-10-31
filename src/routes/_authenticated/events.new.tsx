@@ -1,5 +1,5 @@
 import { getNativeFilePath } from "@/lib/desktopBridge";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import {
@@ -94,7 +94,7 @@ import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktopBridge";
-import { saveWorkflow, updateWorkflow, getWorkflow } from "@/lib/history.functions";
+import { saveWorkflow, updateWorkflow, getWorkflow, saveWorkflowSafely } from "@/lib/history.functions";
 import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
@@ -105,6 +105,10 @@ import { EVENT_TYPES, getEventType } from "@/lib/eventTypes";
 import { Slider } from "@/components/ui/slider";
 import { VibeBreakdown } from "@/components/builder/VibeBreakdown";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
+import { readEventSnapshot } from "@/lib/snapshotSafety";
+import { storeEventDraft, loadEventDraft, confirmEventDraft, type EventDraft } from "@/lib/eventDrafts";
+import { validateTiming, boundedNumber, displayNumber, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "@/lib/inputSafety";
+import { useAuth } from "@/hooks/useAuth";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -164,15 +168,39 @@ function Index() {
   const getEventFn = useServerFn(getWorkflow);
   const [savedEventId, setSavedEventId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
-  const saveFunctions = useRef({ saveEventFn, updateEventFn });
-  saveFunctions.current = { saveEventFn, updateEventFn };
+  const safeSaveFn = useServerFn(saveWorkflowSafely);
+  const { user: draftUser } = useAuth();
+  const accountRef = useRef<string | null>(null); accountRef.current = draftUser?.id ?? null;
+  const remoteVersion = useRef<string | null>(null);
+  const stableCreate = useRef<string>(crypto.randomUUID());
+  const snapshotReadOnly = useRef(false);
+  const restoredFingerprint = useRef<string | null>(null);
+  const recoveryOrigin = useRef<{ account: string; event: string; token: string } | null>(null);
+  const snapshotExtras = useRef<{ inputs: Record<string, unknown>; lists: Record<string, unknown> }>({ inputs: {}, lists: {} });
+  const [recovery, setRecovery] = useState<EventDraft<ReturnType<typeof eventSnapshot>> | null>(null);
+  const [snapshotProblem, setSnapshotProblem] = useState<string | null>(null);
+  const draftTokens = useRef(new WeakMap<object, { account: string; event: string; token: string }>());
+  const saveFunctions = useRef({ safeSaveFn });
+  saveFunctions.current = { safeSaveFn };
   const [autosave] = useState(() => createEventAutosave<ReturnType<typeof eventSnapshot>>({
-    write: (id, snapshot) => id
-      ? saveFunctions.current.updateEventFn({ data: { id, ...snapshot } })
-      : saveFunctions.current.saveEventFn({ data: snapshot }),
+    safeWriteContract: true,
+    write: (id, snapshot, attempt) => saveFunctions.current.safeSaveFn({ data: {
+      id: id ?? attempt.createId, create: attempt.create, expectedUpdatedAt: attempt.expectedUpdatedAt, ...snapshot,
+    }, signal: attempt.signal }),
+    onConfirmed: (snapshot, saved) => {
+      remoteVersion.current = saved.updatedAt ?? remoteVersion.current;
+      const draft = draftTokens.current.get(snapshot);
+      if (draft && accountRef.current === draft.account) {
+        try { confirmEventDraft(draft.account, draft.event, draft.token); } catch { toast.error("Saved online, but local recovery cleanup failed."); }
+      }
+      if (recoveryOrigin.current && accountRef.current === recoveryOrigin.current.account) {
+        const origin = recoveryOrigin.current;
+        try { confirmEventDraft(origin.account, origin.event, origin.token); recoveryOrigin.current = null; } catch { /* Original stays available. */ }
+      }
+    },
     onState: setSaveState,
     onId: setSavedEventId,
-    onError: () => toast.error("Could not save event changes. Retry when your connection is available."),
+    onError: () => toast.error("Save was not confirmed. Your recovery copy is kept. Retry checks the saved version before changing it."),
   }));
   const restoredEvent = useRef(false);
   const resultBoundary = useRef<{ eventId: string | undefined } | null>(null);
@@ -206,7 +234,7 @@ function Index() {
   const [listType, setListType] = useState<ListType>("dance");
   const [minutes, setMinutes] = useState<string>("60");
   const background = listType !== "dance";
-  const minutesNum = Math.max(0, parseFloat(minutes) || 0);
+  const minutesNum = displayNumber(minutes, MAX_EVENT_MINUTES);
   const bgTarget = Math.ceil(minutesNum / AVG_BACKGROUND_SONG_MIN);
   const bgLabel = listType === "dinner" ? "Dinner" : "Cocktail Hour";
   const bgFile = listType === "dinner" ? "dinner" : "cocktail-hour";
@@ -340,6 +368,10 @@ function Index() {
     restoredEvent.current = false;
     savedSelectionsRef.current = null;
     autosave.reset();
+    snapshotReadOnly.current = false; snapshotExtras.current = { inputs: {}, lists: {} };
+    restoredFingerprint.current = null;
+    setSnapshotProblem(null); setRecovery(null); remoteVersion.current = null;
+    stableCreate.current = crypto.randomUUID();
     genTokenRef.current += 1;
     setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
@@ -499,7 +531,8 @@ function Index() {
         added += parsed.length;
         okFiles++;
         collected.push(...parsed);
-        update(id, { state: "done", count: parsed.length });
+        const incomplete = parsed.filter(s => !s.artist || !s.song).length;
+        update(id, { state: "done", count: parsed.length, message: incomplete ? `${incomplete} incomplete rows kept — check artist and song details.` : undefined });
       } catch {
         update(id, { state: "error", message: "We couldn't read this file. Check that it's plain text or CSV." });
       }
@@ -543,7 +576,7 @@ function Index() {
   }
 
 
-  const hoursNum = parseFloat(hours) || 0;
+  const hoursNum = displayNumber(hours, MAX_EVENT_HOURS);
   const sectionMinutes = formatMinutes(hoursNum);
   const activeSplit: SectionSplit | undefined = splitOn && !background ? split : undefined;
   const splitTotal = split.warmUp + split.transition + split.peak;
@@ -612,8 +645,8 @@ function Index() {
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,split:splitOn?split:undefined},
-      lists:{warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
+      inputs:{...snapshotExtras.current.inputs,songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,split:splitOn?split:undefined},
+      lists:{...snapshotExtras.current.lists,warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
     clearWorkflowState();
@@ -621,10 +654,19 @@ function Index() {
     let cancelled=false;
     getEventFn({data:{id:openedEventId}}).then(row=>{
       if(cancelled)return;
-      const inputs=row.inputs as unknown as WorkflowSnapshot["inputs"];
-      const lists=row.lists as unknown as WorkflowSnapshot["lists"];
-      if(!inputs || !lists)return;
-      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(Number(inputs.hours)||3));
+      const checked = readEventSnapshot({ inputs: row.inputs, lists: row.lists });
+      const inputs=checked.snapshot.inputs as unknown as WorkflowSnapshot["inputs"];
+      const lists=checked.snapshot.lists as unknown as WorkflowSnapshot["lists"];
+      snapshotExtras.current = { inputs: checked.snapshot.inputs, lists: checked.snapshot.lists };
+      restoredFingerprint.current = null;
+      snapshotReadOnly.current = !!checked.problem;
+      setSnapshotProblem(checked.problem);
+      remoteVersion.current = row.updated_at;
+      autosave.configure(openedEventId, row.updated_at);
+      if (accountRef.current) {
+        try { setRecovery(loadEventDraft(accountRef.current, openedEventId)); } catch (e) { toast.error((e as Error).message); }
+      }
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(displayNumber(inputs.hours, MAX_EVENT_HOURS) || 3));
       // A saved event with only a single list and no dance-floor sections is a
       // cocktail/dinner list even if the stored snapshot predates listType.
       const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
@@ -632,12 +674,12 @@ function Index() {
       const lt:ListType=storedType??(looksBackground?"cocktail":"dance");
       setListType(lt);setMinutes(inputs.minutes??"60");
       if(lt!=="dance"){
-        const t=Math.ceil((parseFloat(inputs.minutes??"60")||0)/AVG_BACKGROUND_SONG_MIN);
+        const t=Math.ceil(displayNumber(inputs.minutes??"60", MAX_EVENT_MINUTES)/AVG_BACKGROUND_SONG_MIN);
         const miss=Math.max(0,t-lists.warmUp.length);const sf={warmUp:miss,transition:0,peak:0,total:miss};
         setResult({warmUp:lists.warmUp,transition:[],peak:[],targetTotal:t,perSectionTarget:t,perSectionBase:t,shortfall:sf,finalShortfall:sf,duplicatesRemoved:0,blockedCount:0});
       } else {
-        const per=Math.ceil((Math.max(0,Number(inputs.hours) || 0)*15/3)*(inputs.buffer??2));
-        const secTargets=inputs.split?sectionTargetsFromSplit(inputs.split,inputs.buffer??2,(inputs.songs??[]).length):undefined;
+        const per=Math.ceil((displayNumber(inputs.hours, MAX_EVENT_HOURS)*15/3)*(displayNumber(inputs.buffer??2, 4)||2));
+        const secTargets=inputs.split&&!checked.problem?sectionTargetsFromSplit(inputs.split,inputs.buffer??2,(inputs.songs??[]).length):undefined;
         const tFor=(k:SectionKey)=>secTargets?.[k]??per;
         const shortfall={warmUp:Math.max(0,tFor("warmUp")-lists.warmUp.length),transition:Math.max(0,tFor("transition")-lists.transition.length),peak:Math.max(0,tFor("peak")-lists.peak.length),total:0};
         shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
@@ -655,7 +697,7 @@ function Index() {
       resultBoundary.current={eventId:openedEventId};
       restoredEvent.current=true;
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
-    }).catch(()=>{if(!cancelled)toast.error("Could not open this event")});
+    }).catch((e)=>{if(!cancelled){snapshotReadOnly.current=true;setSnapshotProblem((e as Error).message);toast.error((e as Error).message)}});
     return ()=>{cancelled=true;autosave.reset();genTokenRef.current+=1};
   },[openedEventId]);
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean}>|null>(null);
@@ -668,20 +710,81 @@ function Index() {
     }return next});
   },[result,workspace.library]);
   useEffect(()=>{
-    if(!result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
+    if(snapshotReadOnly.current || recovery || !accountRef.current || !result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
     const boundary=openedEventId;
-    autosave.schedule(eventSnapshot(result,matches),savedEventId,()=>openedEventIdRef.current===boundary);
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId]);
+    const snapshot = eventSnapshot(result,matches);
+    const fingerprint = JSON.stringify(snapshot);
+    // Opening an event (including legacy defaults) is not an edit and must not write it back.
+    if (openedEventId && restoredFingerprint.current === null) { restoredFingerprint.current = fingerprint; return; }
+    if (fingerprint === restoredFingerprint.current) return;
+    restoredFingerprint.current = fingerprint;
+    const account = accountRef.current, event = openedEventId ?? "new", token = crypto.randomUUID();
+    const draft = { version: 1 as const, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now() };
+    try { storeEventDraft(draft); } catch { toast.error("Local recovery could not be saved. Do not close this event until saving is confirmed."); }
+    draftTokens.current.set(snapshot, { account, event, token });
+    autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===account);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,draftUser?.id]);
   useEffect(()=>{
     const recover=()=>autosave.retry();
     window.addEventListener("online",recover);
     return ()=>{window.removeEventListener("online",recover);autosave.reset()};
   },[autosave]);
 
+  const latestSnapshot = useRef<ReturnType<typeof eventSnapshot> | null>(null);
+  const latestSaveState = useRef(saveState); latestSaveState.current = saveState;
+  latestSnapshot.current = result ? eventSnapshot(result, matches) : null;
+  const persistOnExit = () => {
+    const account = accountRef.current, snapshot = latestSnapshot.current;
+    if (!account || !snapshot || latestSaveState.current === "saved" || snapshotReadOnly.current || recovery) return;
+    const token = crypto.randomUUID(), event = openedEventIdRef.current ?? "new";
+    storeEventDraft({ version: 1, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now() });
+  };
+  const exitGuard = useRef(persistOnExit); exitGuard.current = persistOnExit;
+  useBlocker({ shouldBlockFn: () => {
+    if (!result || saveState === "saved") return false;
+    try { exitGuard.current(); } catch { return !window.confirm("Device recovery storage is unavailable. Leaving may lose unsaved changes. Leave anyway?"); }
+    return !window.confirm("Changes are not confirmed online. Leave and keep the local recovery copy?");
+  }, enableBeforeUnload: !!result && saveState !== "saved" });
+  useEffect(() => {
+    const preserve = () => { try { exitGuard.current(); } catch { /* beforeunload warning remains active */ } };
+    window.addEventListener("pagehide", preserve); window.addEventListener("beforeunload", preserve);
+    return () => { preserve(); window.removeEventListener("pagehide", preserve); window.removeEventListener("beforeunload", preserve); };
+  }, []);
+  useEffect(() => {
+    if (!draftUser || openedEventId) return;
+    try { const draft = loadEventDraft<ReturnType<typeof eventSnapshot>>(draftUser.id, "new"); if (draft) { stableCreate.current = draft.createId; setRecovery(draft); } }
+    catch (e) { toast.error((e as Error).message); }
+    autosave.configure(null, null, stableCreate.current);
+  }, [draftUser?.id, openedEventId]);
+  function restoreRecovery(asNew: boolean) {
+    if (!recovery || recovery.account !== accountRef.current) return;
+    try {
+      if (!asNew && recovery.baseVersion !== remoteVersion.current) throw new Error("The saved event changed. Save this recovery copy as a new event instead.");
+      const { snapshot, problem } = readEventSnapshot(recovery.snapshot);
+      if (problem) throw new Error(problem);
+      const inputs = snapshot.inputs;
+      setSongs(inputs.songs); setHours(inputs.hours); setArtistsInput(inputs.artistsInput); setGenresInput(inputs.genresInput); setDecades(inputs.decades);
+      setNotes(inputs.notes); setDoNotPlayInput(inputs.doNotPlayInput); setExpand(inputs.expand); setEventName(inputs.eventName);
+      setBuffer(inputs.buffer ?? 2); setVibe(inputs.vibe ?? ""); setEventType(inputs.eventType ?? ""); setHomeKey(inputs.homeKey ?? "");
+      setSplitOn(!!inputs.split); setSplit(inputs.split ?? equalSplit(Number(inputs.hours))); setListType(inputs.listType ?? "dance"); setMinutes(inputs.minutes ?? "60");
+      setBpmOn(!!inputs.bpmRange); if(inputs.bpmRange)setBpmRange(inputs.bpmRange); setDanceOn(!!inputs.danceRange); if(inputs.danceRange)setDanceRange(inputs.danceRange);
+      savedSelectionsRef.current = snapshot.lists.selections ?? null; snapshotExtras.current = { inputs, lists: snapshot.lists };
+      const r = generateLists({ uploaded: [], hours: Number(inputs.hours), buffer: inputs.buffer ?? 2, split: inputs.split, prefs: { artists: [], genres: [], decades: [], notes: "" }, expand: false });
+      setResult({ ...r, warmUp: snapshot.lists.warmUp, transition: snapshot.lists.transition, peak: snapshot.lists.peak });
+      recoveryOrigin.current = { account: recovery.account, event: recovery.event, token: recovery.token };
+      restoredFingerprint.current = "recovered";
+      autosave.reset();
+      if (asNew) { stableCreate.current = crypto.randomUUID(); setSavedEventId(null); autosave.configure(null, null, stableCreate.current); }
+      else { stableCreate.current = recovery.createId; autosave.configure(savedEventId, recovery.baseVersion, recovery.createId); }
+      resultBoundary.current = { eventId: openedEventId }; restoredEvent.current = true; snapshotReadOnly.current = false; setSaveState("idle"); setRecovery(null);
+    } catch (e) { toast.error((e as Error).message); }
+  }
+
   async function generate() {
     // No uploads is fine as long as the client gave artists, genres or decades —
     // the whole list is then built by the recommender.
-    const noUploads = !songs.some((x) => x.artist.trim() && x.song.trim());
+    try { validateTiming(hours, buffer, splitOn ? split : undefined); if (background) boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); } catch (e) { toast.error((e as Error).message); return; }
+    const noUploads = !songs.some((x) => x.artist.trim() || x.song.trim());
     if (noUploads && !artistsInput.trim() && !genresInput.trim() && decades.length === 0) {
       toast.error("Upload songs or enter some artists, genres or decades first");
       return;
@@ -703,7 +806,7 @@ function Index() {
       hours: background ? 24 : hoursNum,
       expand: false,
       buffer: background ? 1 : buffer,
-      split: activeSplit,
+      split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined,
       prefs,
     });
     // Cocktail / dinner: one continuous list that must cover the time.
@@ -1196,7 +1299,7 @@ function Index() {
             hours: hoursNum,
             expand: true,
             buffer,
-            split: activeSplit,
+            split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined,
             prefs,
           });
           // Track keys across ALL sections so a library song can't be added
@@ -1724,7 +1827,8 @@ function Index() {
       toast.error("No songs in this list are matched to your music files yet — nothing to export");
       return;
     }
-    const m3u = buildM3u(refs, mergedLibrary);
+    let m3u: string;
+    try { m3u = buildM3u(refs, mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
@@ -1793,7 +1897,8 @@ function Index() {
       toast.error("No songs in this list are matched to your music files yet — nothing to export");
       return;
     }
-    const m3u = buildM3u(refs, mergedLibrary);
+    let m3u: string;
+    try { m3u = buildM3u(refs, mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.m3u`;
@@ -1835,6 +1940,7 @@ function Index() {
     let failed = 0;
     let matchedTotal = 0;
     let skippedTotal = 0;
+    try { for (const section of sections) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     for (const section of sections) {
       const list = exportResult[section];
       if (!list.length) continue;
@@ -1880,6 +1986,7 @@ function Index() {
   async function exportAllZip() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
+    try { for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
@@ -1990,13 +2097,15 @@ function Index() {
   const [isPendingLive, startLiveTransition] = useTransition();
 
   function computeLiveTargets(songsArg: Song[], hoursArg: number) {
-    const safeHours = hoursArg > 0 ? hoursArg : 0;
+    const safeHours = displayNumber(hoursArg, MAX_EVENT_HOURS);
+    let safeSplit = activeSplit;
+    try { validateTiming(safeHours, buffer, safeSplit); } catch { safeSplit = undefined; }
     const r = generateLists({
       uploaded: songsArg,
       hours: safeHours,
       expand: false,
-      buffer,
-      split: activeSplit,
+      buffer: displayNumber(buffer, 4) || 2,
+      split: safeSplit && !snapshotReadOnly.current ? safeSplit : undefined,
       prefs: { artists: [], genres: [], decades: [], notes: "" },
     });
     return {
@@ -2053,11 +2162,16 @@ function Index() {
     });
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-dvh bg-background" onChangeCapture={() => { if (result) autosave.dirty(); }}>
       <Toaster richColors position="top-right" />
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <div className="min-w-0"><p className="eyebrow">Events / Builder</p><h1 className="mt-2 break-words font-display text-3xl tracking-tight sm:text-4xl">{eventName||"New event"}</h1></div>
+        {snapshotProblem && <div role="alert" className="text-warning"><p>{snapshotProblem}</p>{result && <Button size="sm" variant="outline" onClick={() => {
+          try { validateTiming(hours, buffer, splitOn ? split : undefined); if(background)boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); snapshotReadOnly.current=false; restoredFingerprint.current="corrected"; setSnapshotProblem(null); autosave.dirty(); setResult({...result}); }
+          catch(e) { toast.error((e as Error).message); }
+        }}>Use corrected settings</Button>}</div>}
+        {recovery && <div role="alert" className="flex flex-wrap items-center gap-2 border border-border p-3"><span>Unsaved recovery copy from {formatSavedAt(recovery.savedAt)}</span><Button size="sm" onClick={() => restoreRecovery(false)} disabled={recovery.baseVersion !== remoteVersion.current}>Restore recovery copy</Button><Button size="sm" variant="outline" onClick={() => restoreRecovery(true)}>Save recovery as new event</Button></div>}
         <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}{saveState==="error" && <Button variant="outline" size="sm" onClick={()=>autosave.retry()}>Retry save</Button>}</div>
       </header>
       <div className="space-y-6 pb-32 pt-6">
@@ -2114,7 +2228,7 @@ function Index() {
               {background ? (
               <div>
                 <Label htmlFor="minutes">Length (minutes)</Label>
-                <Input id="minutes" type="number" step="5" min="0" value={minutes} onChange={(e) => setMinutes(e.target.value)} className="mt-1.5" />
+                <Input id="minutes" type="number" step="5" min="0" max={MAX_EVENT_MINUTES} value={minutes} onChange={(e) => setMinutes(e.target.value)} className="mt-1.5" />
                 {minutesNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
                     About {bgTarget} songs to cover {minutesNum} min · {songs.length} uploaded{songs.length < bgTarget ? ` · ${bgTarget - songs.length} will be added automatically` : ""}
@@ -2128,7 +2242,7 @@ function Index() {
                   id="hours"
                   type="number"
                   step="0.25"
-                  min="0"
+                  min="0" max={MAX_EVENT_HOURS}
                   value={hours}
                   onChange={(e) => setHours(e.target.value)}
                   className="mt-1.5"
@@ -2156,7 +2270,7 @@ function Index() {
                               <Input
                                 id={`split-${k}`}
                                 type="number"
-                                min="0"
+                                min="0" max={MAX_EVENT_MINUTES}
                                 step="5"
                                 value={split[k]}
                                 onChange={(e) => setSplit({ ...split, [k]: Math.max(0, Math.round(Number(e.target.value) || 0)) })}

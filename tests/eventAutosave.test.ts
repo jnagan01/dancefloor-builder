@@ -28,7 +28,7 @@ describe("event autosave recovery and isolation", () => {
     expect(onState).toHaveBeenLastCalledWith("error");
     queue.schedule({ name: "edited" }, "A", () => true);
     await vi.advanceTimersByTimeAsync(1000);
-    expect(write).toHaveBeenLastCalledWith("A", { name: "edited" });
+    expect(write).toHaveBeenLastCalledWith("A", { name: "edited" }, expect.any(Object));
     expect(onState).toHaveBeenLastCalledWith("saved");
   });
 
@@ -42,7 +42,7 @@ describe("event autosave recovery and isolation", () => {
     // Both the online listener and the Retry button invoke this same recovery API.
     queue.retry();
     await vi.advanceTimersByTimeAsync(0);
-    expect(write).toHaveBeenLastCalledWith("A", snapshot);
+    expect(write).toHaveBeenLastCalledWith("A", snapshot, expect.any(Object));
     expect(write).toHaveBeenCalledTimes(2);
     expect(onState).toHaveBeenLastCalledWith("saved");
     queue.retry();
@@ -64,7 +64,7 @@ describe("event autosave recovery and isolation", () => {
     first.resolve({ id: "A" });
     await vi.advanceTimersByTimeAsync(0);
     expect(write).toHaveBeenCalledTimes(2);
-    expect(write).toHaveBeenLastCalledWith("A", { name: "v3" });
+    expect(write).toHaveBeenLastCalledWith("A", { name: "v3" }, expect.any(Object));
     expect(onState.mock.calls.flat()).not.toContain("saved");
     second.resolve({ id: "A" });
     await vi.advanceTimersByTimeAsync(0);
@@ -82,7 +82,7 @@ describe("event autosave recovery and isolation", () => {
     first.reject(new Error("network"));
     await vi.advanceTimersByTimeAsync(0);
     expect(onError).not.toHaveBeenCalled();
-    expect(write).toHaveBeenLastCalledWith("A", { name: "new" });
+    expect(write).toHaveBeenLastCalledWith("A", { name: "new" }, expect.any(Object));
     expect(onState).toHaveBeenLastCalledWith("saved");
   });
 
@@ -99,12 +99,12 @@ describe("event autosave recovery and isolation", () => {
     queue.retry();
     queue.schedule({ name: "B edit" }, "B", () => active === "B");
     await vi.advanceTimersByTimeAsync(1000);
-    expect(write).toHaveBeenCalledTimes(1);
+    expect(write).toHaveBeenCalledTimes(2);
     if (outcome === "success") first.resolve({ id: "A" });
     else first.reject(new Error("stale failure"));
     await vi.advanceTimersByTimeAsync(0);
     expect(write).toHaveBeenCalledTimes(2);
-    expect(write).toHaveBeenLastCalledWith("B", { name: "B edit" });
+    expect(write).toHaveBeenLastCalledWith("B", { name: "B edit" }, expect.any(Object));
     expect(onId.mock.calls).toEqual([["B"]]);
     expect(onError).not.toHaveBeenCalled();
   });
@@ -143,6 +143,6 @@ describe("event autosave recovery and isolation", () => {
     first.resolve({ id: "created" });
     await vi.advanceTimersByTimeAsync(0);
     expect(write.mock.calls[0][0]).toBeNull();
-    expect(write).toHaveBeenLastCalledWith("created", { name: "edited while creating" });
+    expect(write).toHaveBeenLastCalledWith("created", { name: "edited while creating" }, expect.any(Object));
   });
 });
