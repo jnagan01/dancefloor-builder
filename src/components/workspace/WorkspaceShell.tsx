@@ -1,6 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { Home, CalendarDays, Library, Settings, RefreshCw, Plus } from "lucide-react";
-import { APP_VERSION } from "@/lib/appVersion";
+import { SidebarVersion } from "./SidebarVersion";
 import { Button } from "@/components/ui/button";
 import { Toaster } from "@/components/ui/sonner";
 import { WorkspaceProvider } from "./WorkspaceContext";
@@ -53,13 +53,13 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         </div>
         <div className="hidden pt-4 text-[11px] text-muted-foreground lg:mt-auto lg:block">
           <p className="font-medium text-sidebar-foreground">SetArchitect</p>
-          <p className="mt-1">Version {APP_VERSION}</p>
+          <SidebarVersion className="mt-1" />
         </div>
       </div>
     </aside>
     <div className="min-w-0 flex-1 lg:ml-60">
       <main className="workspace-main mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">{children}</main>
-      <div className="px-4 pb-4 text-xs text-muted-foreground lg:hidden">v{APP_VERSION}</div>
+      <SidebarVersion className="px-4 pb-4 text-xs text-muted-foreground lg:hidden" />
     </div>
   </div></WorkspaceProvider>;
 }
