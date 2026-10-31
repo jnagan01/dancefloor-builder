@@ -48,9 +48,9 @@
 - [x] Unify generation, restoration and displayed targets; verify all four with isolated route regressions.
 
 # Authorized six improvements
-- [ ] Coherent explicit bulk approvals and approved-only musical metadata, with route regressions.
-- [ ] Snapshot-bound export readiness, read-only availability and packaged reports.
-- [ ] Account-isolated versioned backups, required pre-rescan/update checkpoint and non-destructive preview/restore.
-- [ ] Isolated offline/crash/disk-failure checks with synthetic profiles and backend.
-- [ ] Release-blocking Electron end-to-end CI on macos-15 with artifact inspection.
-- [ ] Full regression/adversarial/build checks and exact results/limits.
+- [x] Coherent explicit bulk approvals and approved-only musical metadata, with route regressions.
+- [x] Snapshot-bound export readiness, read-only availability and packaged reports.
+- [x] Account-isolated versioned backups, required pre-rescan/update checkpoint and non-destructive preview/restore.
+- [x] Isolated offline/crash/disk-failure checks with synthetic profiles and backend.
+- [x] Release-blocking Electron end-to-end CI on macos-15 with artifact inspection.
+- [x] Full regression/adversarial/build checks and exact results/limits.
