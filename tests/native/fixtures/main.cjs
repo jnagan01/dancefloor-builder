@@ -39,6 +39,7 @@ handle('test:export',(_e,name,data)=>{if(typeof name!=='string'||name!==path.bas
 handle('test:availability',(_e,paths)=>{const availability={};for(const p of paths){if(!p.startsWith(root+path.sep))throw Error('Real library unreachable');availability[p]=fs.existsSync(p)?'available':'unavailable';}return {ok:true,availability};});
 handle('test:backup',async(_e,raw,account)=>{if(account!=='synthetic-owner')throw Error('Real account blocked');try{await backups.save(raw,account);return {ok:true};}catch(e){return {ok:false,error:e.message};}});
 win=new BrowserWindow({show:false,width:1280,height:1800,webPreferences:{contextIsolation:true,nodeIntegration:false,sandbox:true,preload:path.join(__dirname,'preload.cjs')}});
+win.webContents.session.webRequest.onBeforeRequest((details,callback)=>callback({cancel:!details.url.startsWith(origin+'/')&&!details.url.startsWith('blob:'+origin+'/')}));
 win.webContents.session.on('will-download',(_e,item)=>{fs.mkdirSync(exportsDir,{recursive:true});item.setSavePath(path.join(exportsDir,path.basename(item.getFilename())));});
 win.webContents.on('will-navigate',(e,url)=>{if(!security.isAppUrl(url))e.preventDefault();});win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
 win.loadURL(origin);
