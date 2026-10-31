@@ -2275,7 +2275,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     role="radio"
                     aria-checked={listType === t}
                     disabled={!!result}
-                    onClick={() => setListType(t)}
+                    onClick={() => editListType(t)}
                     className={`rounded-full px-4 py-1.5 text-sm transition-colors disabled:opacity-60 ${listType === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
                   >
                     {LIST_TYPE_LABEL[t]}
@@ -2291,7 +2291,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 id="eventName"
                 placeholder="e.g. Smith Johnson Wedding"
                 value={eventName}
-                onChange={(e) => setEventName(e.target.value)}
+                onChange={(e) => editEventName(e.target.value)}
                 className="mt-1.5"
               />
               {eventName && (
@@ -2304,7 +2304,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               {background ? (
               <div>
                 <Label htmlFor="minutes">Length (minutes)</Label>
-                <Input id="minutes" type="number" step="5" min="0" max={MAX_EVENT_MINUTES} value={minutes} onChange={(e) => setMinutes(e.target.value)} className="mt-1.5" />
+                <Input id="minutes" type="number" step="5" min="0" max={MAX_EVENT_MINUTES} value={minutes} onChange={(e) => editMinutes(e.target.value)} className="mt-1.5" />
                 {minutesNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
                     About {bgTarget} songs to cover {minutesNum} min · {songs.length} uploaded{songs.length < bgTarget ? ` · ${bgTarget - songs.length} will be added automatically` : ""}
@@ -2320,7 +2320,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   step="0.25"
                   min="0" max={MAX_EVENT_HOURS}
                   value={hours}
-                  onChange={(e) => setHours(e.target.value)}
+                  onChange={(e) => editHours(e.target.value)}
                   className="mt-1.5"
                 />
                 {hoursNum > 0 && (
@@ -2334,7 +2334,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 {hoursNum > 0 && (
                   <div className="mt-2">
                     {!splitOn ? (
-                      <Button type="button" variant="outline" size="sm" onClick={() => { setSplit(equalSplit(hoursNum)); setSplitOn(true); }}>
+                      <Button type="button" variant="outline" size="sm" onClick={() => { editSplit(equalSplit(hoursNum)); editSplitOn(true); }}>
                         Customize section times
                       </Button>
                     ) : (
@@ -2349,7 +2349,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                                 min="0" max={MAX_EVENT_MINUTES}
                                 step="5"
                                 value={split[k]}
-                                onChange={(e) => setSplit({ ...split, [k]: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+                                onChange={(e) => editSplit({ ...split, [k]: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
                                 className="mt-1"
                               />
                             </div>
@@ -2360,8 +2360,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                           {splitTotal !== Math.round(hoursNum * 60) ? ` · doesn't match the ${Math.round(hoursNum * 60)}-min dance floor; songs follow these section times` : ""}
                         </p>
                         <div className="mt-2 flex flex-wrap gap-2">
-                          <Button type="button" variant="outline" size="sm" onClick={() => setSplit(equalSplit(hoursNum))}>Reset to equal thirds</Button>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setSplitOn(false)}>Use equal thirds</Button>
+                          <Button type="button" variant="outline" size="sm" onClick={() => editSplit(equalSplit(hoursNum))}>Reset to equal thirds</Button>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => editSplitOn(false)}>Use equal thirds</Button>
                         </div>
                       </div>
                     )}
@@ -2377,7 +2377,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                       <Checkbox
                         checked={decades.includes(d)}
                         onCheckedChange={(v) =>
-                          setDecades(v ? [...decades, d] : decades.filter((x) => x !== d))
+                          editDecades(v ? [...decades, d] : decades.filter((x) => x !== d))
                         }
                       />
                       {d}
@@ -2400,8 +2400,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     <button key={t.id} type="button" title={t.description}
                       onClick={() => {
                         const next = eventType === t.id ? "" : t.id;
-                        setEventType(next);
-                        if (next && t.defaultDecades.length) setDecades([...t.defaultDecades]);
+                        editEventType(next);
+                        if (next && t.defaultDecades.length) editDecades([...t.defaultDecades]);
                       }}
                       className={`rounded-full border px-3 py-1 text-xs transition ${eventType === t.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>
                       {t.label}
@@ -2415,7 +2415,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               <Label>Music style / vibe</Label>
               <div className="mt-2 flex flex-wrap gap-2">
                 {VIBES.map((v) => (
-                  <button key={v.id} type="button" title={v.description} onClick={() => setVibe(vibe === v.id ? "" : v.id)}
+                  <button key={v.id} type="button" title={v.description} onClick={() => editVibe(vibe === v.id ? "" : v.id)}
                     className={`rounded-full border px-3 py-1 text-xs transition ${vibe === v.id ? "border-primary bg-primary/15 text-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>
                     {v.label}
                   </button>
@@ -2428,26 +2428,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     <Label>Tempo target</Label>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {bpmRange[0]}–{bpmRange[1]} BPM
-                      <Switch checked={bpmOn} aria-label="Use tempo target" onCheckedChange={(on) => { if (on && !bpmOn) { const vb = getVibe(vibe); if (vb) setBpmRange([...vb.bpm]); } setBpmOn(on); }} />
+                      <Switch checked={bpmOn} aria-label="Use tempo target" onCheckedChange={(on) => { if (on && !bpmOn) { const vb = getVibe(vibe); if (vb) editBpmRange([...vb.bpm]); } editBpmOn(on); }} />
                     </div>
                   </div>
-                  <Slider className="mt-3" min={60} max={180} step={1} minStepsBetweenThumbs={1} disabled={!bpmOn} value={bpmRange} onValueChange={(v) => setBpmRange([v[0], v[1]])} />
+                  <Slider className="mt-3" min={60} max={180} step={1} minStepsBetweenThumbs={1} disabled={!bpmOn} value={bpmRange} onValueChange={(v) => editBpmRange([v[0], v[1]])} />
                 </div>
                 <div className={danceOn ? "" : "opacity-50"}>
                   <div className="flex items-center justify-between gap-2">
                     <Label>Danceability target</Label>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       {danceRange[0]}–{danceRange[1]}
-                      <Switch checked={danceOn} aria-label="Use danceability target" onCheckedChange={setDanceOn} />
+                      <Switch checked={danceOn} aria-label="Use danceability target" onCheckedChange={editDanceOn} />
                     </div>
                   </div>
-                  <Slider className="mt-3" min={1} max={10} step={0.5} minStepsBetweenThumbs={1} disabled={!danceOn} value={danceRange} onValueChange={(v) => setDanceRange([v[0], v[1]])} />
+                  <Slider className="mt-3" min={1} max={10} step={0.5} minStepsBetweenThumbs={1} disabled={!danceOn} value={danceRange} onValueChange={(v) => editDanceRange([v[0], v[1]])} />
                 </div>
               </div>
             </div>
             <div>
               <Label htmlFor="homeKey">Home key (optional)</Label>
-              <select id="homeKey" value={homeKey} onChange={(e) => setHomeKey(e.target.value)} className="mt-1.5 h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm">
+              <select id="homeKey" value={homeKey} onChange={(e) => editHomeKey(e.target.value)} className="mt-1.5 h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">No preference</option>
                 {KEY_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
               </select>
@@ -2455,15 +2455,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             </div>
             <div>
               <Label htmlFor="artists">Favorite artists (comma separated)</Label>
-              <Input id="artists" value={artistsInput} onChange={(e) => setArtistsInput(e.target.value)} className="mt-1.5" />
+              <Input id="artists" value={artistsInput} onChange={(e) => editArtistsInput(e.target.value)} className="mt-1.5" />
             </div>
             <div>
               <Label htmlFor="genres">Favorite genres (comma separated)</Label>
-              <Input id="genres" value={genresInput} onChange={(e) => setGenresInput(e.target.value)} className="mt-1.5" />
+              <Input id="genres" value={genresInput} onChange={(e) => editGenresInput(e.target.value)} className="mt-1.5" />
             </div>
             <div>
               <Label htmlFor="notes">Additional notes</Label>
-              <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} className="mt-1.5" rows={3} />
+              <Textarea id="notes" value={notes} onChange={(e) => editNotes(e.target.value)} className="mt-1.5" rows={3} />
             </div>
             <div>
               <div className="flex items-center justify-between gap-2">
@@ -2491,7 +2491,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     </Button>
                   )}
                   {doNotPlayInput && (
-                    <Button type="button" variant="ghost" size="sm" onClick={() => setDoNotPlayInput("")}>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => editDoNotPlayInput("")}>
                       <Trash2 className="mr-1 h-4 w-4" />
                       Clear
                     </Button>
@@ -2511,7 +2511,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 <Textarea
                   id="donotplay"
                   value={doNotPlayInput}
-                  onChange={(e) => setDoNotPlayInput(e.target.value)}
+                  onChange={(e) => editDoNotPlayInput(e.target.value)}
                   className="font-mono text-sm"
                   rows={4}
                   placeholder={"One per line\nArtist - Song  (blocks that track)\nArtist          (blocks all songs by that artist)\n\nOr drop a .csv/.txt file here"}
@@ -2695,7 +2695,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   Remove {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""}
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => setSongs([...songs, { artist: "", song: "" }])}>
+              <Button variant="outline" size="sm" onClick={() => editSongs([...songs, { artist: "", song: "" }])}>
                 <Plus className="mr-1 h-4 w-4" />
                 Add row
               </Button>
@@ -2740,7 +2740,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                                 onChange={(e) => {
                                   const next = [...songs];
                                   next[i] = { ...next[i], artist: e.target.value };
-                                  setSongs(next);
+                                  editSongs(next);
                                 }}
                                 className={isDup ? "border-destructive/50" : ""}
                               />
@@ -2752,7 +2752,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                               onChange={(e) => {
                                 const next = [...songs];
                                 next[i] = { ...next[i], song: e.target.value };
-                                setSongs(next);
+                                editSongs(next);
                               }}
                               className={isDup ? "border-destructive/50" : ""}
                             />
@@ -2762,7 +2762,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                               size="icon"
                               variant="ghost"
                               aria-label="Remove song"
-                              onClick={() => setSongs(songs.filter((_, j) => j !== i))}
+                              onClick={() => editSongs(songs.filter((_, j) => j !== i))}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -2798,9 +2798,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   </p>
                 )}
               </div>
-              <Switch checked={expand} onCheckedChange={setExpand} className="shrink-0" />
+              <Switch checked={expand} onCheckedChange={editExpand} className="shrink-0" />
             </div>
-            <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Song buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer} onChange={e=>setBuffer(Number(e.target.value))}>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
+            <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Song buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer} onChange={e=>editBuffer(Number(e.target.value))}>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
             {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
               <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
