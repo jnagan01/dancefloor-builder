@@ -24,7 +24,7 @@ export function validateBackup(raw: string, account: string): Backup {
   for (const [label, path] of Object.entries(b.roots)) if (!label || /[\\/\r\n]/.test(label) || typeof path !== "string" || path.length > 4000 || /[\r\n\u0000]/.test(path) || path.split(/[\\/]/).includes("..") || !(/^(?:\/|[A-Za-z]:[\\/])/.test(path))) throw Error("Unsafe source mapping.");
   const labels = new Set<string>();
   for (const source of b.sources) {
-    if (labels.has(source.label)) throw Error("Duplicate source label; original preserved.");
+    if (!source.label || /[\\/\r\n]/.test(source.label) || labels.has(source.label)) throw Error("Duplicate source label; original preserved.");
     labels.add(source.label);
     const paths = new Set<string>();
     for (const track of source.tracks) {
@@ -37,7 +37,11 @@ export function validateBackup(raw: string, account: string): Backup {
   const ids = new Set<string>();
   for (const event of b.events) {
     if (typeof event.id !== "string" || !event.id || event.id.length > 200 || ids.has(event.id)) throw Error("Invalid event identity.");
-    ids.add(event.id); readEventSnapshot(event.snapshot);
+    ids.add(event.id); const checked = readEventSnapshot(event.snapshot).snapshot;
+    if (checked.inputs.songs.length > 2000) throw Error("Event too large.");
+    for (const selection of Object.values(checked.lists.selections ?? {})) for (const path of selection.paths) {
+      if (path.length > 4000 || /[\r\n\u0000]/.test(path) || path.split(/[\\/]/).includes("..")) throw Error("Unsafe selected recording path.");
+    }
     for (const section of ["warmUp", "transition", "peak"]) if ((event.snapshot.lists[section]?.length ?? 0) > 2000) throw Error("Event too large.");
   }
   return b;

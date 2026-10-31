@@ -234,18 +234,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const library = useMemo(() => sources.length ? indexes.library(sources) : null, [sources, indexes]);
   const knownPaths = indexes.paths(sources);
   const audioIndex = indexes.audio(files, knownPaths, getFolderRoots());
-  const backupSession = useRef({ account: userId, generation: 0, sources });
+  const backupSession = useRef({ account: userId, liveAccount: undefined as string | null | undefined, generation: 0, sources });
   if (backupSession.current.account !== userId) backupSession.current.generation++;
   backupSession.current.account = userId; backupSession.current.sources = sources;
   useEffect(() => {
-    const subscription = supabase.auth.onAuthStateChange?.(() => { backupSession.current.generation++; });
+    const subscription = supabase.auth.onAuthStateChange?.((_event, session) => { backupSession.current.generation++; backupSession.current.liveAccount = session?.user.id ?? null; });
     return () => { backupSession.current.generation++; subscription?.data.subscription.unsubscribe(); };
   }, []);
   function captureBackupOwner() {
-    if (!userId || loading || persistenceBlocked.current || backupSession.current.account !== userId) throw Error("Sign in and resolve unreadable library data before backup.");
+    if (!userId || loading || persistenceBlocked.current || (backupSession.current.account !== userId || (backupSession.current.liveAccount !== undefined && backupSession.current.liveAccount !== userId))) throw Error("Sign in and resolve unreadable library data before backup.");
     const owner = { account: userId, generation: backupSession.current.generation, sources: structuredClone(sources), roots: structuredClone(getFolderRoots()) };
     const check = () => {
-      if (backupSession.current.account !== owner.account || backupSession.current.generation !== owner.generation) throw Error("Account/session changed; operation stopped.");
+      if (backupSession.current.account !== owner.account || backupSession.current.generation !== owner.generation || (backupSession.current.liveAccount !== undefined && backupSession.current.liveAccount !== owner.account)) throw Error("Account/session changed; operation stopped.");
     };
     check(); return { ...owner, check };
   }
