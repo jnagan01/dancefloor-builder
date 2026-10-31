@@ -37,10 +37,11 @@ function createEventRouteHarness(actual) {
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
       '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null},
+      '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},
     };
     const module={exports:{}};
     const events=new Map();
-    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,File,AbortController,localStorage:storage,window:{addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k),confirm:()=>true},setTimeout,clearTimeout,Date});
+    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,File,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:{addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k),confirm:()=>true},setTimeout,clearTimeout,Date});
     const cleanup=old=>{for(const slot of old)slot?.cleanup?.();};
     function render() {
       slots=rootSlots;cursor=0;renderingRoot=true;

@@ -14,12 +14,8 @@ export async function writeEventConditionally(db: any, owner: string, request: {
     if (error) throw new Error("Could not confirm event creation. Keep the local recovery copy and retry.");
   } else {
     if (!request.expectedUpdatedAt) throw new Error("Reopen this event before saving to check its latest version.");
-    let baseline = request.expectedSnapshot as typeof payload | undefined;
-    if (!baseline) {
-      const { data: previous, error } = await db.from("workflow_history").select("name, inputs, lists").eq("id", request.id).eq("user_id", owner).eq("updated_at", request.expectedUpdatedAt).maybeSingle();
-      if (error) throw new Error("Could not read the saved event. Keep the recovery copy.");
-      baseline = previous;
-    }
+    const baseline = request.expectedSnapshot as typeof payload | undefined;
+    if (!baseline) throw new Error("This recovery copy has no original version contents. Save it as a new event instead; nothing was overwritten.");
     if (baseline) {
     const { data, error } = await db.from("workflow_history").update({ ...payload, updated_at: nextEventVersion(request.expectedUpdatedAt) })
       .eq("id", request.id).eq("user_id", owner).eq("updated_at", request.expectedUpdatedAt)

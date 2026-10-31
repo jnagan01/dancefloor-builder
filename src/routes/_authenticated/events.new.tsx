@@ -180,6 +180,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const safeSaveFn = useServerFn(saveWorkflowSafely);
   const accountRef = useRef(account);
   const remoteVersion = useRef<string | null>(null);
+  const remoteSnapshot = useRef<unknown>(undefined);
   const stableCreate = useRef<string>(crypto.randomUUID());
   const snapshotReadOnly = useRef(false);
   const restoredFingerprint = useRef<string | null>(null);
@@ -200,6 +201,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }, signal: attempt.signal }),
     onConfirmed: (snapshot, saved) => {
       remoteVersion.current = saved.updatedAt ?? remoteVersion.current;
+      remoteSnapshot.current = snapshot;
       const draft = draftTokens.current.get(snapshot);
       if (draft && accountRef.current === draft.account) {
         try { confirmEventDraft(draft.account, draft.event, draft.token); } catch { toast.error("Saved online, but local recovery cleanup failed."); }
@@ -384,6 +386,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     snapshotReadOnly.current = false; snapshotExtras.current = { inputs: {}, lists: {} };
     restoredFingerprint.current = null;
     setSnapshotProblem(null); setRecovery(null); remoteVersion.current = null;
+    remoteSnapshot.current = undefined;
     userEdited.current = false;
     genTokenRef.current += 1;
     setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
@@ -675,6 +678,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       snapshotReadOnly.current = !!checked.problem;
       setSnapshotProblem(checked.problem);
       remoteVersion.current = row.updated_at;
+      remoteSnapshot.current = { name: row.name, inputs: row.inputs, lists: row.lists };
       autosave.configure(openedEventId, row.updated_at, stableCreate.current, { name: row.name, inputs: row.inputs, lists: row.lists });
       if (accountRef.current) {
         try { setRecovery(loadEventDraft(accountRef.current, openedEventId)); } catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
@@ -732,7 +736,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     if (fingerprint === restoredFingerprint.current) return;
     restoredFingerprint.current = fingerprint;
     const account = accountRef.current, event = openedEventId ?? "new", token = crypto.randomUUID();
-    const draft = { version: 1 as const, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined };
+    const draft = { version: 1 as const, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, baseSnapshot: remoteSnapshot.current, snapshot, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined };
     try { storeEventDraft(draft); } catch { toast.error("Local recovery could not be saved. Do not close this event until saving is confirmed."); }
     draftTokens.current.set(snapshot, { account, event, token });
     autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===account);
@@ -743,9 +747,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     return ()=>{window.removeEventListener("online",recover);autosave.reset()};
   },[autosave]);
 
-  const latestSnapshot = useRef<{ snapshot: ReturnType<typeof eventSnapshot>; account: string; event: string; createId: string; baseVersion: string | null } | null>(null);
+  const latestSnapshot = useRef<{ snapshot: ReturnType<typeof eventSnapshot>; account: string; event: string; createId: string; baseVersion: string | null; baseSnapshot: unknown } | null>(null);
   const latestSaveState = useRef(saveState); latestSaveState.current = saveState;
-  latestSnapshot.current = result && account ? { snapshot: eventSnapshot(result, matches), account, event: openedEventId ?? "new", createId: stableCreate.current, baseVersion: remoteVersion.current } : null;
+  latestSnapshot.current = result && account ? { snapshot: eventSnapshot(result, matches), account, event: openedEventId ?? "new", createId: stableCreate.current, baseVersion: remoteVersion.current, baseSnapshot: remoteSnapshot.current } : null;
   const persistOnExit = () => {
     const owned = latestSnapshot.current;
     if (!owned || !userEdited.current || latestSaveState.current === "saved" || draftBlocked.current || snapshotReadOnly.current || recovery) return;
@@ -780,13 +784,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (problem) throw new Error(problem);
       if (asNew && openedEventId) {
         const transferred = { ...recovery, snapshot, event: "new", token: crypto.randomUUID(), createId: crypto.randomUUID(), baseVersion: null,
-          origin: { account: recovery.account, event: recovery.event, token: recovery.token } };
+          baseSnapshot: undefined, origin: { account: recovery.account, event: recovery.event, token: recovery.token } };
         // Persist before changing the route. A reload at any point reuses this exact creation UUID.
         if (loadEventDraft(accountRef.current ?? "", "new")) throw new Error("A new-event recovery copy already exists. Restore it first; neither copy was replaced.");
         storeEventDraft(transferred); onHandoff(transferred);
         void navigate({ to: "/events/new", search: {} });
         return;
       }
+      if (!asNew && openedEventId && !recovery.baseSnapshot) throw new Error("This older recovery copy has no original version contents. Save it as a new event instead.");
       const inputs = snapshot.inputs;
       setSongs(inputs.songs); setHours(inputs.hours); setArtistsInput(inputs.artistsInput); setGenresInput(inputs.genresInput); setDecades(inputs.decades);
       setNotes(inputs.notes); setDoNotPlayInput(inputs.doNotPlayInput); setExpand(inputs.expand); setEventName(inputs.eventName);
@@ -800,7 +805,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       restoredFingerprint.current = "recovered";
       autosave.reset(recovery.createId);
       if (asNew) { stableCreate.current = crypto.randomUUID(); setSavedEventId(null); autosave.configure(null, null, stableCreate.current); }
-      else { stableCreate.current = recovery.createId; autosave.configure(savedEventId, recovery.baseVersion, recovery.createId); }
+      else { stableCreate.current = recovery.createId; autosave.configure(savedEventId, recovery.baseVersion, recovery.createId, recovery.baseSnapshot); remoteSnapshot.current=recovery.baseSnapshot; }
       resultBoundary.current = { eventId: openedEventId }; restoredEvent.current = true; snapshotReadOnly.current = false; userEdited.current=true; setSaveState("idle"); setRecovery(null);
     } catch (e) { toast.error((e as Error).message); }
   }

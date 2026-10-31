@@ -151,14 +151,14 @@ describe('atomic existing-schema save contract', () => {
   it('late timed-out same-version update cannot overwrite a newer committed snapshot', async () => {
     const { db, rows } = fakeEventDb(); const base = { id: 'A', create: true, expectedUpdatedAt: null, name: 'initial', inputs: {}, lists: {} };
     const first = await writeEventConditionally(db, 'owner', base);
-    const fresh = { ...base, create: false, expectedUpdatedAt: first.updatedAt, name: 'newer' };
+    const fresh = { ...base, create: false, expectedUpdatedAt: first.updatedAt, expectedSnapshot: { name: base.name, inputs: base.inputs, lists: base.lists }, name: 'newer' };
     await writeEventConditionally(db, 'owner', fresh);
     await expect(writeEventConditionally(db, 'owner', { ...fresh, name: 'late older' })).rejects.toThrow('changed elsewhere');
     expect(rows.get('A').name).toBe('newer');
   });
   it('lost update response is acknowledged only if payload still matches', async () => {
     const { db } = fakeEventDb(); const base = { id: 'A', create: true, expectedUpdatedAt: null, name: 'initial', inputs: {}, lists: {} };
-    const first = await writeEventConditionally(db, 'owner', base); const update = { ...base, create: false, expectedUpdatedAt: first.updatedAt, name: 'latest' };
+    const first = await writeEventConditionally(db, 'owner', base); const update = { ...base, create: false, expectedUpdatedAt: first.updatedAt, expectedSnapshot: { name: base.name, inputs: base.inputs, lists: base.lists }, name: 'latest' };
     const saved = await writeEventConditionally(db, 'owner', update);
     expect(await writeEventConditionally(db, 'owner', update)).toEqual(saved);
     await expect(writeEventConditionally(db, 'other-owner', update)).rejects.toThrow();

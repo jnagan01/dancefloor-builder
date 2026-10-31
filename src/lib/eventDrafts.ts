@@ -2,6 +2,7 @@ export interface EventDraft<T> {
   version: 1; account: string; event: string; token: string; createId: string;
   baseVersion: string | null; snapshot: T; savedAt: number;
   origin?: { account: string; event: string; token: string };
+  baseSnapshot?: unknown;
 }
 const key = (account: string, event: string) => `setarchitect:recovery:${encodeURIComponent(account)}:${encodeURIComponent(event)}`;
 export function storeEventDraft<T>(draft: EventDraft<T>, storage: Storage = localStorage) {
