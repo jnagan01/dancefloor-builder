@@ -9,6 +9,9 @@ async function preserve(parent) {
   const policy = require('./security.cjs').createDesktopSecurity(process.env.DANCEFLOOR_URL || 'https://dancefloor-builder.lovable.app', () => parent);
   if (!parent || !policy.trustedSender({ sender: parent.webContents, senderFrame: parent.webContents.mainFrame })) throw Error('Open the signed-in app before updating.');
   await parent.webContents.executeJavaScript(`(async()=>{if(typeof window.__setarchitectBeforeUpdate!=='function')throw Error('Current-state backup unavailable. Open the updated workspace before updating.');await window.__setarchitectBeforeUpdate();})()`);
+  if (!policy.trustedSender({ sender: parent.webContents, senderFrame: parent.webContents.mainFrame })) throw Error('The app page changed during preservation. Nothing installed.');
+  const frozen = await parent.webContents.executeJavaScript(`Boolean(document.getElementById('update-preservation-lock'))`);
+  if (!frozen) throw Error('This web version cannot safely prepare automatic updates. Open the current workspace before trying again.');
 }
 async function release(parent) {
   if (parent && !parent.isDestroyed()) await parent.webContents.executeJavaScript(`window.__setarchitectReleaseUpdate?.()`);
