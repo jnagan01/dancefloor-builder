@@ -56,7 +56,7 @@ function createEventRouteHarness(actual) {
     function walk(value){if(!value)return [];if(Array.isArray(value))return value.flatMap(walk);if(typeof value!=='object')return [];return [value,...walk(value.props?.children)];}
     function nodes(){return walk(tree);}
     function interact(predicate,handler='onClick',argument){const node=nodes().find(predicate);if(!node)throw Error('No matching rendered control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});node.props[handler]?.(argument);render();}
-    return {render,flush,memory,requests,loads,errors,navigations,nodes,interact,get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
+    return {render,flush,memory,requests,loads,errors,navigations,nodes,interact,get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
   }
   return harness;
 }

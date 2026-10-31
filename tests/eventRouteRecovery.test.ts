@@ -19,6 +19,24 @@ const recovery=(account='owner',event='A')=>({version:1,account,event,token:'rec
 const key=(a:string,e:string)=>`setarchitect:recovery:${a}:${e}`;
 afterEach(()=>{vi.useRealTimers();});
 describe('actual mounted event route recovery and ownership',()=>{
+ it('benign root clicks, playback, review tabs, details and export keep saved without recovery or writes',async()=>{
+  vi.useFakeTimers();const h=harness({rows:{A:row()}});await h.flush();
+  h.tree.props.onClickCapture?.({target:{closest:()=>({})}});h.tree.props.onChangeCapture?.({target:{value:'search'}});
+  h.interact(n=>n.props?.onPreview,'onPreview',{artist:'A',song:'Song'});
+  h.interact(n=>n.props?.onValueChange&&n.props?.value==='warmUp','onValueChange','transition');
+  h.interact(n=>n.props?.onClose&&n.props?.resolve,'onClose');
+  h.interact(n=>n.props?.onExportSpotify,'onExportSpotify');
+  await h.flush();await vi.advanceTimersByTimeAsync(2000);expect(h.current.saveState).toBe('saved');expect(h.requests).toHaveLength(0);h.pagehide();expect(h.memory.size).toBe(0);h.unmount();
+ });
+ it('Retry actual button preserves pending revision, confirms saved and removes the exact recovery draft',async()=>{
+  vi.useFakeTimers();let fail=true;const h=harness({rows:{A:row()},write:async(r:any)=>{if(fail)throw Error('offline');return {id:r.data.id,updatedAt:'2026-10-31T00:00:01Z',revision:r.data.writeRevision};}});await h.flush();h.edit('Changed');expect(h.current.saveState).toBe('idle');await vi.advanceTimersByTimeAsync(1000);await h.flush();expect(h.current.saveState).toBe('error');const marker=h.requests[0].writeRevision;fail=false;
+  h.interact(n=>n.props?.children==='Retry save');await h.flush();expect(h.requests[1].writeRevision).toBe(marker);expect(h.current.saveState).toBe('saved');expect(h.memory.has(key('owner','A'))).toBe(false);h.unmount();
+ });
+ it('same-value input is not an edit; real custom split and removed upload mark immediately and save',async()=>{
+  vi.useFakeTimers();const h=harness({rows:{A:{...row(),inputs:{...row().inputs,songs:[song,{artist:'B',song:'Other'}]}}}});await h.flush();h.edit('Original');expect(h.current.saveState).toBe('saved');
+  h.interact(n=>n.props?.children==='Customize section times');expect(h.current.saveState).toBe('idle');await vi.advanceTimersByTimeAsync(1000);await h.flush();expect(h.requests).toHaveLength(1);expect(h.requests[0].inputs.split).toBeDefined();
+  h.interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',3);h.interact(n=>n.props?.['aria-label']==='Remove song');expect(h.current.saveState).toBe('idle');await vi.advanceTimersByTimeAsync(1000);await h.flush();expect(h.requests[1].inputs.songs).toEqual([{artist:'B',song:'Other'}]);h.unmount();
+ });
  it('save-as-new navigates, preserves selections, and uses the durable request UUID',async()=>{
   vi.useFakeTimers();const memory=new Map([[key('owner','A'),JSON.stringify(recovery())]]);const h=harness({memory,rows:{A:row()}});await h.flush();h.current.restoreRecovery(true);await h.flush();
   const draft=JSON.parse(memory.get(key('owner','new')));expect(h.navigations[0].search).toEqual({});expect(h.current.result.warmUp[0]).toEqual(song);
