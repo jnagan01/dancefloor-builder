@@ -2,8 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 import { validateTiming, boundedNumber, MAX_EVENT_MINUTES } from "./inputSafety";
-import { writeEventConditionally } from "./eventWriteContract";
-import { eventRevision, withEventRevision } from "./eventRevision";
+import { writeEventConditionally, renameEventConditionally } from "./eventWriteContract";
+import { withEventRevision } from "./eventRevision";
 import type { Json } from "@/integrations/supabase/types";
 
 const songSchema = z.object({
@@ -45,7 +45,7 @@ const listsSchema = z.object({
   warmUp: z.array(songSchema).max(2000),
   transition: z.array(songSchema).max(2000),
   peak: z.array(songSchema).max(2000),
-  selections: z.record(z.string(), z.object({ paths: z.array(z.string().max(2000)).max(100), excluded: z.boolean().optional() })).optional(),
+  selections: z.record(z.string(), z.object({ paths: z.array(z.string().max(2000)).max(100), excluded: z.boolean().optional() }).passthrough()).optional(),
 }).passthrough();
 
 function dbError(op: string, error: { message: string; code?: string }): Error {
@@ -143,11 +143,7 @@ export const renameWorkflow = createServerFn({ method: "POST" })
     z.object({ id: z.string().uuid(), name: z.string().min(1).max(200) }).parse(data),
   )
   .handler(async ({ data, context }) => {
-    const { data: row, error } = await context.supabase.from("workflow_history").select("id, name, inputs, lists, updated_at").eq("id", data.id).eq("user_id", context.userId).maybeSingle();
-    if (error) throw dbError("renameWorkflow", error);
-    if (!row) throw new Error("Event not found.");
-    await writeEventConditionally(context.supabase, context.userId, { id: data.id, create: false, expectedUpdatedAt: row.updated_at,
-      expectedRevision: eventRevision(row.inputs), writeRevision: crypto.randomUUID(), name: data.name, inputs: row.inputs, lists: row.lists });
+    await renameEventConditionally(context.supabase, context.userId, data.id, data.name);
     return { ok: true };
   });
 

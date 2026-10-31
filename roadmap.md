@@ -33,6 +33,6 @@
 - [x] Run full regressions and inspect automatic build; report any constraint-limited guarantees. Only mocked services/files were exercised.
 
 # Compact event revisions
-- [ ] Replace full-payload filters with unique compact markers; cover legacy initialization, ABA, and large snapshots.
-- [ ] Carry marker lifecycle through pending autosaves, durable drafts, recovery, creation and other event writers.
-- [ ] Run full tests, automatic build diagnostics and existing isolated adversarial checks; report revision and limits.
+- [x] Replace full-payload filters with unique compact markers; cover legacy initialization, ABA, and large snapshots.
+- [x] Carry marker lifecycle through pending autosaves, durable drafts, recovery, creation and other event writers.
+- [x] Run full tests, automatic build diagnostics and existing isolated adversarial checks; report revision and limits. Live data and Mac operations were not exercised.

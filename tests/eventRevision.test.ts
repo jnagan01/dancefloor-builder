@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { writeEventConditionally } from '@/lib/eventWriteContract';
+import { writeEventConditionally, renameEventConditionally } from '@/lib/eventWriteContract';
+import { createClient } from '@supabase/supabase-js';
 import { EVENT_REVISION_FIELD, eventRevision } from '@/lib/eventRevision';
 import { createEventAutosave } from '@/lib/eventAutosave';
 import { checkpointEventDraft, loadEventDraft, storeEventDraft } from '@/lib/eventDrafts';
@@ -8,6 +9,20 @@ const fresh=()=>crypto.randomUUID();
 const initial=()=>({id:'E',create:true,expectedUpdatedAt:null,expectedRevision:null,writeRevision:fresh(),name:'A',inputs:{unknown:{keep:'value'}},lists:{custom:'keep',warmUp:[]}});
 afterEach(()=>vi.useRealTimers());
 describe('compact revision contract',()=>{
+ it('actual request URLs carry compact JSON-path filters, including distinct legacy missing-marker filter',async()=>{
+  const urls:string[]=[];const bodies:any[]=[];const uuid='11111111-1111-4111-8111-111111111111';
+  const db=createClient('https://mock.invalid','test-key',{auth:{persistSession:false},global:{fetch:async(url,init)=>{
+    urls.push(String(url));const body=JSON.parse(String(init?.body));bodies.push(body);return new Response(JSON.stringify({id:uuid,updated_at:'2026-10-31T00:00:00Z',inputs:body.inputs}),{status:200,headers:{'Content-Type':'application/json'}});
+  }}});
+  const songs=Array.from({length:2000},(_,i)=>({artist:`A${i}`,song:`S${i}`}));const request={id:uuid,create:false,expectedUpdatedAt:'2026-10-31T00:00:00Z',expectedRevision:null,writeRevision:fresh(),name:'Large',inputs:{songs},lists:{warmUp:songs}};
+  await writeEventConditionally(db,uuid,request);await writeEventConditionally(db,uuid,{...request,expectedRevision:request.writeRevision,writeRevision:fresh()});
+  expect(urls.every(u=>u.length<600)).toBe(true);expect(urls[0]).toContain(`inputs-%3E${EVENT_REVISION_FIELD}=is.null`);expect(urls[1]).toContain(`inputs-%3E%3E${EVENT_REVISION_FIELD}=eq.`);expect(JSON.stringify(bodies[0]).length).toBeGreaterThan(100000);
+ });
+ it('history rename rotates revision and keeps all unknown JSON and selections',async()=>{
+  const h=eventDbHarness(),base=initial();const first=await writeEventConditionally(h.db,'owner',base);
+  const renamed=await renameEventConditionally(h.db,'owner','E','Renamed');expect(renamed.revision).not.toBe(first.revision);expect(h.rows.get('E')).toMatchObject({name:'Renamed',inputs:{unknown:{keep:'value'}},lists:{custom:'keep'}});
+  await expect(writeEventConditionally(h.db,'owner',{...base,create:false,expectedRevision:first.revision,expectedUpdatedAt:first.updatedAt,writeRevision:fresh()})).rejects.toThrow('changed elsewhere');
+ });
  it('frozen timestamp payload A B A does not restore the earlier revision',async()=>{
   const h=eventDbHarness(), base=initial();const a=await writeEventConditionally(h.db,'owner',base);
   const b=await writeEventConditionally(h.db,'owner',{...base,create:false,expectedUpdatedAt:a.updatedAt,expectedRevision:a.revision,writeRevision:fresh(),name:'B'});

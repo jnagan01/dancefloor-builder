@@ -36,3 +36,10 @@ function stableJson(value: unknown): string {
   if (value && typeof value === "object") return `{${Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`).join(",")}}`;
   return JSON.stringify(value) ?? "null";
 }
+/** History renames are same-row writes too: capture a marker and rotate it atomically. */
+export async function renameEventConditionally(db: any, owner: string, id: string, name: string) {
+  const { data: row, error } = await db.from("workflow_history").select("id, name, inputs, lists, updated_at").eq("id", id).eq("user_id", owner).maybeSingle();
+  if (error || !row) throw new Error("Could not read this event before renaming it.");
+  return writeEventConditionally(db, owner, { id, create: false, expectedUpdatedAt: row.updated_at,
+    expectedRevision: eventRevision(row.inputs), writeRevision: crypto.randomUUID(), name, inputs: row.inputs, lists: row.lists });
+}
