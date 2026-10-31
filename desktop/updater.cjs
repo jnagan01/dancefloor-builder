@@ -80,7 +80,10 @@ async function fetchLatest() {
 async function runUpdate(latest, parent) {
   const target = path.join(app.getPath("downloads"), latest.assetName || "SetArchitect.dmg");
   try {
-    await require("./backups.cjs").createBackupStore(app.getPath("userData")).verifyAll();
+    const policy = require("./security.cjs").createDesktopSecurity(process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app", () => parent);
+    if (!parent || !policy.trustedSender({ sender: parent.webContents, senderFrame: parent.webContents.mainFrame })) throw Error("Open the signed-in app before updating.");
+    await parent.webContents.executeJavaScript(`(async () => { if (typeof window.__setarchitectBeforeUpdate !== 'function') throw Error('Current-state backup unavailable. Open Settings before updating.'); await window.__setarchitectBeforeUpdate(); })()`);
+
     await download(latest.url, target);
   } catch (error) {
     await dialog.showMessageBox(parent, {

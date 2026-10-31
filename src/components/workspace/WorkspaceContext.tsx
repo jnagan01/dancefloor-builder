@@ -246,6 +246,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const b = { format: "setarchitect-backup" as const, version: 1 as const, account: userId, createdAt: new Date().toISOString(), events, sources: structuredClone(sources), roots: getFolderRoots() } as Backup;
     await saveBackup(b); return b;
   }
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    const host = window as unknown as { __setarchitectBeforeUpdate?: () => Promise<void> };
+    const capture = async () => { await backup(); };
+    host.__setarchitectBeforeUpdate = capture;
+    return () => { if (host.__setarchitectBeforeUpdate === capture) delete host.__setarchitectBeforeUpdate; };
+  }, [userId, loading, sources]);
   async function restoreMetadata(b: Backup) {
     if (!userId || b.account !== userId || loading || persistenceBlocked.current) throw Error("Backup account does not match the active library.");
     await backup();

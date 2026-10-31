@@ -12,7 +12,7 @@ const read=()=>JSON.parse(fs.readFileSync(backend,'utf8'));
 const atomic=data=>{fs.writeFileSync(backend+'.tmp',JSON.stringify(data));fs.renameSync(backend+'.tmp',backend);};
 app.whenReady().then(()=>{
 server=http.createServer((req,res)=>{const asset=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js'].includes(asset)){res.writeHead(404).end();return;}res.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':'text/html');res.end(fs.readFileSync(path.join(process.env.SETARCHITECT_TEST_BUNDLE,asset)));});
-server.listen(0,'127.0.0.1',()=>{
+const portFile=path.join(profile,'port');const port=fs.existsSync(portFile)?Number(fs.readFileSync(portFile,'utf8')):0;server.listen(port,'127.0.0.1',()=>{fs.writeFileSync(portFile,String(server.address().port));
 const origin=`http://127.0.0.1:${server.address().port}`;const security=createDesktopSecurity(origin,()=>win);
 const handle=(name,fn)=>ipcMain.handle(name,security.guard(fn));
 handle('test:fixture',()=>fixture);
