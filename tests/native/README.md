@@ -46,3 +46,9 @@ The user reported GitHub run 41160767318 frozen installs and full regression pas
 The shared `desktop/backup-policy.json` differentiates snapshot selection/root/metadata identifiers from structural credential properties. The desktop package includes it. The fourteenth isolated Electron flow exercises real startup pre-rescan backup and manual rescan, Settings backup preview/download/import, native credential refusal preserving last-good bytes, and restore-as-new recovery. Exact reported selection keys and confirmed/uncertain values survive without a backend row change. Native store roundtrip/verifyAll and browser/native policy agreement are covered in the full suite.
 
 Build26 may reject the required pre-update backup using its old validator; once the signed installer is available, a direct installer may be necessary. No backup requirement was bypassed. This work did not inspect production data, run installers, install dependencies, publish, or trigger GitHub jobs.
+
+## Build28 deterministic synchronization
+
+The late-save case arms a test-only IPC latch, polls the actual backend commit, and asserts its exact write revision while the reply remains held. It navigates away, verifies the durable recovery snapshot and revision, explicitly releases the reply, and reopens the event to assert automatic saved status, no recovery prompt, the latest name and no duplicate row. Backup preview/import/additive restore, startup/manual rescan, artifact download and restore-as-new use bounded observable waits instead of fixed sleeps. Production validators and CI gates are unchanged.
+
+Local validation: `bunx vitest run` passed all 377 tests; `LD_LIBRARY_PATH="$(printf '%s:' /nix/store/*/lib)" xvfb-run -a node tests/native/run.mjs` passed all 14 isolated Electron flows. macOS execution for this revision remains a GitHub gate, not a locally verified result.
