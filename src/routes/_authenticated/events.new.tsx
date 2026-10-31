@@ -348,6 +348,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // setup (connected music folders, VirtualDJ export folder) is intentionally
   // left alone — those represent the DJ's machine, not workflow content.
   function clearWorkflowState() {
+    // Preserve the owned editor snapshot before any manual reset clears it.
+    if (latestSnapshot.current) persistOnExit();
     resultBoundary.current = null;
     setSongs([]);
     setHours(defaultsRef.current.hours);
@@ -1612,6 +1614,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // --- Match controls ---
 
   function updateMatch(key: string, patch: Partial<SongMatch>) {
+    userEdited.current=true; autosave.dirty();
     setMatches((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
@@ -1623,6 +1626,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const artist = next.artist.trim(), song = next.song.trim();
     if (!artist && !song) return;
     if (artist === old.artist && song === old.song) return;
+    userEdited.current=true; autosave.dirty();
     const updated = { ...old, artist, song };
     const oldKey = songKey(section, idx, old);
     const newKey = songKey(section, idx, updated);

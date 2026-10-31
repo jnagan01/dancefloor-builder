@@ -25,8 +25,8 @@ describe('actual mounted event route recovery and ownership',()=>{
  });
  it('every manual reset uses one UUID for draft and interrupted first request across reload',async()=>{
   vi.useFakeTimers();const memory=new Map();const h=harness({eventId:null,memory,write:()=>new Promise(()=>{})});await h.flush();h.current.clearWorkflowState();await h.flush();
-  // Drive actual generation result boundary through explicit new-event recovery.
-  memory.set(key('owner','new'),JSON.stringify({...recovery('owner','new'),createId:h.current.stableCreate,baseVersion:null}));h.unmount();
+  const resetId=h.current.stableCreate;h.current.setSongs([song]);await h.flush();await h.current.generate();await h.flush();await vi.advanceTimersByTimeAsync(1000);
+  expect(h.requests[0].id).toBe(resetId);expect(JSON.parse(memory.get(key('owner','new'))).createId).toBe(resetId);h.unmount();
   const b=harness({eventId:null,memory,write:()=>new Promise(()=>{})});await b.flush();b.current.restoreRecovery(false);await b.flush();await vi.advanceTimersByTimeAsync(1000);const id=b.requests[0].id; expect(JSON.parse(memory.get(key('owner','new'))).createId).toBe(id);b.unmount();
   const c=harness({eventId:null,memory});await c.flush();c.current.restoreRecovery(false);await c.flush();await vi.advanceTimersByTimeAsync(1000);expect(c.requests[0].id).toBe(id);c.unmount();
  });
@@ -42,6 +42,11 @@ describe('actual mounted event route recovery and ownership',()=>{
  });
  it('malformed draft blocks saves and exit replacement until explicit archive',async()=>{
   vi.useFakeTimers();const raw='{invalid';const h=harness({memory:new Map([[key('owner','A'),raw]]),rows:{A:row()}});await h.flush();h.edit('Changed');h.pagehide();await vi.advanceTimersByTimeAsync(1000);expect(h.current.draftBlocked.current).toBe(true);expect(h.requests).toHaveLength(0);expect(h.memory.get(key('owner','A'))).toBe(raw);h.unmount();
+ });
+ it('explicit archive retains the malformed bytes and storage failures keep them blocked',async()=>{
+  const memory=new Map([[key('owner','A'),'null']]);const s={getItem:(k:string)=>memory.get(k)??null,setItem:(k:string,v:string)=>memory.set(k,v),removeItem:(k:string)=>memory.delete(k)} as Storage;
+  expect(()=>drafts.loadEventDraft('owner','A',s)).toThrow();drafts.archiveEventDraft('owner','A',s);expect(memory.has(key('owner','A'))).toBe(false);expect([...memory.values()]).toEqual(['null']);
+  memory.set(key('owner','A'),'{bad');s.setItem=()=>{throw Error('quota');};expect(()=>drafts.archiveEventDraft('owner','A',s)).toThrow('quota');expect(memory.get(key('owner','A'))).toBe('{bad');
  });
  it('delayed library and legacy selections never autosave opening-time defaults',async()=>{
   vi.useFakeTimers();const h=harness({rows:{A:row()}});await h.flush();h.library(vdj.buildLibrary([{filePath:'Music/Song.mp3',title:'Song',artist:'The Artist'}]));await h.flush();await vi.advanceTimersByTimeAsync(2000);expect(h.requests).toHaveLength(0);h.edit('User edit');await vi.advanceTimersByTimeAsync(1000);expect(h.requests).toHaveLength(1);expect(Object.values(h.requests[0].lists.selections)[0]).toMatchObject({paths:['Music/Song.mp3'],excluded:true});h.unmount();

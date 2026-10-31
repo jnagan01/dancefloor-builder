@@ -4,7 +4,7 @@ const ts = require(path.join(root, 'node_modules/typescript'));
 function createEventRouteHarness(actual) {
   let source = fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
   // Expose actual closures in the test VM only; no production test seam or replacement logic.
-  source = source.replace('  const withFileBpm =', '  capture({ result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, setEventName, setResult, userEdited, autosave, computeLiveTargets, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
+  source = source.replace('  const withFileBpm =', '  capture({ result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
   function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }) } = {}) {
     let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false;
