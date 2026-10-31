@@ -3,3 +3,4 @@
 - Apply security.cjs to every native IPC handler and navigation/permission boundary; trust only the exact app origin and owning main frame, because untrusted pages/subframes must never inherit native access. Include desktop helpers in package build.files.
 - Keep electron-updater autoDownload and autoInstallOnAppQuit disabled; invoke Squirrel only after a fresh backup and fsynced draft with editing frozen, because Mac staging can install on ordinary quit.
 - Stamp real app semver and release tags from the single release workflow run counter; verify ZIP/DMG/feed checksums and Developer ID/notarization before release, because cached updates and legacy bootstrap must identify the same increasing version.
+- Keep the provided icon source as RGBA and validate source, ICNS roundtrip and packaged ZIP/DMG icons before release, because resizing or packaging must never flatten transparent corners.
