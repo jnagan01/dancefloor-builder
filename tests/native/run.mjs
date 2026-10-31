@@ -52,6 +52,19 @@ try{
    await page.getByRole('button',{name:'Add non-conflicting metadata sources',exact:true}).click();await page.waitForTimeout(500);
    const restored=JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8'));
    expect(restored[0]).toEqual(original[0]);expect(restored.at(-1).label).toBe('Added source');
+   // Only the fsynced native journal contains these drafts, as after Chromium loss.
+   for (const slot of ['new','new:pending-edit']) {
+     const recoveryKey=`setarchitect:recovery:synthetic-owner:${encodeURIComponent(slot)}`;
+     const rawDraft=JSON.stringify({version:1,account:'synthetic-owner',event:slot,token:'native-pending',createId:'native-only',baseVersion:null,snapshot:b.events[0].snapshot,savedAt:1});
+     const beforeRows=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+     await page.evaluate(({key,raw})=>{localStorage.removeItem(key);window.electronRecovery.set(key,raw);},{key:recoveryKey,raw:rawDraft});
+     await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await page.waitForTimeout(250);
+     expect(await page.evaluate(key=>localStorage.getItem(key),recoveryKey)).toBe(null);
+     expect(await page.evaluate(key=>window.electronRecovery.get(key),recoveryKey)).toBe(rawDraft);
+     expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(beforeRows);
+     expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('Resolve it first');
+     await page.evaluate(key=>window.electronRecovery.remove(key),recoveryKey);
+   }
    await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await page.waitForTimeout(500);
    await page.getByRole('button',{name:'Restore recovery copy',exact:true}).click();await page.waitForTimeout(2200);
    const rows=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'));expect(Object.keys(rows)).toHaveLength(2);
@@ -84,6 +97,30 @@ try{
    const zip=await (await import('jszip')).default.loadAsync(fs.readFileSync(path.join(temp,'exports',zipName)));
    const text=(await Promise.all(Object.values(zip.files).filter(f=>f.name.endsWith('.csv')).map(f=>f.async('string')))).join('\n');
    for(const title of ['Song One','Song Two','Song Three','Song Four','Song Five','Corrected Song'])expect(text).toContain(title);
+ });
+ await check('section-local Transition issue targets Transition and exports only captured checked mapping',async()=>{
+   await app.close();
+   const transitionSong={artist:'Missing Transition',song:'Omitted Transition'};
+   const relativeTracks=tracks.map(t=>({...t,filePath:'Synthetic/'+path.basename(t.filePath)}));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:relativeTracks}));
+   const row={id:'A',name:'Mapping',updated_at:'2026-10-31T01:59:00Z',inputs:{eventName:'Mapping',songs:[song,transitionSong],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[song,transitionSong],peak:[],selections:{[key]:{paths:[relativeTracks[2].filePath],confirmed:true},'transition:0:test artist|test song live':{paths:[relativeTracks[2].filePath],confirmed:true}}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:row}));
+   await launch();
+   await page.evaluate(root=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({Synthetic:root})),library);
+   await page.getByRole('tab',{name:/Transition/}).click();
+   fs.writeFileSync(path.join(temp,'fault'),'availability-delay');
+   await page.getByRole('button',{name:'M3U',exact:true}).click();
+   await page.waitForTimeout(200);
+   await page.evaluate(root=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({Synthetic:root+'/unchecked'})),library);
+   await page.waitForTimeout(1200);fs.unlinkSync(path.join(temp,'fault'));
+   const emitted=fs.readFileSync(path.join(temp,'exports','mapping-transition.m3u'),'utf8');
+   expect(emitted).toContain(tracks[2].filePath);expect(emitted).not.toContain('/unchecked/');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual([tracks[2].filePath]);
+   await page.getByRole('tab',{name:/Warm/}).click();
+   await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed recording',exact:true}).click();
+   expect(await page.getByRole('tab',{name:/Transition/}).getAttribute('data-state')).toBe('active');
+   await page.getByRole('button',{name:'Select none',exact:true}).click();
+   await page.waitForTimeout(100);expect(await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed recording',exact:true}).count()).toBe(0);
  });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
 }catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});throw e;}finally{await app?.close().catch(()=>{});}
