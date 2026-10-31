@@ -527,14 +527,31 @@ export const FOLDER_ROOTS_KEY = "dancefloor:musicFolderRoots";
 export function getFolderRoots(): Record<string, string> {
   if (typeof localStorage === "undefined") return {};
   try {
-    return JSON.parse(localStorage.getItem(FOLDER_ROOTS_KEY) || "{}") as Record<string, string>;
+    const value: unknown = JSON.parse(localStorage.getItem(FOLDER_ROOTS_KEY) || "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.entries(value).some(([, v]) => typeof v !== "string")) {
+      throw new Error("Saved music folder locations are invalid. The original data has been preserved.");
+    }
+    return Object.assign(Object.create(null), value) as Record<string, string>;
   } catch {
     return {};
   }
 }
 
+export function folderRootsProblem(): string | null {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(FOLDER_ROOTS_KEY);
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value) || Object.entries(value).some(([, v]) => typeof v !== "string")) throw new Error();
+    return null;
+  } catch { return "Saved music folder locations could not be read. Original data is preserved; reconnect only after recovering these locations."; }
+}
+
 export function setFolderRoot(label: string, root: string): void {
   if (typeof localStorage === "undefined") return;
+  const problem = folderRootsProblem();
+  if (problem) throw new Error(problem);
   const roots = getFolderRoots();
   const clean = root.trim().replace(/[\\/]+$/, "");
   if (clean) roots[label] = clean;
@@ -575,16 +592,19 @@ export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary, roots: Record
     for (const ti of indices) {
       const t = lib.tracks[ti];
       if (!t) continue;
+      const path = resolveExportPath(t.filePath, roots) ?? t.filePath;
+      if (/[\r\n]/.test(path)) throw new Error(`Cannot export “${t.title}”: its file path contains a line break. No playlist was written.`);
+      const singleLine = (v?: string) => v?.replace(/[\r\n]+/g, " ");
       const vdj =
         vdjTag("filesize", t.fileSize) +
-        vdjTag("artist", t.artist) +
-        vdjTag("title", t.title) +
-        vdjTag("remix", t.remix) +
+        vdjTag("artist", singleLine(t.artist)) +
+        vdjTag("title", singleLine(t.title)) +
+        vdjTag("remix", singleLine(t.remix)) +
         vdjTag("bpm", t.bpm) +
         vdjTag("key", t.key);
       lines.push(`#EXTVDJ:${vdj}`);
-      lines.push(`#EXTINF:-1,${t.artist ? `${t.artist} - ` : ""}${t.title}`);
-      lines.push(resolveExportPath(t.filePath, roots) ?? t.filePath);
+      lines.push(`#EXTINF:-1,${t.artist ? `${singleLine(t.artist)} - ` : ""}${singleLine(t.title)}`);
+      lines.push(path);
     }
   }
   return lines.join("\r\n") + "\r\n";
