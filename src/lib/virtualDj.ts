@@ -621,7 +621,8 @@ export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary, roots: Record
 /**
  * Plain-text set list: numbered "Artist - Title", extras indented.
  * `matchedOnly` drops songs with no library match (used for DJ-software exports);
- * otherwise unmatched songs are kept and flagged "(not in library)".
+ * otherwise unmatched songs are kept and flagged with the actual reason:
+ * "(excluded from DJ export)", "(match not confirmed)", or "(not in library)".
  */
 export function buildTxtPlaylist(
   items: ExportSongRef[],
