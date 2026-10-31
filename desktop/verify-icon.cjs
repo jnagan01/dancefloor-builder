@@ -28,10 +28,14 @@ function inspectIcon(bytes, expectedSize) {
   const alpha=(x,y)=>pixels[(y*width+x)*4+3];
   const corners=[[0,0],[width-1,0],[0,height-1],[width-1,height-1]].map(([x,y])=>alpha(x,y));
   if(corners.some(a=>a!==0)) throw Error('Icon corners must remain fully transparent');
-  let opaqueInterior=0;
-  for(let y=Math.floor(height/4);y<height*3/4;y++) for(let x=Math.floor(width/4);x<width*3/4;x++) if(alpha(x,y)===255) opaqueInterior++;
-  if(opaqueInterior<width*height/100) throw Error('Icon must retain opaque interior artwork');
-  return {width,height,corners,opaqueInterior};
+  // Supplied artwork has interior alpha 251–254; preserve it, never flatten to 255.
+  let nearOpaqueInterior=0, fullyOpaquePixels=0;
+  for(let y=0;y<height;y++) for(let x=0;x<width;x++) {
+    if(alpha(x,y)===255) fullyOpaquePixels++;
+    if(x>=width/4&&x<width*3/4&&y>=height/4&&y<height*3/4&&alpha(x,y)>=250) nearOpaqueInterior++;
+  }
+  if(nearOpaqueInterior<width*height/5 || !fullyOpaquePixels) throw Error('Icon must retain nearly opaque interior artwork and opaque pixels');
+  return {width,height,corners,nearOpaqueInterior,fullyOpaquePixels};
 }
 if(require.main===module) console.log(inspectIcon(fs.readFileSync(process.argv[2]),Number(process.argv[3]||1024)));
 module.exports={inspectIcon};

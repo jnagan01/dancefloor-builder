@@ -4,10 +4,11 @@ import fs from 'node:fs';
 import zlib from 'node:zlib';
 const { inspectIcon } = createRequire(import.meta.url)('../desktop/verify-icon.cjs');
 describe('exact transparent Mac icon', () => {
-  it('retains transparent corners and opaque interior in the 1024 source', () => {
+  it('retains transparent corners and original nearly opaque interior in the 1024 source', () => {
     const result = inspectIcon(fs.readFileSync('desktop/build/icon-source.png'), 1024);
     expect(result.corners).toEqual([0,0,0,0]);
-    expect(result.opaqueInterior).toBeGreaterThan(10485);
+    expect(result.nearOpaqueInterior).toBe(262144);
+    expect(result.fullyOpaquePixels).toBeGreaterThan(0);
   });
   it('rejects flattened artwork with a white rectangle', () => {
     const header=Buffer.alloc(13);header.writeUInt32BE(16,0);header.writeUInt32BE(16,4);header[8]=8;header[9]=6;
