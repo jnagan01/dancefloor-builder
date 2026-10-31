@@ -23,6 +23,7 @@ describe('actual mounted event route recovery and ownership',()=>{
   vi.useFakeTimers();const h=harness({rows:{A:row()}});await h.flush();
   h.tree.props.onClickCapture?.({target:{closest:()=>({})}});h.tree.props.onChangeCapture?.({target:{value:'search'}});
   h.interact(n=>n.props?.onPreview,'onPreview',{artist:'A',song:'Song'});
+  h.sectionClick(n=>n.props?.children==='Details');
   h.interact(n=>n.props?.onValueChange&&n.props?.value==='warmUp','onValueChange','transition');
   h.interact(n=>n.props?.onClose&&n.props?.resolve,'onClose');
   h.interact(n=>n.props?.onExportSpotify,'onExportSpotify');
