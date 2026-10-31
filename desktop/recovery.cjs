@@ -3,7 +3,7 @@ const path=require('node:path'),crypto=require('node:crypto');
 function createRecoveryStore(userData,fs=require('node:fs')){
  const folder=path.join(userData,'event-recovery');
  const location=key=>{if(typeof key!=='string'||!/^setarchitect:recovery:[^:]+:.+/.test(key)||key.length>1500)throw Error('Invalid recovery key.');return path.join(folder,crypto.createHash('sha256').update(key).digest('hex')+'.json');};
- const validate=(raw)=>{if(typeof raw!=='string'||Buffer.byteLength(raw)>32*1024*1024)throw Error('Recovery too large.');JSON.parse(raw);};
+ const validate=(raw)=>{if(typeof raw!=='string'||Buffer.byteLength(raw)>32*1024*1024)throw Error('Recovery too large.');};
  return {
  get(key){const file=location(key);try{const raw=fs.readFileSync(file,'utf8');validate(raw);return raw;}catch(e){if(e.code==='ENOENT')return null;throw e;}},
  set(key,raw){const file=location(key);validate(raw);fs.mkdirSync(folder,{recursive:true});const tmp=file+'.'+crypto.randomUUID()+'.tmp';let fd;
