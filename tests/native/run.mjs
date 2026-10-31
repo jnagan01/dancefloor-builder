@@ -171,7 +171,9 @@ try{
  });
  await check('automatic updater download latch captures latest editor draft before any Squirrel stage',async()=>{
    await page.evaluate(()=>{window.__testState.eventId='A';window.__testState.page='event';window.__rerender();});
-   const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.count())await archive.click();
+   await expect(page.getByRole('button',{name:'Dance floor',exact:false}).first()).toBeVisible({timeout:15000});
+   await expect(page.getByText('Secret Session',{exact:true}).first()).toBeVisible({timeout:15000});
+   const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.count()){await archive.click();await expect(archive).toHaveCount(0);}
    await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
    const name=page.getByPlaceholder('e.g. Smith Johnson Wedding');await expect(name).toHaveValue('Secret Session',{timeout:15000});
    await page.evaluate(()=>window.testBackend.autoUpdate('start'));await expect.poll(()=>fs.existsSync(path.join(temp,'download-started'))).toBe(true);
@@ -181,7 +183,7 @@ try{
    await page.evaluate(()=>window.testBackend.autoUpdate('release'));
    await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'installing'});
    expect(JSON.parse(fs.readFileSync(path.join(temp,'automatic-stage'),'utf8'))).toEqual({locked:true,backup:true});
-   const draft=await page.evaluate(()=>JSON.parse(window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A')));
+   const draft=await page.evaluate(()=>{const pending=window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A:pending-edit');return JSON.parse(pending||window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A'));});
    expect(draft.snapshot.name).toBe('Fresh edit during download');expect(draft.writeRevision).toBeTruthy();
    await page.evaluate(()=>window.testBackend.autoUpdate('unlock'));
    fs.unlinkSync(path.join(temp,'automatic-stage'));fs.writeFileSync(path.join(temp,'fault'),'RENAME_EACCES');
