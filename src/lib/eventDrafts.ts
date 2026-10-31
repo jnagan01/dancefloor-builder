@@ -54,6 +54,7 @@ export function sameEventSnapshot(a: unknown, b: unknown): boolean {
   try { return canonical(a) === canonical(b); } catch { return false; }
 }
 /** A changed exit token is harmless only when BOTH marker and exact semantic data agree. */
+export function pendingRecoveryEvent(event: string) { return `${event}:pending-edit`; }
 export function reconcileEventDraft(account: string, event: string, revision: string | null, snapshot: unknown, storage: Storage = localStorage): boolean {
   const draft = loadEventDraft(account, event, storage);
   if (!draft || !revision || draft.writeRevision !== revision || !sameEventSnapshot(draft.snapshot, snapshot)) return false;

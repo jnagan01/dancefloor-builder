@@ -4,7 +4,7 @@ const ts = require(path.join(root, 'node_modules/typescript'));
 function createEventRouteHarness(actual) {
   let source = fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
   // Expose actual closures in the test VM only; no production test seam or replacement logic.
-  source = source.replace('  const withFileBpm =', '  capture({ result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
+  source = source.replace('  const withFileBpm =', '  capture({ songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   source += '\nexport { SectionView };';
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
   function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }) } = {}) {
@@ -40,7 +40,7 @@ function createEventRouteHarness(actual) {
       '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},
-      '@/lib/neighbors.functions':{getArtistNeighbors:async()=>({neighbors:[]})},
+      '@/lib/neighbors.functions':{getArtistNeighbors:async()=>({clusters:[]})},
       '@/lib/recommend.functions':{recommendSongsForSection:async()=>({suggestions:[]})},
       '@/lib/lastfm.functions':{getArtistCrowdData:async()=>({artists:[]})},
       jszip:{default:class {file(name,data){files.push({name,data});return this;} async generateAsync(){return new Blob(['zip']);}}},

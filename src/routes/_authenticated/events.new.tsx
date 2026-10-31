@@ -107,7 +107,7 @@ import { Slider } from "@/components/ui/slider";
 import { VibeBreakdown } from "@/components/builder/VibeBreakdown";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
 import { readEventSnapshot } from "@/lib/snapshotSafety";
-import { storeEventDraft, loadEventDraft, confirmEventDraft, checkpointEventDraft, archiveEventDraft, reconcileEventDraft, sameEventSnapshot, type EventDraft } from "@/lib/eventDrafts";
+import { storeEventDraft, loadEventDraft, confirmEventDraft, checkpointEventDraft, archiveEventDraft, reconcileEventDraft, sameEventSnapshot, pendingRecoveryEvent, type EventDraft } from "@/lib/eventDrafts";
 import { eventRevision } from "@/lib/eventRevision";
 import { validateTiming, boundedNumber, displayNumber, displayBuffer, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "@/lib/inputSafety";
 import { useAuth } from "@/hooks/useAuth";
@@ -693,7 +693,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       remoteRevision.current = eventRevision(row.inputs);
       autosave.configure(openedEventId, row.updated_at, stableCreate.current, remoteRevision.current);
       if (accountRef.current) {
-        try { reconcileEventDraft(accountRef.current, openedEventId, remoteRevision.current, { name: row.name, inputs: row.inputs, lists: row.lists }); setRecovery(loadEventDraft(accountRef.current, openedEventId)); } catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
+        try { reconcileEventDraft(accountRef.current, openedEventId, remoteRevision.current, { name: row.name, inputs: row.inputs, lists: row.lists }); setRecovery(loadEventDraft(accountRef.current, pendingRecoveryEvent(openedEventId)) ?? loadEventDraft(accountRef.current, openedEventId)); } catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
       }
       setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(displayNumber(inputs.hours, MAX_EVENT_HOURS) || 3));
       // A saved event with only a single list and no dance-floor sections is a
@@ -744,6 +744,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       restoredFingerprint.current = JSON.stringify(eventSnapshot(result, matches));
       return;
     }
+    if (recovery && userEdited.current && account && result && !draftBlocked.current && !snapshotReadOnly.current) {
+      const snapshot = eventSnapshot(result, matches), event = pendingRecoveryEvent(openedEventId ?? "new");
+      try {
+        const previous = loadEventDraft<ReturnType<typeof eventSnapshot>>(account, event);
+        if (!previous || !sameEventSnapshot(previous.snapshot, snapshot)) storeEventDraft({ version: 1, account, event, token: crypto.randomUUID(), createId: stableCreate.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, writeRevision: crypto.randomUUID(), savedId: savedEventId ?? undefined, snapshot, savedAt: Date.now() });
+      } catch { toast.error("Your newer edits could not be kept locally. Keep this event open and archive the older recovery copy before leaving."); }
+      return;
+    }
     if(draftBlocked.current || snapshotReadOnly.current || recovery || !userEdited.current || !accountRef.current || !result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
     const boundary=openedEventId;
     const snapshot = eventSnapshot(result,matches);
@@ -769,12 +777,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   latestSnapshot.current = result && account ? { snapshot: eventSnapshot(result, matches), account, event: openedEventId ?? "new", createId: stableCreate.current } : null;
   const persistOnExit = () => {
     const owned = latestSnapshot.current;
-    if (!owned || !userEdited.current || latestSaveState.current === "saved" || draftBlocked.current || snapshotReadOnly.current || recovery) return;
+    if (!owned || !userEdited.current || latestSaveState.current === "saved" || draftBlocked.current || snapshotReadOnly.current) return;
     const token = crypto.randomUUID();
-    const previous = loadEventDraft<ReturnType<typeof eventSnapshot>>(owned.account, owned.event);
+    const event = recovery ? pendingRecoveryEvent(owned.event) : owned.event;
+    const previous = loadEventDraft<ReturnType<typeof eventSnapshot>>(owned.account, event);
     const sameEdit = previous && sameEventSnapshot(previous.snapshot, owned.snapshot);
     const writeRevision = sameEdit ? previous.writeRevision : crypto.randomUUID();
-    storeEventDraft({ version: 1, ...owned, token: sameEdit ? previous.token : token, writeRevision: writeRevision ?? logicalWrite.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, savedId: savedEventId ?? previous?.savedId, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined });
+    storeEventDraft({ version: 1, ...owned, event, token: sameEdit ? previous.token : token, writeRevision: writeRevision ?? logicalWrite.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, savedId: savedEventId ?? previous?.savedId, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined });
   };
   const exitGuard = useRef(persistOnExit); exitGuard.current = persistOnExit;
   useBlocker({ shouldBlockFn: () => {
@@ -789,7 +798,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }, []);
   useEffect(() => {
     if (!account || openedEventId) return;
-    try { const draft = loadEventDraft<ReturnType<typeof eventSnapshot>>(account, "new"); if (draft) { stableCreate.current = draft.createId; setRecovery(draft); } }
+    try { const draft = loadEventDraft<ReturnType<typeof eventSnapshot>>(account, pendingRecoveryEvent("new")) ?? loadEventDraft<ReturnType<typeof eventSnapshot>>(account, "new"); if (draft) { stableCreate.current = draft.createId; setRecovery(draft); } }
     catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
     autosave.configure(null, null, stableCreate.current);
   }, [account, openedEventId]);
@@ -800,6 +809,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     if (!recovery || recovery.account !== account) return;
     try {
       archiveEventDraft(recovery.account, recovery.event);
+      const event = openedEventId ?? "new";
+      if (recovery.event !== event) archiveEventDraft(recovery.account, event);
+      else archiveEventDraft(recovery.account, pendingRecoveryEvent(event));
       setRecovery(null);
       // Edits made while a conflict was visible remain dirty and are now persisted normally.
       if (userEdited.current) restoredFingerprint.current = null;
@@ -1657,6 +1669,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   function updateMatch(key: string, patch: Partial<SongMatch>) {
     const next = { ...matches, [key]: { ...matches[key], ...patch } };
     if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, matches))) markPersistedEdit();
+    matchesRef.current = next;
     setMatches((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
@@ -2277,7 +2290,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           try { validateTiming(hours, buffer, splitOn ? split : undefined); if(background)boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); snapshotReadOnly.current=false; restoredFingerprint.current="corrected"; setSnapshotProblem(null); markPersistedEdit(); setResult({...result}); }
           catch(e) { toast.error((e as Error).message); }
         }}>Use corrected settings</Button>}</div>}
-        {recovery && <div role="alert" className="flex flex-wrap items-center gap-2 border border-border p-3"><span>Unsaved recovery copy from {formatSavedAt(recovery.savedAt)}</span><Button size="sm" onClick={() => restoreRecovery(false)} disabled={recovery.baseVersion !== remoteVersion.current}>Restore recovery copy</Button><Button size="sm" variant="outline" onClick={() => restoreRecovery(true)}>Save recovery as new event</Button><Button size="sm" variant="outline" onClick={dismissRecovery}>Archive recovery copy and continue</Button></div>}
+        {recovery && <div role="alert" className="flex flex-wrap items-center gap-2 border border-border p-3"><span>Unsaved recovery copy from {formatSavedAt(recovery.savedAt)}</span><Button size="sm" onClick={() => restoreRecovery(false)} disabled={recovery.baseRevision === undefined || (recovery.writeRevision !== remoteRevision.current && (recovery.baseRevision !== remoteRevision.current || (recovery.baseRevision === null && recovery.baseVersion !== remoteVersion.current)))}>Restore recovery copy</Button><Button size="sm" variant="outline" onClick={() => restoreRecovery(true)}>Save recovery as new event</Button><Button size="sm" variant="outline" onClick={dismissRecovery}>Archive recovery copy and continue</Button></div>}
         <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}{saveState==="error" && <Button variant="outline" size="sm" onClick={()=>autosave.retry()}>Retry save</Button>}</div>
       </header>
       <div className="space-y-6 pb-32 pt-6">
