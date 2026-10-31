@@ -119,7 +119,7 @@ try{
    await page.getByRole('tab',{name:/Warm/}).click();
    await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed recording',exact:true}).click();
    expect(await page.getByRole('tab',{name:/Transition/}).getAttribute('data-state')).toBe('active');
-   await page.getByRole('button',{name:'Select none',exact:true}).click();
+   await page.getByRole('button',{name:'Unselect all',exact:true}).click();
    await page.waitForTimeout(100);expect(await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed recording',exact:true}).count()).toBe(0);
  });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
