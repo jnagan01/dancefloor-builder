@@ -71,7 +71,7 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
-/* Dark is the primary expression of the brand. */
+/* Default System fallback is light; explicit/system-dark overrides share these roles. */
 :root {
   --media-overlay: oklch(0.12 0 0 / 75%);
   --media-foreground: oklch(1 0 0);
@@ -129,6 +129,7 @@
   --chart-3: var(--info);
   --chart-4: var(--ai);
   --chart-5: var(--destructive);
+  --gradient-gold: linear-gradient(120deg, var(--gold-soft), var(--gold));
   --shadow-gold: 0 10px 34px -16px oklch(0.62 0.104 82 / 45%);
 }
 
@@ -156,8 +157,8 @@
   --muted-foreground: oklch(0.71 0.014 90);
   --accent: oklch(0.3 0.025 82);
   --accent-foreground: oklch(0.93 0.03 90);
-  --destructive: oklch(0.62 0.2 22);
-  --destructive-foreground: oklch(0.97 0.01 90);
+  --destructive: oklch(0.72 0.16 22);
+  --destructive-foreground: oklch(0.17 0.01 90);
 
   --success: oklch(0.72 0.14 155);
   --success-foreground: oklch(0.17 0.01 90);
@@ -217,8 +218,8 @@
   --muted-foreground: oklch(0.71 0.014 90);
   --accent: oklch(0.3 0.025 82);
   --accent-foreground: oklch(0.93 0.03 90);
-  --destructive: oklch(0.62 0.2 22);
-  --destructive-foreground: oklch(0.97 0.01 90);
+  --destructive: oklch(0.72 0.16 22);
+  --destructive-foreground: oklch(0.17 0.01 90);
 
   --success: oklch(0.72 0.14 155);
   --success-foreground: oklch(0.17 0.01 90);

@@ -1,12 +1,13 @@
 import {build} from 'esbuild';import {_electron as electron,expect} from '@playwright/test';
 import {compile} from '@tailwindcss/node';
+import {Scanner} from '@tailwindcss/oxide';
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'setarchitect-native-')),bundle=path.join(temp,'bundle');fs.mkdirSync(bundle);fs.writeFileSync(path.join(temp,'ISOLATED'),'synthetic only');
 const stub=path.join(root,'tests/native/fixtures/services.tsx');
 const names=['history.functions','recommend.functions','neighbors.functions','lastfm.functions','enrich.functions','spotify.functions','pageHead','appVersion','dirHandleStore','libraryStore'];
 await build({entryPoints:[path.join(root,'tests/native/fixtures/entry.tsx')],bundle:true,platform:'browser',format:'esm',outfile:path.join(bundle,'app.js'),jsx:'automatic',alias:{'@':path.join(root,'src')},plugins:[{name:'isolated-services',setup(b){b.onResolve({filter:/.*/},args=>{if(names.some(n=>args.path===`@/lib/${n}`)||['react-start','react-router'].some(n=>args.path===`@tanstack/${n}`)||['@/hooks/useAuth','@/hooks/useDebounce','@/hooks/useProfileSettings','@/integrations/supabase/client','sonner','@/components/HistoryPanel','@/components/ProfileSettingsDialog','@/components/SpotifyExportDialog','@/components/workspace/WaveformPlayer','@/components/ui/sonner','./settings'].includes(args.path))return {path:stub};});}}]});
-const css=await compile(fs.readFileSync(path.join(root,'src/styles.css'),'utf8'),{base:path.join(root,'src'),onDependency:()=>{}});fs.writeFileSync(path.join(bundle,'app.css'),css.build([]));
+const css=await compile(fs.readFileSync(path.join(root,'src/styles.css'),'utf8'),{base:path.join(root,'src'),onDependency:()=>{}});fs.writeFileSync(path.join(bundle,'app.css'),css.build(new Scanner({sources:[{base:root,pattern:'src/**/*.{tsx,ts}',negated:false}]}).scan()));
 fs.writeFileSync(path.join(bundle,'index.html'),`<link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module">window.__fixture=await window.testBackend.fixture();window.__errors=[];window.__warnings=[];window.__success=[];await import('/app.js');</script>`);
 const library=path.join(temp,'library');fs.mkdirSync(library);const song={artist:'Test Artist',song:'Test Song - Live'};const tracks=[{filePath:path.join(library,'wrong.mp3'),artist:'Unrelated Artist',title:'Wrong Song',bpm:'190',key:'1A',playCount:100},{filePath:path.join(library,'correct.mp3'),artist:song.artist,title:song.song,bpm:'120',key:'8A',playCount:1},{filePath:path.join(library,'most.mp3'),artist:song.artist,title:song.song+' Remix',bpm:'125',key:'9A',playCount:20}];tracks.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes, never played'));
 const key='warmUp:0:test artist|test song live';
@@ -170,7 +171,8 @@ try{
  });
  await check('automatic updater download latch captures latest editor draft before any Squirrel stage',async()=>{
    await page.evaluate(()=>{window.__testState.eventId='A';window.__testState.page='event';window.__rerender();});
-   const name=page.getByPlaceholder('e.g. Smith–Jones Wedding');await expect(name).toHaveValue('Build26 legitimate identifiers',{timeout:15000});
+   await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
+   const name=page.getByPlaceholder('e.g. Smith Johnson Wedding');await expect(name).toHaveValue('Secret Session',{timeout:15000});
    await page.evaluate(()=>window.testBackend.autoUpdate('start'));await expect.poll(()=>fs.existsSync(path.join(temp,'download-started'))).toBe(true);
    expect((await page.evaluate(()=>window.testBackend.autoUpdate('quit'))).blocked).toBe(true);
    await name.fill('Fresh edit during download');await expect(name).toHaveValue('Fresh edit during download');

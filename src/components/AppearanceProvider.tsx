@@ -6,10 +6,10 @@ export function AppearanceProvider({ children }: { children: ReactNode }) {
   const [appearance, update] = useState<Appearance>("system");
   useEffect(() => {
     const media = matchMedia("(prefers-color-scheme: dark)");
-    let selected = readAppearance(localStorage);
+    let selected = readAppearance({ getItem: key => window.localStorage.getItem(key) });
     const sync = () => { update(selected); applyAppearance(selected, media.matches); };
     const systemChange = () => { if (selected === "system") sync(); };
-    const selectionChange = () => { selected = readAppearance(localStorage); sync(); };
+    const selectionChange = () => { selected = readAppearance({ getItem: key => window.localStorage.getItem(key) }); sync(); };
     const storageChange = (event: StorageEvent) => { if (event.key === APPEARANCE_KEY || event.key === null) selectionChange(); };
     sync(); media.addEventListener("change", systemChange);
     window.addEventListener("appearance-change", selectionChange); window.addEventListener("storage", storageChange);
