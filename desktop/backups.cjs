@@ -1,11 +1,24 @@
 // Only controlled account-hashed files below userData; never accepts an import path.
 const path=require('node:path'), crypto=require('node:crypto');
 const MAX=32*1024*1024;
+const policy=require('./backup-policy.json');
+const privateProperty=new RegExp(policy.privatePropertyPattern,'i');
+function inspectBackupValues(value,parts=[],depth=0){
+ if(depth>policy.maxDepth)throw Error('Backup nesting is too deep.');
+ if(typeof value==='number'&&!Number.isFinite(value))throw Error('Unsafe numeric value.');
+ if(typeof value==='string'&&(value.length>policy.maxStringLength||value.includes('\0')))throw Error('Unsafe backup value.');
+ if(!value||typeof value!=='object')return;
+ const dictionary=policy.dictionaryPaths.some(pattern=>{const expected=pattern.split('.');return expected.length===parts.length&&expected.every((part,i)=>part==='*'||part===parts[i]);})||(['events','sources'].includes(parts[0])&&policy.metadataDictionaryProperties.includes(parts.at(-1)));
+ for(const[key,child]of Object.entries(value)){
+  if(key.length>policy.maxStringLength||key.includes('\0')||policy.dangerousKeys.includes(key.toLowerCase())||(!dictionary&&privateProperty.test(key)))throw Error('Backup contains unsafe or private fields.');
+  inspectBackupValues(child,[...parts,key],depth+1);
+ }
+}
 function validate(raw,account){
  if(typeof raw!=='string'||Buffer.byteLength(raw)>MAX)throw Error('Backup too large.');
  const b=JSON.parse(raw);
  if(!b||b.format!=='setarchitect-backup'||b.version!==1||b.account!==account||!Array.isArray(b.events)||b.events.length>500||!Array.isArray(b.sources)||!b.roots||typeof b.roots!=='object'||!Number.isFinite(Date.parse(b.createdAt)))throw Error('Invalid backup.');
- const visit=(v,depth=0)=>{if(typeof v==='number'&&!Number.isFinite(v))throw Error('Unsafe numeric value.');if(depth>30)throw Error('Backup nesting too deep.');if(typeof v==='string'&&v.includes('\0'))throw Error('Unsafe value.');if(v&&typeof v==='object')for(const[k,x]of Object.entries(v)){if(/^(?:__proto__|constructor|prototype|.*password.*|.*credential.*|.*session.*|.*access.?token.*|.*refresh.?token.*|.*secret.*|.*api.?key.*)$/i.test(k))throw Error('Private field in backup.');visit(x,depth+1);}};visit(b);
+ inspectBackupValues(b);
  const labels=new Set(),rootPaths=new Set(),ids=new Set();
  let total=0;for(const s of b.sources){if(!s||typeof s.label!=='string'||!Array.isArray(s.tracks))throw Error('Invalid source.');if(!s.label||labels.has(s.label)||/[\\/\r\n]/.test(s.label))throw Error('Duplicate or unsafe label.');labels.add(s.label);total+=s.tracks.length;const paths=new Set();for(const t of s.tracks)if(!t||typeof t.filePath!=='string'||typeof t.artist!=='string'||typeof t.title!=='string'||/[\r\n]/.test(t.filePath)||t.filePath.split(/[\\/]/).includes('..')||paths.has(t.filePath))throw Error('Invalid track.');else paths.add(t.filePath);}if(total>100000)throw Error('Too many tracks.');
  for(const[label,p]of Object.entries(b.roots))if(!label||/[\\/\r\n]/.test(label)||typeof p!=='string'||/[\r\n\0]/.test(p)||p.split(/[\\/]/).includes('..')||!(/^(?:\/|[A-Za-z]:[\\/])/.test(p)))throw Error('Unsafe mapping.');

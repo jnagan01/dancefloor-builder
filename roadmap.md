@@ -68,3 +68,8 @@
 - [x] Preserve native-only new-event and pending-conflict drafts during backup restore, with native regression.
 - [x] Bind readiness issues to songs, invalidate stale previews, and freeze export library/root paths across awaits.
 - [x] Run full/native/adversarial checks and inspect automatic build results; report final revision.
+
+# Build26 backup identifier regression
+- [ ] Context-aware shared browser/native private-field policy without modifying saved data.
+- [ ] Exact identifier, secret rejection, roundtrip, startup/rescan UI and native-store regressions.
+- [ ] Full and isolated Electron suites, automatic build/typecheck, final revision and updater limitation.
