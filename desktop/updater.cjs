@@ -80,6 +80,7 @@ async function fetchLatest() {
 async function runUpdate(latest, parent) {
   const target = path.join(app.getPath("downloads"), latest.assetName || "SetArchitect.dmg");
   try {
+    await require("./backups.cjs").createBackupStore(app.getPath("userData")).verifyAll();
     await download(latest.url, target);
   } catch (error) {
     await dialog.showMessageBox(parent, {

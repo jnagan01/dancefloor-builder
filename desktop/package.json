@@ -28,6 +28,7 @@
       "tags.cjs",
       "security.cjs",
       "scan.cjs",
+      "backups.cjs",
       "build-info.json",
       "package.json",
       "node_modules/**/*"
