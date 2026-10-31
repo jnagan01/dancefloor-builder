@@ -79,7 +79,7 @@
 - [x] Replace timing-sensitive backup-case waits; run full/native suites and report final revision without production operations.
 
 ## Appearance and guarded automatic Mac updates
-- [ ] Incorporate exact uploaded transparent icon, verify source and ICNS transparency gates, rerun all tests.
+- [x] Incorporate exact uploaded RGBA icon at 1024 and matching favicon; lossless local ICNS roundtrip, source/ICNS/ZIP/DMG transparency release gates, 406 unit + 16 Electron + 49 adversarial checks passed, automatic build OK.
 - [x] Locally persisted Light/Dark/System, first paint, system changes, semantic contrast and synthetic UI checks.
 - [x] Pinned signed ZIP updater, explicit consent, fresh backup/draft preservation before Squirrel staging, quit/cancel/failure gates.
 - [x] Monotonic semver and coherent signed ZIP/DMG/feed artifacts; retain macos-15 regression release prerequisite.
