@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, folderForPath, resolveExportPath, cleanBpm, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
+import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, folderForPath, resolveExportPath, folderRootsProblem, cleanBpm, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
 import { loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
 import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle, supportsNativeScan, scanNativeFolder, chooseNativeMusicFolder, readNativeAudioFile, writeNativeTags, rememberNativeFilePath } from "@/lib/desktopBridge";
 import { pickDirectoryHandle } from "@/lib/virtualDj";
@@ -10,11 +10,13 @@ import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioM
 import { allocateSourceLabel, relabelScan, normalizeFilePath, trackIdentity, createIdentityIndex } from "@/lib/fileIdentity";
 import { metadataResolver, mergeTrackMetadata, carryRescanMetadata } from "@/lib/trackMetadataIdentity";
 import { withoutSourceFiles, cachedFileIdentity } from "@/lib/workspaceFileCache";
+import { createWorkspaceIndexes } from "@/lib/workspaceIndexes";
+import { createTrackRevisions } from "@/lib/trackRevisions";
 import { nativeScanProblem } from "@/lib/nativeScanSafety";
 
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
-  sources: Source[]; files: File[]; audioIndex: AudioIndex; library: VdjLibrary | null; loading: boolean;
+  sources: Source[]; files: File[]; audioIndex: AudioIndex; library: VdjLibrary | null; loading: boolean; persistenceError: string | null;
   addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => string;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
   /** Loads a remembered file from disk (desktop app) so it can be played. */
@@ -50,7 +52,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [vdjSyncing, setVdjSyncing] = useState(false);
   const [vdjRoot, setVdjRoot] = useState<string | null>(null);
   const [vdjTrackCount, setVdjTrackCount] = useState<number | null>(null);
+  const [persistenceError, setPersistenceError] = useState<string | null>(null);
+  const persistenceBlocked = useRef(false);
+  const [indexes] = useState(createWorkspaceIndexes);
+  const [revisions] = useState(createTrackRevisions);
   useEffect(() => {
+    const problem = folderRootsProblem();
+    if (problem) toast.error(problem);
     const saved = Number(localStorage.getItem(VDJ_SYNC_KEY));
     if (saved) setVdjSyncedAt(saved);
     const path = localStorage.getItem(VDJ_PATH_KEY);
@@ -176,7 +184,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (!active) return;
       const id = data.user?.id;
       if (!id) { setLoading(false); return; }
-      const saved = await loadMusicLibrary(id);
+      let saved;
+      try { saved = await loadMusicLibrary(id); } catch (e) {
+        persistenceBlocked.current = true;
+        setPersistenceError((e as Error).message); toast.error((e as Error).message);
+        setLoading(false); return;
+      }
       if (!active) return;
       setSources(saved?.sources ?? []);
       setUserId(id);
@@ -185,7 +198,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, []);
   useEffect(() => {
-    if (userId && !loading) void saveMusicLibrary(sources, userId);
+    if (userId && !loading && !persistenceBlocked.current) void saveMusicLibrary(sources, userId).then(at => {
+      if (!at) { setPersistenceError("Music index changes could not be saved on this device. Your previous saved index is preserved."); toast.error("Could not save music index changes. Check available device storage."); }
+      else setPersistenceError(null);
+    });
   }, [sources, userId, loading]);
   // Desktop app: silently re-read remembered music folders from disk on launch
   // and then re-read VirtualDJ so play counts are there without any manual refresh.
@@ -211,9 +227,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     void syncVirtualDj(vdjDatabaseIn(root), true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading]);
-  const library = useMemo(() => sources.length ? mergeLibraries(sources.map(s => buildLibrary(s.tracks))) : null, [sources]);
-  const audioIndex = useMemo(() => buildAudioIndex(files, [], sources.flatMap(s => s.tracks.map(t => t.filePath)), getFolderRoots()), [files, sources]);
+  const library = useMemo(() => sources.length ? indexes.library(sources) : null, [sources, indexes]);
+  const knownPaths = indexes.paths(sources);
+  const audioIndex = indexes.audio(files, knownPaths, getFolderRoots());
   async function addFolder() {
+    const rootProblem = folderRootsProblem();
+    if (rootProblem) { toast.error(rootProblem); return; }
+    const scanStart = revisions.now();
     if (supportsNativeScan()) {
       const root = await chooseNativeMusicFolder();
       if (!root) return;
@@ -228,7 +248,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       setSources(prev => {
         const old = prev.find(s => s.label === label);
         const resolver = metadataResolver(old?.tracks ?? [], old?.tracks ?? [], getFolderRoots());
-        const tracks = tracksFromAudioFiles(asFileLike(scanned)).map(t => carryRescanMetadata(t, resolver.resolve(t.filePath)));
+        const tracks = tracksFromAudioFiles(asFileLike(scanned)).map(t => reconcileScan(label, t, resolver.resolve(t.filePath), undefined, scanStart));
         return old ? prev.map(s => s.label === label ? { label, tracks } : s) : [...prev, { label, tracks }];
       });
       toast.success(`${scanned.length} tracks indexed from ${label}`);
@@ -248,6 +268,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   /** Re-reads every remembered folder from disk (desktop app only). */
   async function rescanNative(silent = false): Promise<boolean> {
     const roots = getFolderRoots();
+    const scanStart = revisions.now();
     const targets = sources.filter(s => roots[s.label]);
     if (!targets.length) return false;
     const updates = new Map<string, VdjTrack[]>();
@@ -261,13 +282,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       updates.set(source.label, tracksFromAudioFiles(asFileLike(scanned)));
     }
     if (updates.size) {
-      setSources(prev => prev.map(s => {
-        const fresh = updates.get(s.label);
-        if (!fresh) return s;
-        const known = metadataResolver(s.tracks, prev.flatMap(source => source.tracks), roots);
-        const vdj = metadataResolver(vdjInfo.current, prev.flatMap(source => source.tracks), roots);
-        return { label: s.label, tracks: fresh.map(t => carryRescanMetadata(t, known.resolve(t.filePath), vdj.resolve(t.filePath))) };
-      }));
+      setSources(prev => {
+        const allTracks = prev.flatMap(source => source.tracks);
+        const known = metadataResolver(allTracks, allTracks, roots);
+        const vdj = metadataResolver(vdjInfo.current, allTracks, roots);
+        return prev.map(s => {
+          const fresh = updates.get(s.label);
+          if (!fresh) return s;
+          return { label: s.label, tracks: fresh.map(t => reconcileScan(s.label, t, known.resolve(t.filePath), vdj.resolve(t.filePath), scanStart)) };
+        });
+      });
       const total = [...updates.values()].reduce((n, t) => n + t.length, 0);
       if (!silent) toast.success(`${total.toLocaleString()} tracks re-read from your saved folders`);
     }
@@ -286,7 +310,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const available = new Map<string, File[]>();
     for (const file of files) {
       const label = (file.webkitRelativePath || file.name).split("/")[0];
-      available.set(label, [...(available.get(label) ?? []), file]);
+      let bucket = available.get(label);
+      if (!bucket) { bucket = []; available.set(label, bucket); }
+      bucket.push(file);
     }
     setSources(prev => prev.map(source => available.has(source.label) ? { label: source.label, tracks: tracksFromAudioFiles(available.get(source.label) ?? []) } : source));
     toast.success("Connected music folders rescanned. Reconnect any other folders to scan them again.");
@@ -296,10 +322,15 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
    * without the folder having to be reconnected.
    */
   async function saveTrackTags(source: number, index: number, patch: Partial<VdjTrack>) {
+    const sourceLabel = sources[source]?.label;
     const track = sources[source]?.tracks[index];
-    if (!track) return { ok: false, error: "Song not found." };
+    if (!track || !sourceLabel) return { ok: false, error: "Song not found." };
     const full = exactNativePath(track.filePath);
     if (!full) return { ok: false, error: "Rescan this music folder in the Mac app first." };
+    const roots = getFolderRoots();
+    const identity = trackIdentity(track.filePath, roots);
+    const generation = revisions.generation(sourceLabel);
+    const revision = revisions.bump(sourceLabel, track.filePath, roots);
     const fields = ["title", "artist", "album", "genre", "year", "bpm", "key", "comment"] as const;
     const tags: Record<string, string> = {};
     for (const k of fields) if (patch[k] !== undefined) tags[k] = String(patch[k] ?? "");
@@ -307,7 +338,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (!res.ok) return { ok: false, error: res.error };
     const t = res.tags ?? {};
     const year = t.year || undefined;
-    setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((tr, ti) => ti === index ? {
+    if (revisions.generation(sourceLabel) !== generation || revisions.revision(sourceLabel, track.filePath, roots) !== revision) return { ok: true };
+    setSources(prev => prev.map(s => s.label === sourceLabel ? { ...s, tracks: s.tracks.map(tr => trackIdentity(tr.filePath, roots) === identity ? {
       ...tr,
       title: t.title || tr.title, artist: t.artist || tr.artist,
       album: t.album || undefined, genre: t.genre || undefined, year,
@@ -318,8 +350,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
   function exactNativePath(filePath: string): string | null {
     const roots = getFolderRoots();
-    const indexed = [...nativePaths.current.values()].flatMap(map => [...map].map(([relative, path]) => ({ relative, path })));
-    const selected = createIdentityIndex(indexed, f => f.relative, roots, sources.flatMap(s => s.tracks.map(t => t.filePath))).resolve(filePath);
+    const selected = indexes.native(fileCacheRevision.current, nativePaths.current, knownPaths, roots).resolve(filePath);
     if (selected) return selected.path;
     return resolveExportPath(filePath, roots);
   }
@@ -346,6 +377,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const source = sources[index];
     if (!source) return;
     fileCacheRevision.current += 1;
+    revisions.remove(source.label);
     nativePaths.current.delete(source.label);
     setFiles(prev => withoutSourceFiles(prev, source.label, source.tracks.map(t => t.filePath), getFolderRoots()));
     setSources(prev => prev.filter((_, i) => i !== index));
@@ -370,7 +402,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setFiles(prev => [...prev.filter(f => (f.webkitRelativePath || f.name) !== rel), wrapped]);
     return rel;
   }
-  return <Context.Provider value={{ sources, files, audioIndex, library, loading, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack: (source, index, patch) => setSources(prev => prev.map((s, si) => si === source ? { ...s, tracks: s.tracks.map((t, ti) => ti === index ? { ...t, ...patch } : t) } : s)) }}>{children}</Context.Provider>;
+  function reconcileScan(label: string, fresh: VdjTrack, old: VdjTrack | undefined, vdj: VdjTrack | undefined, start: number) {
+    if (old && revisions.changedSince(label, old, getFolderRoots(), start)) return old;
+    return carryRescanMetadata(fresh, old, vdj);
+  }
+  function editTrack(source: number, index: number, patch: Partial<VdjTrack>) {
+    const selected = sources[source], track = selected?.tracks[index];
+    if (!selected || !track) return;
+    const roots = getFolderRoots(), identity = trackIdentity(track.filePath, roots);
+    revisions.bump(selected.label, track.filePath, roots);
+    setSources(prev => prev.map(s => s.label === selected.label ? { ...s, tracks: s.tracks.map(t => trackIdentity(t.filePath, roots) === identity ? { ...t, ...patch, filePath: t.filePath } : t) } : s));
+  }
+  return <Context.Provider value={{ sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);
