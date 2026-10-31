@@ -110,17 +110,22 @@ jobs:
           case "$ICON" in *.icns) ;; *) ICON="$ICON.icns" ;; esac
           iconutil -c iconset "$APP/Contents/Resources/$ICON" -o "$RUNNER_TEMP/packaged.iconset"
           node verify-icon.cjs "$RUNNER_TEMP/packaged.iconset/icon_512x512@2x.png" 1024
-          codesign --verify --deep --strict --verbose=2 "$APP"
-          codesign -dv "$APP" 2>&1 | grep 'Authority=Developer ID Application:'
-          xcrun stapler validate "$APP"
-          xcrun stapler validate release/*.dmg
+          bash verify-mac-app.sh "$APP" "$RUNNER_TEMP/zip-app-signature.log"
+          # electron-builder notarizes/staples the inner app, not the DMG wrapper.
+          # Keep all verification read-only so feed hashes still describe the exact upload bytes.
           hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/icon-dmg" release/*.dmg
+          trap 'hdiutil detach "$RUNNER_TEMP/icon-dmg"' EXIT
+          DMG_APP="$RUNNER_TEMP/icon-dmg/SetArchitect.app"
+          bash verify-mac-app.sh "$DMG_APP" "$RUNNER_TEMP/dmg-app-signature.log"
           cmp "$APP/Contents/Resources/$ICON" "$RUNNER_TEMP/icon-dmg/SetArchitect.app/Contents/Resources/$ICON"
-          hdiutil detach "$RUNNER_TEMP/icon-dmg"
           VERSION=$(node -p "require('./package.json').version")
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = 'com.exceptionalentertainment.dancefloorbuilder'
+          for PACKAGE_APP in "$APP" "$DMG_APP"; do
+            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$PACKAGE_APP/Contents/Info.plist")" = "$VERSION"
+            test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PACKAGE_APP/Contents/Info.plist")" = 'com.exceptionalentertainment.dancefloorbuilder'
+          done
           test "${{ steps.stamp.outputs.tag }}" = "v$VERSION"
+          hdiutil detach "$RUNNER_TEMP/icon-dmg"
+          trap - EXIT
 
       - name: Save the installer
         uses: actions/upload-artifact@v6
