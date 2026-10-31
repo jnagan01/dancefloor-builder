@@ -215,6 +215,21 @@ try{
    const dark=await page.evaluate(()=>({bg:getComputedStyle(document.body).backgroundColor,fg:getComputedStyle(document.body).color}));expect(dark.bg).not.toBe(light.bg);expect(dark.fg).not.toBe(light.fg);
    for(const result of await contrast())expect(result.ratio,`dark ${result.token}`).toBeGreaterThanOrEqual(4.5);
    await page.screenshot({path:path.join(diagnostics,'appearance-dark.png')});
+   for(const choice of ['Light','Dark']){
+     await theme.getByRole('button',{name:choice,exact:true}).click();
+     await page.evaluate(()=>{window.__testState.page='event';window.__rerender();});
+     await page.getByRole('button',{name:'Review & export',exact:false}).first().click();
+     await expect(page.getByText('Event flow',{exact:true})).toBeVisible({timeout:15000});
+     await page.getByText('Event flow',{exact:true}).locator('..').screenshot({path:path.join(diagnostics,`chart-${choice.toLowerCase()}.png`)});
+     await page.getByRole('button',{name:'Check export readiness',exact:true}).click();
+     await expect(page.getByText('Export readiness',{exact:true})).toBeVisible({timeout:15000});
+     await page.getByText('Export readiness',{exact:true}).locator('..').screenshot({path:path.join(diagnostics,`readiness-${choice.toLowerCase()}.png`)});
+     await page.setViewportSize({width:390,height:844});
+     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+     await page.screenshot({path:path.join(diagnostics,`mobile-${choice.toLowerCase()}.png`)});
+     await page.setViewportSize({width:1280,height:1800});
+     await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});
+   }
    await page.reload();await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.appearance),{timeout:15000}).toBe('dark');
    await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await theme.getByRole('button',{name:'System',exact:true}).click();
    await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('light'))).toBe(true);await page.emulateMedia({colorScheme:'dark'});
