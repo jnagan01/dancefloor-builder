@@ -1,3 +1,5 @@
+import { EVENT_REVISION_FIELD } from "./eventRevision";
+import { readEventSnapshot } from "./snapshotSafety";
 export interface EventDraft<T> {
   version: 1; account: string; event: string; token: string; createId: string;
   baseVersion: string | null; snapshot: T; savedAt: number;
@@ -38,4 +40,24 @@ export function archiveEventDraft(account: string, event: string, storage: Stora
 /** Remove only the exact draft acknowledged by the latest confirmed write. */
 export function confirmEventDraft(account: string, event: string, token: string, storage: Storage = localStorage) {
   if (loadEventDraft(account, event, storage)?.token === token) storage.removeItem(key(account, event));
+}
+/** Compare semantic persisted data, ignoring only the application's write marker. */
+export function sameEventSnapshot(a: unknown, b: unknown): boolean {
+  const canonical = (value: unknown): string => {
+    const checked = readEventSnapshot(value).snapshot;
+    const clean = { ...checked, inputs: { ...checked.inputs } };
+    delete clean.inputs[EVENT_REVISION_FIELD];
+    const ordered = (v: unknown): unknown => Array.isArray(v) ? v.map(ordered) : v && typeof v === "object"
+      ? Object.fromEntries(Object.entries(v).filter(([, x]) => x !== undefined).sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, ordered(x)])) : v;
+    return JSON.stringify(ordered(clean));
+  };
+  try { return canonical(a) === canonical(b); } catch { return false; }
+}
+/** A changed exit token is harmless only when BOTH marker and exact semantic data agree. */
+export function pendingRecoveryEvent(event: string) { return `${event}:pending-edit`; }
+export function reconcileEventDraft(account: string, event: string, revision: string | null, snapshot: unknown, storage: Storage = localStorage): boolean {
+  const draft = loadEventDraft(account, event, storage);
+  if (!draft || !revision || draft.writeRevision !== revision || !sameEventSnapshot(draft.snapshot, snapshot)) return false;
+  confirmEventDraft(account, event, draft.token, storage);
+  return true;
 }

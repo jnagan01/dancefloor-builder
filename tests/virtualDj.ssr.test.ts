@@ -41,7 +41,7 @@ assert(merged.tracks.length >= 1, "mergeLibraries returns library");
 const match = mod.matchSong({ artist: "Artist", song: "Song" }, merged);
 assert(match.status === "Matched" || match.status === "Possible Match", `matchSong status ok: ${match.status}`);
 
-const item = { artist: "Artist", song: "Song", match } as Parameters<typeof mod.buildVirtualDjXml>[0][number];
+const item = { song: { artist: "Artist", song: "Song" }, match } as Parameters<typeof mod.buildVirtualDjXml>[0][number];
 const xml = mod.buildVirtualDjXml([item], merged);
 assert(xml.includes("<VirtualFolder"), "buildVirtualDjXml emits VirtualFolder");
 

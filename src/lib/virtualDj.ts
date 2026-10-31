@@ -67,6 +67,8 @@ export interface SongMatch {
   alternatives: number[]; // alternative indices
   extraTrackIndices?: number[]; // additional manually-picked tracks exported alongside trackIndex
   excludedFromVdj?: boolean;
+  /** Explicit approval persisted separately from candidate paths. */
+  confirmed?: boolean;
 }
 
 // --- normalization helpers ---
@@ -490,13 +492,19 @@ export interface ExportSongRef {
   match?: SongMatch;
 }
 
+/** Missing approval never grants a tentative/ambiguous candidate export permission. */
+export function exportApproved(match?: SongMatch): boolean {
+  return !!match && !match.excludedFromVdj && match.confirmed !== false &&
+    (match.confirmed === true || match.status === "Matched" || match.status === "Manually Matched");
+}
+
 export function buildVirtualDjXml(items: ExportSongRef[], lib?: VdjLibrary): string {
   const lines: string[] = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
   lines.push('<VirtualFolder noDuplicates="yes" singleDrive="no" ordered="yes">');
   let idx = 0;
   for (const item of items) {
-    if (item.match?.excludedFromVdj) continue;
+    if (!exportApproved(item.match)) continue;
     if (item.match?.trackIndex == null || !lib) continue;
     const indices = [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])];
     for (const ti of indices) {
@@ -573,7 +581,7 @@ export function resolveExportPath(filePath: string, roots: Record<string, string
 export function countUnresolvedPaths(items: ExportSongRef[], lib?: VdjLibrary, roots = getFolderRoots()): number {
   let n = 0;
   for (const item of items) {
-    if (item.match?.excludedFromVdj || item.match?.trackIndex == null || !lib) continue;
+    if (!exportApproved(item.match) || item.match?.trackIndex == null || !lib) continue;
     for (const ti of [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])]) {
       const t = lib.tracks[ti];
       if (t && resolveExportPath(t.filePath, roots) == null) n += 1;
@@ -586,7 +594,7 @@ export function countUnresolvedPaths(items: ExportSongRef[], lib?: VdjLibrary, r
 export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary, roots: Record<string, string> = getFolderRoots()): string {
   const lines: string[] = ["#EXTM3U"];
   for (const item of items) {
-    if (item.match?.excludedFromVdj) continue;
+    if (!exportApproved(item.match)) continue;
     if (item.match?.trackIndex == null || !lib) continue;
     const indices = [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])];
     for (const ti of indices) {
@@ -623,19 +631,14 @@ export function buildTxtPlaylist(
   const lines: string[] = [];
   let n = 0;
   for (const item of items) {
-    if (item.match?.excludedFromVdj) continue;
     const label = `${item.song.artist ? `${item.song.artist} - ` : ""}${item.song.song}`;
     const ti = item.match?.trackIndex;
-    const main = ti != null && lib ? lib.tracks[ti] : undefined;
-    if (!main) {
-      if (opts.matchedOnly) continue;
-      n += 1;
-      lines.push(`${n}. ${label} (not in library)`);
-      continue;
-    }
+    const main = exportApproved(item.match) && ti != null && lib ? lib.tracks[ti] : undefined;
+    if (opts.matchedOnly && !main) continue;
     n += 1;
-    lines.push(`${n}. ${main.artist ? `${main.artist} - ` : ""}${main.title}`);
-    for (const ei of item.match?.extraTrackIndices ?? []) {
+    // Reference exports always describe the intended song, never a candidate's metadata.
+    lines.push(`${n}. ${opts.matchedOnly && main ? `${main.artist ? `${main.artist} - ` : ""}${main.title}` : label}${!main && !opts.matchedOnly ? " (not in library)" : ""}`);
+    if (opts.matchedOnly) for (const ei of item.match?.extraTrackIndices ?? []) {
       const t = lib?.tracks[ei];
       if (t) lines.push(`   + ${t.artist ? `${t.artist} - ` : ""}${t.title}`);
     }
@@ -647,7 +650,7 @@ export function buildTxtPlaylist(
 export function countMatchedForExport(items: ExportSongRef[], lib?: VdjLibrary): number {
   let n = 0;
   for (const item of items) {
-    if (item.match?.excludedFromVdj) continue;
+    if (!exportApproved(item.match)) continue;
     const ti = item.match?.trackIndex;
     if (ti != null && lib && lib.tracks[ti]) n += 1;
   }

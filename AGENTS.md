@@ -16,3 +16,7 @@
 - Reconcile tag callbacks and scans by case-sensitive identity plus session revision/generation, not positions; cache identity-only indexes separately from metadata-aware library subjects because edits must not redirect files or rebuild audio unnecessarily.
 - Validate persisted roots, source indexes and snapshots without writing sanitized replacements over corrupted originals; keep older out-of-range snapshots read-only and fail exports before any writes when paths cannot be represented safely.
 - Mark event dirty only at changed persisted-value mutations, not root click/change capture; passive restore/matching sets the read baseline and Retry/view/playback controls do not change save revisions.
+
+- Require explicit approval for tentative/restored uncertain file candidates in every DJ playlist exporter; reference files retain intended songs, because a candidate path is not consent to export a different recording.
+- Reconcile recovery only with both the unique write marker and semantic snapshot equality; keep conflict-time edits in a separate owned recovery slot and archive conflicts explicitly, because late saves must not force duplicates or discard new edits.
+- Use generateLists for dance target rounding in restore and display and block missing-title uploads before full generation, because partial imports must never become invented songs or silently disappear.

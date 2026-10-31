@@ -43,6 +43,7 @@ import {
   buildTxtPlaylist,
   buildM3u,
   countMatchedForExport,
+  exportApproved,
   countUnresolvedPaths,
   resolveExportPath,
   cleanBpm,
@@ -106,7 +107,7 @@ import { Slider } from "@/components/ui/slider";
 import { VibeBreakdown } from "@/components/builder/VibeBreakdown";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
 import { readEventSnapshot } from "@/lib/snapshotSafety";
-import { storeEventDraft, loadEventDraft, confirmEventDraft, checkpointEventDraft, archiveEventDraft, type EventDraft } from "@/lib/eventDrafts";
+import { storeEventDraft, loadEventDraft, confirmEventDraft, checkpointEventDraft, archiveEventDraft, reconcileEventDraft, sameEventSnapshot, pendingRecoveryEvent, type EventDraft } from "@/lib/eventDrafts";
 import { eventRevision } from "@/lib/eventRevision";
 import { validateTiming, boundedNumber, displayNumber, displayBuffer, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "@/lib/inputSafety";
 import { useAuth } from "@/hooks/useAuth";
@@ -479,7 +480,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const index = mergedLibrary.tracks.findIndex(t => t.filePath === picked.path);
     if (index < 0) return;
     pendingFilePick.current = null;
-    updateMatch(picked.key, {status:"Manually Matched",confidence:1,trackIndex:index,alternatives:[],extraTrackIndices:[]});
+    updateMatch(picked.key, {status:"Manually Matched",confidence:1,confirmed:true,trackIndex:index,alternatives:[],extraTrackIndices:[]});
   }, [mergedLibrary]);
 
   useEffect(() => {
@@ -663,12 +664,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
 
   function eventSnapshot(nextResult: GenerationResult, nextMatches: Record<string,SongMatch>) {
-    const selections: Record<string,{paths:string[];excluded?:boolean}> = { ...savedSelectionsRef.current };
+    const selections: Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}> = { ...savedSelectionsRef.current };
     for (const sec of ["warmUp","transition","peak"] as SectionKey[]) nextResult[sec].forEach((song,i) => {
       const key = songKey(sec,i,song), match = nextMatches[key];
       if (!match || !mergedLibrary) return;
       const paths = [match.trackIndex,...(match.extraTrackIndices??[])].filter((v):v is number=>typeof v==="number").map(v=>mergedLibrary.tracks[v]?.filePath).filter((v):v is string=>!!v);
-      if(paths.length || match.excludedFromVdj) selections[key]={paths,excluded:match.excludedFromVdj};
+      if(paths.length || match.excludedFromVdj) selections[key]={...selections[key],paths,excluded:match.excludedFromVdj,confirmed:exportApproved({...match,excludedFromVdj:false})};
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
@@ -692,7 +693,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       remoteRevision.current = eventRevision(row.inputs);
       autosave.configure(openedEventId, row.updated_at, stableCreate.current, remoteRevision.current);
       if (accountRef.current) {
-        try { setRecovery(loadEventDraft(accountRef.current, openedEventId)); } catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
+        try { reconcileEventDraft(accountRef.current, openedEventId, remoteRevision.current, { name: row.name, inputs: row.inputs, lists: row.lists }); setRecovery(loadEventDraft(accountRef.current, pendingRecoveryEvent(openedEventId)) ?? loadEventDraft(accountRef.current, openedEventId)); } catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
       }
       setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(displayNumber(inputs.hours, MAX_EVENT_HOURS) || 3));
       // A saved event with only a single list and no dance-floor sections is a
@@ -706,17 +707,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const miss=Math.max(0,t-lists.warmUp.length);const sf={warmUp:miss,transition:0,peak:0,total:miss};
         setResult({warmUp:lists.warmUp,transition:[],peak:[],targetTotal:t,perSectionTarget:t,perSectionBase:t,shortfall:sf,finalShortfall:sf,duplicatesRemoved:0,blockedCount:0});
       } else {
-        const legacyBuffer = displayBuffer(inputs.buffer ?? 2);
-        const per=Math.ceil((displayNumber(inputs.hours, MAX_EVENT_HOURS)*15/3)*legacyBuffer);
-        const secTargets=inputs.split&&!checked.problem?sectionTargetsFromSplit(inputs.split,inputs.buffer??2,(inputs.songs??[]).length):undefined;
-        const tFor=(k:SectionKey)=>secTargets?.[k]??per;
-        const shortfall={warmUp:Math.max(0,tFor("warmUp")-lists.warmUp.length),transition:Math.max(0,tFor("transition")-lists.transition.length),peak:Math.max(0,tFor("peak")-lists.peak.length),total:0};
+        const target = generateLists({ uploaded: inputs.songs ?? [], hours: displayNumber(inputs.hours ?? "3", MAX_EVENT_HOURS), buffer: displayBuffer(inputs.buffer ?? 2),
+          split: inputs.split && !checked.problem ? inputs.split : undefined, expand: false,
+          prefs: { artists: [], genres: [], decades: [], notes: "", doNotPlay: parseDoNotPlay(inputs.doNotPlayInput ?? "") } });
+        const shortfall={warmUp:Math.max(0,sectionTargetFor(target,"warmUp")-lists.warmUp.length),transition:Math.max(0,sectionTargetFor(target,"transition")-lists.transition.length),peak:Math.max(0,sectionTargetFor(target,"peak")-lists.peak.length),total:0};
         shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
-        setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:secTargets?secTargets.warmUp+secTargets.transition+secTargets.peak:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/legacyBuffer),...(secTargets?{sectionTargets:secTargets}:{}),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
+        setResult({...target,warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,shortfall,finalShortfall:shortfall});
       }
       // Re-key saved selections by section+position so snapshots written with an
       // older dedupeKey format (e.g. "the weeknd|…") still land on their song.
-      const rekeyed:Record<string,{paths:string[];excluded?:boolean}>={};
+      const rekeyed:Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>={};
       for(const [k,v] of Object.entries(lists.selections??{})){
         const m=k.match(/^(warmUp|transition|peak):(\d+):/);
         const s=m?(lists[m[1] as SectionKey]??[])[Number(m[2])]:undefined;
@@ -729,19 +729,27 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }).catch((e)=>{if(!cancelled){snapshotReadOnly.current=true;setSnapshotProblem((e as Error).message);toast.error((e as Error).message)}});
     return ()=>{cancelled=true;autosave.reset();genTokenRef.current+=1};
   },[openedEventId, account]);
-  const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean}>|null>(null);
+  const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>|null>(null);
   useEffect(()=>{
     if(!result || !workspace.library || !savedSelectionsRef.current || resultBoundary.current?.eventId!==openedEventId)return;
     const selections=savedSelectionsRef.current;
     setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(selections)){
       const indices=value.paths.map(path=>mergedLibrary.tracks.findIndex(t=>t.filePath===path)).filter(i=>i>=0);
-      next[key]={...(next[key]??{status:"Missing From Library",confidence:0,alternatives:[]}),...(indices.length?{status:"Manually Matched" as const,confidence:1,trackIndex:indices[0],extraTrackIndices:indices.slice(1)}:{}),excludedFromVdj:value.excluded};
+      next[key]={...(next[key]??{status:"Missing From Library",confidence:0,alternatives:[]}),...(indices.length?{status:(value.confirmed === true ? "Manually Matched" : "Possible Match") as MatchStatus,confidence:value.confirmed === true ? 1 : 0,confirmed:value.confirmed === true,trackIndex:indices[0],extraTrackIndices:indices.slice(1)}:{}),excludedFromVdj:value.excluded};
     }return next});
   },[result,workspace.library]);
   useEffect(()=>{
     if (result && !userEdited.current) {
       // Passive restore/matching establishes a read baseline, never an edit.
       restoredFingerprint.current = JSON.stringify(eventSnapshot(result, matches));
+      return;
+    }
+    if (recovery && userEdited.current && account && result && !draftBlocked.current && !snapshotReadOnly.current) {
+      const snapshot = eventSnapshot(result, matches), event = pendingRecoveryEvent(openedEventId ?? "new");
+      try {
+        const previous = loadEventDraft<ReturnType<typeof eventSnapshot>>(account, event);
+        if (!previous || !sameEventSnapshot(previous.snapshot, snapshot)) storeEventDraft({ version: 1, account, event, token: crypto.randomUUID(), createId: stableCreate.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, writeRevision: crypto.randomUUID(), savedId: savedEventId ?? undefined, snapshot, savedAt: Date.now() });
+      } catch { toast.error("Your newer edits could not be kept locally. Keep this event open and archive the older recovery copy before leaving."); }
       return;
     }
     if(draftBlocked.current || snapshotReadOnly.current || recovery || !userEdited.current || !accountRef.current || !result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
@@ -751,12 +759,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Opening an event (including legacy defaults) is not an edit and must not write it back.
     if (fingerprint === restoredFingerprint.current) return;
     restoredFingerprint.current = fingerprint;
-    const account = accountRef.current, event = openedEventId ?? "new", token = crypto.randomUUID();
+    const owner = accountRef.current, event = openedEventId ?? "new", token = crypto.randomUUID();
     logicalWrite.current = recoveredWrite.current ?? crypto.randomUUID(); recoveredWrite.current = null;
-    const draft = { version: 1 as const, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, writeRevision: logicalWrite.current, savedId: savedEventId ?? undefined, snapshot, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined };
+    const draft = { version: 1 as const, account: owner, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, writeRevision: logicalWrite.current, savedId: savedEventId ?? undefined, snapshot, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined };
     try { storeEventDraft(draft); } catch { toast.error("Local recovery could not be saved. Do not close this event until saving is confirmed."); }
-    draftTokens.current.set(snapshot, { account, event, token });
-    autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===account, 1000, logicalWrite.current);
+    draftTokens.current.set(snapshot, { account: owner, event, token });
+    autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===owner, 1000, logicalWrite.current);
   },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,account,saveState]);
   useEffect(()=>{
     const recover=()=>autosave.retry();
@@ -769,12 +777,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   latestSnapshot.current = result && account ? { snapshot: eventSnapshot(result, matches), account, event: openedEventId ?? "new", createId: stableCreate.current } : null;
   const persistOnExit = () => {
     const owned = latestSnapshot.current;
-    if (!owned || !userEdited.current || latestSaveState.current === "saved" || draftBlocked.current || snapshotReadOnly.current || recovery) return;
+    if (!owned || !userEdited.current || latestSaveState.current === "saved" || draftBlocked.current || snapshotReadOnly.current) return;
     const token = crypto.randomUUID();
-    const previous = loadEventDraft<ReturnType<typeof eventSnapshot>>(owned.account, owned.event);
-    const sameEdit = previous && JSON.stringify(previous.snapshot) === JSON.stringify(owned.snapshot);
+    const event = recovery ? pendingRecoveryEvent(owned.event) : owned.event;
+    const previous = loadEventDraft<ReturnType<typeof eventSnapshot>>(owned.account, event);
+    const sameEdit = previous && sameEventSnapshot(previous.snapshot, owned.snapshot);
     const writeRevision = sameEdit ? previous.writeRevision : crypto.randomUUID();
-    storeEventDraft({ version: 1, ...owned, token, writeRevision: writeRevision ?? logicalWrite.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, savedId: savedEventId ?? previous?.savedId, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined });
+    storeEventDraft({ version: 1, ...owned, event, token: sameEdit ? previous.token : token, writeRevision: writeRevision ?? logicalWrite.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, savedId: savedEventId ?? previous?.savedId, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined });
   };
   const exitGuard = useRef(persistOnExit); exitGuard.current = persistOnExit;
   useBlocker({ shouldBlockFn: () => {
@@ -789,13 +798,25 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }, []);
   useEffect(() => {
     if (!account || openedEventId) return;
-    try { const draft = loadEventDraft<ReturnType<typeof eventSnapshot>>(account, "new"); if (draft) { stableCreate.current = draft.createId; setRecovery(draft); } }
+    try { const draft = loadEventDraft<ReturnType<typeof eventSnapshot>>(account, pendingRecoveryEvent("new")) ?? loadEventDraft<ReturnType<typeof eventSnapshot>>(account, "new"); if (draft) { stableCreate.current = draft.createId; setRecovery(draft); } }
     catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
     autosave.configure(null, null, stableCreate.current);
   }, [account, openedEventId]);
   useEffect(() => {
     if (handoff && recovery?.token === handoff.token && !draftBlocked.current) { restoreRecovery(false); onHandoff(null); }
   }, [handoff, recovery]);
+  function dismissRecovery() {
+    if (!recovery || recovery.account !== account) return;
+    try {
+      archiveEventDraft(recovery.account, recovery.event);
+      const event = openedEventId ?? "new";
+      if (recovery.event !== event) archiveEventDraft(recovery.account, event);
+      else archiveEventDraft(recovery.account, pendingRecoveryEvent(event));
+      setRecovery(null);
+      // Edits made while a conflict was visible remain dirty and are now persisted normally.
+      if (userEdited.current) restoredFingerprint.current = null;
+    } catch (e) { toast.error((e as Error).message); }
+  }
   function restoreRecovery(asNew: boolean) {
     if (!recovery || recovery.account !== accountRef.current) return;
     try {
@@ -820,8 +841,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       setSplitOn(!!inputs.split); setSplit(inputs.split ?? equalSplit(Number(inputs.hours))); setListType(inputs.listType ?? "dance"); setMinutes(inputs.minutes ?? "60");
       setBpmOn(!!inputs.bpmRange); if(inputs.bpmRange)setBpmRange(inputs.bpmRange); setDanceOn(!!inputs.danceRange); if(inputs.danceRange)setDanceRange(inputs.danceRange);
       savedSelectionsRef.current = snapshot.lists.selections ?? null; snapshotExtras.current = { inputs, lists: snapshot.lists };
-      const r = generateLists({ uploaded: [], hours: Number(inputs.hours), buffer: inputs.buffer ?? 2, split: inputs.split, prefs: { artists: [], genres: [], decades: [], notes: "" }, expand: false });
-      setResult({ ...r, warmUp: snapshot.lists.warmUp, transition: snapshot.lists.transition, peak: snapshot.lists.peak });
+      const r = generateLists({ uploaded: inputs.songs, hours: Number(inputs.hours), buffer: inputs.buffer ?? 2, split: inputs.split, prefs: { artists: [], genres: [], decades: [], notes: "" }, expand: false });
+      const isBackground = inputs.listType === "cocktail" || inputs.listType === "dinner";
+      const t = Math.ceil(displayNumber(inputs.minutes ?? "60", MAX_EVENT_MINUTES) / AVG_BACKGROUND_SONG_MIN);
+      setResult({ ...r, ...(isBackground ? { targetTotal: t, perSectionTarget: t, perSectionBase: t } : {}), warmUp: snapshot.lists.warmUp, transition: snapshot.lists.transition, peak: snapshot.lists.peak });
       recoveryOrigin.current = recovery.origin ?? { account: recovery.account, event: recovery.event, token: recovery.token };
       restoredFingerprint.current = "recovered";
       autosave.reset(recovery.createId);
@@ -836,6 +859,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // No uploads is fine as long as the client gave artists, genres or decades —
     // the whole list is then built by the recommender.
     try { validateTiming(hours, buffer, splitOn ? split : undefined); if (background) boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); } catch (e) { toast.error((e as Error).message); return; }
+    const missingTitles = songs.filter(s => s.artist.trim() && !s.song.trim());
+    if (missingTitles.length) { toast.error(`${missingTitles.length} uploaded row${missingTitles.length === 1 ? " is" : "s are"} missing a song title. Add the title in Uploaded songs before generating; every row has been kept.`); setStep(3); return; }
     const noUploads = !songs.some((x) => x.artist.trim() || x.song.trim());
     if (noUploads && !artistsInput.trim() && !genresInput.trim() && decades.length === 0) {
       toast.error("Upload songs or enter some artists, genres or decades first");
@@ -894,7 +919,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
       const m = matchSong({ artist: s.artist, song: s.song }, mergedLibrary);
-      if (m.trackIndex == null) return s;
+      if (!exportApproved(m) || m.trackIndex == null) return s;
       const t = mergedLibrary.tracks[m.trackIndex];
       if (!t) return s;
       const bpmNum = parseBpm(t.bpm);
@@ -1644,6 +1669,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   function updateMatch(key: string, patch: Partial<SongMatch>) {
     const next = { ...matches, [key]: { ...matches[key], ...patch } };
     if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, matches))) markPersistedEdit();
+    matchesRef.current = next;
     setMatches((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
@@ -1659,6 +1685,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const updated = { ...old, artist, song };
     const oldKey = songKey(section, idx, old);
     const newKey = songKey(section, idx, updated);
+    if (savedSelectionsRef.current) delete savedSelectionsRef.current[oldKey];
     const list = [...result[section]];
     list[idx] = updated;
     setResult({ ...result, [section]: list });
@@ -1668,7 +1695,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const copy = { ...prev };
       delete copy[oldKey];
       if (fresh) copy[newKey] = fresh;
-      else if (prev[oldKey]) copy[newKey] = prev[oldKey];
+      else copy[newKey] = {status:"Missing From Library",confidence:0,alternatives:[]};
       return copy;
     });
   }
@@ -1676,7 +1703,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   function confirmMatch(key: string) {
     const m = matches[key];
     if (!m || m.trackIndex == null) return;
-    updateMatch(key, { status: "Matched", confidence: 1 });
+    updateMatch(key, { status: "Matched", confidence: 1, confirmed: true });
   }
 
   function chooseAlternative(key: string, trackIndex: number) {
@@ -1685,7 +1712,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       // Unselecting the primary: promote the next selected file so the song stays matched.
       const extras = m.extraTrackIndices ?? [];
       if (extras.length) {
-        updateMatch(key,{status:"Manually Matched",confidence:1,trackIndex:extras[0],alternatives:m.alternatives,extraTrackIndices:extras.slice(1)});
+        updateMatch(key,{status:"Manually Matched",confidence:1,confirmed:true,trackIndex:extras[0],alternatives:m.alternatives,extraTrackIndices:extras.slice(1)});
       } else {
         updateMatch(key,{status:"Missing From Library",confidence:0,trackIndex:undefined,alternatives:m.alternatives??[],extraTrackIndices:[]});
       }
@@ -1693,7 +1720,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     const others = [m.trackIndex, ...m.alternatives].filter((i): i is number => i != null && i !== trackIndex);
     const extras = (m.extraTrackIndices ?? []).filter((i) => i !== trackIndex);
-    updateMatch(key, { status: "Manually Matched", confidence: 1, trackIndex, alternatives: others, extraTrackIndices: extras });
+    updateMatch(key, { status: "Manually Matched", confidence: 1, confirmed: true, trackIndex, alternatives: others, extraTrackIndices: extras });
   }
 
   function markUnresolved(key: string) {
@@ -1728,6 +1755,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const extras = (m?.extraTrackIndices ?? []).filter((i) => i !== trackIndex);
     updateMatch(searchOpen.key, {
       status: "Manually Matched",
+      confirmed: true,
       confidence: 1,
       trackIndex,
       alternatives: [],
@@ -1744,7 +1772,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     const existing = findTrackForPickedFile(mergedLibrary, file.name, file.size, getNativeFilePath(file) || file.webkitRelativePath || undefined);
     if (existing >= 0) {
-      updateMatch(key, {status:"Manually Matched",confidence:1,trackIndex:existing,alternatives:[],extraTrackIndices:[]});
+      updateMatch(key, {status:"Manually Matched",confidence:1,confirmed:true,trackIndex:existing,alternatives:[],extraTrackIndices:[]});
       toast.success(`Matched ${file.name} from your music folder`);
       return;
     }
@@ -1848,7 +1876,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   function unmatchedCountForResult(source: GenerationResult, section: SectionKey): number {
     return getSectionRefsForResult(source, section).filter(
-      (r) => !r.match || r.match.trackIndex == null || r.match.excludedFromVdj,
+      (r) => !exportApproved(r.match) || r.match?.trackIndex == null,
     ).length;
   }
 
@@ -1856,7 +1884,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const unmatched = unmatchedCountForResult(exportResult, section);
     if (unmatched === 0) return true;
     return window.confirm(
-      `${unmatched} songs are not matched to files in your library, so they will be left out of the playlist sent to your DJ software. They are still included in the CSV, PDF, text and Spotify exports. Continue?`,
+      `${unmatched} songs have no approved file match (including unconfirmed candidates), so they will be left out of the playlist sent to your DJ software. They are still included in the CSV, PDF, text and Spotify exports. Continue?`,
     );
   }
 
@@ -1887,6 +1915,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     let m3u: string;
     try { m3u = buildM3u(refs, mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    warnUnapproved(refs);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
@@ -1897,6 +1926,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   // --- Direct-to-VirtualDJ folder exports ---
 
+  function warnUnapproved(refs: ExportSongRef[]) {
+    const n = refs.filter(r => !exportApproved(r.match) || r.match?.trackIndex == null).length;
+    if (n) toast.warning(`${n} song${n === 1 ? "" : "s"} without an approved file match left out of DJ playlists. Confirm uncertain matches first. Reference files retain your intended songs.`);
+  }
   function warnUnresolvedPaths(count: number) {
     if (count > 0) {
       toast.warning(
@@ -1920,6 +1953,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       return;
     }
     if (!confirmUnmatched(exportResult, section)) return;
+    try { buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
@@ -1945,6 +1979,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
+    try { buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
@@ -1957,6 +1992,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     let m3u: string;
     try { m3u = buildM3u(refs, mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    warnUnapproved(refs);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.m3u`;
@@ -1986,6 +2022,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       toast.error("Load a VirtualDJ database first — no music files are connected");
       return;
     }
+    try { for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
@@ -2045,6 +2082,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
     try { for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    warnUnapproved((["warmUp", "transition", "peak"] as SectionKey[]).flatMap(sec => getSectionRefsForResult(exportResult, sec)));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
@@ -2053,7 +2091,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       // Reference files keep every song; the DJ playlist keeps matched songs only.
       zip.file(`${prefix}${sectionFile(section)}.csv`, songsToCsv(exportResult[section]));
       zip.file(`${prefix}${sectionFile(section)}.txt`, buildTxtPlaylist(refs, mergedLibrary));
-      if (mergedLibrary) {
+      if (countMatchedForExport(refs, mergedLibrary) > 0) {
         zip.file(`${prefix}${sectionFile(section)}.m3u`, buildM3u(refs, mergedLibrary));
       }
     });
@@ -2164,11 +2202,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       expand: false,
       buffer: displayBuffer(buffer),
       split: safeSplit && !snapshotReadOnly.current ? safeSplit : undefined,
-      prefs: { artists: [], genres: [], decades: [], notes: "" },
+      prefs: { artists: [], genres: [], decades: [], notes: "", doNotPlay: parseDoNotPlay(doNotPlayInput) },
     });
     return {
-      total: r.targetTotal,
-      perSection: r.perSectionTarget,
+      total: background ? bgTarget : r.targetTotal,
+      perSection: background ? bgTarget : r.perSectionTarget,
       perSectionBase: r.perSectionBase,
       shortfall: r.shortfall,
     };
@@ -2184,7 +2222,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
     // debouncedExpand is intentionally part of deps for visual pending state only
     void debouncedExpand;
-  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer, splitOn, split, background]);
+  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer, splitOn, split, background, minutes, doNotPlayInput]);
 
 
   const [step, setStep] = useState(1);
@@ -2252,7 +2290,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           try { validateTiming(hours, buffer, splitOn ? split : undefined); if(background)boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); snapshotReadOnly.current=false; restoredFingerprint.current="corrected"; setSnapshotProblem(null); markPersistedEdit(); setResult({...result}); }
           catch(e) { toast.error((e as Error).message); }
         }}>Use corrected settings</Button>}</div>}
-        {recovery && <div role="alert" className="flex flex-wrap items-center gap-2 border border-border p-3"><span>Unsaved recovery copy from {formatSavedAt(recovery.savedAt)}</span><Button size="sm" onClick={() => restoreRecovery(false)} disabled={recovery.baseVersion !== remoteVersion.current}>Restore recovery copy</Button><Button size="sm" variant="outline" onClick={() => restoreRecovery(true)}>Save recovery as new event</Button></div>}
+        {recovery && <div role="alert" className="flex flex-wrap items-center gap-2 border border-border p-3"><span>Unsaved recovery copy from {formatSavedAt(recovery.savedAt)}</span><Button size="sm" onClick={() => restoreRecovery(false)} disabled={recovery.baseRevision === undefined || (recovery.writeRevision !== remoteRevision.current && (recovery.baseRevision !== remoteRevision.current || (recovery.baseRevision === null && recovery.baseVersion !== remoteVersion.current)))}>Restore recovery copy</Button><Button size="sm" variant="outline" onClick={() => restoreRecovery(true)}>Save recovery as new event</Button><Button size="sm" variant="outline" onClick={dismissRecovery}>Archive recovery copy and continue</Button></div>}
         <div className="flex items-center gap-2 text-xs text-muted-foreground" role="status">{result ? saveState==="saving"?"Saving event…":saveState==="saved"?"Event saved automatically":saveState==="error"?"Event not saved":"Preparing event…" : "Not generated yet"}{saveState==="error" && <Button variant="outline" size="sm" onClick={()=>autosave.retry()}>Retry save</Button>}</div>
       </header>
       <div className="space-y-6 pb-32 pt-6">
@@ -3015,7 +3053,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             {background
               ? minutesNum > 0 ? `${bgLabel} · about ${bgTarget} songs for ${minutesNum} min` : "Set the length to see the song target"
               : hoursNum > 0
-              ? `Target ${liveTargets.total} songs · ${liveTargets.perSection} per section (${buffer}× buffer)`
+              ? `Target ${result?.targetTotal ?? liveTargets.total} songs · ${result?.sectionTargets ? `${result.sectionTargets.warmUp} / ${result.sectionTargets.transition} / ${result.sectionTargets.peak}` : result?.perSectionTarget ?? liveTargets.perSection} per section (${buffer}× buffer)`
               : "Set the dance floor length to see song targets"}
           </p>
           <div className="flex shrink-0 items-center gap-2">

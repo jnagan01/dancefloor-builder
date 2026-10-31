@@ -14,7 +14,7 @@ const inputs = z.object({
 }).passthrough();
 const lists = z.object({
   warmUp: z.array(song).default([]), transition: z.array(song).default([]), peak: z.array(song).default([]),
-  selections: z.record(z.string(), z.object({ paths: z.array(z.string()), excluded: z.boolean().optional() }).passthrough()).optional(),
+  selections: z.record(z.string(), z.object({ paths: z.array(z.string()), excluded: z.boolean().optional(), confirmed: z.boolean().optional() }).passthrough()).optional(),
 }).passthrough();
 export function readEventSnapshot(value: unknown) {
   const parsed = z.object({ inputs, lists }).passthrough().safeParse(value);

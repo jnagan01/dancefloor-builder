@@ -4,12 +4,12 @@ const ts = require(path.join(root, 'node_modules/typescript'));
 function createEventRouteHarness(actual) {
   let source = fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
   // Expose actual closures in the test VM only; no production test seam or replacement logic.
-  source = source.replace('  const withFileBpm =', '  capture({ result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
+  source = source.replace('  const withFileBpm =', '  capture({ songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   source += '\nexport { SectionView };';
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
   function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }) } = {}) {
     let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false, tree;
-    const loads = [], requests = [], errors = [], navigations = [];
+    const loads = [], requests = [], errors = [], navigations = [], downloads = [], files = [], warnings = []; let blocker;
     let workspace = { sources: [], library: null, audioIndex: actual.audio.buildAudioIndex([]) };
     const storage = { getItem: k => memory.get(k) ?? null, setItem: (k,v) => memory.set(k,v), removeItem: k => memory.delete(k) };
     global.localStorage = storage;
@@ -27,23 +27,28 @@ function createEventRouteHarness(actual) {
     const route = { useSearch: () => ({eventId:eventId ?? undefined}) };
     const navigate = async r => { navigations.push(r); eventId=r.search?.eventId; };
     const modules = {
-      react, 'react/jsx-runtime': {jsx,jsxs:jsx}, '@tanstack/react-router': {createFileRoute:()=>opts=>({...route,...opts}),useNavigate:()=>navigate,useBlocker:no},
+      react, 'react/jsx-runtime': {jsx,jsxs:jsx}, '@tanstack/react-router': {createFileRoute:()=>opts=>({...route,...opts}),useNavigate:()=>navigate,useBlocker:opts=>{blocker=opts;}},
       '@tanstack/react-start': {useServerFn:f=>f}, '@/lib/history.functions':history,
       '@/hooks/useAuth': {useAuth:()=>({user:account?{id:account}:null})}, '@/hooks/useDebounce':{useDebounce:v=>v},
       '@/components/workspace/WorkspaceContext':{useWorkspace:()=>workspace},
       '@/integrations/supabase/client':{supabase:{auth:{getUser:async()=>({data:{user:null}})}}},
-      sonner:{toast:{error:e=>errors.push(e),success:no,warning:no,info:no}},
-      '@/lib/virtualDj':actual.vdj, '@/lib/danceFloor':actual.dance, '@/lib/audioMatch':actual.audio,
+      sonner:{toast:{error:e=>errors.push(e),success:no,warning:e=>warnings.push(e),info:no}},
+      '@/lib/virtualDj':{...actual.vdj, supportsDirectoryWrite:()=>true, writeFileToDir:async(_dir,name,data)=>{files.push({name,data});}}, '@/lib/danceFloor':{...actual.dance,downloadBlob:(blob,name)=>downloads.push({blob,name})}, '@/lib/audioMatch':actual.audio,
       '@/lib/snapshotSafety':actual.snapshots, '@/lib/eventDrafts':actual.drafts, '@/lib/inputSafety':actual.input,
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
       '@/lib/eventRevision':actual.revisions,
       '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
-      '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null},
+      '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},
+      '@/lib/neighbors.functions':{getArtistNeighbors:async()=>({clusters:[]})},
+      '@/lib/recommend.functions':{recommendSongsForSection:async()=>({suggestions:[]})},
+      '@/lib/lastfm.functions':{getArtistCrowdData:async()=>({artists:[]})},
+      jszip:{default:class {file(name,data){files.push({name,data});return this;} async generateAsync(){return new Blob(['zip']);}}},
+      '@/lib/desktopBridge':{getNativeFilePath:()=>null,isDesktopApp:()=>false},
     };
     const module={exports:{}};
     const events=new Map();
-    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,File,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:{addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k),confirm:()=>true},setTimeout,clearTimeout,Date});
+    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,File,Blob,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:{addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k),confirm:()=>true},setTimeout,clearTimeout,Date});
     const cleanup=old=>{for(const slot of old)slot?.cleanup?.();};
     function render() {
       slots=rootSlots;cursor=0;renderingRoot=true;
@@ -58,7 +63,7 @@ function createEventRouteHarness(actual) {
     function nodes(){return walk(tree);}
     function interact(predicate,handler='onClick',argument){const node=nodes().find(predicate);if(!node)throw Error('No matching rendered control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});node.props[handler]?.(argument);render();}
     function sectionClick(predicate){const child=nodes().find(n=>n.props?.onPreview&&n.props?.songs);if(!child)throw Error('No review section');const parentSlots=slots;slots=[];cursor=0;const sectionTree=module.exports.SectionView(child.props);const control=walk(sectionTree).find(predicate);if(!control)throw Error('No section control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});control.props.onClick?.();slots=parentSlots;render();}
-    return {render,flush,memory,requests,loads,errors,navigations,nodes,interact,sectionClick,get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
+    return {render,flush,memory,requests,loads,errors,navigations,downloads,files,warnings,nodes,interact,sectionClick,leave(){return blocker?.shouldBlockFn();}, async invoke(prop){const n=nodes().find(n=>typeof n.props?.[prop]==='function');if(!n)throw Error(prop); await n.props[prop]();render();}, get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
   }
   return harness;
 }

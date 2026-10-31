@@ -40,3 +40,9 @@
 # Dirty-state regression
 - [x] Remove broad capture, mark actual changed persisted controls and song changes, and baseline passive restoration.
 - [x] Verify actual benign UI handlers, Retry, immediate edits, full suite/build and adversarial checks. Existing review has no manual move control; tested its actual rename/removal and regeneration paths without adding unrelated UI.
+
+# Native UI review fixes
+- [x] Require approved candidates in every DJ export and preserve intended reference songs.
+- [x] Reconcile exact late-save recovery; preserve conflicting copies as backups.
+- [x] Block incomplete-title generation explicitly, retaining import rows.
+- [x] Unify generation, restoration and displayed targets; verify all four with isolated route regressions.

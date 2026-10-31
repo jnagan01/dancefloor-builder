@@ -52,7 +52,7 @@ export interface WorkflowSnapshot {
     warmUp: Array<Song & { fromUpload?: boolean }>;
     transition: Array<Song & { fromUpload?: boolean }>;
     peak: Array<Song & { fromUpload?: boolean }>;
-    selections?: Record<string, { paths: string[]; excluded?: boolean }>;
+    selections?: Record<string, { paths: string[]; excluded?: boolean; confirmed?: boolean }>;
   };
 }
 
