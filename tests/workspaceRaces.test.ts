@@ -15,6 +15,9 @@ const {harness,scan}=createHarnessModules({vdj,bridge,audio,identity,metadata,ca
 const track=(filePath:string,title='Old')=>({filePath,artist:'A',title,bpm:'90'});
 const tick=()=>new Promise(r=>setTimeout(r,0));
 describe('actual workspace closures: findings 1 and 4',()=>{
+ it('tag request BEFORE scan, completed DURING scan, is retained',async()=>{
+  const h=harness([{label:'Music',tracks:[track('Music/Song.mp3')]}]);vdj.setFolderRoot('Music','/mock/Music');const w=h.render();const tags=w.saveTrackTags(0,0,{title:'Completed'});const p=w.rescan();await tick();h.pendingTags[0].resolve({ok:true,tags:{title:'Completed',bpm:'137'}});await tags;h.pendingScans[0].resolve(scan('/mock/Music'));await p;expect(h.render().sources[0].tracks[0]).toMatchObject({title:'Completed',bpm:'137'});
+ });
  it('removal during native tag save never updates next source',async()=>{
   const h=harness([{label:'Music',tracks:[track('Music/Old.mp3')]},{label:'Other',tracks:[track('Other/Other.mp3','Other')]}]);
   vdj.setFolderRoot('Music','/mock/Music');const w=h.render();const p=w.saveTrackTags(0,0,{title:'Edited'});w.removeSource(0);h.pendingTags[0].resolve({ok:true,tags:{title:'Edited'}});await p;

@@ -67,7 +67,7 @@ function readKey(db: IDBDatabase, key: string): Promise<SavedLibraryPayload | nu
       const req = tx.objectStore(STORE).get(key);
       req.onsuccess = () => {
         const val = req.result as SavedLibraryPayload | undefined;
-        if (val === undefined || val === null) return resolve(null);
+        if (val === undefined) return resolve(null);
         if (!validSavedLibrary(val)) { reject(new Error("Saved music index is unreadable. Original data has been preserved; automatic saving is disabled.")); return; }
         resolve(val);
       };
@@ -88,17 +88,17 @@ export async function loadMusicLibrary(userId: string): Promise<SavedLibraryPayl
     // shared key. Move it to the first account that loads on this device.
     const legacy = await readKey(db, LIBRARY_KEY);
     if (legacy) {
-      await new Promise<void>((resolve) => {
+      await new Promise<void>((resolve, reject) => {
         try {
           const tx = db.transaction(STORE, "readwrite");
           const store = tx.objectStore(STORE);
           store.put(legacy, keyFor(userId));
           store.delete(LIBRARY_KEY);
           tx.oncomplete = () => resolve();
-          tx.onerror = () => resolve();
-          tx.onabort = () => resolve();
+          tx.onerror = () => reject(new Error("Music index migration failed. The original index is preserved; automatic saving is disabled."));
+          tx.onabort = () => reject(new Error("Music index migration failed. The original index is preserved; automatic saving is disabled."));
         } catch {
-          resolve();
+          reject(new Error("Music index migration failed. The original index is preserved; automatic saving is disabled."));
         }
       });
       result = legacy;
