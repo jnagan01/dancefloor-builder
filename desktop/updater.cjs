@@ -77,16 +77,16 @@ async function fetchLatest() {
   };
 }
 
-async function runUpdate(latest, parent) {
+async function runUpdate(latest, parent, effects = {}) {
   const target = path.join(app.getPath("downloads"), latest.assetName || "SetArchitect.dmg");
   try {
     const policy = require("./security.cjs").createDesktopSecurity(process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app", () => parent);
     if (!parent || !policy.trustedSender({ sender: parent.webContents, senderFrame: parent.webContents.mainFrame })) throw Error("Open the signed-in app before updating.");
     await parent.webContents.executeJavaScript(`(async () => { if (typeof window.__setarchitectBeforeUpdate !== 'function') throw Error('Current-state backup unavailable. Open Settings before updating.'); await window.__setarchitectBeforeUpdate(); })()`);
 
-    await download(latest.url, target);
+    await (effects.download || download)(latest.url, target);
   } catch (error) {
-    await dialog.showMessageBox(parent, {
+    await (effects.message || dialog.showMessageBox)(parent, {
       type: "error",
       title: "Download failed",
       message: "The new version couldn't be downloaded.",
@@ -95,8 +95,8 @@ async function runUpdate(latest, parent) {
     });
     return;
   }
-  await shell.openPath(target);
-  await dialog.showMessageBox(parent, {
+  await (effects.open || shell.openPath)(target);
+  await (effects.message || dialog.showMessageBox)(parent, {
     type: "info",
     title: "Almost there",
     message: "The new version has been downloaded and opened.",
@@ -162,4 +162,4 @@ async function checkForUpdates({ silent = true } = {}) {
   if (response === 0) await runUpdate(latest, parent);
 }
 
-module.exports = { checkForUpdates, buildInfo };
+module.exports = { checkForUpdates, buildInfo, runUpdate };

@@ -1,16 +1,23 @@
 import React from 'react';
-import {createEventAutosave} from '../../../src/lib/eventAutosave';
+export {useWorkspace} from '../../../src/components/workspace/WorkspaceContext';
 import {buildLibrary} from '../../../src/lib/virtualDj';
 const w=window as any;
 export function createFileRoute(){return(options:any)=>({...options,useSearch:()=>({eventId:w.__testState.eventId})});}
-export function useNavigate(){return async(options:any)=>{w.__testState.eventId=options.search?.eventId;w.__rerender();};}
+export function useNavigate(){return async(options:any)=>{w.__testState.page='event';w.__testState.eventId=options.search?.eventId;w.__rerender();};}
 export function useBlocker(){return {};}
-export function useAuth(){return {user:{id:'synthetic-owner'}};}
+export function useAuth(){return {user:{id:w.__testState.account}};}
 export function useServerFn(fn:any){return fn;}
-let workspace:any;export function useWorkspace(){return workspace??=( {sources:[],files:[],loading:false,library:buildLibrary(w.__fixture.tracks),audioIndex:{entries:[],byPath:new Map(),byBase:new Map()},ensureLocalFile:async()=>null});}
 export async function getWorkflow(request:any){return w.testBackend.read(request.data.id);}
 export async function saveWorkflowSafely(request:any){return w.testBackend.write(request.data);}
-export const supabase={auth:{getUser:async()=>({data:{user:null}})}};
+const listeners=new Set<any>();
+export const supabase={auth:{getUser:async()=>({data:{user:{id:w.__testState.account}}}),onAuthStateChange:(f:any)=>{listeners.add(f);return {data:{subscription:{unsubscribe:()=>listeners.delete(f)}}};}},from:(table:string)=>({
+ select:()=>({eq:(_key:string,account:string)=>({limit:async()=>w.testBackend.list(account),maybeSingle:async()=>({data:null})})}),
+ update:()=>({eq:async()=>({error:null})})
+})};
+export const loadMusicLibrary=async()=>({sources:w.__fixture.sources??[{label:'Synthetic',tracks:w.__fixture.tracks}],version:1,savedAt:Date.now()});
+export const saveMusicLibrary=async(sources:any,account:string)=>{await w.testBackend.library(sources,account);return Date.now();};
+export const validSavedLibrary=(v:any)=>v?.version===1&&Array.isArray(v.sources)&&v.sources.every((s:any)=>typeof s.label==='string'&&Array.isArray(s.tracks)&&s.tracks.every((t:any)=>typeof t.filePath==='string'&&typeof t.artist==='string'&&typeof t.title==='string'));
+
 export const toast={error:(text:any)=>w.__errors.push(String(text)),warning:(text:any)=>w.__warnings.push(String(text)),success:(text:any)=>w.__success.push(String(text)),info:()=>{}};
 export const recommendSongsForSection=async()=>({suggestions:[]}),getArtistNeighbors=async()=>({clusters:[]}),getArtistCrowdData=async()=>({artists:[]}),enrichSongs=async()=>({results:[]}),importSpotifyPlaylist=async()=>({songs:[]});
 export function useDebounce(v:any){return v;}
