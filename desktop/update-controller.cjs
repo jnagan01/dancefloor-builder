@@ -19,7 +19,7 @@ function createUpdateController({ updater, currentVersion, newer, cancellation, 
     return active;
   }
   function check() {
-    if (["installing", "staging-failed"].includes(state.phase)) return Promise.resolve({ ...state });
+    if (["installing", "staging-failed", "preservation-failed"].includes(state.phase)) return Promise.resolve({ ...state });
     return once(async () => {
       publish("checking");
       try {
@@ -49,14 +49,17 @@ function createUpdateController({ updater, currentVersion, newer, cancellation, 
         updater.quitAndInstall(); // With autoInstallOnAppQuit=false this FIRST invokes Squirrel.
       } catch (error) {
         if (state.phase === "installing") { authorized = false; publish("staging-failed", { error: error.message }); }
-        else { await release(); publish(token?.cancelled ? "cancelled" : "failed", { version, error: error.message }); }
+        else {
+          try { await release(); publish(token?.cancelled ? "cancelled" : "failed", { version, error: error.message }); }
+          catch (unlockError) { publish("preservation-failed", { version, error: `Update stopped; editing remains locked: ${unlockError.message}` }); }
+        }
       } finally { token = null; }
       return { ...state };
     });
   }
   return { check, install, status: () => ({ ...state }), cancel: () => { if (state.phase === "downloading") token?.cancel(); return { ...state }; },
-    blocksQuit: () => !authorized && ["downloading", "preserving", "installing", "staging-failed"].includes(state.phase),
-    blocksNavigation: () => ["preserving", "installing", "staging-failed"].includes(state.phase),
+    blocksQuit: () => !authorized && ["downloading", "preserving", "installing", "staging-failed", "preservation-failed"].includes(state.phase),
+    blocksNavigation: () => ["preserving", "installing", "staging-failed", "preservation-failed"].includes(state.phase),
     installAuthorized: () => authorized && state.phase === "installing" };
 }
 module.exports = { createUpdateController };
