@@ -638,7 +638,14 @@ export function buildTxtPlaylist(
     if (opts.matchedOnly && !main) continue;
     n += 1;
     // Reference exports always describe the intended song, never a candidate's metadata.
-    lines.push(`${n}. ${opts.matchedOnly && main ? `${main.artist ? `${main.artist} - ` : ""}${main.title}` : label}${!main && !opts.matchedOnly ? " (not in library)" : ""}`);
+    let warning = "";
+    if (!main && !opts.matchedOnly) {
+      const candidate = ti != null && lib ? lib.tracks[ti] : undefined;
+      if (item.match?.excludedFromVdj) warning = " (excluded from DJ export)";
+      else if (candidate) warning = " (match not confirmed)";
+      else warning = " (not in library)";
+    }
+    lines.push(`${n}. ${opts.matchedOnly && main ? `${main.artist ? `${main.artist} - ` : ""}${main.title}` : label}${warning}`);
     if (opts.matchedOnly) for (const ei of item.match?.extraTrackIndices ?? []) {
       const t = lib?.tracks[ei];
       if (t) lines.push(`   + ${t.artist ? `${t.artist} - ` : ""}${t.title}`);
