@@ -109,7 +109,7 @@ try{
    await page.evaluate(root=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({Synthetic:root})),library);
    await page.getByRole('tab',{name:/Transition/}).click();
    fs.writeFileSync(path.join(temp,'fault'),'availability-delay');
-   await page.getByRole('button',{name:'M3U',exact:true}).click();
+   await page.getByRole('button',{name:/Download M3U Transition Playlist/}).click();
    await page.waitForTimeout(200);
    await page.evaluate(root=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({Synthetic:root+'/unchecked'})),library);
    await page.waitForTimeout(1200);fs.unlinkSync(path.join(temp,'fault'));
