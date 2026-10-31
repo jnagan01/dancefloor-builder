@@ -2,10 +2,8 @@ const fs=require('fs'), vm=require('vm'), path=require('node:path');
 const root=path.resolve(__dirname,'../..');
 const projectRequire=specifier=>require(path.join(root,specifier));
 const ts=projectRequire('node_modules/typescript');
-const vdj=projectRequire('src/lib/virtualDj.ts'), bridge=projectRequire('src/lib/desktopBridge.ts');
-const {buildAudioIndex,resolveAudioFile}=projectRequire('src/lib/audioMatch.ts');
-const identity=projectRequire('src/lib/fileIdentity.ts'), metadata=projectRequire('src/lib/trackMetadataIdentity.ts'), cache=projectRequire('src/lib/workspaceFileCache.ts'), safety=projectRequire('src/lib/nativeScanSafety.ts');
-const workspaceIndexes=projectRequire('src/lib/workspaceIndexes.ts'), trackRevisions=projectRequire('src/lib/trackRevisions.ts');
+function createHarnessModules({vdj,bridge,audio,identity,metadata,cache,safety,workspaceIndexes,trackRevisions}) {
+const {buildAudioIndex,resolveAudioFile}=audio;
 const source=fs.readFileSync(path.join(root,'src/components/workspace/WorkspaceContext.tsx'),'utf8');
 const compiled=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText;
 const deferred=()=>{let resolve,reject; const promise=new Promise((a,b)=>{resolve=a;reject=b});return {promise,resolve,reject}};
@@ -17,4 +15,6 @@ function harness(initial, native=true){let slots=[],cursor=0,current; const memo
  const module={exports:{}};vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>{if(!(k in modules))throw Error(k);return modules[k]},console,File,crypto,AbortController,localStorage:global.localStorage,window:{},setTimeout,clearTimeout});
  function render(){cursor=0;module.exports.WorkspaceProvider({children:null});return current}render();slots[0]=initial;slots[3]=false;render();return {render,queueRoot:r=>rootsQueue.push(r),pendingScans,pendingTags,pendingReads,resolverCalls,memory,slots};}
 const scan=(root,name='Song.mp3',bpm='120')=>({ok:true,complete:true,root,label:root.split('/').pop(),files:[{name,path:`${root}/${name}`,relativePath:`Music/${name}`,tags:{bpm,title:name,artist:'A'}}]});
-module.exports={harness,deferred,scan};
+return {harness,deferred,scan};
+}
+module.exports={createHarnessModules};
