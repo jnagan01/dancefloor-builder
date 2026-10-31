@@ -1,165 +1,58 @@
-/* SetArchitect — checks GitHub Releases for a newer Mac build. */
-const { app, dialog, shell, BrowserWindow } = require("electron");
-const path = require("node:path");
-const fs = require("node:fs");
-const https = require("node:https");
-
+/* Signed GitHub ZIP updates. DMG remains only for first install / legacy bootstrap. */
+const { app, dialog, BrowserWindow } = require('electron');
+const fs = require('node:fs'), path = require('node:path');
+const { createUpdateController } = require('./update-controller.cjs');
 let buildInfo = null;
-try {
-  buildInfo = JSON.parse(fs.readFileSync(path.join(__dirname, "build-info.json"), "utf8"));
-} catch {
-  buildInfo = null; // running from source, or built without release info
+try { buildInfo = JSON.parse(fs.readFileSync(path.join(__dirname, 'build-info.json'), 'utf8')); } catch {}
+let controller, checkingDialog = false;
+async function preserve(parent) {
+  const policy = require('./security.cjs').createDesktopSecurity(process.env.DANCEFLOOR_URL || 'https://dancefloor-builder.lovable.app', () => parent);
+  if (!parent || !policy.trustedSender({ sender: parent.webContents, senderFrame: parent.webContents.mainFrame })) throw Error('Open the signed-in app before updating.');
+  await parent.webContents.executeJavaScript(`(async()=>{if(typeof window.__setarchitectBeforeUpdate!=='function')throw Error('Current-state backup unavailable. Open the updated workspace before updating.');await window.__setarchitectBeforeUpdate();})()`);
+  if (!policy.trustedSender({ sender: parent.webContents, senderFrame: parent.webContents.mainFrame })) throw Error('The app page changed during preservation. Nothing installed.');
+  const frozen = await parent.webContents.executeJavaScript(`Boolean(document.getElementById('update-preservation-lock'))`);
+  if (!frozen) throw Error('This web version cannot safely prepare automatic updates. Open the current workspace before trying again.');
 }
-
-const UA = { "User-Agent": "DancefloorBuilder-Updater", Accept: "application/vnd.github+json" };
-
-function getJson(url) {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, { headers: UA }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          res.resume();
-          return resolve(getJson(res.headers.location));
-        }
-        if (res.statusCode !== 200) {
-          res.resume();
-          return reject(new Error(`GitHub returned ${res.statusCode}`));
-        }
-        let body = "";
-        res.setEncoding("utf8");
-        res.on("data", (c) => (body += c));
-        res.on("end", () => {
-          try {
-            resolve(JSON.parse(body));
-          } catch (error) {
-            reject(error);
-          }
-        });
-      })
-      .on("error", reject);
-  });
+async function release(parent) {
+  if (parent && !parent.isDestroyed()) await parent.webContents.executeJavaScript(`window.__setarchitectReleaseUpdate?.()`);
 }
-
-function download(url, destination) {
-  return new Promise((resolve, reject) => {
-    https
-      .get(url, { headers: UA }, (res) => {
-        if (res.statusCode === 301 || res.statusCode === 302) {
-          res.resume();
-          return resolve(download(res.headers.location, destination));
-        }
-        if (res.statusCode !== 200) {
-          res.resume();
-          return reject(new Error(`Download failed (${res.statusCode})`));
-        }
-        const file = fs.createWriteStream(destination);
-        res.pipe(file);
-        file.on("finish", () => file.close(() => resolve(destination)));
-        file.on("error", reject);
-      })
-      .on("error", reject);
-  });
+function getController() {
+  if (controller) return controller;
+  if (process.platform !== 'darwin' || !app.isPackaged || !/^[\w.-]+\/[\w.-]+$/.test(buildInfo?.repository || '')) throw Error('Automatic Mac updates are available in signed release copies only.');
+  const { MacUpdater } = require('electron-updater');
+  const { CancellationToken } = require('builder-util-runtime');
+  const semver = require('semver');
+  const [owner, repo] = buildInfo.repository.split('/');
+  const updater = new MacUpdater({ provider: 'github', owner, repo, private: false, releaseType: 'release' });
+  controller = createUpdateController({ updater, currentVersion: app.getVersion(), newer: (a,b) => Boolean(semver.valid(a) && semver.valid(b) && semver.gt(a,b)), cancellation: () => new CancellationToken(), preserve: () => preserve(BrowserWindow.getAllWindows()[0]), release: () => release(BrowserWindow.getAllWindows()[0]), notify: state => { for (const win of BrowserWindow.getAllWindows()) { win.setProgressBar(state.phase === 'downloading' ? state.percent / 100 : -1); win.webContents.send('update:status', state); } } });
+  return controller;
 }
-
-async function fetchLatest() {
-  if (!buildInfo || !buildInfo.repository) return null;
-  const release = await getJson(
-    `https://api.github.com/repos/${buildInfo.repository}/releases/latest`,
-  );
-  if (!release || !release.tag_name) return null;
-  const asset = (release.assets || []).find((a) => /\.dmg$/i.test(a.name || ""));
-  return {
-    tag: release.tag_name,
-    name: release.name || release.tag_name,
-    url: asset && asset.browser_download_url,
-    assetName: asset && asset.name,
-    isNewer: release.tag_name !== buildInfo.tag,
-  };
-}
-
-async function runUpdate(latest, parent, effects = {}) {
-  const target = path.join(app.getPath("downloads"), latest.assetName || "SetArchitect.dmg");
-  try {
-    const policy = require("./security.cjs").createDesktopSecurity(process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app", () => parent);
-    if (!parent || !policy.trustedSender({ sender: parent.webContents, senderFrame: parent.webContents.mainFrame })) throw Error("Open the signed-in app before updating.");
-    await parent.webContents.executeJavaScript(`(async () => { if (typeof window.__setarchitectBeforeUpdate !== 'function') throw Error('Current-state backup unavailable. Open Settings before updating.'); await window.__setarchitectBeforeUpdate(); })()`);
-
-    await (effects.download || download)(latest.url, target);
-  } catch (error) {
-    await (effects.message || dialog.showMessageBox)(parent, {
-      type: "error",
-      title: "Download failed",
-      message: "The new version couldn't be downloaded.",
-      detail: String((error && error.message) || error),
-      buttons: ["OK"],
-    });
-    return;
-  }
-  await (effects.open || shell.openPath)(target);
-  await (effects.message || dialog.showMessageBox)(parent, {
-    type: "info",
-    title: "Almost there",
-    message: "The new version has been downloaded and opened.",
-    detail:
-      "Drag SetArchitect into your Applications folder, replace the old one, then quit and reopen the app.",
-    buttons: ["OK"],
-  });
-}
-
 async function checkForUpdates({ silent = true } = {}) {
+  if (checkingDialog) return;
+  checkingDialog = true;
   const parent = BrowserWindow.getAllWindows()[0] || null;
-  if (!buildInfo || !buildInfo.repository) {
-    if (!silent) {
-      await dialog.showMessageBox(parent, {
-        type: "info",
-        title: "Check for updates",
-        message: "Automatic updates aren't available in this copy of the app.",
-        detail: "Install a build from the download page to get update notifications.",
-        buttons: ["OK"],
-      });
-    }
-    return;
-  }
-
-  let latest = null;
   try {
-    latest = await fetchLatest();
-  } catch (error) {
-    if (!silent) {
-      await dialog.showMessageBox(parent, {
-        type: "warning",
-        title: "Check for updates",
-        message: "Couldn't check for a new version.",
-        detail: String((error && error.message) || error),
-        buttons: ["OK"],
-      });
+    const c = getController();
+    const state = await c.check();
+    if (state.phase === 'available') {
+      const { response } = await dialog.showMessageBox(parent, { type: 'info', title: 'Update available', message: `SetArchitect ${state.version} is available.`, detail: 'Download, preserve your current work, then install and restart automatically.', buttons: ['Update now', 'Later'], defaultId: 0, cancelId: 1 });
+      if (response === 0) { const result = await c.install(); if (['failed','staging-failed','preservation-failed'].includes(result.phase)) throw Error(result.error); }
+    } else if (!silent && ['failed','current'].includes(state.phase)) {
+      await dialog.showMessageBox(parent, { type: state.phase === 'failed' ? 'warning' : 'info', message: state.phase === 'failed' ? "Couldn't check for an update." : "You're running the latest version.", detail: state.error || `Installed: ${app.getVersion()}`, buttons: ['OK'] });
     }
-    return;
-  }
-
-  if (!latest || !latest.isNewer || !latest.url) {
-    if (!silent) {
-      await dialog.showMessageBox(parent, {
-        type: "info",
-        title: "Check for updates",
-        message: "You're running the latest version.",
-        detail: `Installed: ${buildInfo.tag || app.getVersion()}`,
-        buttons: ["OK"],
-      });
-    }
-    return;
-  }
-
-  const { response } = await dialog.showMessageBox(parent, {
-    type: "info",
-    title: "Update available",
-    message: `A new version of SetArchitect is available (${latest.name}).`,
-    detail: "It will download to your Downloads folder and open automatically.",
-    buttons: ["Update now", "Later"],
-    defaultId: 0,
-    cancelId: 1,
-  });
-  if (response === 0) await runUpdate(latest, parent);
+  } catch (error) { if (!silent) await dialog.showMessageBox(parent, { type: 'error', message: 'Update stopped. Your work has not been discarded.', detail: error.message, buttons: ['OK'] }); }
+  finally { checkingDialog = false; }
 }
-
-module.exports = { checkForUpdates, buildInfo, runUpdate };
+// Real preservation, with only installer effects injected for isolated Electron checks.
+async function runUpdate(_latest, parent, effects) {
+  const { EventEmitter } = require('node:events');
+  const updater = new EventEmitter(); updater.checkForUpdates = async () => ({ updateInfo: { version: '2.0.0' } });
+  updater.downloadUpdate = () => effects.download(); updater.quitAndInstall = () => effects.open();
+  const c = createUpdateController({ updater, currentVersion: '1.0.0', newer: () => true, cancellation: () => ({ cancelled: false, cancel() { this.cancelled = true; } }), preserve: () => preserve(parent), release: () => release(parent) });
+  await c.check(); const result = await c.install();
+  if (result.phase !== 'installing') await effects.message(parent, { message: result.error || 'Update stopped' });
+  // Synthetic open is not a restart, so release the production renderer freeze.
+  await release(parent);
+  return result;
+}
+module.exports = { checkForUpdates, buildInfo, runUpdate, getController, updateBlocksQuit: () => controller?.blocksQuit() || false, updateBlocksNavigation: () => controller?.blocksNavigation() || false, updateInstallAuthorized: () => controller?.installAuthorized() || false };

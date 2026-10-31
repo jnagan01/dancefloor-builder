@@ -13,6 +13,8 @@ import * as React from "react";
 
 import appCss from "../styles.css?url";
 import { APP_BUILD_TIME } from "@/lib/appVersion";
+import { AppearanceProvider } from "@/components/AppearanceProvider";
+import { appearanceScript } from "@/lib/appearance";
 
 function NotFoundComponent() {
   return (
@@ -110,8 +112,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: appearanceScript }} />
         <HeadContent />
       </head>
       <body>
@@ -184,7 +187,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <AppearanceProvider><Outlet /></AppearanceProvider>
     </QueryClientProvider>
   );
 }

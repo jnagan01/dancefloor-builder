@@ -31,3 +31,11 @@ contextBridge.exposeInMainWorld("electronAvailability", { check: paths => ipcRen
 
 const journal = (action, key, raw) => { const result = ipcRenderer.sendSync("recovery:journal", action, key, raw); if (!result?.ok) throw Error(result?.error || "Recovery journal unavailable."); return result.value ?? null; };
 contextBridge.exposeInMainWorld("electronRecovery", { get: key => journal("get", key), set: (key, raw) => journal("set", key, raw), remove: key => journal("remove", key) });
+
+contextBridge.exposeInMainWorld("electronUpdates", {
+  status: () => ipcRenderer.invoke("update:status"),
+  check: () => ipcRenderer.invoke("update:check"),
+  install: () => ipcRenderer.invoke("update:install"),
+  cancel: () => ipcRenderer.invoke("update:cancel"),
+  subscribe: callback => { const listener = (_event, state) => callback(state); ipcRenderer.on("update:status", listener); return () => ipcRenderer.removeListener("update:status", listener); },
+});

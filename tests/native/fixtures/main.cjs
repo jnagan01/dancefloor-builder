@@ -17,7 +17,7 @@ const atomic=data=>{fs.writeFileSync(backend+'.tmp',JSON.stringify(data));fs.ren
 // Explicit test-only latch: commit reaches disk, but its IPC reply stays held until released.
 const lateWrites=new Map();
 app.whenReady().then(()=>{
-server=http.createServer((req,res)=>{const asset=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js'].includes(asset)){res.writeHead(404).end();return;}res.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':'text/html');res.end(fs.readFileSync(path.join(process.env.SETARCHITECT_TEST_BUNDLE,asset)));});
+server=http.createServer((req,res)=>{const asset=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js','app.css'].includes(asset)){res.writeHead(404).end();return;}res.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':asset.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(process.env.SETARCHITECT_TEST_BUNDLE,asset)));});
 const portFile=path.join(profile,'port');const port=fs.existsSync(portFile)?Number(fs.readFileSync(portFile,'utf8')):0;server.listen(port,'127.0.0.1',()=>{fs.writeFileSync(portFile,String(server.address().port));
 const origin=`http://127.0.0.1:${server.address().port}`;const security=createDesktopSecurity(origin,()=>win);
 const recovery=require('../../../desktop/recovery.cjs').createRecoveryStore(profile);ipcMain.on('recovery:journal',(event,action,key,raw)=>{try{security.guard(()=>{const value=action==='get'?recovery.get(key):action==='set'?recovery.set(key,raw):recovery.remove(key);event.returnValue={ok:true,value};})(event);}catch(e){event.returnValue={ok:false,error:e.message};}});
@@ -27,7 +27,24 @@ handle('test:scan',async(_e,folder)=>{if(!fixture.startBackups||folder!==root)th
 handle('test:list',async(_e,account)=>{if(account!=='synthetic-owner')throw Error('Real account blocked');return {data:Object.values(read()),error:null};});
 handle('test:library',(_e,sources,account)=>{if(account!=='synthetic-owner')throw Error('Real account blocked');fs.writeFileSync(path.join(profile,'library-index.json'),JSON.stringify(sources));});
 handle('test:latest',async(_e,account)=>({ok:true,raw:await backups.latest(account)}));
-handle('test:update',async()=>{const {runUpdate}=require('../../../desktop/updater.cjs');process.env.DANCEFLOOR_URL=origin;await runUpdate({url:'https://synthetic.invalid/installer.dmg',assetName:'synthetic.dmg'},win,{download:async()=>{fs.writeFileSync(path.join(profile,'handoff'),'downloaded');},open:async()=>{fs.appendFileSync(path.join(profile,'handoff'),' opened');},message:async(_p,m)=>{fs.writeFileSync(path.join(profile,'update-message.json'),JSON.stringify(m));}});return {ok:fs.existsSync(path.join(profile,'handoff'))};});
+handle('test:update',async()=>{const {runUpdate}=require('../../../desktop/updater.cjs');process.env.DANCEFLOOR_URL=origin;const result=await runUpdate({url:'https://synthetic.invalid/installer.dmg',assetName:'synthetic.dmg'},win,{download:async()=>{fs.writeFileSync(path.join(profile,'update-download'),'downloaded');},open:async()=>{fs.writeFileSync(path.join(profile,'handoff'),'staged and relaunched');},message:async(_p,m)=>{fs.writeFileSync(path.join(profile,'update-message.json'),JSON.stringify(m));}});return {ok:result.phase==='installing'};});
+let updateController, downloadRelease;
+handle('test:auto-update',async(_e,action)=>{
+ if(action==='start'){
+  const {EventEmitter}=require('node:events'),u=new EventEmitter();
+  u.checkForUpdates=async()=>({updateInfo:{version:'1.2.29'}});
+  u.downloadUpdate=async token=>{fs.writeFileSync(path.join(profile,'download-started'),'yes');await new Promise(resolve=>{downloadRelease=resolve;});if(token.cancelled)throw Error('cancelled');fs.writeFileSync(path.join(profile,'download-finished'),'yes');};
+  u.quitAndInstall=()=>{if(!fs.existsSync(path.join(profile,'download-finished')))throw Error('Undownloaded stage');fs.writeFileSync(path.join(profile,'automatic-stage'),JSON.stringify({locked:true,backup:fs.existsSync(path.join(profile,'backups'))}));};
+  updateController=require('../../../desktop/update-controller.cjs').createUpdateController({updater:u,currentVersion:'1.2.28',newer:()=>true,cancellation:()=>({cancelled:false,cancel(){this.cancelled=true;}}),preserve:async()=>{await win.webContents.executeJavaScript(`window.__setarchitectBeforeUpdate()`);const locked=await win.webContents.executeJavaScript(`Boolean(document.getElementById('update-preservation-lock'))`);if(!locked)throw Error('Editing not frozen');},release:()=>win.webContents.executeJavaScript(`window.__setarchitectReleaseUpdate?.()`)});
+  await updateController.check();void updateController.install();return updateController.status();
+ }
+ if(action==='release'){if(!downloadRelease)throw Error('Download latch not armed');downloadRelease();downloadRelease=null;}
+ else if(action==='cancel')updateController.cancel();
+ else if(action==='quit'){return {blocked:updateController.blocksQuit()};}
+ else if(action==='unlock'){await win.webContents.executeJavaScript(`window.__setarchitectReleaseUpdate?.()`);}
+ else if(action!=='status')throw Error('Invalid action');
+ return updateController.status();
+});
 handle('test:read' ,(_e,id)=>read()[id]);
 handle('test:late-write',(_e,action,id)=>{
  if(id!=='A')throw Error('Synthetic event required');

@@ -9,7 +9,7 @@ app.setPath("userData", path.join(app.getPath("appData"), "Dancefloor Builder"))
 const { createBackupStore } = require("./backups.cjs");
 const backups = createBackupStore(app.getPath("userData"));
 const recovery = require("./recovery.cjs").createRecoveryStore(app.getPath("userData"));
-const { checkForUpdates } = require("./updater.cjs");
+const { checkForUpdates, getController, updateBlocksQuit, updateBlocksNavigation, updateInstallAuthorized } = require("./updater.cjs");
 const { createTagCache, writeTags } = require("./tags.cjs");
 
 const APP_URL = process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app";
@@ -80,7 +80,13 @@ function createWindow() {
 
   mainWindow.on("resize", () => persistState(mainWindow));
   mainWindow.on("move", () => persistState(mainWindow));
-  mainWindow.on("close", () => persistState(mainWindow));
+  mainWindow.on("close", event => {
+    persistState(mainWindow);
+    if (updateBlocksQuit()) event.preventDefault();
+  });
+  // Preserve the existing beforeunload veto for ordinary quits. Only the already
+  // fsynced + backed-up, frozen update handoff may accept native restart.
+  mainWindow.webContents.on("will-prevent-unload", event => { if (updateInstallAuthorized()) event.preventDefault(); });
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
@@ -95,6 +101,7 @@ function createWindow() {
     return { action: "deny" };
   });
   const guardNavigation = (event, url) => {
+    if (updateBlocksNavigation()) { event.preventDefault(); return; }
     const target = event.url ?? url;
     const action = security.navigation(target);
     if (action !== "app") {
@@ -160,12 +167,12 @@ function buildMenu() {
         {
           label: "Reload",
           accelerator: "CmdOrCtrl+R",
-          click: () => mainWindow && mainWindow.reload(),
+          click: () => mainWindow && !updateBlocksNavigation() && mainWindow.reload(),
         },
         {
           label: "Home",
           accelerator: "CmdOrCtrl+Shift+H",
-          click: () => mainWindow && mainWindow.loadURL(APP_URL),
+          click: () => mainWindow && !updateBlocksNavigation() && mainWindow.loadURL(APP_URL),
         },
         { type: "separator" },
         { role: "close" },
@@ -219,6 +226,10 @@ function registerVirtualDjHandlers() {
     catch(e) { event.returnValue = { ok: false, error: e.message }; }
   });
   const handle = (channel, handler) => ipcMain.handle(channel, security.guard(handler));
+  handle("update:status", () => getController().status());
+  handle("update:check", () => getController().check());
+  handle("update:install", () => getController().install());
+  handle("update:cancel", () => getController().cancel());
   handle("backup:save", async (_event, raw, account) => { try { await backups.save(raw, account); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } });
   handle("backup:latest", async (_event, account) => { try { return { ok: true, raw: await backups.latest(account) }; } catch (e) { return { ok: false, error: e.message }; } });
   handle("fs:availability", async (_event, paths) => {
@@ -345,6 +356,8 @@ function registerVirtualDjHandlers() {
     return { ok: true, path: result.filePaths[0] };
   });
 }
+
+app.on("before-quit", event => { if (updateBlocksQuit()) event.preventDefault(); });
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {

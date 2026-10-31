@@ -1,11 +1,14 @@
 import {build} from 'esbuild';import {_electron as electron,expect} from '@playwright/test';
+import {compile} from '@tailwindcss/node';
+import {Scanner} from '@tailwindcss/oxide';
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'setarchitect-native-')),bundle=path.join(temp,'bundle');fs.mkdirSync(bundle);fs.writeFileSync(path.join(temp,'ISOLATED'),'synthetic only');
 const stub=path.join(root,'tests/native/fixtures/services.tsx');
 const names=['history.functions','recommend.functions','neighbors.functions','lastfm.functions','enrich.functions','spotify.functions','pageHead','appVersion','dirHandleStore','libraryStore'];
 await build({entryPoints:[path.join(root,'tests/native/fixtures/entry.tsx')],bundle:true,platform:'browser',format:'esm',outfile:path.join(bundle,'app.js'),jsx:'automatic',alias:{'@':path.join(root,'src')},plugins:[{name:'isolated-services',setup(b){b.onResolve({filter:/.*/},args=>{if(names.some(n=>args.path===`@/lib/${n}`)||['react-start','react-router'].some(n=>args.path===`@tanstack/${n}`)||['@/hooks/useAuth','@/hooks/useDebounce','@/hooks/useProfileSettings','@/integrations/supabase/client','sonner','@/components/HistoryPanel','@/components/ProfileSettingsDialog','@/components/SpotifyExportDialog','@/components/workspace/WaveformPlayer','@/components/ui/sonner','./settings'].includes(args.path))return {path:stub};});}}]});
-fs.writeFileSync(path.join(bundle,'index.html'),`<div id="root"></div><script type="module">window.__fixture=await window.testBackend.fixture();window.__errors=[];window.__warnings=[];window.__success=[];await import('/app.js');</script>`);
+const css=await compile(fs.readFileSync(path.join(root,'src/styles.css'),'utf8'),{base:path.join(root,'src'),onDependency:()=>{}});fs.writeFileSync(path.join(bundle,'app.css'),css.build(new Scanner({sources:[{base:root,pattern:'src/**/*.{tsx,ts}',negated:false}]}).scan()));
+fs.writeFileSync(path.join(bundle,'index.html'),`<link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module">window.__fixture=await window.testBackend.fixture();window.__errors=[];window.__warnings=[];window.__success=[];await import('/app.js');</script>`);
 const library=path.join(temp,'library');fs.mkdirSync(library);const song={artist:'Test Artist',song:'Test Song - Live'};const tracks=[{filePath:path.join(library,'wrong.mp3'),artist:'Unrelated Artist',title:'Wrong Song',bpm:'190',key:'1A',playCount:100},{filePath:path.join(library,'correct.mp3'),artist:song.artist,title:song.song,bpm:'120',key:'8A',playCount:1},{filePath:path.join(library,'most.mp3'),artist:song.artist,title:song.song+' Remix',bpm:'125',key:'9A',playCount:20}];tracks.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes, never played'));
 const key='warmUp:0:test artist|test song live';
 fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));
@@ -165,6 +168,72 @@ try{
    const queued=await page.evaluate(()=>JSON.parse(window.electronRecovery.get('setarchitect:recovery:synthetic-owner:new')));
    expect(queued.snapshot).toEqual(snapshot);expect(queued.snapshot.lists.selections).toEqual(selected);
    expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(originalRows);
+ });
+ await check('automatic updater download latch captures latest editor draft before any Squirrel stage',async()=>{
+   await page.evaluate(()=>{window.__testState.eventId='A';window.__testState.page='event';window.__rerender();});
+   await expect(page.getByRole('button',{name:'Dance floor',exact:false}).first()).toBeVisible({timeout:15000});
+   await expect(page.getByText('Secret Session',{exact:true}).first()).toBeVisible({timeout:15000});
+   const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.count()){await archive.click();await expect(archive).toHaveCount(0);}
+   await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
+   const name=page.getByPlaceholder('e.g. Smith Johnson Wedding');await expect(name).toHaveValue('Secret Session',{timeout:15000});
+   await page.evaluate(()=>window.testBackend.autoUpdate('start'));await expect.poll(()=>fs.existsSync(path.join(temp,'download-started'))).toBe(true);
+   expect((await page.evaluate(()=>window.testBackend.autoUpdate('quit'))).blocked).toBe(true);
+   await name.fill('Fresh edit during download');await expect(name).toHaveValue('Fresh edit during download');
+   expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);
+   await page.evaluate(()=>window.testBackend.autoUpdate('release'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'installing'});
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'automatic-stage'),'utf8'))).toEqual({locked:true,backup:true});
+   const draft=await page.evaluate(()=>{const pending=window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A:pending-edit');return JSON.parse(pending||window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A'));});
+   expect(draft.snapshot.name).toBe('Fresh edit during download');expect(draft.writeRevision).toBeTruthy();
+   await page.evaluate(()=>window.testBackend.autoUpdate('unlock'));
+   fs.unlinkSync(path.join(temp,'automatic-stage'));fs.writeFileSync(path.join(temp,'fault'),'RENAME_EACCES');
+   await page.evaluate(()=>window.testBackend.autoUpdate('start'));await page.evaluate(()=>window.testBackend.autoUpdate('release'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'failed'});
+   expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);expect(await page.locator('#update-preservation-lock').count()).toBe(0);
+   fs.unlinkSync(path.join(temp,'fault'));
+   await page.evaluate(()=>window.testBackend.autoUpdate('start'));await page.evaluate(()=>window.testBackend.autoUpdate('cancel'));await page.evaluate(()=>window.testBackend.autoUpdate('release'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'cancelled'});expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);
+ });
+ await check('actual appearance controls follow System only, persist and render both themes',async()=>{
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});
+   const theme=page.getByRole('group',{name:'Appearance'});
+   await page.emulateMedia({colorScheme:'dark'});await theme.getByRole('button',{name:'System',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dark'))).toBe(true);
+   await theme.getByRole('button',{name:'Light',exact:true}).click();await page.emulateMedia({colorScheme:'dark'});
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('light'))).toBe(true);
+   await expect(theme.getByRole('button',{name:'Light',exact:true})).toHaveAttribute('aria-pressed','true');
+   const light=await page.evaluate(()=>({bg:getComputedStyle(document.body).backgroundColor,fg:getComputedStyle(document.body).color}));
+   const contrast=async()=>page.evaluate(()=>{
+     const ctx=document.createElement('canvas').getContext('2d');const style=getComputedStyle(document.documentElement);
+     const luminance=token=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=style.getPropertyValue('--'+token).trim();ctx.fillRect(0,0,1,1);const data=ctx.getImageData(0,0,1,1).data;const rgb=[...data].slice(0,3).map(c=>{const v=c/255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4;});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;};
+     return ['foreground','muted-foreground','primary','success','warning','info','ai','destructive'].map(token=>{const a=luminance(token),b=luminance('background');return {token,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};}).concat(['primary','secondary','card','popover','success','warning','info','ai','destructive'].map(token=>{const a=luminance(token),b=luminance(token+'-foreground');return {token:token+' pair',ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};}));
+   });
+   for(const result of await contrast())expect(result.ratio,`light ${result.token}`).toBeGreaterThanOrEqual(4.5);
+   await page.screenshot({path:path.join(diagnostics,'appearance-light.png')});
+   await theme.getByRole('button',{name:'Dark',exact:true}).click();await page.emulateMedia({colorScheme:'light'});
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dark'))).toBe(true);
+   const dark=await page.evaluate(()=>({bg:getComputedStyle(document.body).backgroundColor,fg:getComputedStyle(document.body).color}));expect(dark.bg).not.toBe(light.bg);expect(dark.fg).not.toBe(light.fg);
+   for(const result of await contrast())expect(result.ratio,`dark ${result.token}`).toBeGreaterThanOrEqual(4.5);
+   await page.screenshot({path:path.join(diagnostics,'appearance-dark.png')});
+   for(const choice of ['Light','Dark']){
+     await theme.getByRole('button',{name:choice,exact:true}).click();
+     await page.evaluate(()=>{window.__testState.page='event';window.__rerender();});
+     await page.getByRole('button',{name:'Review & export',exact:false}).first().click();
+     await expect(page.getByText('Event flow',{exact:true})).toBeVisible({timeout:15000});
+     await page.getByText('Event flow',{exact:true}).locator('..').screenshot({path:path.join(diagnostics,`chart-${choice.toLowerCase()}.png`)});
+     await page.getByRole('button',{name:'Check export readiness',exact:true}).click();
+     await expect(page.getByRole('region',{name:'Export readiness'}).getByText(/requested songs/)).toBeVisible({timeout:15000});
+     await page.getByRole('region',{name:'Export readiness'}).screenshot({path:path.join(diagnostics,`readiness-${choice.toLowerCase()}.png`)});
+     await page.setViewportSize({width:390,height:844});
+     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+     await page.screenshot({path:path.join(diagnostics,`mobile-${choice.toLowerCase()}.png`)});
+     await page.setViewportSize({width:1280,height:1800});
+     await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});
+   }
+   await page.reload();await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.appearance),{timeout:15000}).toBe('dark');
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await theme.getByRole('button',{name:'System',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('light'))).toBe(true);await page.emulateMedia({colorScheme:'dark'});
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dark'))).toBe(true);
  });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
 }catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});throw e;}finally{await app?.close().catch(()=>{});}

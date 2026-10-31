@@ -1,4 +1,5 @@
 import { saveBackup } from "@/lib/backupClient";
+import { lockUpdateEditing } from "@/lib/updatePreservation";
 import { previewMetadataRestore, validateBackup, type Backup } from "@/lib/backups";
 import { readEventSnapshot } from "@/lib/snapshotSafety";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -266,7 +267,14 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!isDesktopApp()) return;
     const host = window as unknown as { __setarchitectBeforeUpdate?: () => Promise<void> };
-    const capture = async () => { await backup(); };
+    const capture = async () => {
+      const lock = lockUpdateEditing();
+      try {
+        const saved = await backup();
+        if (JSON.stringify(backupSession.current.sources) !== JSON.stringify(saved.sources) || JSON.stringify(getFolderRoots()) !== JSON.stringify(saved.roots)) throw Error("Library changed while preparing the update. Try again; nothing installed.");
+        lock.checkpoint();
+      } catch (error) { lock.release(); throw error; }
+    };
     host.__setarchitectBeforeUpdate = capture;
     return () => { if (host.__setarchitectBeforeUpdate === capture) delete host.__setarchitectBeforeUpdate; };
   }, [userId, loading, sources]);

@@ -260,7 +260,7 @@ function Art({ src, round, onPlay, label }: { src?: string; round?: boolean; onP
       ? <img src={src} alt="" loading="lazy" className={`size-11 object-cover ${shape}`}/>
       : <span className={`grid size-11 place-items-center bg-muted/60 ${shape}`}><Music2 className="size-4 text-muted-foreground"/></span>}
     <button type="button" aria-label={`Play ${label}`} title={`Play ${label}`} onClick={onPlay}
-      className={`absolute inset-0 grid place-items-center bg-black/55 text-white opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${shape}`}>
+      className={`absolute inset-0 grid place-items-center bg-media-overlay text-media-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 ${shape}`}>
       <Play size={15} className="translate-x-px"/>
     </button>
   </span>;
@@ -317,16 +317,16 @@ function ConsensusTrackList({ rows, loading, inLibrary, onPlay }: { rows: Consen
       {hero.artwork ? <img src={hero.artwork} alt="" className="h-44 w-full object-cover"/> : <div className="h-44 w-full bg-muted/50"/>}
       <HeroPlay label={hero.title} onClick={() => onPlay(hero.artist, hero.title)}/>
       <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-4">
-        <span className="font-display text-3xl font-semibold leading-none text-white/90">1</span>
+        <span className="font-display text-3xl font-semibold leading-none text-media-foreground/90">1</span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-display text-lg font-semibold text-white">{hero.title}</span>
-          <span className="block truncate text-sm text-white/70">{hero.artist}</span>
+          <span className="block truncate font-display text-lg font-semibold text-media-foreground">{hero.title}</span>
+          <span className="block truncate text-sm text-media-foreground/70">{hero.artist}</span>
           <span className="mt-1.5 flex flex-wrap items-center gap-1">
-            {hero.sources.map(s => <span key={s.source} className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] text-white/85">{SOURCE_LABEL[s.source]} #{s.rank}</span>)}
+            {hero.sources.map(s => <span key={s.source} className="rounded-full bg-media-badge px-2 py-0.5 text-[10px] text-media-foreground/85">{SOURCE_LABEL[s.source]} #{s.rank}</span>)}
             {hero.sources.length >= 3 ? <span className="rounded-full bg-primary/85 px-2 py-0.5 text-[10px] font-medium text-primary-foreground">Cross-platform</span> : null}
           </span>
         </span>
-        <span className={`shrink-0 text-[11px] ${inLibrary(hero) ? "text-success" : "text-white/70"}`}>
+        <span className={`shrink-0 text-[11px] ${inLibrary(hero) ? "text-success" : "text-media-foreground/70"}`}>
           {inLibrary(hero) ? "In library" : "Missing"}
         </span>
       </div>
@@ -368,11 +368,11 @@ function ArtistList({ rows, loading, onPlay }: { rows: ConsensusArtist[]; loadin
       {hero.artwork ? <img src={hero.artwork} alt="" className="h-44 w-full object-cover"/> : <div className="h-44 w-full bg-muted/50"/>}
       {hero.topTrack ? <HeroPlay label={hero.topTrack} onClick={() => onPlay(hero.artist, hero.topTrack!)}/> : null}
       <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-4">
-        <span className="font-display text-3xl font-semibold leading-none text-white/90">1</span>
+        <span className="font-display text-3xl font-semibold leading-none text-media-foreground/90">1</span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate font-display text-lg font-semibold text-white">{hero.artist}</span>
-          <span className="block truncate text-sm text-white/70">{sub(hero) || "Trending now"}</span>
-          {hero.topTrack ? <span className="block truncate text-xs text-white/55">Top track: {hero.topTrack}</span> : null}
+          <span className="block truncate font-display text-lg font-semibold text-media-foreground">{hero.artist}</span>
+          <span className="block truncate text-sm text-media-foreground/70">{sub(hero) || "Trending now"}</span>
+          {hero.topTrack ? <span className="block truncate text-xs text-media-foreground/55">Top track: {hero.topTrack}</span> : null}
         </span>
       </div>
     </div> : null}

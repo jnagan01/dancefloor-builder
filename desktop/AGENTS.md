@@ -1,0 +1,5 @@
+# Desktop architecture
+- Keep the pre-rebrand bundle ID and pinned Dancefloor Builder userData path in main.cjs, because changing them loses tag cache, backups, folder permissions and update continuity.
+- Apply security.cjs to every native IPC handler and navigation/permission boundary; trust only the exact app origin and owning main frame, because untrusted pages/subframes must never inherit native access. Include desktop helpers in package build.files.
+- Keep electron-updater autoDownload and autoInstallOnAppQuit disabled; invoke Squirrel only after a fresh backup and fsynced draft with editing frozen, because Mac staging can install on ordinary quit.
+- Stamp real app semver and release tags from the single release workflow run counter; verify ZIP/DMG/feed checksums and Developer ID/notarization before release, because cached updates and legacy bootstrap must identify the same increasing version.
