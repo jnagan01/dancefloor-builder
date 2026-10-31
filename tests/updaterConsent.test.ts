@@ -15,7 +15,7 @@ async function startup(options: { discovery?: boolean; rejection?: boolean; fail
   if(options.rejection) controller.install=async()=>{throw Error('install rejected');};
   const exports: any = {};
   const source=fs.readFileSync('desktop/updater.cjs','utf8').replace('let controller, checkingDialog = false;', 'let controller = injectedController, checkingDialog = false;');
-  vm.runInNewContext(source,{module:{exports},exports,injectedController:controller,process, __dirname:'/synthetic',require:(name:string)=>name==='electron'?{app:{getVersion:()=> '1.0.0'},BrowserWindow:{getAllWindows:()=>[]},dialog:{showMessageBox:async(_parent:any,box:any)=>{calls.push(box);return {response:options.later?1:0};}}}:require(name)});
+  vm.runInNewContext(source,{module:{exports},exports,injectedController:controller,process, __dirname:'/synthetic',require:(name:string)=>name==='electron'?{app:{getVersion:()=> '1.0.0'},BrowserWindow:{getAllWindows:()=>[]},dialog:{showMessageBox:async(_parent:any,box:any)=>{calls.push(box);return {response:options.later?1:0};}}}:name==='./update-controller.cjs'?{createUpdateController}:require(name)});
   await exports.checkForUpdates({silent:true});
   return {calls,stages,controller};
 }
