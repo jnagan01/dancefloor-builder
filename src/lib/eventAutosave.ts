@@ -13,6 +13,7 @@ export function createEventAutosave<T>(options: {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const flights = new Map<string, { controller: AbortController; uncertain: boolean }>();
   const uncertainKeys = new Set<string>();
+  const knownVersions = new Map<string, string>();
   const valid = (job: Job) => job.epoch === epoch && job.current();
   const clearTimer = () => { clearTimeout(timer); timer = undefined; };
   const rekeyPending = () => { if (pending) pending.key = key; };
@@ -39,6 +40,7 @@ export function createEventAutosave<T>(options: {
       const saved = await options.write(id, job.snapshot, { signal: controller.signal, expectedUpdatedAt: version, createId, create: !id });
       if (!timedOut && valid(job)) {
         id = saved.id; version = saved.updatedAt ?? version; key = id;
+        if (saved.updatedAt) knownVersions.set(saved.id, saved.updatedAt);
         rekeyPending();
         options.onId(saved.id);
         uncertainKeys.delete(job.key);
@@ -56,7 +58,7 @@ export function createEventAutosave<T>(options: {
   }
   return {
     schedule(snapshot: T, eventId: string | null, current: () => boolean, delay = 1000) {
-      if (eventId) { id = eventId; key = eventId; }
+      if (eventId) { id = eventId; key = eventId; version = knownVersions.get(eventId) ?? version; }
       pending = { epoch, revision: ++revision, snapshot, current, key };
       ready = false; options.onState("idle"); clearTimer();
       timer = setTimeout(() => { timer = undefined; ready = true; void drain(); }, delay);
@@ -65,6 +67,7 @@ export function createEventAutosave<T>(options: {
     retry() { if (!pending || !valid(pending)) return; clearTimer(); ready = true; void drain(); },
     configure(eventId: string | null, updatedAt: string | null, stableCreateId?: string) {
       id = eventId; version = updatedAt; createId = stableCreateId ?? crypto.randomUUID(); key = id ?? createId;
+      if (eventId && updatedAt) knownVersions.set(eventId, updatedAt);
     },
     reset() { epoch++; revision++; clearTimer(); pending = null; ready = false; id = null; version = null; createId = crypto.randomUUID(); key = createId; },
   };

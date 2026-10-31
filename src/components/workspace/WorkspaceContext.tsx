@@ -270,11 +270,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const roots = getFolderRoots();
     const scanStart = revisions.now();
     const targets = sources.filter(s => roots[s.label]);
+    const generations = new Map(targets.map(s => [s.label, revisions.generation(s.label)]));
     if (!targets.length) return false;
     const updates = new Map<string, VdjTrack[]>();
     const problems: string[] = [];
     for (const source of targets) {
       const result = await scanNativeFolder(roots[source.label]);
+      if (revisions.generation(source.label) !== generations.get(source.label)) continue;
       const problem = nativeScanProblem(result, source.tracks.length);
       if (problem || !result.files) { problems.push(`${source.label}: ${problem ?? "couldn't be read"}`); continue; }
       const scanned = relabelScan(result.files, source.label);
@@ -314,7 +316,12 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       if (!bucket) { bucket = []; available.set(label, bucket); }
       bucket.push(file);
     }
-    setSources(prev => prev.map(source => available.has(source.label) ? { label: source.label, tracks: tracksFromAudioFiles(available.get(source.label) ?? []) } : source));
+    setSources(prev => {
+      const all = prev.flatMap(s => s.tracks), known = metadataResolver(all, all, getFolderRoots());
+      return prev.map(source => available.has(source.label) ? { label: source.label, tracks: tracksFromAudioFiles(available.get(source.label) ?? []).map(t => {
+        const old = known.resolve(t.filePath); return old ?? t;
+      }) } : source);
+    });
     toast.success("Connected music folders rescanned. Reconnect any other folders to scan them again.");
   }
   /**
