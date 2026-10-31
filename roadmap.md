@@ -25,3 +25,9 @@
 - [x] Bounded duration validation and preflight-safe newline handling for every DJ export.
 - [x] Linear browser scan buckets, shared native merge indexes, cached native/audio identities and single library construction.
 - [x] Tracked regressions for every finding, full suite and automatic build checks, isolated mock flow and monitored benchmarks. Real Mac/live server operations intentionally not exercised.
+
+# Independent recovery review
+- [ ] Correct save-as-new, stable creation IDs, account/event boundaries and malformed-draft lockout with actual route regressions.
+- [ ] Prevent opening-time writes and invalid legacy calculations; harden conditional writes against timestamp collisions.
+- [ ] Preserve tag completion during scans and fail closed on null library records/migration failures.
+- [ ] Run full regressions and inspect automatic build; report any constraint-limited guarantees.

@@ -346,13 +346,18 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     const t = res.tags ?? {};
     const year = t.year || undefined;
     if (revisions.generation(sourceLabel) !== generation || revisions.revision(sourceLabel, track.filePath, roots) !== revision) return { ok: true };
-    setSources(prev => prev.map(s => s.label === sourceLabel ? { ...s, tracks: s.tracks.map(tr => trackIdentity(tr.filePath, roots) === identity ? {
+    // Completion is a separate edit boundary: a scan may have started after the request.
+    const completedRevision = revisions.bump(sourceLabel, track.filePath, roots);
+    setSources(prev => {
+      if (revisions.generation(sourceLabel) !== generation || revisions.revision(sourceLabel, track.filePath, roots) !== completedRevision) return prev;
+      return prev.map(s => s.label === sourceLabel ? { ...s, tracks: s.tracks.map(tr => trackIdentity(tr.filePath, roots) === identity ? {
       ...tr,
       title: t.title || tr.title, artist: t.artist || tr.artist,
       album: t.album || undefined, genre: t.genre || undefined, year,
       decade: year && /^\d{4}$/.test(year) ? `${year.slice(0, 3)}0s` : tr.decade,
       bpm: cleanBpm(t.bpm), key: t.key || undefined, comment: t.comment || undefined, fromTags: true,
-    } : tr) } : s));
+    } : tr) } : s);
+    });
     return { ok: true };
   }
   function exactNativePath(filePath: string): string | null {

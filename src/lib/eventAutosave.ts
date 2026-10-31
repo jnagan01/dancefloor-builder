@@ -1,5 +1,5 @@
 export type SaveState = "idle" | "saving" | "saved" | "error";
-export interface SaveAttempt { signal: AbortSignal; expectedUpdatedAt: string | null; createId: string; create: boolean }
+export interface SaveAttempt { signal: AbortSignal; expectedUpdatedAt: string | null; createId: string; create: boolean; expectedSnapshot?: unknown }
 /** Serialized per identity; timed-out requests may retry ONLY with atomic CAS/idempotent creation. */
 export function createEventAutosave<T>(options: {
   write: (id: string | null, snapshot: T, attempt: SaveAttempt) => Promise<{ id: string; updatedAt?: string }>;
@@ -14,6 +14,7 @@ export function createEventAutosave<T>(options: {
   const flights = new Map<string, { controller: AbortController; uncertain: boolean }>();
   const uncertainKeys = new Set<string>();
   const knownVersions = new Map<string, string>();
+  let expectedSnapshot: unknown;
   const valid = (job: Job) => job.epoch === epoch && job.current();
   const clearTimer = () => { clearTimeout(timer); timer = undefined; };
   const rekeyPending = () => { if (pending) pending.key = key; };
@@ -37,9 +38,10 @@ export function createEventAutosave<T>(options: {
       // Unknown outcome: no automatic retry. Explicit retry uses the same CAS version/create UUID.
     }, options.timeoutMs ?? 15000);
     try {
-      const saved = await options.write(id, job.snapshot, { signal: controller.signal, expectedUpdatedAt: version, createId, create: !id });
+      const saved = await options.write(id, job.snapshot, { signal: controller.signal, expectedUpdatedAt: version, createId, create: !id, expectedSnapshot });
       if (!timedOut && valid(job)) {
         id = saved.id; version = saved.updatedAt ?? version; key = id;
+        expectedSnapshot = job.snapshot;
         if (saved.updatedAt) knownVersions.set(saved.id, saved.updatedAt);
         rekeyPending();
         options.onId(saved.id);
@@ -65,10 +67,11 @@ export function createEventAutosave<T>(options: {
     },
     dirty() { options.onState("idle"); },
     retry() { if (!pending || !valid(pending)) return; clearTimer(); ready = true; void drain(); },
-    configure(eventId: string | null, updatedAt: string | null, stableCreateId?: string) {
+    configure(eventId: string | null, updatedAt: string | null, stableCreateId?: string, baseline?: unknown) {
       id = eventId; version = updatedAt; createId = stableCreateId ?? crypto.randomUUID(); key = id ?? createId;
+      expectedSnapshot = baseline;
       if (eventId && updatedAt) knownVersions.set(eventId, updatedAt);
     },
-    reset() { epoch++; revision++; clearTimer(); pending = null; ready = false; id = null; version = null; createId = crypto.randomUUID(); key = createId; },
+    reset(stableCreateId: string = crypto.randomUUID()) { epoch++; revision++; clearTimer(); pending = null; ready = false; id = null; version = null; expectedSnapshot = undefined; createId = stableCreateId; key = createId; return createId; },
   };
 }
