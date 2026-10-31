@@ -25,7 +25,9 @@ describe('native UI review: actual isolated route callers',()=>{
   const sec=h.nodes().find((n:any)=>n.props?.onRename);sec.props.onRename(0,{...song,song:'Test Song - Live - Edited'});h.render();await h.flush();
   const match=Object.values(h.current.matches)[0] as vdj.SongMatch;expect(vdj.exportApproved(match)).toBe(false);expect(match.status).toBe("Possible Match");
   await h.current.exportAllZip();expect(h.files.some((f:any)=>f.name.endsWith('.m3u'))).toBe(false);expect(h.files.find((f:any)=>f.name.endsWith('.txt')).data).toContain('Test Song - Live - Edited');
-  h.current.setVdjDirHandle({});await h.flush();for(const prop of ['onExportM3u','onExportM3uToVdj','onExportXmlToVdj'])await h.invoke(prop);await h.current.exportAllToVdj();expect(h.files.filter((f:any)=>f.name.endsWith('.m3u'))).toHaveLength(0);h.unmount();
+  h.current.setVdjDirHandle({});await h.flush();for(const prop of ['onExportM3u','onExportM3uToVdj','onExportXmlToVdj'])await h.invoke(prop);await h.current.exportAllToVdj();expect(h.files.filter((f:any)=>f.name.endsWith('.m3u'))).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(1000);await h.flush();const saved=h.requests.at(-1);const savedSelection=Object.values(saved.lists.selections)[0] as any;expect(savedSelection.confirmed).toBe(false);h.unmount();
+  const reloaded=harness({rows:{A:{...row(),name:saved.name,inputs:saved.inputs,lists:saved.lists}}});await reloaded.flush();reloaded.library(vdj.buildLibrary([track]));await reloaded.flush();await reloaded.current.exportAllZip();expect(reloaded.files.some((f:any)=>f.name.endsWith('.m3u'))).toBe(false);expect(reloaded.requests).toHaveLength(0);reloaded.unmount();
  });
  it.each([undefined,false])('legacy or explicitly unconfirmed paths never gain approval on restore (%s)',async confirmed=>{
   vi.useFakeTimers();const original=row({[key]:{paths:[track.filePath],confirmed}});const h=harness({rows:{A:original}});await h.flush();h.library(vdj.buildLibrary([track]));await h.flush();
