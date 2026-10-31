@@ -14,6 +14,8 @@ const faultyFs={...fs,promises:{...fs.promises,
 }};const backups=createBackupStore(profile,faultyFs);
 const read=()=>JSON.parse(fs.readFileSync(backend,'utf8'));
 const atomic=data=>{fs.writeFileSync(backend+'.tmp',JSON.stringify(data));fs.renameSync(backend+'.tmp',backend);};
+// Explicit test-only latch: commit reaches disk, but its IPC reply stays held until released.
+const lateWrites=new Map();
 app.whenReady().then(()=>{
 server=http.createServer((req,res)=>{const asset=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js'].includes(asset)){res.writeHead(404).end();return;}res.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':'text/html');res.end(fs.readFileSync(path.join(process.env.SETARCHITECT_TEST_BUNDLE,asset)));});
 const portFile=path.join(profile,'port');const port=fs.existsSync(portFile)?Number(fs.readFileSync(portFile,'utf8')):0;server.listen(port,'127.0.0.1',()=>{fs.writeFileSync(portFile,String(server.address().port));
@@ -27,13 +29,21 @@ handle('test:library',(_e,sources,account)=>{if(account!=='synthetic-owner')thro
 handle('test:latest',async(_e,account)=>({ok:true,raw:await backups.latest(account)}));
 handle('test:update',async()=>{const {runUpdate}=require('../../../desktop/updater.cjs');process.env.DANCEFLOOR_URL=origin;await runUpdate({url:'https://synthetic.invalid/installer.dmg',assetName:'synthetic.dmg'},win,{download:async()=>{fs.writeFileSync(path.join(profile,'handoff'),'downloaded');},open:async()=>{fs.appendFileSync(path.join(profile,'handoff'),' opened');},message:async(_p,m)=>{fs.writeFileSync(path.join(profile,'update-message.json'),JSON.stringify(m));}});return {ok:fs.existsSync(path.join(profile,'handoff'))};});
 handle('test:read' ,(_e,id)=>read()[id]);
+handle('test:late-write',(_e,action,id)=>{
+ if(id!=='A')throw Error('Synthetic event required');
+ if(action==='arm'){if(lateWrites.get(id)?.held)throw Error('Write already held');lateWrites.set(id,{armed:true,held:false,replied:false,revision:null,name:null});}
+ else if(action==='release'){const state=lateWrites.get(id);if(!state?.held||!state.release)throw Error('No committed reply held');state.release();}
+ else if(action!=='status')throw Error('Invalid latch action');
+ const state=lateWrites.get(id);return state?{armed:state.armed,held:state.held,replied:state.replied,revision:state.revision,name:state.name}:null;
+});
 handle('test:write',async(_e,r)=>{
  if(fault()==='offline')throw Error('Synthetic offline');if(fault()==='hang')return new Promise(()=>{});
  const rows=read(),old=rows[r.id],field='__setarchitect_write_revision_v1';
  if(r.create&&old){if(old.inputs[field]!==r.writeRevision)throw Error('Conflict');return {id:r.id,revision:r.writeRevision,updatedAt:old.updated_at};}
  if(!r.create&&(!old||((old.inputs[field]??null)!==r.expectedRevision)))throw Error('Synthetic conflict');
  rows[r.id]={id:r.id,name:r.name,inputs:{...r.inputs,[field]:r.writeRevision},lists:r.lists,updated_at:'2026-10-31T01:59:00Z'};atomic(rows);
- if(fault()==='late'){await new Promise(resolve=>setTimeout(resolve,1800));}
+ const latch=lateWrites.get(r.id);
+ if(latch?.armed){latch.armed=false;latch.held=true;latch.revision=r.writeRevision;latch.name=r.inputs.eventName;await new Promise(resolve=>{latch.release=resolve;});latch.held=false;latch.replied=true;}
  return {id:r.id,revision:r.writeRevision,updatedAt:rows[r.id].updated_at};
 });
 handle('test:export',(_e,name,data)=>{if(typeof name!=='string'||name!==path.basename(name)||typeof data!=='string')throw Error('Unsafe export');if(['ENOSPC','EACCES'].includes(fault())||(fault()==='PARTIAL'&&name.endsWith('.m3u')))return {ok:false,error:fault()};fs.mkdirSync(exportsDir,{recursive:true});fs.writeFileSync(path.join(exportsDir,name),data);return {ok:true};});
