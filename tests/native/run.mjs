@@ -145,7 +145,7 @@ try{
    expect(await page.getByRole('combobox',{name:'Event to restore'}).inputValue()).toBe('A');
    const raw=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);
    expect(JSON.parse(raw).events[0].snapshot).toEqual(snapshot);
-   const download=page.waitForEvent('download');await page.getByRole('button',{name:'Download backup',exact:true}).click();const downloaded=await download;const artifact=await downloaded.path();expect(JSON.parse(fs.readFileSync(artifact,'utf8')).events[0].snapshot).toEqual(snapshot);
+   await page.getByRole('button',{name:'Download backup',exact:true}).click();await page.waitForTimeout(500);const artifact=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('setarchitect-backup-')).sort().at(-1);expect(artifact).toBeTruthy();expect(JSON.parse(fs.readFileSync(path.join(temp,'exports',artifact),'utf8')).events[0].snapshot).toEqual(snapshot);
    const bad=JSON.parse(raw);bad.events[0].snapshot.inputs.access_token='synthetic credential';
    expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),bad)).ok).toBe(false);
    expect(await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw)).toBe(raw);
