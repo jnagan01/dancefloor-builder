@@ -171,6 +171,7 @@ try{
  });
  await check('automatic updater download latch captures latest editor draft before any Squirrel stage',async()=>{
    await page.evaluate(()=>{window.__testState.eventId='A';window.__testState.page='event';window.__rerender();});
+   const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.count())await archive.click();
    await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
    const name=page.getByPlaceholder('e.g. Smith Johnson Wedding');await expect(name).toHaveValue('Secret Session',{timeout:15000});
    await page.evaluate(()=>window.testBackend.autoUpdate('start'));await expect.poll(()=>fs.existsSync(path.join(temp,'download-started'))).toBe(true);
