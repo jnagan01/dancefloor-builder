@@ -202,6 +202,7 @@ try{
    expect(await page.evaluate(()=>Array.from(document.body.children).filter(el=>el.id!=='update-preservation-lock').every(el=>el.inert))).toBe(true);
    expect((await page.evaluate(()=>window.testBackend.autoUpdate('quit'))).blocked).toBe(true);
    expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);
+   await cover.screenshot({path:path.join(root,'test-results/native/staging-failure-overlay.png')});
    // Test-only cleanup: production controller deliberately exposes no unlock for uncertain staging.
    await page.evaluate(()=>window.testBackend.autoUpdate('unlock'));fs.unlinkSync(path.join(temp,'fault'));
  });
