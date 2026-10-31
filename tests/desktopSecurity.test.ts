@@ -90,7 +90,7 @@ async function loadMain() {
   const app = { setPath: vi.fn(), getPath: () => "/mock", requestSingleInstanceLock: () => true, on: vi.fn(), whenReady: async () => {}, quit: vi.fn() };
   const electron = { app, BrowserWindow: function () { return win; }, shell: { openExternal: external }, Menu: { buildFromTemplate: () => [], setApplicationMenu: vi.fn() }, dialog: { showOpenDialog }, ipcMain: { handle: (name: string, fn: Function) => handlers.set(name, fn) } };
   runInNewContext(readFileSync(new URL("../desktop/main.cjs", import.meta.url), "utf8"), {
-    require: (name: string) => name === "electron" ? electron : name === "node:fs" ? fs : name === "./security.cjs" ? require("../desktop/security.cjs") : name === "./scan.cjs" ? { scanFolder } : name === "./tags.cjs" ? { createTagCache: () => ({ forget: vi.fn(), flush: async () => {} }), writeTags } : name === "./updater.cjs" ? { checkForUpdates: async () => {} } : require(name),
+    require: (name: string) => name === "electron" ? electron : name === "node:fs" ? fs : name === "./security.cjs" ? require("../desktop/security.cjs") : name === "./scan.cjs" ? { scanFolder } : name === "./tags.cjs" ? { createTagCache: () => ({ forget: vi.fn(), flush: async () => {} }), writeTags } : name === "./backups.cjs" ? { createBackupStore: () => ({ save: async () => {}, latest: async () => null }) } : name === "./updater.cjs" ? { checkForUpdates: async () => {} } : require(name),
     process: { env: {}, platform: "darwin" }, __dirname: "/mock/desktop", setTimeout: vi.fn(), console,
   });
   await Promise.resolve();
@@ -101,7 +101,7 @@ describe("real main process wiring with mocks", () => {
     const { handlers, wc, showOpenDialog, fs, scanFolder, writeTags } = await loadMain();
     expect([...handlers.keys()].sort()).toEqual([
       "vdj:default-path", "vdj:default-root", "vdj:choose-root", "vdj:read-database", "vdj:choose-database",
-      "fs:choose-folder", "fs:choose-music-folder", "fs:write-tags", "fs:scan-folder", "fs:read-audio", "fs:write-file",
+      "backup:save", "backup:latest", "fs:availability", "fs:choose-folder", "fs:choose-music-folder", "fs:write-tags", "fs:scan-folder", "fs:read-audio", "fs:write-file",
     ].sort());
     for (const handler of handlers.values()) {
       expect(() => handler({ sender: wc, senderFrame: { url: APP } }, "/mock/music")).toThrow("Native access denied");

@@ -22,3 +22,9 @@ contextBridge.exposeInMainWorld("electronFiles", {
   },
   writeFile: (dirPath, name, contents) => ipcRenderer.invoke("fs:write-file", { dirPath, name, contents }),
 });
+
+contextBridge.exposeInMainWorld("electronBackups", {
+  save: (raw, account) => ipcRenderer.invoke("backup:save", raw, account),
+  latest: account => ipcRenderer.invoke("backup:latest", account),
+});
+contextBridge.exposeInMainWorld("electronAvailability", { check: paths => ipcRenderer.invoke("fs:availability", paths) });

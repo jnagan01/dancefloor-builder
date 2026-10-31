@@ -46,3 +46,11 @@
 - [x] Reconcile exact late-save recovery; preserve conflicting copies as backups.
 - [x] Block incomplete-title generation explicitly, retaining import rows.
 - [x] Unify generation, restoration and displayed targets; verify all four with isolated route regressions.
+
+# Authorized six improvements
+- [x] Coherent explicit bulk approvals and approved-only musical metadata, with route regressions.
+- [x] Snapshot-bound export readiness, read-only availability and packaged reports.
+- [x] Account-isolated versioned backups, required pre-rescan/update checkpoint and non-destructive preview/restore.
+- [x] Isolated offline/crash/disk-failure checks with synthetic profiles and backend.
+- [ ] Release-blocking Electron CI is wired and seven checks pass; remaining Electron cases: six-row partial import, late-save recovery, abrupt process kill, fresh update capture and restore preview. CI execution/signing requires GitHub runner.
+- [x] Full regression/adversarial/build checks and exact results/limits.

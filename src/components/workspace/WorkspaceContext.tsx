@@ -1,3 +1,6 @@
+import { saveBackup } from "@/lib/backupClient";
+import { previewMetadataRestore, type Backup } from "@/lib/backups";
+import { readEventSnapshot } from "@/lib/snapshotSafety";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, folderForPath, resolveExportPath, folderRootsProblem, cleanBpm, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
@@ -17,6 +20,7 @@ import { nativeScanProblem } from "@/lib/nativeScanSafety";
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
   sources: Source[]; files: File[]; audioIndex: AudioIndex; library: VdjLibrary | null; loading: boolean; persistenceError: string | null;
+  backup: () => Promise<Backup>; restoreMetadata: (backup: Backup) => Promise<void>;
   addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => string;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
   /** Loads a remembered file from disk (desktop app) so it can be played. */
@@ -230,6 +234,33 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const library = useMemo(() => sources.length ? indexes.library(sources) : null, [sources, indexes]);
   const knownPaths = indexes.paths(sources);
   const audioIndex = indexes.audio(files, knownPaths, getFolderRoots());
+  async function backup(): Promise<Backup> {
+    if (!userId || loading || persistenceBlocked.current) throw Error("Sign in and resolve unreadable library data before backup.");
+    // Read-only owner-scoped collection. No remote writes, credentials or audio.
+    const { data, error } = await supabase.from("workflow_history").select("id,name,inputs,lists").eq("user_id", userId).limit(501);
+    if (error || !data || data.length > 500) throw Error("Could not read all events for backup. Operation stopped.");
+    const events = data.map(row => {
+      const snapshot = { name: row.name, inputs: row.inputs, lists: row.lists };
+      readEventSnapshot(snapshot); return { id: row.id, snapshot };
+    });
+    const b = { format: "setarchitect-backup" as const, version: 1 as const, account: userId, createdAt: new Date().toISOString(), events, sources: structuredClone(sources), roots: getFolderRoots() } as Backup;
+    await saveBackup(b); return b;
+  }
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    const host = window as unknown as { __setarchitectBeforeUpdate?: () => Promise<void> };
+    const capture = async () => { await backup(); };
+    host.__setarchitectBeforeUpdate = capture;
+    return () => { if (host.__setarchitectBeforeUpdate === capture) delete host.__setarchitectBeforeUpdate; };
+  }, [userId, loading, sources]);
+  async function restoreMetadata(b: Backup) {
+    if (!userId || b.account !== userId || loading || persistenceBlocked.current) throw Error("Backup account does not match the active library.");
+    await backup();
+    const plan = previewMetadataRestore(b, sources, getFolderRoots());
+    // Never overwrite an existing label, root or track. Conflicts are previewed in Settings.
+    for (const [label, root] of Object.entries(plan.mappings)) setFolderRoot(label, root);
+    setSources(prev => [...prev, ...plan.additions.filter(source => !prev.some(s => s.label === source.label))]);
+  }
   async function addFolder() {
     const rootProblem = folderRootsProblem();
     if (rootProblem) { toast.error(rootProblem); return; }
@@ -237,6 +268,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (supportsNativeScan()) {
       const root = await chooseNativeMusicFolder();
       if (!root) return;
+      try { await backup(); } catch (e) { toast.error((e as Error).message); return; }
       const result = await scanNativeFolder(root);
       const actualRoot = result.root ?? root;
       const label = allocateSourceLabel(result.label ?? root.split("/").filter(Boolean).pop() ?? "Music", actualRoot, sources.map(s => s.label), getFolderRoots());
@@ -267,6 +299,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
   /** Re-reads every remembered folder from disk (desktop app only). */
   async function rescanNative(silent = false): Promise<boolean> {
+    try { await backup(); } catch (e) { toast.error((e as Error).message); return false; }
     const roots = getFolderRoots();
     const scanStart = revisions.now();
     const targets = sources.filter(s => roots[s.label]);
@@ -425,7 +458,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     revisions.bump(selected.label, track.filePath, roots);
     setSources(prev => prev.map(s => s.label === selected.label ? { ...s, tracks: s.tracks.map(t => trackIdentity(t.filePath, roots) === identity ? { ...t, ...patch, filePath: t.filePath } : t) } : s));
   }
-  return <Context.Provider value={{ sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, backup, restoreMetadata, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);

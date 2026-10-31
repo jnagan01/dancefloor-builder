@@ -6,6 +6,8 @@ const fs = require("node:fs");
 // Keep the pre-rebrand data folder so window state, tag cache and tag backups carry over.
 app.setPath("userData", path.join(app.getPath("appData"), "Dancefloor Builder"));
 
+const { createBackupStore } = require("./backups.cjs");
+const backups = createBackupStore(app.getPath("userData"));
 const { checkForUpdates } = require("./updater.cjs");
 const { createTagCache, writeTags } = require("./tags.cjs");
 
@@ -212,6 +214,13 @@ function defaultVdjPath() {
 
 function registerVirtualDjHandlers() {
   const handle = (channel, handler) => ipcMain.handle(channel, security.guard(handler));
+  handle("backup:save", async (_event, raw, account) => { try { await backups.save(raw, account); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } });
+  handle("backup:latest", async (_event, account) => { try { return { ok: true, raw: await backups.latest(account) }; } catch (e) { return { ok: false, error: e.message }; } });
+  handle("fs:availability", async (_event, paths) => {
+    if (!Array.isArray(paths) || paths.length > 10000 || paths.some(p => typeof p !== "string" || !path.isAbsolute(p) || /[\r\n\0]/.test(p))) return { ok: false, error: "Invalid availability request." };
+    const entries = await Promise.all(paths.map(async p => { try { const stat = await fs.promises.stat(p); await fs.promises.access(p, fs.constants.R_OK); return [p, stat.isFile() ? "available" : "unavailable"]; } catch { return [p, "unavailable"]; } }));
+    return { ok: true, availability: Object.fromEntries(entries) };
+  });
   handle("vdj:default-path", () => defaultVdjPath());
   handle("vdj:default-root", () => defaultVdjRoot());
   handle("vdj:choose-root", async () => {

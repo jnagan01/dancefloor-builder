@@ -1,3 +1,4 @@
+import { exportReadiness, readinessText, type Availability } from "@/lib/exportReadiness";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -44,6 +45,7 @@ import {
   buildM3u,
   countMatchedForExport,
   exportApproved,
+  musicalMatchApproved,
   countUnresolvedPaths,
   resolveExportPath,
   cleanBpm,
@@ -239,14 +241,25 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   function applyReviewMode(mode: "first" | "most" | "all" | "none", section: SectionKey) {
     setReviewMode(mode);
     if (!result || !mergedLibrary) return;
+    const next = { ...matchesRef.current };
     result[section].forEach((song, index) => {
       const key = songKey(section, index, song);
-      if (mode === "none") { markUnresolved(key); return; }
-      const found = searchLibrary(`${song.artist} ${song.song}`, mergedLibrary, mode === "all" ? matchLimit : 1);
-      if (!found.length) return;
-      const automatic = matchSong(song, mergedLibrary);
-      updateMatch(key, { status: "Manually Matched", confidence: automatic.confidence, trackIndex: found[0], alternatives: [], extraTrackIndices: mode === "all" ? found.slice(1) : [] });
+      const previous = next[key];
+      if (mode === "none") {
+        next[key] = { ...previous, status: "Missing From Library", confidence: 0, confirmed: false, trackIndex: undefined, alternatives: [], extraTrackIndices: [] };
+        return;
+      }
+      const candidates = searchLibraryBySong(song.artist, song.song, mergedLibrary, matchLimit).filter(candidate => candidate.s >= 0.55);
+      if (!candidates.length) return;
+      const ranked = mode === "most" ? [...candidates].sort((a, b) => {
+        const count = (i: number) => { const n = mergedLibrary.tracks[i]?.playCount; return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0; };
+        return count(b.i) - count(a.i) || b.s - a.s || a.i - b.i;
+      }) : candidates;
+      next[key] = { ...previous, status: "Manually Matched", confidence: 1, confirmed: true, trackIndex: ranked[0].i, alternatives: [], extraTrackIndices: mode === "all" ? ranked.slice(1).map(c => c.i) : [] };
     });
+    if (JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, matchesRef.current))) markPersistedEdit();
+    matchesRef.current = next;
+    setMatches(next);
   }
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
   const [songs, setSongs] = useState<Song[]>([]);
@@ -919,7 +932,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
       const m = matchSong({ artist: s.artist, song: s.song }, mergedLibrary);
-      if (!exportApproved(m) || m.trackIndex == null) return s;
+      if (!musicalMatchApproved(m) || m.trackIndex == null) return s;
       const t = mergedLibrary.tracks[m.trackIndex];
       if (!t) return s;
       const bpmNum = parseBpm(t.bpm);
@@ -1667,10 +1680,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // --- Match controls ---
 
   function updateMatch(key: string, patch: Partial<SongMatch>) {
-    const next = { ...matches, [key]: { ...matches[key], ...patch } };
-    if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, matches))) markPersistedEdit();
+    const previous = matchesRef.current;
+    const next = { ...previous, [key]: { ...previous[key], ...patch } };
+    if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, previous))) markPersistedEdit();
     matchesRef.current = next;
-    setMatches((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
+    setMatches(next);
   }
 
   // Edit a song's title/artist in place; carries its file match over to the new key.
@@ -1694,8 +1708,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setMatches((prev) => {
       const copy = { ...prev };
       delete copy[oldKey];
-      if (fresh) copy[newKey] = fresh;
+      if (fresh) copy[newKey] = { ...fresh, confirmed: false };
       else copy[newKey] = {status:"Missing From Library",confidence:0,alternatives:[]};
+      matchesRef.current = copy;
       return copy;
     });
   }
@@ -1714,7 +1729,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (extras.length) {
         updateMatch(key,{status:"Manually Matched",confidence:1,confirmed:true,trackIndex:extras[0],alternatives:m.alternatives,extraTrackIndices:extras.slice(1)});
       } else {
-        updateMatch(key,{status:"Missing From Library",confidence:0,trackIndex:undefined,alternatives:m.alternatives??[],extraTrackIndices:[]});
+        updateMatch(key,{status:"Missing From Library",confidence:0,confirmed:false,trackIndex:undefined,alternatives:m.alternatives??[],extraTrackIndices:[]});
       }
       return;
     }
@@ -1724,7 +1739,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   function markUnresolved(key: string) {
-    updateMatch(key, { status: "Missing From Library", confidence: 0, trackIndex: undefined, alternatives: [], extraTrackIndices: [] });
+    updateMatch(key, { status: "Missing From Library", confidence: 0, confirmed: false, trackIndex: undefined, alternatives: [], extraTrackIndices: [] });
   }
 
   function toggleExtraPick(key: string, trackIndex: number) {
@@ -1869,6 +1884,25 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
 
 
+  const [readiness, setReadiness] = useState<ReturnType<typeof exportReadiness> | null>(null);
+  const [readinessBusy, setReadinessBusy] = useState(false);
+  async function checkReadiness(refs: ExportSongRef[]) {
+    let availability: Record<string, Availability> = {};
+    const native = typeof window === "undefined" ? undefined : (window as unknown as { electronAvailability?: { check(paths: string[]): Promise<{ok: boolean; availability?: Record<string, Availability>; error?: string}> } }).electronAvailability;
+    if (native) {
+      const paths = [...new Set(refs.filter(r => exportApproved(r.match)).flatMap(r => [r.match?.trackIndex, ...(r.match?.extraTrackIndices ?? [])]).filter((i): i is number => i != null).map(i => mergedLibrary.tracks[i]).filter(Boolean).map(t => resolveExportPath(t.filePath) ?? t.filePath))];
+      const result = await native.check(paths);
+      if (!result.ok) throw Error(result.error ?? "File availability check failed. Export stopped.");
+      availability = result.availability ?? {};
+    }
+    return exportReadiness(refs, mergedLibrary, availability);
+  }
+  async function previewReadiness() {
+    if (!result) return;
+    const refs = (background ? ["warmUp"] : ["warmUp", "transition", "peak"]).flatMap(section => getSectionRefsForResult(result, section as SectionKey));
+    setReadinessBusy(true);
+    try { setReadiness(await checkReadiness(refs)); } catch (e) { toast.error((e as Error).message); } finally { setReadinessBusy(false); }
+  }
   function unmatchedCount(section: SectionKey): number {
     if (!result) return 0;
     return unmatchedCountForResult(result, section);
@@ -1892,7 +1926,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   async function exportSectionXml(section: SectionKey) {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    const refs = getSectionRefsForResult(exportResult, section);
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     const xml = buildTxtPlaylist(refs, mergedLibrary);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
@@ -1901,23 +1935,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     );
   }
 
-  function exportSectionM3u(section: SectionKey) {
+  async function exportSectionM3u(section: SectionKey) {
     if (!mergedLibrary.tracks.length) {
       toast.error("Load a VirtualDJ database first");
       return;
     }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    const refs = getSectionRefsForResult(exportResult, section);
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     if (countMatchedForExport(refs, mergedLibrary) === 0) {
       toast.error("No songs in this list are matched to your music files yet — nothing to export");
       return;
     }
     let m3u: string;
     try { m3u = buildM3u(refs, mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    let report: ReturnType<typeof exportReadiness>;
+    try { report = await checkReadiness(refs); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
     warnUnapproved(refs);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    downloadBlob(new Blob([readinessText(report)], { type: "text/plain" }), `${prefix}${sectionFile(section)}-readiness.txt`);
     downloadBlob(
       new Blob([m3u], { type: "audio/x-mpegurl" }),
       `${prefix}${sectionFile(section)}.m3u`,
@@ -1954,16 +1991,19 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     if (!confirmUnmatched(exportResult, section)) return;
     try { buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
     }
-    const refs = getSectionRefsForResult(exportResult, section);
+    let report: ReturnType<typeof exportReadiness>;
+    try { report = await checkReadiness(refs); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
     const xml = buildTxtPlaylist(refs, mergedLibrary, { matchedOnly: true });
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.txt`;
     try {
+      await writeFileToDir(dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
       await writeFileToDir(dir, fname, xml);
       toast.success(matchedSummary(refs, fname));
     } catch {
@@ -1980,23 +2020,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
     try { buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
     }
-    const refs = getSectionRefsForResult(exportResult, section);
     if (countMatchedForExport(refs, mergedLibrary) === 0) {
       toast.error("No songs in this list are matched to your music files yet — nothing to export");
       return;
     }
     let m3u: string;
     try { m3u = buildM3u(refs, mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    let report: ReturnType<typeof exportReadiness>;
+    try { report = await checkReadiness(refs); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
     warnUnapproved(refs);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.m3u`;
     try {
+      await writeFileToDir(dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
       await writeFileToDir(dir, fname, m3u);
       toast.success(matchedSummary(refs, fname));
     } catch {
@@ -2018,28 +2061,39 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   async function exportAllToVdj() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
+    const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
+    const captured = Object.fromEntries(sections.map(section => [section, structuredClone(getSectionRefsForResult(exportResult, section))])) as Record<SectionKey, ExportSongRef[]>;
+    let report: ReturnType<typeof exportReadiness>;
+    try {
+      // Validate every exact captured playlist before read-only native availability.
+      for (const section of sections) buildM3u(captured[section], mergedLibrary);
+      report = await checkReadiness(sections.flatMap(section => captured[section]));
+      setReadiness(report);
+      if (report.unavailable) { toast.error("Export stopped: approved music files are unavailable. References remain available in TXT/CSV."); return; }
+    } catch (e) { toast.error((e as Error).message); return; }
     if (!mergedLibrary.tracks.length) {
       toast.error("Load a VirtualDJ database first — no music files are connected");
       return;
     }
-    try { for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    try { for (const section of sections) buildM3u(captured[section], mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
     }
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    const sections: SectionKey[] = ["warmUp", "transition", "peak"];
+
     let written = 0;
     let unresolvedTotal = 0;
     let failed = 0;
     let matchedTotal = 0;
     let skippedTotal = 0;
-    try { for (const section of sections) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    try { for (const section of sections) buildM3u(captured[section], mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    try { await writeFileToDir(dir, `${prefix}export-readiness.txt`, readinessText(report)); } catch { toast.error("Readiness report could not be written. Export stopped."); return; }
     for (const section of sections) {
       const list = exportResult[section];
       if (!list.length) continue;
-      const refs = getSectionRefsForResult(exportResult, section);
+      const refs = captured[section];
       const matched = countMatchedForExport(refs, mergedLibrary);
       matchedTotal += matched;
       skippedTotal += refs.length - matched;
@@ -2081,13 +2135,24 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   async function exportAllZip() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    try { for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
+    const captured = Object.fromEntries(sections.map(section => [section, structuredClone(getSectionRefsForResult(exportResult, section))])) as Record<SectionKey, ExportSongRef[]>;
+    let report: ReturnType<typeof exportReadiness>;
+    try {
+      // Validate every exact captured playlist before read-only native availability.
+      for (const section of sections) buildM3u(captured[section], mergedLibrary);
+      report = await checkReadiness(sections.flatMap(section => captured[section]));
+      setReadiness(report);
+      if (report.unavailable) { toast.error("Export stopped: approved music files are unavailable. References remain available in TXT/CSV."); return; }
+    } catch (e) { toast.error((e as Error).message); return; }
+    try { for (const section of sections) buildM3u(captured[section], mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     warnUnapproved((["warmUp", "transition", "peak"] as SectionKey[]).flatMap(sec => getSectionRefsForResult(exportResult, sec)));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
-    (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-      const refs = getSectionRefsForResult(exportResult, section);
+    zip.file(`${prefix}export-readiness.txt`, readinessText(report));
+    sections.forEach((section) => {
+      const refs = captured[section];
       // Reference files keep every song; the DJ playlist keeps matched songs only.
       zip.file(`${prefix}${sectionFile(section)}.csv`, songsToCsv(exportResult[section]));
       zip.file(`${prefix}${sectionFile(section)}.txt`, buildTxtPlaylist(refs, mergedLibrary));
@@ -2250,11 +2315,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // vibe breakdown, and track cards all show the file's real BPM, not a guess.
   const withFileBpm = (sec: SectionKey, songs: Song[]): RampSong[] =>
     songs.map((s, i) => {
-      const ti = matches[songKey(sec, i, s)]?.trackIndex;
+      const match = matches[songKey(sec, i, s)];
+      const ti = musicalMatchApproved(match) ? match?.trackIndex : undefined;
       const track = ti != null ? (mergedLibrary.tracks[ti] as { bpm?: unknown; key?: string } | undefined) : undefined;
       const fileBpm = track ? parseBpm(track.bpm) : undefined;
       const base = s as RampSong;
-      return { ...base, bpm: fileBpm ?? base.bpm, key: track?.key || base.key };
+      return { ...base, bpm: fileBpm ?? base.bpm, key: track?.key || base.key || (base as Song & {camelot?: string}).camelot };
     });
 
   function markPersistedEdit() {
@@ -2934,6 +3000,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 </div>
               ) : null}
 
+              <section className="space-y-2 border-y border-border py-3" aria-label="Export readiness">
+                <Button variant="outline" size="sm" disabled={readinessBusy} onClick={previewReadiness}><CheckCircle2 className="mr-2 size-4" />{readinessBusy ? "Checking files…" : "Check export readiness"}</Button>
+                {readiness && <><p className="text-sm">{readiness.requested} requested songs · {readiness.approved} approved recordings · {readiness.omitted} omitted songs · {readiness.unavailable} unavailable files · {readiness.unknown} availability unknown</p>
+                <div className="max-h-40 overflow-auto">{readiness.problems.map((problem, i) => <Button key={i} variant="ghost" size="sm" className="block h-auto max-w-full whitespace-normal text-left" onClick={() => { let remaining = problem.index; for (const section of (background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]) { if (remaining < (result[section]?.length ?? 0)) { setActiveSection(section); setTimeout(() => document.getElementById(`song-${section}-${remaining}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); break; } remaining -= result[section]?.length ?? 0; } }}>{problem.title} — {problem.reason}</Button>)}</div></>}
+              </section>
               <EventEnergyRamp
                 targets={targets}
                 homeKey={homeKey || undefined}
@@ -3466,12 +3537,13 @@ function SectionView(props: SectionViewProps) {
           const inReview = m?.status === "Possible Match" || m?.status === "Multiple Matches";
           if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
           const meta = s as BadgeSong;
-          const fileBpm = track ? parseBpm(track.bpm) : undefined;
+          const musicalTrack = musicalMatchApproved(m) ? track : undefined;
+          const fileBpm = musicalTrack ? parseBpm(musicalTrack.bpm) : undefined;
           const estimatedBpm = typeof meta.bpm === "number" ? Math.round(meta.bpm) : null;
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
           return (
-            <div key={key} className={`panel overflow-hidden ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
+            <div id={`song-${section}-${i}`} key={key} className={`panel overflow-hidden ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
               {/* Track header */}
               <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-stretch gap-3 p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]">
                 <div className="flex w-8 flex-col items-center justify-center gap-1">
@@ -3531,7 +3603,7 @@ function SectionView(props: SectionViewProps) {
                   <Hud label="Energy" value={meta.energy != null ? Math.round(meta.energy) : "—"} />
                   <Hud label="Dance" value={meta.danceability != null ? Math.round(meta.danceability) : "—"} />
                   <Hud label="Mood" value={meta.valence != null ? Math.round(meta.valence) : "—"} />
-                  <Hud label="Key" value={track?.key || meta.camelot || "—"} />
+                  <Hud label="Key" value={musicalTrack?.key || (meta.camelot ? `≈${meta.camelot}` : "—")} />
                   <Hud
                     label="BPM"
                     value={fileBpm != null ? Math.round(fileBpm) : estimatedBpm != null ? `≈${estimatedBpm}` : "—"}
