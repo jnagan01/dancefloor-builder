@@ -203,10 +203,17 @@ try{
    await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('light'))).toBe(true);
    await expect(theme.getByRole('button',{name:'Light',exact:true})).toHaveAttribute('aria-pressed','true');
    const light=await page.evaluate(()=>({bg:getComputedStyle(document.body).backgroundColor,fg:getComputedStyle(document.body).color}));
+   const contrast=async()=>page.evaluate(()=>{
+     const ctx=document.createElement('canvas').getContext('2d');const style=getComputedStyle(document.documentElement);
+     const luminance=token=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=style.getPropertyValue('--'+token).trim();ctx.fillRect(0,0,1,1);const data=ctx.getImageData(0,0,1,1).data;const rgb=[...data].slice(0,3).map(c=>{const v=c/255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4;});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;};
+     return ['foreground','muted-foreground','primary','success','warning','info','ai','destructive'].map(token=>{const a=luminance(token),b=luminance('background');return {token,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};}).concat(['primary','secondary','card','popover','success','warning','info','ai','destructive'].map(token=>{const a=luminance(token),b=luminance(token+'-foreground');return {token:token+' pair',ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};}));
+   });
+   for(const result of await contrast())expect(result.ratio,`light ${result.token}`).toBeGreaterThanOrEqual(4.5);
    await page.screenshot({path:path.join(diagnostics,'appearance-light.png')});
    await theme.getByRole('button',{name:'Dark',exact:true}).click();await page.emulateMedia({colorScheme:'light'});
    await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dark'))).toBe(true);
    const dark=await page.evaluate(()=>({bg:getComputedStyle(document.body).backgroundColor,fg:getComputedStyle(document.body).color}));expect(dark.bg).not.toBe(light.bg);expect(dark.fg).not.toBe(light.fg);
+   for(const result of await contrast())expect(result.ratio,`dark ${result.token}`).toBeGreaterThanOrEqual(4.5);
    await page.screenshot({path:path.join(diagnostics,'appearance-dark.png')});
    await page.reload();await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.appearance),{timeout:15000}).toBe('dark');
    await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await theme.getByRole('button',{name:'System',exact:true}).click();

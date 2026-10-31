@@ -17,7 +17,7 @@ function fixture(options: any = {}) {
   updater.downloadUpdate = async (token: any) => { calls.push('download'); updater.emit('download-progress',{percent:42}); if(options.download) await options.download(token); calls.push('downloaded'); };
   updater.quitAndInstall = () => { calls.push('squirrel'); if(options.stageError) throw Error('staging'); };
   const token = { cancelled: false, cancel() { this.cancelled = true; } };
-  const c = createUpdateController({updater,currentVersion:'1.2.28',newer:(a:string,b:string)=>require('semver').valid(a)&&require('semver').gt(a,b),cancellation:()=>token,preserve:async()=>{calls.push('preserve');await options.preserve?.();calls.push('fsynced');},release:async()=>calls.push('release')});
+  const c = createUpdateController({updater,currentVersion:'1.2.28',newer:(a:string,b:string)=>require('semver').valid(a)&&require('semver').gt(a,b),cancellation:()=>token,preserve:async()=>{calls.push('preserve');await options.preserve?.();calls.push('fsynced');},release:async()=>{calls.push('release');await options.release?.();}});
   return { c, updater, calls, token };
 }
 describe('guarded signed Mac update controller',()=>{
@@ -30,6 +30,7 @@ describe('guarded signed Mac update controller',()=>{
   it('failed download releases safely and never invokes Squirrel',async()=>{const {c,calls}=fixture({download:()=>{throw Error('network');}});await c.check();await c.install();expect(c.status().phase).toBe('failed');expect(calls).not.toContain('preserve');expect(calls).not.toContain('squirrel');});
   it('concurrent check/install shares work, cannot start another download',async()=>{const d=deferred();const {c,calls}=fixture({download:()=>d.promise});await c.check();const a=c.install(),b=c.install(),e=c.check();expect(a).toBe(b);expect(a).toBe(e);expect(calls.filter(x=>x==='download')).toHaveLength(1);d.resolve();await a;});
   it('staging error retains freeze and blocks quit: staged updates may install on ordinary quit',async()=>{const {c,calls}=fixture({stageError:true});await c.check();await c.install();expect(c.status().phase).toBe('staging-failed');expect(c.blocksQuit()).toBe(true);expect(c.blocksNavigation()).toBe(true);expect(c.installAuthorized()).toBe(false);expect(calls).not.toContain('release');});
+  it('failure to unlock editing still blocks quit and reports failure',async()=>{const {c}=fixture({preserve:()=>{throw Error('backup');},release:()=>{throw Error('renderer lost');}});await c.check();await c.install();expect(c.status().phase).toBe('preservation-failed');expect(c.blocksQuit()).toBe(true);expect(c.blocksNavigation()).toBe(true);});
   it('asynchronous native staging error also blocks quit',async()=>{const {c,updater}=fixture();await c.check();await c.install();updater.emit('error',Error('signature rejected'));expect(c.blocksQuit()).toBe(true);expect(c.installAuthorized()).toBe(false);});
 });
 describe('coherent release versions and actual artifact hashes',()=>{
