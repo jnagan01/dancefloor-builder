@@ -3,6 +3,15 @@ export interface EventDraft<T> {
   baseVersion: string | null; snapshot: T; savedAt: number;
   origin?: { account: string; event: string; token: string };
   baseSnapshot?: unknown;
+  baseRevision?: string | null;
+  writeRevision?: string;
+  savedId?: string;
+}
+/** Rebase a newer pending draft after an earlier edit is confirmed; never remove its snapshot. */
+export function checkpointEventDraft(account: string, event: string, saved: { id: string; updatedAt?: string; revision?: string | null }, storage: Storage = localStorage) {
+  const draft = loadEventDraft(account, event, storage);
+  if (!draft) return;
+  storeEventDraft({ ...draft, baseRevision: saved.revision, baseVersion: saved.updatedAt ?? draft.baseVersion, savedId: saved.id, baseSnapshot: undefined }, storage);
 }
 const key = (account: string, event: string) => `setarchitect:recovery:${encodeURIComponent(account)}:${encodeURIComponent(event)}`;
 export function storeEventDraft<T>(draft: EventDraft<T>, storage: Storage = localStorage) {
