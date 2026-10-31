@@ -1,3 +1,4 @@
+import { exportReadiness, readinessText, type Availability } from "@/lib/exportReadiness";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -1883,6 +1884,25 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
 
 
+  const [readiness, setReadiness] = useState<ReturnType<typeof exportReadiness> | null>(null);
+  const [readinessBusy, setReadinessBusy] = useState(false);
+  async function checkReadiness(refs: ExportSongRef[]) {
+    let availability: Record<string, Availability> = {};
+    const native = typeof window === "undefined" ? undefined : (window as unknown as { electronAvailability?: { check(paths: string[]): Promise<{ok: boolean; availability?: Record<string, Availability>; error?: string}> } }).electronAvailability;
+    if (native) {
+      const paths = [...new Set(refs.filter(r => exportApproved(r.match)).flatMap(r => [r.match?.trackIndex, ...(r.match?.extraTrackIndices ?? [])]).filter((i): i is number => i != null).map(i => mergedLibrary.tracks[i]).filter(Boolean).map(t => resolveExportPath(t.filePath) ?? t.filePath))];
+      const result = await native.check(paths);
+      if (!result.ok) throw Error(result.error ?? "File availability check failed. Export stopped.");
+      availability = result.availability ?? {};
+    }
+    return exportReadiness(refs, mergedLibrary, availability);
+  }
+  async function previewReadiness() {
+    if (!result) return;
+    const refs = (background ? ["warmUp"] : ["warmUp", "transition", "peak"]).flatMap(section => getSectionRefsForResult(result, section as SectionKey));
+    setReadinessBusy(true);
+    try { setReadiness(await checkReadiness(refs)); } catch (e) { toast.error((e as Error).message); } finally { setReadinessBusy(false); }
+  }
   function unmatchedCount(section: SectionKey): number {
     if (!result) return 0;
     return unmatchedCountForResult(result, section);
@@ -1906,7 +1926,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   async function exportSectionXml(section: SectionKey) {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    const refs = getSectionRefsForResult(exportResult, section);
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     const xml = buildTxtPlaylist(refs, mergedLibrary);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(
@@ -1915,23 +1935,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     );
   }
 
-  function exportSectionM3u(section: SectionKey) {
+  async function exportSectionM3u(section: SectionKey) {
     if (!mergedLibrary.tracks.length) {
       toast.error("Load a VirtualDJ database first");
       return;
     }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    const refs = getSectionRefsForResult(exportResult, section);
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     if (countMatchedForExport(refs, mergedLibrary) === 0) {
       toast.error("No songs in this list are matched to your music files yet — nothing to export");
       return;
     }
     let m3u: string;
     try { m3u = buildM3u(refs, mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    let report: ReturnType<typeof exportReadiness>;
+    try { report = await checkReadiness(refs); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
     warnUnapproved(refs);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
+    downloadBlob(new Blob([readinessText(report)], { type: "text/plain" }), `${prefix}${sectionFile(section)}-readiness.txt`);
     downloadBlob(
       new Blob([m3u], { type: "audio/x-mpegurl" }),
       `${prefix}${sectionFile(section)}.m3u`,
@@ -1968,16 +1991,19 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     if (!confirmUnmatched(exportResult, section)) return;
     try { buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
     }
-    const refs = getSectionRefsForResult(exportResult, section);
+    let report: ReturnType<typeof exportReadiness>;
+    try { report = await checkReadiness(refs); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
     const xml = buildTxtPlaylist(refs, mergedLibrary, { matchedOnly: true });
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.txt`;
     try {
+      await writeFileToDir(dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
       await writeFileToDir(dir, fname, xml);
       toast.success(matchedSummary(refs, fname));
     } catch {
@@ -1994,23 +2020,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
     try { buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
     }
-    const refs = getSectionRefsForResult(exportResult, section);
     if (countMatchedForExport(refs, mergedLibrary) === 0) {
       toast.error("No songs in this list are matched to your music files yet — nothing to export");
       return;
     }
     let m3u: string;
     try { m3u = buildM3u(refs, mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    let report: ReturnType<typeof exportReadiness>;
+    try { report = await checkReadiness(refs); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
     warnUnapproved(refs);
     warnUnresolvedPaths(countUnresolvedPaths(refs, mergedLibrary));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.m3u`;
     try {
+      await writeFileToDir(dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
       await writeFileToDir(dir, fname, m3u);
       toast.success(matchedSummary(refs, fname));
     } catch {
@@ -2032,28 +2061,39 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   async function exportAllToVdj() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
+    const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
+    const captured = Object.fromEntries(sections.map(section => [section, structuredClone(getSectionRefsForResult(exportResult, section))])) as Record<SectionKey, ExportSongRef[]>;
+    let report: ReturnType<typeof exportReadiness>;
+    try {
+      // Validate every exact captured playlist before read-only native availability.
+      for (const section of sections) buildM3u(captured[section], mergedLibrary);
+      report = await checkReadiness(sections.flatMap(section => captured[section]));
+      setReadiness(report);
+      if (report.unavailable) { toast.error("Export stopped: approved music files are unavailable. References remain available in TXT/CSV."); return; }
+    } catch (e) { toast.error((e as Error).message); return; }
     if (!mergedLibrary.tracks.length) {
       toast.error("Load a VirtualDJ database first — no music files are connected");
       return;
     }
-    try { for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    try { for (const section of sections) buildM3u(captured[section], mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     const dir = await ensureExportFolder();
     if (!dir) {
       toast.error("Pick a VirtualDJ export folder first");
       return;
     }
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
-    const sections: SectionKey[] = ["warmUp", "transition", "peak"];
+
     let written = 0;
     let unresolvedTotal = 0;
     let failed = 0;
     let matchedTotal = 0;
     let skippedTotal = 0;
-    try { for (const section of sections) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    try { for (const section of sections) buildM3u(captured[section], mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    try { await writeFileToDir(dir, `${prefix}export-readiness.txt`, readinessText(report)); } catch { toast.error("Readiness report could not be written. Export stopped."); return; }
     for (const section of sections) {
       const list = exportResult[section];
       if (!list.length) continue;
-      const refs = getSectionRefsForResult(exportResult, section);
+      const refs = captured[section];
       const matched = countMatchedForExport(refs, mergedLibrary);
       matchedTotal += matched;
       skippedTotal += refs.length - matched;
@@ -2095,13 +2135,24 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   async function exportAllZip() {
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
-    try { for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) buildM3u(getSectionRefsForResult(exportResult, section), mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
+    const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
+    const captured = Object.fromEntries(sections.map(section => [section, structuredClone(getSectionRefsForResult(exportResult, section))])) as Record<SectionKey, ExportSongRef[]>;
+    let report: ReturnType<typeof exportReadiness>;
+    try {
+      // Validate every exact captured playlist before read-only native availability.
+      for (const section of sections) buildM3u(captured[section], mergedLibrary);
+      report = await checkReadiness(sections.flatMap(section => captured[section]));
+      setReadiness(report);
+      if (report.unavailable) { toast.error("Export stopped: approved music files are unavailable. References remain available in TXT/CSV."); return; }
+    } catch (e) { toast.error((e as Error).message); return; }
+    try { for (const section of sections) buildM3u(captured[section], mergedLibrary); } catch(e) { toast.error((e as Error).message); return; }
     warnUnapproved((["warmUp", "transition", "peak"] as SectionKey[]).flatMap(sec => getSectionRefsForResult(exportResult, sec)));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
-    (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-      const refs = getSectionRefsForResult(exportResult, section);
+    zip.file(`${prefix}export-readiness.txt`, readinessText(report));
+    sections.forEach((section) => {
+      const refs = captured[section];
       // Reference files keep every song; the DJ playlist keeps matched songs only.
       zip.file(`${prefix}${sectionFile(section)}.csv`, songsToCsv(exportResult[section]));
       zip.file(`${prefix}${sectionFile(section)}.txt`, buildTxtPlaylist(refs, mergedLibrary));
@@ -2949,6 +3000,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 </div>
               ) : null}
 
+              <section className="space-y-2 border-y border-border py-3" aria-label="Export readiness">
+                <Button variant="outline" size="sm" disabled={readinessBusy} onClick={previewReadiness}><CheckCircle2 className="mr-2 size-4" />{readinessBusy ? "Checking files…" : "Check export readiness"}</Button>
+                {readiness && <><p className="text-sm">{readiness.requested} requested songs · {readiness.approved} approved recordings · {readiness.omitted} omitted songs · {readiness.unavailable} unavailable files · {readiness.unknown} availability unknown</p>
+                <div className="max-h-40 overflow-auto">{readiness.problems.map((problem, i) => <Button key={i} variant="ghost" size="sm" className="block h-auto max-w-full whitespace-normal text-left" onClick={() => { let remaining = problem.index; for (const section of (background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]) { if (remaining < (result[section]?.length ?? 0)) { document.getElementById(`song-${section}-${remaining}`)?.scrollIntoView({ block: "center", behavior: "smooth" }); break; } remaining -= result[section]?.length ?? 0; } }}>{problem.title} — {problem.reason}</Button>)}</div></>}
+              </section>
               <EventEnergyRamp
                 targets={targets}
                 homeKey={homeKey || undefined}
@@ -3487,7 +3543,7 @@ function SectionView(props: SectionViewProps) {
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
           return (
-            <div key={key} className={`panel overflow-hidden ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
+            <div id={`song-${section}-${i}`} key={key} className={`panel overflow-hidden ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
               {/* Track header */}
               <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-stretch gap-3 p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]">
                 <div className="flex w-8 flex-col items-center justify-center gap-1">
