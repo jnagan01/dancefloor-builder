@@ -7,7 +7,7 @@ export function useNavigate(){return async(options:any)=>{w.__testState.eventId=
 export function useBlocker(){return {};}
 export function useAuth(){return {user:{id:'synthetic-owner'}};}
 export function useServerFn(fn:any){return fn;}
-export function useWorkspace(){return {sources:[],files:[],loading:false,library:buildLibrary(w.__fixture.tracks),audioIndex:{entries:[],byPath:new Map(),byBase:new Map()},ensureLocalFile:async()=>null};}
+let workspace:any;export function useWorkspace(){return workspace??=( {sources:[],files:[],loading:false,library:buildLibrary(w.__fixture.tracks),audioIndex:{entries:[],byPath:new Map(),byBase:new Map()},ensureLocalFile:async()=>null});}
 export async function getWorkflow(request:any){return w.testBackend.read(request.data.id);}
 export async function saveWorkflowSafely(request:any){return w.testBackend.write(request.data);}
 export const supabase={auth:{getUser:async()=>({data:{user:null}})}};
