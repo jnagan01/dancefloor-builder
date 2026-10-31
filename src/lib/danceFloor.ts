@@ -199,8 +199,8 @@ function parseCsv(text: string): Song[] {
   // Fallback: parse without headers, two columns
   const rows = Papa.parse<string[]>(text, { skipEmptyLines: true }).data;
   return rows
-    .map((r) => guessArtistSong((r[0] || "") + " - " + (r[1] || "")))
-    .filter((r): r is Song => !!r);
+    .map((r) => ({ artist: (r[0] || "").trim(), song: (r[1] || "").trim() }))
+    .filter((r) => r.artist || r.song);
 }
 
 function parseTxt(text: string): Song[] {

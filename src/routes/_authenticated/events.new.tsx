@@ -730,7 +730,25 @@ function Index() {
     return ()=>{window.removeEventListener("online",recover);autosave.reset()};
   },[autosave]);
 
-  useBlocker({ shouldBlockFn: () => !!result && saveState !== "saved" && !window.confirm("Changes are not confirmed online. Leave and keep the local recovery copy?"), enableBeforeUnload: !!result && saveState !== "saved" });
+  const latestSnapshot = useRef<ReturnType<typeof eventSnapshot> | null>(null);
+  latestSnapshot.current = result ? eventSnapshot(result, matches) : null;
+  const persistOnExit = () => {
+    const account = accountRef.current, snapshot = latestSnapshot.current;
+    if (!account || !snapshot || snapshotReadOnly.current || recovery) return;
+    const token = crypto.randomUUID(), event = openedEventIdRef.current ?? "new";
+    storeEventDraft({ version: 1, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now() });
+  };
+  const exitGuard = useRef(persistOnExit); exitGuard.current = persistOnExit;
+  useBlocker({ shouldBlockFn: () => {
+    if (!result || saveState === "saved") return false;
+    try { exitGuard.current(); } catch { return !window.confirm("Device recovery storage is unavailable. Leaving may lose unsaved changes. Leave anyway?"); }
+    return !window.confirm("Changes are not confirmed online. Leave and keep the local recovery copy?");
+  }, enableBeforeUnload: !!result && saveState !== "saved" });
+  useEffect(() => {
+    const preserve = () => { try { exitGuard.current(); } catch { /* beforeunload warning remains active */ } };
+    window.addEventListener("pagehide", preserve); window.addEventListener("beforeunload", preserve);
+    return () => { preserve(); window.removeEventListener("pagehide", preserve); window.removeEventListener("beforeunload", preserve); };
+  }, []);
   useEffect(() => {
     if (!draftUser || openedEventId) return;
     try { const draft = loadEventDraft<ReturnType<typeof eventSnapshot>>(draftUser.id, "new"); if (draft) { stableCreate.current = draft.createId; setRecovery(draft); } }
@@ -2143,7 +2161,7 @@ function Index() {
     });
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-dvh bg-background" onChangeCapture={() => { if (result) autosave.dirty(); }}>
       <Toaster richColors position="top-right" />
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">

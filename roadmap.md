@@ -19,9 +19,9 @@
 - [x] Run mock regressions and the full suite; inspect automatic build/typecheck and report changed files/revision.
 
 # Stress-test repairs
-- [ ] Identity/revision-safe tag callbacks and scan/edit reconciliation.
-- [ ] Bounded, conflict-safe autosaves and account/event-scoped durable recovery with navigation protection.
-- [ ] Partial CSV/TXT preservation, root/library/snapshot validation and visible storage failures.
-- [ ] Bounded duration validation and preflight-safe newline handling for every DJ export.
-- [ ] Linear browser scan buckets, shared native merge indexes, cached native/audio identities and single library construction.
+- [x] Identity/revision-safe tag callbacks and scan/edit reconciliation.
+- [x] Bounded, conflict-safe autosaves and account/event-scoped durable recovery with navigation protection.
+- [x] Partial CSV/TXT preservation, root/library/snapshot validation and visible storage failures.
+- [x] Bounded duration validation and preflight-safe newline handling for every DJ export.
+- [x] Linear browser scan buckets, shared native merge indexes, cached native/audio identities and single library construction.
 - [ ] Tracked regressions for every finding, full suite and automatic build checks, isolated mock flow and monitored benchmarks.
