@@ -19,9 +19,9 @@ const lib = {
 } as unknown as VdjLibrary;
 
 const refs: ExportSongRef[] = [
-  { song: { artist: "Artist A", song: "Song A" } as never, match: { trackIndex: 0 } as never },
+  { song: { artist: "Artist A", song: "Song A" } as never, match: { status: "Matched", trackIndex: 0 } as never },
   { song: { artist: "Nobody", song: "Unmatched Song" } as never },
-  { song: { artist: "Artist B", song: "Song B" } as never, match: { trackIndex: 1 } as never },
+  { song: { artist: "Artist B", song: "Song B" } as never, match: { status: "Matched", trackIndex: 1 } as never },
 ];
 
 describe("DJ-software exports include matched songs only", () => {
