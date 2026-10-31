@@ -313,6 +313,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       toast.error("No do-not-play entries found");
       return;
     }
+    markPersistedEdit();
     setDoNotPlayInput((prev) => {
       const existing = prev.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       const incoming = newLines.join("\n").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -560,7 +561,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         update(id, { state: "error", message: "We couldn't read this file. Check that it's plain text or CSV." });
       }
     }
-    if (collected.length) setSongs((prev) => [...prev, ...collected]);
+    if (collected.length) { markPersistedEdit(); setSongs((prev) => [...prev, ...collected]); }
     if (okFiles) toast.success(`Imported ${added} songs from ${okFiles} file${okFiles > 1 ? "s" : ""}`);
     else toast.error("No songs imported — see file details below the drop zone.");
   }
@@ -584,7 +585,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         toast.error(res.error || "No songs found in that link.");
         return;
       }
-      setSongs((prev) => [...prev, ...res.songs]);
+      markPersistedEdit(); setSongs((prev) => [...prev, ...res.songs]);
       update({ state: "done", count: res.songs.length, name: res.name ? `Spotify · ${res.name}` : "Spotify playlist" });
       toast.success(
         `Imported ${res.songs.length} songs from Spotify${res.truncated ? " (first 1,000)" : ""}`,
@@ -632,6 +633,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   function removeDoNotPlayEntry(index: number) {
     const next = [...doNotPlayEntries];
     next.splice(index, 1);
+    markPersistedEdit();
     setDoNotPlayInput(doNotPlayEntriesToText(next));
   }
 
@@ -646,6 +648,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
     const removed = before - next.length;
     if (removed > 0) {
+      markPersistedEdit();
       setDoNotPlayInput(doNotPlayEntriesToText(next));
       toast.success(`Removed ${removed} duplicate do-not-play entr${removed === 1 ? "y" : "ies"}`);
     }
@@ -1518,6 +1521,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const before = songs.length;
     const next = dedupeSongs(songs);
     const removed = before - next.length;
+    if (next.length !== songs.length) markPersistedEdit();
     setSongs(next);
     toast.success(`Removed ${removed} duplicate song${removed === 1 ? "" : "s"}`);
   }

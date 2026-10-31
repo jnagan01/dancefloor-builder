@@ -7,7 +7,7 @@ function createEventRouteHarness(actual) {
   source = source.replace('  const withFileBpm =', '  capture({ result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
   function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }) } = {}) {
-    let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false;
+    let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false, tree;
     const loads = [], requests = [], errors = [], navigations = [];
     let workspace = { sources: [], library: null, audioIndex: actual.audio.buildAudioIndex([]) };
     const storage = { getItem: k => memory.get(k) ?? null, setItem: (k,v) => memory.set(k,v), removeItem: k => memory.delete(k) };
@@ -48,12 +48,14 @@ function createEventRouteHarness(actual) {
       slots=rootSlots;cursor=0;renderingRoot=true;
       const child=module.exports.Route.component();rootSlots=slots;
       if(activeKey!==child.key){if(activeKey!==undefined)cleanup(editorSlots);editorSlots=[];activeKey=child.key;}
-      slots=editorSlots;cursor=0;renderingRoot=false;child.type(child.props);editorSlots=slots;
+      slots=editorSlots;cursor=0;renderingRoot=false;tree=child.type(child.props);editorSlots=slots;
       const jobs=queued;queued=[];jobs.forEach(f=>f());dirty=false;return captured;
     }
     let editorSlots=[];
     async function flush(){for(let i=0;i<6;i++){render();await Promise.resolve();await Promise.resolve();}}
-    return {render,flush,memory,requests,loads,errors,navigations,get current(){return captured}, edit(name){captured.userEdited.current=true;captured.autosave.dirty();captured.setEventName(name);render();},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
+    function nodes(value=tree){if(!value)return [];if(Array.isArray(value))return value.flatMap(v=>nodes(v));if(typeof value!=='object')return [];return [value,...nodes(value.props?.children)];}
+    function interact(predicate,handler='onClick',argument){const node=nodes().find(predicate);if(!node)throw Error('No matching rendered control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});node.props[handler]?.(argument);render();}
+    return {render,flush,memory,requests,loads,errors,navigations,nodes,interact,get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
   }
   return harness;
 }
