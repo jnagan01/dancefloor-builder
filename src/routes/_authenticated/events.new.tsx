@@ -800,6 +800,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     storeEventDraft({ version: 1, ...owned, event, token: sameEdit ? previous.token : token, writeRevision: writeRevision ?? logicalWrite.current, baseVersion: remoteVersion.current, baseRevision: remoteRevision.current, savedId: savedEventId ?? previous?.savedId, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined });
   };
   const exitGuard = useRef(persistOnExit); exitGuard.current = persistOnExit;
+  useEffect(() => {
+    const host = window as Window & { __setarchitectPreserveEvent?: () => void };
+    const preserve = () => {
+      if (userEdited.current && (draftBlocked.current || snapshotReadOnly.current)) throw Error("Resolve event recovery before updating. Your data has not been changed.");
+      exitGuard.current(); // Throws on native journal or Chromium storage failure.
+    };
+    host.__setarchitectPreserveEvent = preserve;
+    return () => { if (host.__setarchitectPreserveEvent === preserve) delete host.__setarchitectPreserveEvent; };
+  }, []);
   useBlocker({ shouldBlockFn: () => {
     if (!result || saveState === "saved") return false;
     try { exitGuard.current(); } catch { return !window.confirm("Device recovery storage is unavailable. Leaving may lose unsaved changes. Leave anyway?"); }
