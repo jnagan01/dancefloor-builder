@@ -63,3 +63,8 @@
 
 # External verification
 - [ ] Run read-only regression job on GitHub/macOS; blocked here by unavailable GitHub CLI/token and runner.
+
+# Final integration review
+- [ ] Preserve native-only new-event and pending-conflict drafts during backup restore, with native regression.
+- [ ] Bind readiness issues to songs, invalidate stale previews, and freeze export library/root paths across awaits.
+- [ ] Run full/native/adversarial checks and inspect automatic build results; report final revision.

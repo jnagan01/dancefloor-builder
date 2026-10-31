@@ -490,6 +490,7 @@ function xmlEscape(s: string): string {
 export interface ExportSongRef {
   song: Song;
   match?: SongMatch;
+  identity?: { section: "warmUp" | "transition" | "peak"; index: number; key: string };
 }
 
 /** Musical identity approval is independent of whether the recording is exported. */

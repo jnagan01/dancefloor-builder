@@ -26,4 +26,5 @@
 
 - Fence backup/restore after every asynchronous boundary using account-session generation and captured sources/roots; compute conflict previews with identity maps and bounded samples, because late operations must not mix account data or stall large libraries.
 - Mirror native event recovery in an fsynced, account/event-key-hashed journal behind exact-origin main-frame IPC; keep existing browser recovery keys, because Chromium localStorage alone did not survive an abrupt process kill.
+- Check both durable new-event recovery slots before backup restore, and capture section/song identity plus library/root mappings for export readiness and output, because native-only drafts and asynchronous path changes must never bypass preservation or availability checks.
 - Reuse the read-only macOS regression workflow as a required release dependency; web-only changes trigger checks but not installer publication, because every release must pass the same synthetic gates.
