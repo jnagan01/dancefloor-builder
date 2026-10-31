@@ -106,8 +106,8 @@ import { Slider } from "@/components/ui/slider";
 import { VibeBreakdown } from "@/components/builder/VibeBreakdown";
 import { EventEnergyRamp, type RampSong } from "@/components/builder/EventEnergyRamp";
 import { readEventSnapshot } from "@/lib/snapshotSafety";
-import { storeEventDraft, loadEventDraft, confirmEventDraft, type EventDraft } from "@/lib/eventDrafts";
-import { validateTiming, boundedNumber, displayNumber, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "@/lib/inputSafety";
+import { storeEventDraft, loadEventDraft, confirmEventDraft, archiveEventDraft, type EventDraft } from "@/lib/eventDrafts";
+import { validateTiming, boundedNumber, displayNumber, displayBuffer, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "@/lib/inputSafety";
 import { useAuth } from "@/hooks/useAuth";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
@@ -115,7 +115,7 @@ const VDJ_DIR_KEY = "vdjExportFolder";
 
 export const Route = createFileRoute("/_authenticated/events/new")({
   validateSearch: (search: Record<string, unknown>): { eventId?: string } => ({ eventId: typeof search.eventId === "string" ? search.eventId : undefined }),
-  component: Index,
+  component: EventRoute,
   head: () => pageHead("New event", "Build and review three dance floor playlists from your client song list."),
 });
 
@@ -157,7 +157,16 @@ interface DirHandleLike {
   getFileHandle(name: string, options?: { create?: boolean }): Promise<unknown>;
 }
 
-function Index() {
+// Remount the entire workflow synchronously on either identity transition, not after an effect.
+function EventRoute() {
+  const { eventId } = Route.useSearch();
+  const { user } = useAuth();
+  const [handoff, setHandoff] = useState<EventDraft<unknown> | null>(null);
+  return <Index key={JSON.stringify([user?.id ?? null, eventId ?? null])} account={user?.id ?? null}
+    handoff={!eventId && handoff?.account === user?.id ? handoff : null} onHandoff={setHandoff} />;
+}
+
+function Index({ account, handoff, onHandoff }: { account: string | null; handoff: EventDraft<unknown> | null; onHandoff: (draft: EventDraft<unknown> | null) => void }) {
   const navigate = useNavigate();
   const { eventId: openedEventId } = Route.useSearch();
   const openedEventIdRef = useRef(openedEventId);
@@ -169,12 +178,14 @@ function Index() {
   const [savedEventId, setSavedEventId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle"|"saving"|"saved"|"error">("idle");
   const safeSaveFn = useServerFn(saveWorkflowSafely);
-  const { user: draftUser } = useAuth();
-  const accountRef = useRef<string | null>(null); accountRef.current = draftUser?.id ?? null;
+  const accountRef = useRef(account);
   const remoteVersion = useRef<string | null>(null);
   const stableCreate = useRef<string>(crypto.randomUUID());
   const snapshotReadOnly = useRef(false);
   const restoredFingerprint = useRef<string | null>(null);
+  const userEdited = useRef(false);
+  const draftBlocked = useRef(false);
+  const [draftProblem, setDraftProblem] = useState<string | null>(null);
   const recoveryOrigin = useRef<{ account: string; event: string; token: string } | null>(null);
   const snapshotExtras = useRef<{ inputs: Record<string, unknown>; lists: Record<string, unknown> }>({ inputs: {}, lists: {} });
   const [recovery, setRecovery] = useState<EventDraft<ReturnType<typeof eventSnapshot>> | null>(null);
@@ -185,7 +196,7 @@ function Index() {
   const [autosave] = useState(() => createEventAutosave<ReturnType<typeof eventSnapshot>>({
     safeWriteContract: true,
     write: (id, snapshot, attempt) => saveFunctions.current.safeSaveFn({ data: {
-      id: id ?? attempt.createId, create: attempt.create, expectedUpdatedAt: attempt.expectedUpdatedAt, ...snapshot,
+      id: id ?? attempt.createId, create: attempt.create, expectedUpdatedAt: attempt.expectedUpdatedAt, expectedSnapshot: attempt.expectedSnapshot, ...snapshot,
     }, signal: attempt.signal }),
     onConfirmed: (snapshot, saved) => {
       remoteVersion.current = saved.updatedAt ?? remoteVersion.current;
@@ -367,11 +378,11 @@ function Index() {
     setSpotifyLink("");
     restoredEvent.current = false;
     savedSelectionsRef.current = null;
-    autosave.reset();
+    stableCreate.current = autosave.reset();
     snapshotReadOnly.current = false; snapshotExtras.current = { inputs: {}, lists: {} };
     restoredFingerprint.current = null;
     setSnapshotProblem(null); setRecovery(null); remoteVersion.current = null;
-    stableCreate.current = crypto.randomUUID();
+    userEdited.current = false;
     genTokenRef.current += 1;
     setWorkflowInstanceId((n) => nextWorkflowInstanceId(n));
   }
@@ -387,7 +398,7 @@ function Index() {
     let cancelled = false;
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user || cancelled) return;
+      if (!user || user.id !== account || cancelled) return;
       const { data } = await supabase
         .from("profiles")
         .select("music_setup_completed, default_hours, default_decades, default_expand, favorite_artists")
@@ -410,7 +421,7 @@ function Index() {
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [account]);
 
   // Persist "setup completed" once music and an export folder are configured.
   useEffect(() => {
@@ -662,9 +673,9 @@ function Index() {
       snapshotReadOnly.current = !!checked.problem;
       setSnapshotProblem(checked.problem);
       remoteVersion.current = row.updated_at;
-      autosave.configure(openedEventId, row.updated_at);
+      autosave.configure(openedEventId, row.updated_at, stableCreate.current, { name: row.name, inputs: row.inputs, lists: row.lists });
       if (accountRef.current) {
-        try { setRecovery(loadEventDraft(accountRef.current, openedEventId)); } catch (e) { toast.error((e as Error).message); }
+        try { setRecovery(loadEventDraft(accountRef.current, openedEventId)); } catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
       }
       setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(displayNumber(inputs.hours, MAX_EVENT_HOURS) || 3));
       // A saved event with only a single list and no dance-floor sections is a
@@ -678,12 +689,13 @@ function Index() {
         const miss=Math.max(0,t-lists.warmUp.length);const sf={warmUp:miss,transition:0,peak:0,total:miss};
         setResult({warmUp:lists.warmUp,transition:[],peak:[],targetTotal:t,perSectionTarget:t,perSectionBase:t,shortfall:sf,finalShortfall:sf,duplicatesRemoved:0,blockedCount:0});
       } else {
-        const per=Math.ceil((displayNumber(inputs.hours, MAX_EVENT_HOURS)*15/3)*(displayNumber(inputs.buffer??2, 4)||2));
+        const legacyBuffer = displayBuffer(inputs.buffer ?? 2);
+        const per=Math.ceil((displayNumber(inputs.hours, MAX_EVENT_HOURS)*15/3)*legacyBuffer);
         const secTargets=inputs.split&&!checked.problem?sectionTargetsFromSplit(inputs.split,inputs.buffer??2,(inputs.songs??[]).length):undefined;
         const tFor=(k:SectionKey)=>secTargets?.[k]??per;
         const shortfall={warmUp:Math.max(0,tFor("warmUp")-lists.warmUp.length),transition:Math.max(0,tFor("transition")-lists.transition.length),peak:Math.max(0,tFor("peak")-lists.peak.length),total:0};
         shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
-        setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:secTargets?secTargets.warmUp+secTargets.transition+secTargets.peak:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/(inputs.buffer??2)),...(secTargets?{sectionTargets:secTargets}:{}),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
+        setResult({warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,targetTotal:secTargets?secTargets.warmUp+secTargets.transition+secTargets.peak:per*3,perSectionTarget:per,perSectionBase:Math.ceil(per/legacyBuffer),...(secTargets?{sectionTargets:secTargets}:{}),shortfall,finalShortfall:shortfall,duplicatesRemoved:0,blockedCount:0});
       }
       // Re-key saved selections by section+position so snapshots written with an
       // older dedupeKey format (e.g. "the weeknd|…") still land on their song.
@@ -699,7 +711,7 @@ function Index() {
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
     }).catch((e)=>{if(!cancelled){snapshotReadOnly.current=true;setSnapshotProblem((e as Error).message);toast.error((e as Error).message)}});
     return ()=>{cancelled=true;autosave.reset();genTokenRef.current+=1};
-  },[openedEventId]);
+  },[openedEventId, account]);
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean}>|null>(null);
   useEffect(()=>{
     if(!result || !workspace.library || !savedSelectionsRef.current || resultBoundary.current?.eventId!==openedEventId)return;
@@ -710,34 +722,33 @@ function Index() {
     }return next});
   },[result,workspace.library]);
   useEffect(()=>{
-    if(snapshotReadOnly.current || recovery || !accountRef.current || !result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
+    if(draftBlocked.current || snapshotReadOnly.current || recovery || !userEdited.current || !accountRef.current || !result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
     const boundary=openedEventId;
     const snapshot = eventSnapshot(result,matches);
     const fingerprint = JSON.stringify(snapshot);
     // Opening an event (including legacy defaults) is not an edit and must not write it back.
-    if (openedEventId && restoredFingerprint.current === null) { restoredFingerprint.current = fingerprint; return; }
     if (fingerprint === restoredFingerprint.current) return;
     restoredFingerprint.current = fingerprint;
     const account = accountRef.current, event = openedEventId ?? "new", token = crypto.randomUUID();
-    const draft = { version: 1 as const, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now() };
+    const draft = { version: 1 as const, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined };
     try { storeEventDraft(draft); } catch { toast.error("Local recovery could not be saved. Do not close this event until saving is confirmed."); }
     draftTokens.current.set(snapshot, { account, event, token });
     autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===account);
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,draftUser?.id]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,account,saveState]);
   useEffect(()=>{
     const recover=()=>autosave.retry();
     window.addEventListener("online",recover);
     return ()=>{window.removeEventListener("online",recover);autosave.reset()};
   },[autosave]);
 
-  const latestSnapshot = useRef<ReturnType<typeof eventSnapshot> | null>(null);
+  const latestSnapshot = useRef<{ snapshot: ReturnType<typeof eventSnapshot>; account: string; event: string; createId: string; baseVersion: string | null } | null>(null);
   const latestSaveState = useRef(saveState); latestSaveState.current = saveState;
-  latestSnapshot.current = result ? eventSnapshot(result, matches) : null;
+  latestSnapshot.current = result && account ? { snapshot: eventSnapshot(result, matches), account, event: openedEventId ?? "new", createId: stableCreate.current, baseVersion: remoteVersion.current } : null;
   const persistOnExit = () => {
-    const account = accountRef.current, snapshot = latestSnapshot.current;
-    if (!account || !snapshot || latestSaveState.current === "saved" || snapshotReadOnly.current || recovery) return;
-    const token = crypto.randomUUID(), event = openedEventIdRef.current ?? "new";
-    storeEventDraft({ version: 1, account, event, token, createId: stableCreate.current, baseVersion: remoteVersion.current, snapshot, savedAt: Date.now() });
+    const owned = latestSnapshot.current;
+    if (!owned || !userEdited.current || latestSaveState.current === "saved" || draftBlocked.current || snapshotReadOnly.current || recovery) return;
+    const token = crypto.randomUUID();
+    storeEventDraft({ version: 1, ...owned, token, savedAt: Date.now(), origin: recoveryOrigin.current ?? undefined });
   };
   const exitGuard = useRef(persistOnExit); exitGuard.current = persistOnExit;
   useBlocker({ shouldBlockFn: () => {
@@ -751,17 +762,29 @@ function Index() {
     return () => { preserve(); window.removeEventListener("pagehide", preserve); window.removeEventListener("beforeunload", preserve); };
   }, []);
   useEffect(() => {
-    if (!draftUser || openedEventId) return;
-    try { const draft = loadEventDraft<ReturnType<typeof eventSnapshot>>(draftUser.id, "new"); if (draft) { stableCreate.current = draft.createId; setRecovery(draft); } }
-    catch (e) { toast.error((e as Error).message); }
+    if (!account || openedEventId) return;
+    try { const draft = loadEventDraft<ReturnType<typeof eventSnapshot>>(account, "new"); if (draft) { stableCreate.current = draft.createId; setRecovery(draft); } }
+    catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
     autosave.configure(null, null, stableCreate.current);
-  }, [draftUser?.id, openedEventId]);
+  }, [account, openedEventId]);
+  useEffect(() => {
+    if (handoff && recovery?.token === handoff.token && !draftBlocked.current) { restoreRecovery(false); onHandoff(null); }
+  }, [handoff, recovery]);
   function restoreRecovery(asNew: boolean) {
     if (!recovery || recovery.account !== accountRef.current) return;
     try {
       if (!asNew && recovery.baseVersion !== remoteVersion.current) throw new Error("The saved event changed. Save this recovery copy as a new event instead.");
       const { snapshot, problem } = readEventSnapshot(recovery.snapshot);
       if (problem) throw new Error(problem);
+      if (asNew && openedEventId) {
+        const transferred = { ...recovery, snapshot, event: "new", token: crypto.randomUUID(), createId: crypto.randomUUID(), baseVersion: null,
+          origin: { account: recovery.account, event: recovery.event, token: recovery.token } };
+        // Persist before changing the route. A reload at any point reuses this exact creation UUID.
+        if (loadEventDraft(accountRef.current ?? "", "new")) throw new Error("A new-event recovery copy already exists. Restore it first; neither copy was replaced.");
+        storeEventDraft(transferred); onHandoff(transferred);
+        void navigate({ to: "/events/new", search: {} });
+        return;
+      }
       const inputs = snapshot.inputs;
       setSongs(inputs.songs); setHours(inputs.hours); setArtistsInput(inputs.artistsInput); setGenresInput(inputs.genresInput); setDecades(inputs.decades);
       setNotes(inputs.notes); setDoNotPlayInput(inputs.doNotPlayInput); setExpand(inputs.expand); setEventName(inputs.eventName);
@@ -771,12 +794,12 @@ function Index() {
       savedSelectionsRef.current = snapshot.lists.selections ?? null; snapshotExtras.current = { inputs, lists: snapshot.lists };
       const r = generateLists({ uploaded: [], hours: Number(inputs.hours), buffer: inputs.buffer ?? 2, split: inputs.split, prefs: { artists: [], genres: [], decades: [], notes: "" }, expand: false });
       setResult({ ...r, warmUp: snapshot.lists.warmUp, transition: snapshot.lists.transition, peak: snapshot.lists.peak });
-      recoveryOrigin.current = { account: recovery.account, event: recovery.event, token: recovery.token };
+      recoveryOrigin.current = recovery.origin ?? { account: recovery.account, event: recovery.event, token: recovery.token };
       restoredFingerprint.current = "recovered";
-      autosave.reset();
+      autosave.reset(recovery.createId);
       if (asNew) { stableCreate.current = crypto.randomUUID(); setSavedEventId(null); autosave.configure(null, null, stableCreate.current); }
       else { stableCreate.current = recovery.createId; autosave.configure(savedEventId, recovery.baseVersion, recovery.createId); }
-      resultBoundary.current = { eventId: openedEventId }; restoredEvent.current = true; snapshotReadOnly.current = false; setSaveState("idle"); setRecovery(null);
+      resultBoundary.current = { eventId: openedEventId }; restoredEvent.current = true; snapshotReadOnly.current = false; userEdited.current=true; setSaveState("idle"); setRecovery(null);
     } catch (e) { toast.error((e as Error).message); }
   }
 
