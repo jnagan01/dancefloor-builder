@@ -90,7 +90,7 @@ async function loadMain(update = { blocked: false, authorized: false }) {
     setWindowOpenHandler: (fn: Function) => { windowOpen = fn; }, on: (name: string, fn: Function) => listeners.set(name, fn) };
   const windowListeners = new Map<string, Function>();
   const appListeners = new Map<string, Function>();
-  const win = { webContents: wc, isDestroyed: () => false, once: vi.fn(), on: (name: string, fn: Function) => windowListeners.set(name,fn), loadURL: vi.fn(), show: vi.fn() };
+  const win = { webContents: wc, isDestroyed: () => false, isMinimized: () => true, once: vi.fn(), on: (name: string, fn: Function) => windowListeners.set(name,fn), loadURL: vi.fn(), show: vi.fn() };
   const app = { setPath: vi.fn(), getPath: () => "/mock", requestSingleInstanceLock: () => true, on: (name: string, fn: Function) => appListeners.set(name,fn), whenReady: async () => {}, quit: vi.fn() };
   const electron = { app, BrowserWindow: function () { return win; }, shell: { openExternal: external }, Menu: { buildFromTemplate: () => [], setApplicationMenu: vi.fn() }, dialog: { showOpenDialog }, ipcMain: { on: (name: string, fn: Function) => handlers.set(name, fn), handle: (name: string, fn: Function) => handlers.set(name, fn) } };
   runInNewContext(readFileSync(new URL("../desktop/main.cjs", import.meta.url), "utf8"), {
