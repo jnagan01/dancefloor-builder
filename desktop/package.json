@@ -1,7 +1,7 @@
 {
   "name": "dancefloor-builder-desktop",
   "productName": "SetArchitect",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "description": "SetArchitect \u2014 event and set programming for DJs",
   "author": "Exceptional Entertainment",
@@ -25,6 +25,7 @@
       "main.cjs",
       "preload.cjs",
       "updater.cjs",
+      "update-controller.cjs",
       "tags.cjs",
       "security.cjs",
       "scan.cjs",
@@ -40,6 +41,12 @@
       "target": [
         {
           "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
           "arch": [
             "arm64"
           ]
@@ -65,9 +72,17 @@
           "path": "/Applications"
         }
       ]
-    }
+    },
+    "publish": {
+      "provider": "github",
+      "releaseType": "release"
+    },
+    "artifactName": "SetArchitect-${version}-${arch}.${ext}"
   },
   "dependencies": {
-    "node-taglib-sharp": "6.0.3"
+    "node-taglib-sharp": "6.0.3",
+    "electron-updater": "6.6.2",
+    "builder-util-runtime": "9.3.1",
+    "semver": "7.7.3"
   }
 }
