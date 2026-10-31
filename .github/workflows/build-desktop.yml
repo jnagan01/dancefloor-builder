@@ -39,11 +39,15 @@ jobs:
           set -e
           mkdir -p build/icon.iconset
           SRC=build/icon-source.png
+          node verify-icon.cjs "$SRC" 1024
           for size in 16 32 64 128 256 512; do
             sips -z $size $size "$SRC" --out "build/icon.iconset/icon_${size}x${size}.png"
             sips -z $((size*2)) $((size*2)) "$SRC" --out "build/icon.iconset/icon_${size}x${size}@2x.png"
           done
           iconutil -c icns build/icon.iconset -o build/icon.icns
+          iconutil -c iconset build/icon.icns -o build/verified.iconset
+          node verify-icon.cjs build/verified.iconset/icon_512x512@2x.png 1024
+          rm -rf build/verified.iconset
           rm -rf build/icon.iconset
 
       - name: Set up pinned Bun
@@ -102,10 +106,17 @@ jobs:
           mkdir -p "$RUNNER_TEMP/update-zip"
           ditto -x -k release/*.zip "$RUNNER_TEMP/update-zip"
           APP="$RUNNER_TEMP/update-zip/SetArchitect.app"
+          ICON=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Contents/Info.plist")
+          case "$ICON" in *.icns) ;; *) ICON="$ICON.icns" ;; esac
+          iconutil -c iconset "$APP/Contents/Resources/$ICON" -o "$RUNNER_TEMP/packaged.iconset"
+          node verify-icon.cjs "$RUNNER_TEMP/packaged.iconset/icon_512x512@2x.png" 1024
           codesign --verify --deep --strict --verbose=2 "$APP"
           codesign -dv "$APP" 2>&1 | grep 'Authority=Developer ID Application:'
           xcrun stapler validate "$APP"
           xcrun stapler validate release/*.dmg
+          hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/icon-dmg" release/*.dmg
+          cmp "$APP/Contents/Resources/$ICON" "$RUNNER_TEMP/icon-dmg/SetArchitect.app/Contents/Resources/$ICON"
+          hdiutil detach "$RUNNER_TEMP/icon-dmg"
           VERSION=$(node -p "require('./package.json').version")
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Contents/Info.plist")" = 'com.exceptionalentertainment.dancefloorbuilder'
