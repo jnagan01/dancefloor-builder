@@ -15,3 +15,4 @@
 - Key the entire event editor by captured account and route event identity; preserve its owned snapshot on cleanup before mounting another editor, and transfer recovery-as-new durably before navigation, because effect-only resets misattribute drafts.
 - Reconcile tag callbacks and scans by case-sensitive identity plus session revision/generation, not positions; cache identity-only indexes separately from metadata-aware library subjects because edits must not redirect files or rebuild audio unnecessarily.
 - Validate persisted roots, source indexes and snapshots without writing sanitized replacements over corrupted originals; keep older out-of-range snapshots read-only and fail exports before any writes when paths cannot be represented safely.
+- Mark event dirty only at changed persisted-value mutations, not root click/change capture; passive restore/matching sets the read baseline and Retry/view/playback controls do not change save revisions.
