@@ -35,6 +35,7 @@ function createEventRouteHarness(actual) {
       '@/lib/virtualDj':actual.vdj, '@/lib/danceFloor':actual.dance, '@/lib/audioMatch':actual.audio,
       '@/lib/snapshotSafety':actual.snapshots, '@/lib/eventDrafts':actual.drafts, '@/lib/inputSafety':actual.input,
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
+      '@/lib/eventRevision':actual.revisions,
       '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null},
       '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},

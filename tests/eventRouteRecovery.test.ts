@@ -10,8 +10,9 @@ import * as autosave from '@/lib/eventAutosave';
 import * as vibes from '@/lib/vibes';
 import * as isolation from '@/lib/workflowIsolation';
 import * as theory from '@/lib/musicTheory';
+import * as revisions from '@/lib/eventRevision';
 const require=createRequire(import.meta.url);
-const harness=require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({vdj,dance,audio,snapshots,drafts,input,autosave,vibes,isolation,theory});
+const harness=require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({vdj,dance,audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions});
 const song={artist:'The Artist',song:'Song'};
 const row=(buffer=2)=>({id:'A',name:'Original',updated_at:'2026-10-31T00:00:00Z',inputs:{hours:'3',buffer,eventName:'Original'},lists:{warmUp:[song],selections:{'warmUp:0:old':{paths:['Music/Song.mp3'],excluded:true}}}});
 const recovery=(account='owner',event='A')=>({version:1,account,event,token:'recover',createId:'a-create',baseVersion:row().updated_at,snapshot:{name:'Recovery',inputs:{...row().inputs,eventName:'Recovery'},lists:row().lists},savedAt:1});
@@ -44,7 +45,7 @@ describe('actual mounted event route recovery and ownership',()=>{
   vi.useFakeTimers();let resolve:(v:any)=>void=()=>{};const h=harness({rows:{A:row()},write:()=>new Promise(r=>resolve=r)});await h.flush();h.edit('First');await vi.advanceTimersByTimeAsync(1000);h.edit('Second');resolve({id:'A',updatedAt:'2026-10-31T00:00:02Z'});await h.flush();expect(h.current.saveState).not.toBe('saved');expect(JSON.parse(h.memory.get(key('owner','A'))).snapshot.inputs.eventName).toBe('Second');h.unmount();
  });
  it('older recovery without original contents cannot overwrite an existing event',async()=>{
-  vi.useFakeTimers();const h=harness({memory:new Map([[key('owner','A'),JSON.stringify(recovery())]]),rows:{A:row()}});await h.flush();h.current.restoreRecovery(false);await h.flush();await vi.advanceTimersByTimeAsync(1000);expect(h.requests).toHaveLength(0);expect(h.errors.some((e:string)=>e.includes('original version'))).toBe(true);expect(h.memory.has(key('owner','A'))).toBe(true);h.unmount();
+  vi.useFakeTimers();const h=harness({memory:new Map([[key('owner','A'),JSON.stringify(recovery())]]),rows:{A:row()}});await h.flush();h.current.restoreRecovery(false);await h.flush();await vi.advanceTimersByTimeAsync(1000);expect(h.requests).toHaveLength(0);expect(h.errors.some((e:string)=>e.includes('saved event changed')||e.includes('original version'))).toBe(true);expect(h.memory.has(key('owner','A'))).toBe(true);h.unmount();
  });
  it('malformed draft blocks saves and exit replacement until explicit archive',async()=>{
   vi.useFakeTimers();const raw='{invalid';const h=harness({memory:new Map([[key('owner','A'),raw]]),rows:{A:row()}});await h.flush();h.edit('Changed');h.pagehide();await vi.advanceTimersByTimeAsync(1000);expect(h.current.draftBlocked.current).toBe(true);expect(h.requests).toHaveLength(0);expect(h.memory.get(key('owner','A'))).toBe(raw);h.unmount();

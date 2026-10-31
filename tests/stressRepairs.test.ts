@@ -6,6 +6,7 @@ import { createWorkspaceIndexes } from "@/lib/workspaceIndexes";
 import { storeEventDraft, loadEventDraft, confirmEventDraft } from "@/lib/eventDrafts";
 import { createEventAutosave } from "@/lib/eventAutosave";
 import { writeEventConditionally } from "@/lib/eventWriteContract";
+import { EVENT_REVISION_FIELD } from "@/lib/eventRevision";
 import { validSavedLibrary, loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
 const track = (filePath: string, title = "Old") => ({ filePath, artist: "A", title, bpm: "90" });
 const prefs = { artists: [], genres: [], decades: [], notes: "" };
@@ -136,29 +137,29 @@ function fakeEventDb() {
     const chain: any = {
       upsert: async (value: any) => { if (!rows.has(value.id)) rows.set(value.id, { ...value, updated_at: new Date(++serial).toISOString() }); return { error: null }; },
       update: (value: any) => { mode = 'update'; payload = value; return chain; },
-      select: () => chain, eq: (k: string, v: unknown) => { filters[k] = v; return chain; },
-      maybeSingle: async () => { const row = rows.get(filters.id as string); if (!row || Object.entries(filters).some(([k,v]) => ['inputs','lists'].includes(k) ? JSON.stringify(row[k]) !== v : row[k] !== v)) return { data: null, error: null };
+      select: () => chain, eq: (k: string, v: unknown) => { filters[k] = v; return chain; }, is: (k:string,v:unknown)=>{filters[k]=v;return chain;},
+      maybeSingle: async () => { const row = rows.get(filters.id as string); if (!row || Object.entries(filters).some(([k,v]) => k.startsWith('inputs->>') ? row.inputs[EVENT_REVISION_FIELD]!==v : k.startsWith('inputs->') ? Object.hasOwn(row.inputs,EVENT_REVISION_FIELD) : row[k] !== v)) return { data: null, error: null };
         if (mode === 'update') Object.assign(row, payload, { updated_at: new Date(++serial).toISOString() }); return { data: { ...row }, error: null }; },
     }; return chain;
   } } };
 }
 describe('atomic existing-schema save contract', () => {
   it('stable create UUID deduplicates a lost creation response', async () => {
-    const { db, rows } = fakeEventDb(); const request = { id: 'stable', create: true, expectedUpdatedAt: null, name: 'A', inputs: { nested: 1 }, lists: {} };
+    const { db, rows } = fakeEventDb(); const request = { id: 'stable', create: true, expectedUpdatedAt: null, expectedRevision:null, writeRevision:crypto.randomUUID(), name: 'A', inputs: { nested: 1 }, lists: {} };
     const first = await writeEventConditionally(db, 'owner', request); const second = await writeEventConditionally(db, 'owner', request);
     expect(rows.size).toBe(1); expect(second).toEqual(first);
   });
   it('late timed-out same-version update cannot overwrite a newer committed snapshot', async () => {
-    const { db, rows } = fakeEventDb(); const base = { id: 'A', create: true, expectedUpdatedAt: null, name: 'initial', inputs: {}, lists: {} };
+    const { db, rows } = fakeEventDb(); const base = { id: 'A', create: true, expectedUpdatedAt: null, expectedRevision:null, writeRevision:crypto.randomUUID(), name: 'initial', inputs: {}, lists: {} };
     const first = await writeEventConditionally(db, 'owner', base);
-    const fresh = { ...base, create: false, expectedUpdatedAt: first.updatedAt, expectedSnapshot: { name: base.name, inputs: base.inputs, lists: base.lists }, name: 'newer' };
+    const fresh = { ...base, create: false, expectedUpdatedAt: first.updatedAt, expectedRevision:first.revision,writeRevision:crypto.randomUUID(), name: 'newer' };
     await writeEventConditionally(db, 'owner', fresh);
     await expect(writeEventConditionally(db, 'owner', { ...fresh, name: 'late older' })).rejects.toThrow('changed elsewhere');
     expect(rows.get('A').name).toBe('newer');
   });
   it('lost update response is acknowledged only if payload still matches', async () => {
-    const { db } = fakeEventDb(); const base = { id: 'A', create: true, expectedUpdatedAt: null, name: 'initial', inputs: {}, lists: {} };
-    const first = await writeEventConditionally(db, 'owner', base); const update = { ...base, create: false, expectedUpdatedAt: first.updatedAt, expectedSnapshot: { name: base.name, inputs: base.inputs, lists: base.lists }, name: 'latest' };
+    const { db } = fakeEventDb(); const base = { id: 'A', create: true, expectedUpdatedAt: null, expectedRevision:null,writeRevision:crypto.randomUUID(), name: 'initial', inputs: {}, lists: {} };
+    const first = await writeEventConditionally(db, 'owner', base); const update = { ...base, create: false, expectedUpdatedAt: first.updatedAt, expectedRevision:first.revision,writeRevision:crypto.randomUUID(), name: 'latest' };
     const saved = await writeEventConditionally(db, 'owner', update);
     expect(await writeEventConditionally(db, 'owner', update)).toEqual(saved);
     await expect(writeEventConditionally(db, 'other-owner', update)).rejects.toThrow();
