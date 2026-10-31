@@ -38,8 +38,11 @@ function createEventRouteHarness(actual) {
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
       '@/lib/eventRevision':actual.revisions,
       '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
-      '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null},
+      '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},
+      '@/lib/neighbors.functions':{getArtistNeighbors:async()=>({neighbors:[]})},
+      '@/lib/recommend.functions':{recommendSongsForSection:async()=>({suggestions:[]})},
+      '@/lib/lastfm.functions':{getArtistCrowdData:async()=>({artists:[]})},
       jszip:{default:class {file(name,data){files.push({name,data});return this;} async generateAsync(){return new Blob(['zip']);}}},
       '@/lib/desktopBridge':{getNativeFilePath:()=>null,isDesktopApp:()=>false},
     };
