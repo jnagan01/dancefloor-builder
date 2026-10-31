@@ -21,9 +21,9 @@ const storageKey=(account='owner',event='A')=>`setarchitect:recovery:${account}:
 afterEach(()=>vi.useRealTimers());
 describe('native UI review: actual isolated route callers',()=>{
  it('renamed tentative candidate is omitted by ZIP, M3U and direct DJ TXT while reference files retain intended title',async()=>{
-  vi.useFakeTimers();const h=harness({rows:{A:row()}});await h.flush();h.library(vdj.buildLibrary([track]));await h.flush();
+  vi.useFakeTimers();const h=harness({eventId:null});await h.flush();h.library(vdj.buildLibrary([track]));await h.current.handleFiles([new File(['Test Artist - Test Song - Live'],'client.txt')]);await h.flush();await h.current.generate();await h.flush();
   const sec=h.nodes().find((n:any)=>n.props?.onRename);sec.props.onRename(0,{...song,song:'Test Song - Live - Edited'});h.render();await h.flush();
-  const match=Object.values(h.current.matches)[0] as vdj.SongMatch;expect(vdj.exportApproved(match)).toBe(false);
+  const match=Object.values(h.current.matches)[0] as vdj.SongMatch;expect(vdj.exportApproved(match)).toBe(false);expect(match.status).toBe("Possible Match");
   await h.current.exportAllZip();expect(h.files.some((f:any)=>f.name.endsWith('.m3u'))).toBe(false);expect(h.files.find((f:any)=>f.name.endsWith('.txt')).data).toContain('Test Song - Live - Edited');
   h.current.setVdjDirHandle({});await h.flush();for(const prop of ['onExportM3u','onExportM3uToVdj','onExportXmlToVdj'])await h.invoke(prop);await h.current.exportAllToVdj();expect(h.files.filter((f:any)=>f.name.endsWith('.m3u'))).toHaveLength(0);h.unmount();
  });
