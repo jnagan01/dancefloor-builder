@@ -222,8 +222,8 @@ try{
      await expect(page.getByText('Event flow',{exact:true})).toBeVisible({timeout:15000});
      await page.getByText('Event flow',{exact:true}).locator('..').screenshot({path:path.join(diagnostics,`chart-${choice.toLowerCase()}.png`)});
      await page.getByRole('button',{name:'Check export readiness',exact:true}).click();
-     await expect(page.getByText('Export readiness',{exact:true})).toBeVisible({timeout:15000});
-     await page.getByText('Export readiness',{exact:true}).locator('..').screenshot({path:path.join(diagnostics,`readiness-${choice.toLowerCase()}.png`)});
+     await expect(page.getByRole('region',{name:'Export readiness'}).getByText(/requested songs/)).toBeVisible({timeout:15000});
+     await page.getByRole('region',{name:'Export readiness'}).screenshot({path:path.join(diagnostics,`readiness-${choice.toLowerCase()}.png`)});
      await page.setViewportSize({width:390,height:844});
      expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
      await page.screenshot({path:path.join(diagnostics,`mobile-${choice.toLowerCase()}.png`)});
