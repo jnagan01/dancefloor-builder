@@ -1449,6 +1449,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
 
     resultBoundary.current={eventId:openedEventId};
+    userEdited.current = true;
     setResult(r);
     setActiveSection("warmUp");
     setSaveState("saving");
@@ -2127,7 +2128,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       uploaded: songsArg,
       hours: safeHours,
       expand: false,
-      buffer: displayNumber(buffer, 4) || 2,
+      buffer: displayBuffer(buffer),
       split: safeSplit && !snapshotReadOnly.current ? safeSplit : undefined,
       prefs: { artists: [], genres: [], decades: [], notes: "" },
     });
@@ -2185,11 +2186,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
 
   return (
-    <div className="min-h-dvh bg-background" onChangeCapture={() => { if (result) autosave.dirty(); }}>
+    <div className="min-h-dvh bg-background" onChangeCapture={() => { userEdited.current=true; if (result) autosave.dirty(); }} onClickCapture={(e) => { if ((e.target as HTMLElement).closest("button,[role='checkbox'],[role='switch'],[role='slider']")) { userEdited.current=true; if (result) autosave.dirty(); } }}>
       <Toaster richColors position="top-right" />
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <div className="min-w-0"><p className="eyebrow">Events / Builder</p><h1 className="mt-2 break-words font-display text-3xl tracking-tight sm:text-4xl">{eventName||"New event"}</h1></div>
+        {draftProblem && <div role="alert"><p>{draftProblem}</p><Button variant="outline" size="sm" onClick={() => {
+          if (!account) return;
+          try { archiveEventDraft(account, openedEventId ?? "new"); draftBlocked.current=false; setDraftProblem(null); autosave.dirty(); }
+          catch { toast.error("Could not preserve the unreadable recovery copy. Saving remains blocked."); }
+        }}>Preserve unreadable copy and enable saving</Button></div>}
         {snapshotProblem && <div role="alert" className="text-warning"><p>{snapshotProblem}</p>{result && <Button size="sm" variant="outline" onClick={() => {
           try { validateTiming(hours, buffer, splitOn ? split : undefined); if(background)boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); snapshotReadOnly.current=false; restoredFingerprint.current="corrected"; setSnapshotProblem(null); autosave.dirty(); setResult({...result}); }
           catch(e) { toast.error((e as Error).message); }

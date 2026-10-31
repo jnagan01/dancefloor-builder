@@ -200,6 +200,7 @@ export const saveWorkflowSafely = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => z.object({
     id: z.string().uuid(), create: z.boolean(), expectedUpdatedAt: z.string().nullable(),
+    expectedSnapshot: z.object({ name: z.string(), inputs: z.unknown(), lists: z.unknown() }).optional(),
     name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
   }).parse(data))
   .handler(async ({ data, context }) => writeEventConditionally(context.supabase, context.userId, data));
