@@ -1,10 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
+import { validateTiming, boundedNumber, MAX_EVENT_MINUTES } from "./inputSafety";
+import { writeEventConditionally } from "./eventWriteContract";
 
 const songSchema = z.object({
-  artist: z.string().min(1).max(300),
-  song: z.string().min(1).max(300),
+  artist: z.string().max(300),
+  song: z.string().max(300),
   fromUpload: z.boolean().optional(),
   energy: z.number().optional(), danceability: z.number().optional(), popularity: z.number().optional(), valence: z.number().optional(),
   bpm: z.number().optional(), camelot: z.string().optional(), genre: z.string().optional(), year: z.number().optional(),
@@ -14,7 +16,7 @@ const songSchema = z.object({
   aiReason: z.string().optional(), fromLibrary: z.boolean().optional(),
 });
 
-const inputsSchema = z.object({
+export const inputsSchema = z.object({
   songs: z.array(songSchema).max(2000),
   hours: z.string().max(10),
   artistsInput: z.string().max(5000),
@@ -30,6 +32,11 @@ const inputsSchema = z.object({
   eventName: z.string().max(200),
   listType: z.enum(["dance", "cocktail", "dinner"]).optional(),
   minutes: z.string().max(10).optional(),
+  eventType: z.string().max(40).optional(), homeKey: z.string().max(10).optional(),
+  split: z.object({ warmUp: z.number(), transition: z.number(), peak: z.number() }).optional(),
+}).passthrough().superRefine((value, ctx) => {
+  try { validateTiming(value.hours, value.buffer ?? 2, value.split); if (value.minutes !== undefined) boundedNumber(value.minutes, MAX_EVENT_MINUTES, "List minutes"); }
+  catch (e) { ctx.addIssue({ code: "custom", message: (e as Error).message }); }
 });
 
 const listsSchema = z.object({
@@ -84,7 +91,7 @@ export const getWorkflow = createServerFn({ method: "POST" })
     const { supabase } = context;
     const { data: row, error } = await supabase
       .from("workflow_history")
-      .select("id, name, created_at, inputs, lists")
+      .select("id, name, created_at, updated_at, inputs, lists")
       .eq("id", data.id)
       .single();
     if (error) throw dbError("getWorkflow", error);
@@ -186,3 +193,12 @@ export const listMostRequested = createServerFn({ method: "GET" })
       .sort((a, b) => b.events - a.events || a.song.localeCompare(b.song))
       .slice(0, 10);
   });
+
+/** Retry-safe endpoint: same UUID for creation, atomic expected-version update for existing events. */
+export const saveWorkflowSafely = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => z.object({
+    id: z.string().uuid(), create: z.boolean(), expectedUpdatedAt: z.string().nullable(),
+    name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
+  }).parse(data))
+  .handler(async ({ data, context }) => writeEventConditionally(context.supabase, context.userId, data));

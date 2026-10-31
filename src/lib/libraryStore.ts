@@ -28,7 +28,8 @@ export interface SavedLibraryPayload {
 function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     if (typeof indexedDB === "undefined") return resolve(null);
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    let req: IDBOpenDBRequest;
+    try { req = indexedDB.open(DB_NAME, DB_VERSION); } catch { resolve(null); return; }
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
@@ -59,25 +60,27 @@ export async function saveMusicLibrary(sources: SavedLibrarySource[], userId: st
 }
 
 function readKey(db: IDBDatabase, key: string): Promise<SavedLibraryPayload | null> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     try {
       const tx = db.transaction(STORE, "readonly");
       const req = tx.objectStore(STORE).get(key);
       req.onsuccess = () => {
         const val = req.result as SavedLibraryPayload | undefined;
-        if (!val || val.version !== 1 || !Array.isArray(val.sources)) return resolve(null);
+        if (val === undefined || val === null) return resolve(null);
+        if (!validSavedLibrary(val)) { reject(new Error("Saved music index is unreadable. Original data has been preserved; automatic saving is disabled.")); return; }
         resolve(val);
       };
-      req.onerror = () => resolve(null);
+      req.onerror = () => reject(new Error("Could not read the saved music index. Automatic saving is disabled."));
     } catch {
-      resolve(null);
+      reject(new Error("Could not read the saved music index. Automatic saving is disabled."));
     }
   });
 }
 
 export async function loadMusicLibrary(userId: string): Promise<SavedLibraryPayload | null> {
   const db = await openDb();
-  if (!db) return null;
+  if (!db) throw new Error("Music index storage is unavailable. Automatic saving is disabled.");
+  try {
   let result = await readKey(db, keyFor(userId));
   if (!result) {
     // One-time migration: libraries saved before per-account storage used a
@@ -100,8 +103,8 @@ export async function loadMusicLibrary(userId: string): Promise<SavedLibraryPayl
       result = legacy;
     }
   }
-  db.close();
   return result;
+  } finally { db.close(); }
 }
 
 export async function clearMusicLibrary(userId: string): Promise<void> {
@@ -124,4 +127,14 @@ export async function clearMusicLibrary(userId: string): Promise<void> {
 export function countSavedTracks(payload: SavedLibraryPayload | null): number {
   if (!payload) return 0;
   return payload.sources.reduce((n, s) => n + (s.tracks?.length ?? 0), 0);
+}
+
+export function validSavedLibrary(value: unknown): value is SavedLibraryPayload {
+  if (!value || typeof value !== "object") return false;
+  const v = value as SavedLibraryPayload;
+  return v.version === 1 && Number.isFinite(v.savedAt) && Array.isArray(v.sources) && v.sources.every(s =>
+    s && typeof s.label === "string" && Array.isArray(s.tracks) && s.tracks.every(t =>
+      t && typeof t.filePath === "string" && typeof t.artist === "string" && typeof t.title === "string" &&
+      ["bpm","key","genre","year","album","comment","fileSize","decade","remix","lastPlayTime"].every(k => (t as unknown as Record<string, unknown>)[k] === undefined || typeof (t as unknown as Record<string, unknown>)[k] === "string") &&
+      (t.playCount === undefined || Number.isFinite(t.playCount))));
 }
