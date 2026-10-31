@@ -735,6 +735,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }return next});
   },[result,workspace.library]);
   useEffect(()=>{
+    if (result && !userEdited.current) {
+      // Passive restore/matching establishes a read baseline, never an edit.
+      restoredFingerprint.current = JSON.stringify(eventSnapshot(result, matches));
+      return;
+    }
     if(draftBlocked.current || snapshotReadOnly.current || recovery || !userEdited.current || !accountRef.current || !result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
     const boundary=openedEventId;
     const snapshot = eventSnapshot(result,matches);
@@ -1632,7 +1637,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // --- Match controls ---
 
   function updateMatch(key: string, patch: Partial<SongMatch>) {
-    userEdited.current=true; autosave.dirty();
+    const next = { ...matches, [key]: { ...matches[key], ...patch } };
+    if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, matches))) markPersistedEdit();
     setMatches((prev) => ({ ...prev, [key]: { ...prev[key], ...patch } }));
   }
 
@@ -1761,6 +1767,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     if (!result) return null;
     if (!expand || !result.finalShortfall || result.finalShortfall.total === 0) return result;
     const topped = topUpSectionsFromLibrary(result, buildCurrentPrefs());
+    if (JSON.stringify([topped.warmUp,topped.transition,topped.peak]) !== JSON.stringify([result.warmUp,result.transition,result.peak])) markPersistedEdit();
     setResult(topped);
     if (mergedLibrary) {
       // Preserve existing matches (manual picks, extra tracks, VDJ exclusions)
@@ -2207,8 +2214,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       return { ...base, bpm: fileBpm ?? base.bpm, key: track?.key || base.key };
     });
 
+  function markPersistedEdit() {
+    userEdited.current = true;
+    if (result) autosave.dirty();
+  }
+  function editValue<T>(current: T, setter: (value: T | ((prev: T) => T)) => void) {
+    return (value: T | ((prev: T) => T)) => {
+      const next = typeof value === "function" ? (value as (prev: T) => T)(current) : value;
+      if (JSON.stringify(next) === JSON.stringify(current)) return;
+      markPersistedEdit(); setter(next);
+    };
+  }
+  const editEventName=editValue(eventName,setEventName), editHours=editValue(hours,setHours), editMinutes=editValue(minutes,setMinutes);
+  const editSongs=editValue(songs,setSongs), editSplit=editValue(split,setSplit), editSplitOn=editValue(splitOn,setSplitOn);
+  const editDecades=editValue(decades,setDecades), editEventType=editValue(eventType,setEventType), editVibe=editValue(vibe,setVibe);
+  const editBpmOn=editValue(bpmOn,setBpmOn), editBpmRange=editValue(bpmRange,setBpmRange), editDanceOn=editValue(danceOn,setDanceOn), editDanceRange=editValue(danceRange,setDanceRange);
+  const editHomeKey=editValue(homeKey,setHomeKey), editArtistsInput=editValue(artistsInput,setArtistsInput), editGenresInput=editValue(genresInput,setGenresInput);
+  const editNotes=editValue(notes,setNotes), editDoNotPlayInput=editValue(doNotPlayInput,setDoNotPlayInput), editExpand=editValue(expand,setExpand), editBuffer=editValue(buffer,setBuffer), editListType=editValue(listType,setListType);
+
   return (
-    <div className="min-h-dvh bg-background" onChangeCapture={() => { userEdited.current=true; if (result) autosave.dirty(); }} onClickCapture={(e) => { if ((e.target as HTMLElement).closest("button,[role='checkbox'],[role='switch'],[role='slider']")) { userEdited.current=true; if (result) autosave.dirty(); } }}>
+    <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">

@@ -36,3 +36,7 @@
 - [x] Replace full-payload filters with unique compact markers; cover legacy initialization, ABA, and large snapshots.
 - [x] Carry marker lifecycle through pending autosaves, durable drafts, recovery, creation and other event writers.
 - [x] Run full tests, automatic build diagnostics and existing isolated adversarial checks; report revision and limits. Live data and Mac operations were not exercised.
+
+# Dirty-state regression
+- [ ] Remove broad capture, mark actual changed persisted controls and song changes, and baseline passive restoration.
+- [ ] Verify actual benign UI handlers, Retry, immediate edits, full suite/build and adversarial checks.
