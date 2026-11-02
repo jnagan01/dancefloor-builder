@@ -160,7 +160,7 @@ export function recoverVdjBlocks(text: string, strict: StrictParse | null = domB
   BLOCK_START.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = BLOCK_START.exec(text)) !== null) {
-    starts.push(m.index + m[1].length + (m[0].length - m[1].length - m[2].length - 1));
+    starts.push(m.index + m[0].length - m[2].length - 1);
   }
   const blocks: VdjBlock[] = [];
   const skipped: SkippedVdjEntry[] = [];
