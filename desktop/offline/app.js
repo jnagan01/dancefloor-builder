@@ -60,7 +60,7 @@
       const t = state.index.tracks[state.index.byPath.get(p)];
       const full = C.fullPath(p, state.data.roots);
       const problem = !t ? "not in saved library" : !full ? "unknown music folder location" : state.availability[full] !== "available" ? "file missing on this Mac" : "";
-      return el("div", { class: "file" }, `${t ? `${t.artist} — ${t.title}` : p}${problem ? ` · ${problem}` : ""}`);
+      return el("div", { class: "file" }, `${t ? `${t.artist} — ${t.title}${t.remix ? ` (${t.remix})` : ""} · ` : ""}${p}${problem ? ` · ${problem}` : ""}`);
     });
     const id = `song-${section}-${i}`;
     const li = el("li", { class: "song", id },
