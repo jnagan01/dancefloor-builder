@@ -1,6 +1,7 @@
 import {build} from 'esbuild';import {_electron as electron,expect} from '@playwright/test';
 import {compile} from '@tailwindcss/node';
 import {Scanner} from '@tailwindcss/oxide';
+import {malformedVdjFixture} from './fixtures/malformed-vdj.mjs';
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'setarchitect-native-')),bundle=path.join(temp,'bundle');fs.mkdirSync(bundle);fs.writeFileSync(path.join(temp,'ISOLATED'),'synthetic only');
@@ -281,6 +282,43 @@ try{
    await prep.locator('li',{hasText:'Band – Hit'}).getByRole('button',{name:'Add to section'}).click();
    await expect.poll(tab).toContain(`Warm Up (${n+1} / ${target}, -${shortBy-1})`);
    await expect(page.getByText(`-${shortBy-1} short`,{exact:true}).first()).toBeVisible();
+ });
+ await check('malformed production VDJ XML: ordinary refresh recovers lengths per entry with exact identities, keeps old values, reports skips',async()=>{
+   await app.close();
+   const dir=path.join(library,'malformed');fs.mkdirSync(path.join(dir,'other'),{recursive:true});
+   const fx=malformedVdjFixture(dir),F=fx.files;
+   const lib=[{filePath:F.bill,artist:'Bill Withers',title:"Ain't No Sunshine"},{filePath:F.billOther,artist:'Bill Withers',title:"Ain't No Sunshine"},{filePath:F.simon,artist:'Simon & Garfunkel',title:'Cecilia'},{filePath:F.zero,artist:'Zed',title:'Zero',songLength:'111'},{filePath:F.bad,artist:'Zed',title:'Bad',songLength:'222'},{filePath:F.unclosed,artist:'Unclosed',title:'Quote',songLength:'333',genre:'Kept'},{filePath:F.entity,artist:'Entity',title:'Boom'},{filePath:F.after,artist:'Zed',title:'After'}];
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib,vdjRefresh:true}));
+   fs.writeFileSync(path.join(temp,'vdj.xml'),fx.xml);const xmlBefore=fs.readFileSync(path.join(temp,'vdj.xml'));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const request={artist:'Bill Withers',song:"Ain't No Sunshine",fromUpload:true};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Bill',updated_at:'2026-11-02T21:00:00Z',inputs:{eventName:'Bill',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[`warmUp:0:${dedupeKey(request.artist,request.song)}`]:{paths:[F.bill],confirmed:true}}}}}));
+   await launch();
+   await page.evaluate(r=>localStorage.setItem('dancefloor:vdjRoot',r),temp);await page.reload();
+   const index=()=>{try{return JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8')).flatMap(s=>s.tracks);}catch{return [];}};
+   const lengths=()=>Object.fromEntries(index().map(t=>[t.filePath,t.songLength??null]));
+   const expected={[F.bill]:'290',[F.billOther]:'120',[F.simon]:'175',[F.zero]:'111',[F.bad]:'222',[F.unclosed]:'333',[F.entity]:'100',[F.after]:'306'};
+   await expect.poll(lengths,{timeout:15000}).toEqual(expected);
+   await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;});
+   await page.getByRole('button',{name:'Fixture VirtualDJ refresh',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toBe('Synced 11 VirtualDJ tracks · 7 matched in your folders · 8 with length');
+   expect(await page.evaluate(()=>window.__warnings)).toEqual(['2 damaged VirtualDJ entries were skipped; those tracks keep their saved details.']);
+   expect(lengths()).toEqual(expected);
+   const saved=index();expect(saved.map(t=>t.filePath)).toEqual(lib.map(t=>t.filePath)); // exact case-sensitive identities, no basename conflation
+   expect(saved.find(t=>t.filePath===F.unclosed)).toMatchObject({genre:'Kept',songLength:'333'});
+   expect(saved.find(t=>t.filePath===F.simon)).toMatchObject({genre:'Folk',playCount:0});
+   expect(fs.readFileSync(path.join(temp,'vdj.xml')).equals(xmlBefore)).toBe(true);
+   await page.getByRole('button',{name:"Details for Bill Withers – Ain't No Sunshine"}).first().click();
+   await expect(page.getByTestId('detail-exact-file')).toHaveText(F.bill);
+   await expect(page.getByRole('region',{name:'Track facts'})).toContainText('4:50');
+   await page.keyboard.press('Escape');
+   // Rewriting the same entry as invalid on the next refresh keeps the last valid length.
+   fs.writeFileSync(path.join(temp,'vdj.xml'),fx.xml.replace('SongLength="290.352086"','SongLength="0"'));
+   await page.getByRole('button',{name:'Fixture VirtualDJ refresh',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>window.__success.length),{timeout:15000}).toBe(2);
+   expect(lengths()).toEqual(expected);
  });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
 }catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});throw e;}finally{await app?.close().catch(()=>{});}
