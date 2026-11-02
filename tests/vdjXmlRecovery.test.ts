@@ -124,3 +124,17 @@ describe("malformed VirtualDJ database recovery", () => {
     expect((await readVdjDatabaseFile(fs, path.join(dir, "missing.xml"))).ok).toBe(false);
   });
 });
+
+describe("NUL characters between or after entries (actual production damage)", () => {
+  const song = (n: string, len: string) => ` <Song FilePath="${DIR}/${n}"><Tags Author="A" Title="${n}" /><Infos SongLength="${len}" /></Song>`;
+  const cases: Record<string, string> = {
+    "line-start NUL before a Song": ["<VirtualDJ_Database>", song("Ain&apos;t One.mp3", "290.352086"), "\u0000" + song("Two &amp; B.mp3", "200"), song("Three.mp3", "100"), "</VirtualDJ_Database>"].join("\n"),
+    "NUL on its own line between Songs": ["<VirtualDJ_Database>", song("Ain&apos;t One.mp3", "290.352086"), "\u0000", song("Two &amp; B.mp3", "200"), song("Three.mp3", "100"), "</VirtualDJ_Database>"].join("\n"),
+    "trailing NUL": ["<VirtualDJ_Database>", song("Ain&apos;t One.mp3", "290.352086"), song("Two &amp; B.mp3", "200"), song("Three.mp3", "100"), "</VirtualDJ_Database>", "\u0000"].join("\n"),
+  };
+  it.each(Object.entries(cases))("%s keeps every track, exact paths and lengths", (_name, xml) => {
+    const r = parse(xml);
+    expect(r.skippedCount).toBe(0);
+    expect(r.tracks.map(t => [t.filePath, t.songLength])).toEqual([[`${DIR}/Ain't One.mp3`, "290"], [`${DIR}/Two & B.mp3`, "200"], [`${DIR}/Three.mp3`, "100"]]);
+  });
+});
