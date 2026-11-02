@@ -3,9 +3,10 @@
 - Keep the event builder under `/events/new` and the authenticated workspace shell under `_authenticated/route.tsx`, because Home must be the default landing page without resetting event state on unrelated pages.
 - Keep selected music source indexes in account-scoped IndexedDB; browser file access requires reconnecting folders and server storage must not hold local audio files.
 - Keep event autosave in the owner-scoped `workflow_history` JSON snapshot, because old snapshots must stay readable.
-- Keep workspace colors and typography in shared semantic CSS tokens and reuse the same local-file waveform player for library and event review, because visual changes must remain consistent without changing playback behavior.
+- Use shared semantic CSS tokens and one local-file waveform player for library/event review, for consistent visuals and playback.
+- Keep app-only prep knowledge in the account-fenced `src/lib/prep` store, never in snapshots/audio, backed up as optional `prep`, because events must stay readable.
 - Read and write song metadata tags only inside the Mac app (desktop/tags.cjs via node-taglib-sharp, cached by size+mtime in userData), because browsers cannot modify local files and edits must land in the music files themselves.
-- Keep event-type presets in `src/lib/eventTypes.ts`, separate from vibes, and apply their era/explicit rules only to added songs in `reorderForEnergyProgression`, because client uploads must always stay in the list.
+- Event-type presets live in `src/lib/eventTypes.ts`; their rules apply only to added songs, because client uploads must stay.
 - Route every same-row event writer through owner/id plus the reserved inputs revision marker compare-and-set; initialize missing legacy markers atomically with the observed timestamp, use fresh UUIDs per logical edit stable through retry/reload, and never put full JSON in URL filters, because timestamps and payload ABA are insufficient.
 - Treat native scans as atomic source replacements and retain saved tracks on failed, partial or unexpectedly empty rescans, because inaccessible folders must not erase library indexes.
 - Use the shared case-sensitive file-identity index for playback, picked-file selection and metadata carry-forward; selected paths never fall through to another basename or scored song, because duplicate filenames may refer to different audio.
