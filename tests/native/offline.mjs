@@ -324,7 +324,13 @@ try {
     fs.renameSync(path.join(overlays, hash), path.join(overlays, "moved")); fs.writeFileSync(path.join(overlays, hash), "blocker");
     await w.locator("#song-warmUp-0").getByRole("button", { name: /Choose recording/ }).click();
     await w.locator("#song-warmUp-0 .results li", { hasText: "Music/b/Song.mp3" }).getByRole("button").click();
+    // Wait for THIS choice's own failure: the export error above is already shown, so first see the pending
+    // status, then a non-pending error, and only then remove the blocker.
+    await expect(w.locator("#status")).not.toHaveClass(/pending/);
     await expect(w.locator("#status")).toHaveClass(/error/);
+    await expect(w.locator("#status")).not.toContainText("The files this export started were removed");
+    await expect(w.locator("#song-warmUp-0")).not.toContainText("Chosen offline");
+    await expect(w.locator("#song-warmUp-0")).toContainText("Confirmed recording (saved)");
     fs.unlinkSync(path.join(overlays, hash)); fs.renameSync(path.join(overlays, "moved"), path.join(overlays, hash));
     expect(fs.readFileSync(path.join(overlays, hash, fs.readdirSync(path.join(overlays, hash))[0]), "utf8")).toBe(saved);
   });

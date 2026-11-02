@@ -100,6 +100,7 @@
   async function choose(section, index, change) {
     if (state.busy || !state.event) return; state.busy = true; renderEvents();
     const id = state.event.id, gen = state.gen;
+    status("Saving offline choice…", "pending");
     try {
       const res = await api.choose(id, { section, index, ...change });
       if (!current(id, gen)) return;
