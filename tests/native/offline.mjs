@@ -175,7 +175,7 @@ function analyzeProtocol(lines) {
     if (l.includes("SEND \u25BA") && m.method) { open.set(key, `${m.method} session=${sid}`); sent.set(key, m.method); continue; }
     if (m.method === "Target.attachedToTarget") { const t = m.params.targetInfo; Object.assign(sess(m.params.sessionId), { targetId: t.targetId, type: t.type, targetUrl: t.url, waiting: m.params.waitingForDebugger }); }
     else if (m.method === "Target.detachedFromTarget") sess(m.params.sessionId).detached = true;
-    else if (m.method === "Target.targetInfoChanged") for (const s of sessions.values()) if (s.targetId === m.params.targetInfo.targetId) s.targetUrl = m.params.targetInfo.url;
+    else if (m.method === "Target.targetInfoChanged") { for (const s of sessions.values()) if (s.targetId === m.params.targetInfo.targetId) s.targetUrl = m.params.targetInfo.url; }
     else if (m.id !== undefined) {
       open.delete(key);
       if (sent.get(key) === "Page.getFrameTree" && m.result) { const f = m.result.frameTree.frame; Object.assign(sess(sid), { frameId: f.id, frameUrl: f.url, loaderId: f.loaderId }); }
