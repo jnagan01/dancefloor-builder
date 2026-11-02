@@ -61,7 +61,7 @@ class TolerantNode implements XmlNodeLike {
   }
 }
 
-interface ParsedTag { node: TolerantNode; end: number; selfClosing: boolean; problem?: string }
+interface ParsedTag { node: TolerantNode; end: number; selfClosing: boolean; problem?: string; rawPath?: string }
 
 /** Parse one start tag beginning at `text[start] === "<"`; quote-aware, bounded by text. */
 function parseStartTag(text: string, start: number): ParsedTag | { error: string } {
@@ -70,11 +70,12 @@ function parseStartTag(text: string, start: number): ParsedTag | { error: string
   const node = new TolerantNode(nameMatch[1]);
   let i = start + nameMatch[0].length;
   let problem: string | undefined;
+  let rawPath: string | undefined;
   const seen = new Map<string, string | null>();
   while (i < text.length) {
     while (i < text.length && /\s/.test(text[i])) i++;
-    if (text.startsWith("/>", i)) return { node, end: i + 2, selfClosing: true, problem };
-    if (text[i] === ">") return { node, end: i + 1, selfClosing: false, problem };
+    if (text.startsWith("/>", i)) return { node, end: i + 2, selfClosing: true, problem, rawPath };
+    if (text[i] === ">") return { node, end: i + 1, selfClosing: false, problem, rawPath };
     const nm = /^[^\s=/>"'<]+/.exec(text.slice(i, i + 256));
     if (!nm) { problem = "unexpected character in tag"; i++; continue; }
     const name = nm[0];
@@ -87,7 +88,9 @@ function parseStartTag(text: string, start: number): ParsedTag | { error: string
     if (quote !== '"' && quote !== "'") { problem = "unquoted attribute"; continue; }
     const close = text.indexOf(quote, i + 1);
     if (close < 0) return { error: `unterminated ${name} value` };
-    const value = decodeXmlAttribute(text.slice(i + 1, close));
+    const raw = text.slice(i + 1, close);
+    if (rawPath === undefined && /^(filepath|path|filepathname)$/i.test(name)) rawPath = raw;
+    const value = decodeXmlAttribute(raw);
     i = close + 1;
     if (seen.has(name)) {
       if (seen.get(name) !== value) return { error: `conflicting duplicate ${name}` };
@@ -109,6 +112,9 @@ export function parseBlockTolerant(block: string): { node: TolerantNode } | { er
   if (!pathValue) {
     return { error: head.problem?.startsWith("invalid character reference") ? head.problem : "missing file path" };
   }
+  // A raw "<", line break or `="` inside a path means a quote ran past its tag;
+  // using it would invent a different file identity.
+  if (/[<\n\r]|="/.test(head.rawPath ?? "")) return { error: "unsafe file path" };
   if (head.selfClosing) return { node: song };
   let i = head.end;
   while (i < block.length) {

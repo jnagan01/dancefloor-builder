@@ -196,8 +196,12 @@ export function parseVdjDatabaseXmlDetailed(text: string, options: { strictBlock
   const cleaned = text.replace(/^\uFEFF/, "").trimStart();
   const tracks: VdjTrack[] = [];
   const hasDom = typeof DOMParser !== "undefined" && options.strictBlocks !== false;
-  let invalid = !hasDom;
-  if (hasDom) {
+  // A DOCTYPE can declare custom/external entities; never let the parser expand
+  // them. Such files are read block by block, where no DTD is in scope.
+  const firstSong = cleaned.search(/<(Song|Track)[\s>/]/i);
+  const declaresDtd = /<!DOCTYPE/i.test(firstSong < 0 ? cleaned : cleaned.slice(0, firstSong));
+  let invalid = !hasDom || declaresDtd;
+  if (hasDom && !declaresDtd) {
     const doc = new DOMParser().parseFromString(cleaned, "application/xml");
     invalid = doc.getElementsByTagName("parsererror").length > 0;
     if (!invalid) {
