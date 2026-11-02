@@ -115,7 +115,7 @@ async function spawnAndAttach(args, env, timeout) {
     await stopChild(child); log.end();
     const pending = pendingCalls(protocol);
     fs.writeFileSync(path.join(diagnostics, `attach-${launches}-protocol.log`), protocol.join("\n"));
-    e.message += `\nCDP calls without a reply when attach failed:\n${pending.join("\n") || "(none)"}`;
+    console.log(`CDP calls without a reply when attach failed (full log: attach-${launches}-protocol.log):\n${pending.join("\n") || "(none)"}`);
     e.attachFailed = true;
     throw e;
   }
