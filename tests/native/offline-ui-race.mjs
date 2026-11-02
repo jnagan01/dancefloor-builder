@@ -68,13 +68,11 @@ try {
     if (kept !== "/m/a.mp3") throw Error("A's completed overlay was not preserved");
   });
 
-  await step("stale choice/export responses after an event change are discarded, not applied to B", async () => {
-    // Bypass the disabled navigation to simulate the worst case: event switches while a mutation is pending.
+  await step("pending export ignores even a forcibly re-enabled event button; report shows only on A", async () => {
     await page.evaluate(() => { window.__bridge.delay.choose = false; window.__bridge.delay.export = true; });
     await nav("Event A").click(); await expect(detail.locator("h2")).toHaveText("Event A");
     await detail.getByRole("button", { name: "Export VirtualDJ playlists" }).click();
     await page.evaluate(() => { const b = [...document.querySelectorAll("#events button")].find(x => x.textContent === "Event B"); b.disabled = false; b.click(); });
-    // busy guard ignores the click; force state change via a fresh load is impossible from UI, so release and confirm A got its own report
     await page.evaluate(() => window.__bridge.release("export", "A"));
     await expect(detail.locator(".report")).toContainText("A-report.txt");
     await nav("Event B").click(); await expect(detail.locator("h2")).toHaveText("Event B");
