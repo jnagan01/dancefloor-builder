@@ -68,7 +68,7 @@ function UpdatesPage() {
               <p className="mt-1 font-mono text-xs text-muted-foreground">Build {shortId(published.buildId)}</p>
             </>
           ) : (
-            <p className="mt-2 text-sm text-muted-foreground">{busy ? "Checking…" : "Not checked yet"}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{busy ? "Checking…" : result?.kind === "unverified" ? "Couldn’t verify published version" : "Not checked yet"}</p>
           )}
           {checkedAt && <p className="mt-1 text-xs text-muted-foreground">Checked {formatBuildDate(checkedAt)}</p>}
         </div>
