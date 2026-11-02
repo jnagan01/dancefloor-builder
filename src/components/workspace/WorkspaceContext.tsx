@@ -5,7 +5,7 @@ import { previewMetadataRestore, validateBackup, type Backup } from "@/lib/backu
 import { readEventSnapshot } from "@/lib/snapshotSafety";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXml, setFolderRoot, getFolderRoots, folderForPath, resolveExportPath, folderRootsProblem, cleanBpm, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
+import { buildLibrary, mergeLibraries, tracksFromAudioFiles, pickDirectoryFiles, parseVdjDatabaseXmlDetailed, setFolderRoot, getFolderRoots, folderForPath, resolveExportPath, folderRootsProblem, cleanBpm, type VdjLibrary, type VdjTrack } from "@/lib/virtualDj";
 import { loadMusicLibrary, saveMusicLibrary } from "@/lib/libraryStore";
 import { readVdjDatabase, isDesktopApp, getNativeFilePath, chooseVdjRoot, getDefaultVdjRoot, vdjDatabaseIn, vdjPlaylistsIn, makeNativeDirHandle, supportsNativeScan, scanNativeFolder, chooseNativeMusicFolder, readNativeAudioFile, writeNativeTags, rememberNativeFilePath } from "@/lib/desktopBridge";
 import { pickDirectoryHandle } from "@/lib/virtualDj";
