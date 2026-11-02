@@ -54,6 +54,8 @@ async function launch({ deny, online, url, timeout = 30000 }) {
   const env = { ...process.env, SETARCHITECT_TEST_USERDATA: temp};
   if (online) env.DANCEFLOOR_URL = url || ORIGIN; else delete env.DANCEFLOOR_URL; // offline phases try the real published URL, blocked
   app = await electron.launch({ timeout, executablePath: bin, args: [path.join(root, "tests/native/fixtures/offline-entry.cjs"), "--no-sandbox", ...(deny ? DENY : [])], env });
+  const proc = app.process(); const log = fs.createWriteStream(path.join(diagnostics, `offline-main-${proc.pid}.log`));
+  proc.stdout?.pipe(log); proc.stderr?.pipe(log);
   return app;
 }
 async function offlineWindow(tries = 200) {
@@ -64,7 +66,18 @@ async function offlineWindow(tries = 200) {
   }
   throw Error("Offline workspace did not open.");
 }
-async function close() { if (app) await app.close().catch(() => {}); app = null; }
+// Each relaunch reuses the profile, so the previous main process must be fully gone first. On macOS a
+// lingering instance keeps the single-instance lock; the relaunched process then quits before Playwright
+// releases "ready" and hangs until the launch timeout. Verify exit and the lock release explicitly.
+async function close() {
+  if (!app) return; const proc = app.process(); const current = app; app = null;
+  const exited = proc.exitCode !== null || proc.signalCode ? Promise.resolve() : new Promise(r => proc.once("exit", r));
+  await Promise.race([current.close().catch(e => console.log(`close: ${e.message}`)), new Promise(r => setTimeout(r, 15000))]);
+  if (!await Promise.race([exited.then(() => true), new Promise(r => setTimeout(() => r(false), 10000))])) {
+    console.log(`main ${proc.pid} still running after close; killing`); proc.kill("SIGKILL"); await exited;
+  }
+  for (let i = 0; i < 100 && ["SingletonLock", "SingletonSocket"].some(n => { try { fs.lstatSync(path.join(temp, n)); return true; } catch { return false; } }); i++) await new Promise(r => setTimeout(r, 100));
+}
 async function check(name, page, fn) { await fn(); count++; if (page) await page.screenshot({ path: path.join(diagnostics, `offline-${count}.png`) }).catch(() => {}); console.log(`PASS ${name}`); }
 const snapshotDir = path.join(temp, "offline", "snapshots");
 const hashDir = () => fs.readdirSync(snapshotDir).filter(n => !n.includes(".prev.") && n.endsWith(".json")).map(n => path.join(snapshotDir, n));
