@@ -92,7 +92,6 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     } catch (e) { try { fs.unlinkSync(temp); } catch { /* already gone */ } throw e; }
     try { const d = fs.openSync(dir, "r"); try { fs.fsyncSync(d); } finally { fs.closeSync(d); } } catch { /* directory fsync unsupported */ }
   }
-  const unlinkMarker = async () => { try { await fs.promises.unlink(activeFile); } catch (e) { if (e.code !== "ENOENT") throw e; } };
   const fenced = gen => { if (gen !== generation) throw Error("Account or session changed; offline access was not prepared."); };
   const markerValid = a => !revoked && (a.epoch === undefined ? 0 : a.epoch) === epoch;
 

@@ -76,4 +76,36 @@ describe("offline revocation fence", () => {
     delete m.epoch; fs.writeFileSync(file, JSON.stringify(m));
     expect((await createOfflineStore(dir).loadActive()).state).toBe("ready");
   });
+
+  it("an unreadable revocation fence is repaired by the next trusted prepare, before the marker is committed", async () => {
+    const dir = tmp(); fs.mkdirSync(path.join(dir, "offline"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "offline/epoch.json"), "{corrupt");
+    const store = createOfflineStore(dir);
+    await store.accountSeen(owner);
+    expect((await store.loadActive()).state).toBe("none");
+    await store.prepare(backup(), owner);
+    expect((await store.loadActive()).state).toBe("ready");
+    expect(JSON.parse(fs.readFileSync(path.join(dir, "offline/epoch.json"), "utf8")).epoch).toBe(1);
+    expect((await createOfflineStore(dir).loadActive()).state).toBe("ready");
+  });
+
+  it("revocation whose epoch write fails still wins over a paused prepare; nothing resurrects after restart", async () => {
+    const dir = tmp(), p = pausable(/snapshots[\\/][a-f0-9]{64}\.json$/);
+    let failEpoch = false;
+    const fsx = { ...p.fsx, openSync: (f: fs.PathLike, ...rest: unknown[]) => { if (failEpoch && String(f).includes("epoch.json")) throw Object.assign(Error("EIO"), { code: "EIO" }); return (fs.openSync as (...a: unknown[]) => number)(f, ...rest); } };
+    const store = createOfflineStore(dir, fsx);
+    await store.accountSeen(owner); await store.prepare(backup(), owner);
+    p.arm();
+    const late = store.prepare(backup(), owner);
+    await p.atGate;
+    failEpoch = true;
+    await store.invalidate(); // epoch write fails, marker unlink succeeds
+    expect(fs.existsSync(path.join(dir, "offline/active.json"))).toBe(false);
+    p.release();
+    await expect(late).rejects.toThrow(/changed/);
+    expect(fs.existsSync(path.join(dir, "offline/active.json"))).toBe(false);
+    expect((await store.loadActive()).state).toBe("none");
+    expect((await createOfflineStore(dir).loadActive()).state).toBe("none"); // abrupt restart
+    expect(snapshots(dir).length).toBeGreaterThan(0);
+  });
 });
