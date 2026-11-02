@@ -1,22 +1,36 @@
 import { resolveAudioFile } from "@/lib/audioMatch";
 import { TrackTagEditor } from "@/components/workspace/TrackTagEditor";
 import { createFileRoute } from "@tanstack/react-router";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { FilterPanel } from "@/components/prep/FilterPanel";
+import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
+import { EMPTY_FILTER, activeChips, facetOptions, matchesFilter, readFilter, trackFacts, type FilterState } from "@/lib/prep/filters";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, RefreshCw, Search, Columns3, Play, Pencil } from "lucide-react";
+import { Plus, RefreshCw, Search, Columns3, Play, Pencil, Info, SlidersHorizontal } from "lucide-react";
 import { pageHead } from "@/lib/pageHead";
 import { resolveExportPath, cleanBpm } from "@/lib/virtualDj";
+import { makeSubject } from "@/lib/matchCore";
 
 export const Route = createFileRoute("/_authenticated/library")({ component: LibraryPage, head: () => pageHead("Library", "Search, play, and edit the tracks in your connected music folders.") });
 const fields = ["Title", "Artist", "Album", "BPM", "Year", "Genre", "Key", "Comment", "Plays", "File path"] as const;
 type Field = typeof fields[number];
 function LibraryPage() {
-  const { sources, library, audioIndex, addFolder, rescan, persistenceError } = useWorkspace();
+  const { sources, library, audioIndex, addFolder, rescan, persistenceError, account } = useWorkspace();
+  const [filter, setFilterState] = useState<FilterState>(EMPTY_FILTER);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [detail, setDetail] = useState<DetailSubject | null>(null);
+  const filterKey = account ? `setarchitect:libraryFilter:${account}` : null;
+  // Last-used filter persists per account on this device; read after hydration.
+  useEffect(() => { if (!filterKey) { setFilterState(EMPTY_FILTER); return; } try { const raw = localStorage.getItem(filterKey); const f = raw ? readFilter(JSON.parse(raw)) : null; setFilterState(f ?? EMPTY_FILTER); if (f && activeChips(f, "library").length) setFiltersOpen(true); } catch { setFilterState(EMPTY_FILTER); } }, [filterKey]);
+  const setFilter = (f: FilterState) => { setFilterState(f); setPage(1); if (filterKey) try { localStorage.setItem(filterKey, JSON.stringify(f)); } catch { /* storage full: filter still applies */ } };
+  const facts = useMemo(() => sources.map(s => s.tracks.map(trackFacts)), [sources]);
+  const options = useMemo(() => facetOptions(facts.flat()), [facts]);
+  const deferredFilter = useDeferredValue(filter);
   const [query, setQuery] = useState("");
   const [columns, setColumns] = useState<Field[]>(["Title", "Artist", "BPM", "Year", "Genre", "Key", "Plays", "File path"]);
   const [columnsOpen, setColumnsOpen] = useState(false);
@@ -29,13 +43,13 @@ function LibraryPage() {
   const filtered = useMemo(() => {
     const needle = deferredQuery.trim().toLowerCase();
     const all = sources.flatMap((s, si) => s.tracks.map((t, ti) => ({t, si, ti})))
-      .filter(({t}) => !needle || `${t.artist} ${t.title} ${t.filePath} ${resolveExportPath(t.filePath) ?? ""}`.toLowerCase().includes(needle));
+      .filter(({t, si, ti}) => matchesFilter(facts[si][ti], deferredFilter, "library") && (!needle || `${t.artist} ${t.title} ${t.filePath} ${resolveExportPath(t.filePath) ?? ""}`.toLowerCase().includes(needle)));
     const mul = sort.dir === "asc" ? 1 : -1;
     all.sort((a, b) => sort.key === "Plays"
       ? ((a.t.playCount ?? -1) - (b.t.playCount ?? -1)) * mul
       : (a.t[sort.key === "Artist" ? "artist" : "title"] ?? "").localeCompare(b.t[sort.key === "Artist" ? "artist" : "title"] ?? "", undefined, {sensitivity:"base"}) * mul);
     return all;
-  }, [sources, deferredQuery, sort]);
+  }, [sources, facts, deferredFilter, deferredQuery, sort]);
   const pageSize = perPage === 0 ? Math.max(filtered.length, 1) : perPage;
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -56,6 +70,7 @@ function LibraryPage() {
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="relative min-w-0 flex-1 sm:max-w-sm"><Search size={16} className="absolute left-3 top-3 text-muted-foreground"/><Input className="pl-9" placeholder="Search tracks and file paths" aria-label="Search library" value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}}/></div>
       <div className="flex shrink-0 items-center gap-2">
+        <Button size="sm" variant={filtersOpen ? "default" : "outline"} aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(o=>!o)}><SlidersHorizontal size={15} className="mr-1"/>Filters{activeChips(filter,"library").length ? ` (${activeChips(filter,"library").length})` : ""}</Button>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">Sort by
           <select className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground" aria-label="Sort tracks by" value={sort.key} onChange={e=>{setSort({key:e.target.value as "Title"|"Artist"|"Plays", dir:e.target.value==="Plays"?"desc":"asc"});setPage(1)}}>
             <option value="Title">Song title</option><option value="Artist">Artist</option><option value="Plays">Plays</option>
@@ -66,7 +81,8 @@ function LibraryPage() {
       </div>
     </div>
     <p className="text-xs text-muted-foreground">Full paths appear for folders with a saved location. In a browser, reconnect a folder after reopening to play its audio.</p>
-    <div className="overflow-x-auto border border-border"><table className="w-full text-left text-sm"><thead className="border-b border-border"><tr><th scope="col">Play</th>{fields.filter(f=>columns.includes(f)).map(f=><th scope="col" key={f}>{f==="Plays"||f==="Title"||f==="Artist"?<button type="button" className="hover:text-primary" onClick={()=>toggleSort(f as "Title"|"Artist"|"Plays")} title={`Sort by ${f.toLowerCase()}`}>{f}{arrow(f as "Title"|"Artist"|"Plays")}</button>:f}</th>)}<th scope="col">Edit</th></tr></thead><tbody className="divide-y divide-border">{rows.map(({t,si,ti})=>{const file=resolveFile({filePath:t.filePath});return <tr key={`${si}:${ti}`}><td><Button size="icon" variant="ghost" disabled={!file && !resolveExportPath(t.filePath)} title={file || resolveExportPath(t.filePath)?"Play local file":"Reconnect music folder to play"} aria-label={`Play ${t.title}`} onClick={()=>setPlaying({artist:t.artist,song:t.title,filePath:t.filePath})}><Play size={15}/></Button></td>{fields.filter(f=>columns.includes(f)).map(f=><td key={f} className={f==="File path"?"min-w-52 max-w-sm break-all text-xs text-muted-foreground":f==="Title"?"min-w-44 font-medium":f==="Plays"||f==="BPM"?"whitespace-nowrap tabular-nums":"whitespace-nowrap"}>{f==="Artist"?t.artist:f==="Title"?t.title:f==="BPM"?(cleanBpm(t.bpm) ?? "—"):f==="File path"?(resolveExportPath(t.filePath) ?? t.filePath):f==="Plays"?(t.playCount!=null?t.playCount.toLocaleString():"—"):(t as unknown as Record<string,unknown>)[f.toLowerCase()]?.toString()||"—"}</td>)}<td><Button size="icon" variant="ghost" aria-label={`Edit ${t.title}`} title="View and edit song details" onClick={()=>setEditing({source:si,index:ti})}><Pencil size={15}/></Button></td></tr>})}</tbody></table>{!rows.length && <p className="py-10 text-center text-sm text-muted-foreground">{sources.length?"No tracks match your search":"Add a music folder to start your library"}</p>}</div>
+    {filtersOpen && <FilterPanel context="library" options={options} value={filter} onChange={setFilter} shown={filtered.length}/>}
+    <div className="overflow-x-auto border border-border"><table className="w-full text-left text-sm"><thead className="border-b border-border"><tr><th scope="col">Play</th>{fields.filter(f=>columns.includes(f)).map(f=><th scope="col" key={f}>{f==="Plays"||f==="Title"||f==="Artist"?<button type="button" className="hover:text-primary" onClick={()=>toggleSort(f as "Title"|"Artist"|"Plays")} title={`Sort by ${f.toLowerCase()}`}>{f}{arrow(f as "Title"|"Artist"|"Plays")}</button>:f}</th>)}<th scope="col">Details</th></tr></thead><tbody className="divide-y divide-border">{rows.map(({t,si,ti})=>{const file=resolveFile({filePath:t.filePath});return <tr key={`${si}:${ti}`}><td><Button size="icon" variant="ghost" disabled={!file && !resolveExportPath(t.filePath)} title={file || resolveExportPath(t.filePath)?"Play local file":"Reconnect music folder to play"} aria-label={`Play ${t.title}`} onClick={()=>setPlaying({artist:t.artist,song:t.title,filePath:t.filePath})}><Play size={15}/></Button></td>{fields.filter(f=>columns.includes(f)).map(f=><td key={f} className={f==="File path"?"min-w-52 max-w-sm break-all text-xs text-muted-foreground":f==="Title"?"min-w-44 font-medium":f==="Plays"||f==="BPM"?"whitespace-nowrap tabular-nums":"whitespace-nowrap"}>{f==="Artist"?t.artist:f==="Title"?t.title:f==="BPM"?(cleanBpm(t.bpm) ?? "—"):f==="File path"?(resolveExportPath(t.filePath) ?? t.filePath):f==="Plays"?(t.playCount!=null?t.playCount.toLocaleString():"—"):(t as unknown as Record<string,unknown>)[f.toLowerCase()]?.toString()||"—"}</td>)}<td className="whitespace-nowrap"><Button size="icon" variant="ghost" aria-label={`Details for ${t.title}`} title="Details, versions and notes" onClick={()=>setDetail({artist:t.artist,song:t.title,track:t,alternatives:(library ? library.byKey.get((sj=>`${sj.artist}|${sj.title.base}`)(makeSubject(t.artist,t.title))) ?? [] : []).map(i=>library!.tracks[i]).filter(Boolean)})}><Info size={15}/></Button><Button size="icon" variant="ghost" aria-label={`Edit ${t.title}`} title="View and edit song details" onClick={()=>setEditing({source:si,index:ti})}><Pencil size={15}/></Button></td></tr>})}</tbody></table>{!rows.length && <p className="py-10 text-center text-sm text-muted-foreground">{sources.length?"No tracks match your search and filters":"Add a music folder to start your library"}</p>}</div>
     <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
       <p className="text-xs text-muted-foreground">{filtered.length ? `Showing ${((safePage-1)*pageSize+1).toLocaleString()}–${Math.min(safePage*pageSize, filtered.length).toLocaleString()} of ${filtered.length.toLocaleString()} tracks` : "No tracks to show"}</p>
       <div className="flex items-center gap-2">
@@ -80,6 +96,7 @@ function LibraryPage() {
         <Button size="sm" variant="outline" disabled={safePage>=pageCount} onClick={()=>setPage(p=>Math.min(pageCount,p+1))}>Next</Button>
       </div>
     </div>
+    <TrackDetailSheet subject={detail} onClose={()=>setDetail(null)} onPreview={t=>setPlaying({artist:t.artist,song:t.title,filePath:t.filePath})}/>
     <WaveformPlayer target={playing} resolve={resolveFile} onClose={()=>setPlaying(null)}/>
     <Dialog open={columnsOpen} onOpenChange={setColumnsOpen}><DialogContent><DialogHeader><DialogTitle>Choose columns</DialogTitle></DialogHeader><div className="grid grid-cols-2 gap-3">{fields.map(f=><label key={f} className="flex items-center gap-2 text-sm"><Checkbox checked={columns.includes(f)} onCheckedChange={v=>setColumns(prev=>v?[...prev,f]:prev.filter(x=>x!==f))}/>{f}</label>)}</div></DialogContent></Dialog>
     <TrackTagEditor target={editing} onClose={()=>setEditing(null)}/>

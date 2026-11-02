@@ -2,17 +2,21 @@ import { validSavedLibrary, type SavedLibrarySource } from "./libraryStore";
 import { readEventSnapshot } from "./snapshotSafety";
 import { EVENT_REVISION_FIELD } from "./eventRevision";
 import { inspectBackupValues } from "./backupPolicy";
+import { readKnowledge, type PrepKnowledge } from "./prep/knowledge";
 export const MAX_BACKUP_BYTES = 32 * 1024 * 1024;
 export interface Backup {
   format: "setarchitect-backup"; version: 1; account: string; createdAt: string;
   events: { id: string; snapshot: { name: string; inputs: Record<string, unknown>; lists: Record<string, unknown> } }[];
   sources: SavedLibrarySource[]; roots: Record<string, string>;
+  /** Optional additive section (preparation notes, groups, presets, shortlists). Older backups omit it. */
+  prep?: PrepKnowledge;
 }
 export function validateBackup(raw: string, account: string): Backup {
   if (new TextEncoder().encode(raw).length > MAX_BACKUP_BYTES) throw Error("Backup exceeds 32 MB; original preserved.");
   const b = JSON.parse(raw);
   if (!b || b.format !== "setarchitect-backup" || b.version !== 1 || b.account !== account || typeof b.createdAt !== "string" || !Number.isFinite(Date.parse(b.createdAt)) || !Array.isArray(b.events) || b.events.length > 500 || !validSavedLibrary({ version: 1, savedAt: Date.now(), sources: b.sources }) || b.sources.reduce((n: number, s: SavedLibrarySource) => n + s.tracks.length, 0) > 100000) throw Error("Backup version, account or contents are invalid; original preserved.");
   inspectBackupValues(b);
+  if (b.prep !== undefined && !readKnowledge(b.prep)) throw Error("Backup preparation notes are invalid; original preserved.");
   if (!b.roots || Array.isArray(b.roots) || typeof b.roots !== "object") throw Error("Invalid source mappings.");
   for (const [label, path] of Object.entries(b.roots)) if (!label || /[\\/\r\n]/.test(label) || typeof path !== "string" || path.length > 4000 || /[\r\n\u0000]/.test(path) || path.split(/[\\/]/).includes("..") || !(/^(?:\/|[A-Za-z]:[\\/])/.test(path))) throw Error("Unsafe source mapping.");
   const labels = new Set<string>();
