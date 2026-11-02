@@ -19,6 +19,10 @@ export async function prepareOfflineAccess(owner: { account: string; check: () =
   const backup = await collect();
   owner.check();
   if (backup.account !== owner.account) throw Error("Account changed; offline access was not prepared.");
+  // The Mac app only accepts a prepare for the account it was most recently told is signed in.
+  const seen = await bridge.accountSeen(owner.account);
+  owner.check();
+  if (!seen.ok) throw Error("Offline access could not confirm the signed-in account. Nothing was changed.");
   const result = await bridge.prepare(JSON.stringify(backup), owner.account);
   try { owner.check(); } catch (e) { await bridge.signedOut().catch(() => {}); throw e; }
   if (!result.ok) throw Error(result.error ?? "Offline access could not be saved. The previous offline copy is unchanged.");

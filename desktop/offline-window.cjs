@@ -111,9 +111,10 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
     throw Error("Too many existing playlists with this name.");
   }
 
-  /** Portable (exFAT/FAT-safe, no hard links) all-or-nothing publication: each file is
-   * created exclusively ("wx", never overwrites), written and fsynced. On any failure every
-   * file created by THIS export is removed; anything that could not be removed is reported. */
+  /** Portable (exFAT/FAT-safe, no hard links), best-effort all-or-nothing publication: each
+   * file is created exclusively ("wx", never overwrites), written and fsynced. On failure every
+   * file created by THIS export is removed, but cleanup itself can fail (e.g. a drive pulled
+   * mid-export), so partial files may remain; those are named in the error, never hidden. */
   async function writeExport(dir, files, fence) {
     const created = [];
     try {
@@ -134,7 +135,7 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
       const reason = e.code || e.message;
       return { written: [], failed: [reason], leftover, error: leftover.length
         ? `Export failed (${reason}). These partial files could not be removed and should be deleted: ${leftover.join(", ")}`
-        : `Export failed (${reason}). No playlists were left in the folder.` };
+        : `Export failed (${reason}). The files this export started were removed.` };
     }
   }
 

@@ -97,12 +97,12 @@ try {
   await check("trusted signed-in origin prepares offline access; mismatched account rejected without replacing last-good", null, async () => {
     await launch({ deny: false, online: true });
     const page = await app.firstWindow(); await page.waitForLoadState("domcontentloaded");
-    const r = await page.evaluate(([raw, a]) => window.electronOffline.prepare(raw, a), [backup(), ACCOUNT]);
+    const r = await page.evaluate(async ([raw, a]) => { await window.electronOffline.accountSeen(a); return window.electronOffline.prepare(raw, a); }, [backup(), ACCOUNT]);
     expect(r).toMatchObject({ ok: true, events: 1, tracks: tracks.length });
     expect(await page.evaluate(a => window.electronOffline.status(a), ACCOUNT)).toMatchObject({ prepared: true, events: 1 });
     expect(await page.evaluate(() => window.electronOffline.status("someone-else"))).toMatchObject({ prepared: false });
     snapDigest = digest(hashDir()[0]);
-    const bad = await page.evaluate(([raw, a]) => window.electronOffline.prepare(raw, a), [backup("someone-else"), ACCOUNT]);
+    const bad = await page.evaluate(async ([raw, a]) => { await window.electronOffline.accountSeen(a); return window.electronOffline.prepare(raw, a); }, [backup("someone-else"), ACCOUNT]);
     expect(bad.ok).toBe(false);
     expect(digest(hashDir()[0])).toBe(snapDigest);
     expect(await page.evaluate(() => typeof window.setarchitectOffline)).toBe("undefined");
@@ -169,7 +169,7 @@ try {
     const blocked = path.join(temp, "not-a-folder"); fs.writeFileSync(blocked, "file");
     fs.writeFileSync(path.join(temp, "export-dir"), blocked);
     await w.getByRole("button", { name: "Export VirtualDJ playlists" }).click();
-    await expect(w.locator(".report")).toContainText("No playlists were left in the folder");
+    await expect(w.locator(".report")).toContainText("The files this export started were removed");
     const overlays = path.join(temp, "offline", "overlays"), [hash] = fs.readdirSync(overlays);
     const saved = fs.readFileSync(path.join(overlays, hash, fs.readdirSync(path.join(overlays, hash))[0]), "utf8");
     fs.renameSync(path.join(overlays, hash), path.join(overlays, "moved")); fs.writeFileSync(path.join(overlays, hash), "blocker");
@@ -215,10 +215,10 @@ try {
   await check("sign-out revokes; corrupt cache explains without blank screen or rewrite", null, async () => {
     await launch({ deny: false, online: true });
     const page = await app.firstWindow(); await page.waitForLoadState("domcontentloaded");
-    expect((await page.evaluate(([raw, a]) => window.electronOffline.prepare(raw, a), [backup(), ACCOUNT])).ok).toBe(true);
+    expect((await page.evaluate(async ([raw, a]) => { await window.electronOffline.accountSeen(a); return window.electronOffline.prepare(raw, a); }, [backup(), ACCOUNT])).ok).toBe(true);
     await page.evaluate(() => window.electronOffline.signedOut());
     expect(await page.evaluate(a => window.electronOffline.status(a), ACCOUNT)).toMatchObject({ prepared: false });
-    expect((await page.evaluate(([raw, a]) => window.electronOffline.prepare(raw, a), [backup(), ACCOUNT])).ok).toBe(true);
+    expect((await page.evaluate(async ([raw, a]) => { await window.electronOffline.accountSeen(a); return window.electronOffline.prepare(raw, a); }, [backup(), ACCOUNT])).ok).toBe(true);
     await close();
     for (const f of fs.readdirSync(snapshotDir)) fs.writeFileSync(path.join(snapshotDir, f), "{corrupt");
     await launch({ deny: true });
@@ -230,7 +230,7 @@ try {
   await check("open offline window closes immediately when another account signs in", null, async () => {
     await launch({ deny: false, online: true });
     const page = await app.firstWindow(); await page.waitForLoadState("domcontentloaded");
-    expect((await page.evaluate(([raw, a]) => window.electronOffline.prepare(raw, a), [backup(), ACCOUNT])).ok).toBe(true);
+    expect((await page.evaluate(async ([raw, a]) => { await window.electronOffline.accountSeen(a); return window.electronOffline.prepare(raw, a); }, [backup(), ACCOUNT])).ok).toBe(true);
     await app.evaluate(({ Menu }) => Menu.getApplicationMenu().getMenuItemById("open-offline").click());
     const ow = await offlineWindow();
     await expect(ow.getByRole("heading", { name: "Synthetic <b>Wedding</b>" })).toBeVisible();
