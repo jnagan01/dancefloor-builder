@@ -55,7 +55,7 @@
 
   function songRow(section, i, song) {
     const sel = selectionFor(section, i), st = C.songStatus(sel);
-    const labels = { confirmed: "Confirmed recording (saved)", local: "Chosen offline — this Mac only", tentative: "Suggested, not confirmed — won't export", none: "No recording chosen", excluded: "Excluded from DJ export" };
+    const labels = { confirmed: "Confirmed recording (saved)", local: "Chosen offline — this Mac only", tentative: "Suggested, not confirmed — won't export", none: "No recording chosen", excluded: "Excluded from DJ export", stale: "Saved choice doesn't match this song — choose again" };
     const files = ((st === "confirmed" || st === "local") && sel.paths || []).map(p => {
       const t = state.index.tracks[state.index.byPath.get(p)];
       const full = C.fullPath(p, state.data.roots);
@@ -129,11 +129,12 @@
 
   function renderDetail(focusId, focusButton) {
     const e = state.event;
-    const sections = C.SECTIONS.filter(([k]) => e.lists[k].length).map(([k, label]) => [el("h3", { text: label }), el("ol", { class: "songs" }, ...e.lists[k].map((s, i) => songRow(k, i, s)))]).flat();
+    const sections = C.SECTIONS.filter(([k]) => e.lists[k].length).map(([k, label]) => [el("h3", { text: C.sectionLabel(e, k, label) }), el("ol", { class: "songs" }, ...e.lists[k].map((s, i) => songRow(k, i, s)))]).flat();
     const local = Object.keys(state.overlay).length;
     $("detail").replaceChildren(
       el("h2", { text: e.name || "Untitled event" }),
       el("p", { class: "muted", text: `Saved event as of ${when(state.data.preparedAt)}. Unsaved edits from the online workspace are kept separately and are not shown here.${local ? ` ${local} recording choice(s) made offline on this Mac.` : ""}${e.staleOverlays ? ` ${e.staleOverlays} earlier offline choice set(s) for an older copy of this event are kept but not applied.` : ""}` }),
+      e.otherLists && e.otherLists.length ? el("p", { class: "notice", text: `Not available offline: ${e.otherLists.length} other saved list(s) (${e.otherLists.join(", ")}). Open them online.` }) : null,
       el("div", { class: "actions" }, el("button", { type: "button", class: "primary", text: "Export VirtualDJ playlists", on: { click: doExport } })),
       report(),
       ...(sections.length ? sections : [el("p", { class: "muted", text: "This event has no song lists yet." })]));

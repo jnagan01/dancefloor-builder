@@ -35,15 +35,56 @@
       .replace(/\s+/g, " ")
       .trim();
   }
-  const songKey = (section, index, song) => `${section}:${index}:${norm(song.artist)}|${norm(song.song)}`;
-  const songIdentity = song => `${norm(song && song.artist)}|${norm(song && song.song)}`;
+  // Exact port of src/lib/danceFloor.ts normalizeKey/artistParts/stripArtistFromTitle/dedupeKey
+  // (parity is enforced by tests/offlineAccess.test.ts), so saved selection keys match exactly.
+  function normalizeKey(s) {
+    return (s || "")
+      .toLowerCase()
+      .replace(/[([{][^)\]}]*[)\]}]/g, " ")
+      .replace(/\s+(feat\.?|ft\.?|featuring|with|w\/)\s+.*$/gi, " ")
+      .replace(/\s*[-–—:]\s*(the\s+)?(\d{2,4}\s+)?(re[- ]?master(ed)?|radio edit|edit|extended( (mix|version|edit))?|version|mix|live|mono|stereo|deluxe|single|album version|anniversary( edition)?|bonus track|explicit|clean|instrumental|acoustic|demo|reissue|original( mix| version)?)(\s+\d{2,4})?\s*$/gi, " ")
+      .replace(/\s+[-–—]\s+(from\s.*|.*\b(version|remix|mix|edit|re-?master(ed)?|live|mono|stereo)\b.*)$/gi, " ")
+      .replace(/\s+(&|and|x|vs\.?)\s+.*$/gi, " ")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\p{L}\p{N}\s]/gu, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  const stripThe = s => s.replace(/^the\s+/, "");
+  function artistParts(artist) {
+    const raw = (artist || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+      .split(/\s*(?:,|;|\/|&|\+|\band\b|\bx\b|\bvs\.?|\bfeat\.?|\bft\.?|\bfeaturing\b|\bwith\b)\s*/i);
+    const out = new Set();
+    for (const p of raw) { const n = stripThe(p.replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim()); if (n) out.add(n); }
+    return [...out];
+  }
+  function stripArtistFromTitle(artist, song) {
+    const s = (song || "").trim();
+    const a = normalizeKey(artist).replace(/^(the|a)\s+/, "");
+    if (!s || !a) return s;
+    const m = s.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+    if (!m) return s;
+    const left = normalizeKey(m[1]).replace(/^(the|a)\s+/, "");
+    const right = normalizeKey(m[2]).replace(/^(the|a)\s+/, "");
+    const parts = new Set(artistParts(artist));
+    const isArtist = x => x === a || parts.has(x);
+    if (isArtist(left) && m[2].trim()) return m[2].trim();
+    if (isArtist(right) && m[1].trim()) return m[1].trim();
+    return s;
+  }
+  const dedupeKey = (artist, song) => `${normalizeKey(artist).replace(/^(the|a)\s+/, "")}|${normalizeKey(stripArtistFromTitle(artist, song))}`;
+  const songKey = (section, index, song) => `${section}:${index}:${dedupeKey(song.artist, song.song)}`;
+  const songIdentity = song => dedupeKey(song && song.artist, song && song.song);
 
-  /** The original saved choice for a position. Legacy keys are matched by section+index. */
-  function cachedSelection(selections, section, index) {
-    if (!selections) return null;
+  /** The saved choice whose key is exactly this song's canonical key. A key for the same
+   * position but a different song identity is stale and never applies. */
+  function cachedSelection(selections, section, index, song) {
+    if (!selections || !song) return null;
+    const exact = songKey(section, index, song);
+    if (Object.prototype.hasOwnProperty.call(selections, exact)) return selections[exact];
     const prefix = `${section}:${index}:`;
-    for (const key of Object.keys(selections)) if (key.startsWith(prefix)) return selections[key];
-    return null;
+    return Object.keys(selections).some(k => k.startsWith(prefix)) ? { stale: true, paths: [] } : null;
   }
 
   /** Overlay choices apply only to the same song identity at the same position. */
@@ -51,12 +92,13 @@
     const song = event.lists[section][index];
     const local = overlay && overlay.selections ? overlay.selections[`${section}:${index}`] : null;
     if (local && local.song && songIdentity(local.song) === songIdentity(song)) return { ...local, source: "local" };
-    const saved = cachedSelection(event.lists.selections, section, index);
+    const saved = cachedSelection(event.lists.selections, section, index, song);
     return saved ? { ...saved, source: "saved" } : null;
   }
 
   function songStatus(selection) {
     if (!selection) return "none";
+    if (selection.stale) return "stale";
     if (selection.excluded) return "excluded";
     if (selection.confirmed === true && selection.paths && selection.paths.length) return selection.source === "local" ? "local" : "confirmed";
     return selection.paths && selection.paths.length ? "tentative" : "none";
@@ -104,6 +146,11 @@
     return top;
   }
 
+  /** Cocktail/dinner events store their single list in warmUp. */
+  function sectionLabel(event, section, label) {
+    const t = event.listType;
+    return section === "warmUp" && (t === "cocktail" || t === "dinner") ? (t === "cocktail" ? "Cocktail list" : "Dinner list") : label;
+  }
   /** Exact identity plan for export. Unapproved, excluded, unknown or missing files are never written. */
   function exportPlan(event, overlay, index, roots, availability) {
     const sections = [];
@@ -122,7 +169,7 @@
         const at = { section, index: i };
         if (status !== "confirmed" && status !== "local") {
           omitted++;
-          problems.push({ ...at, title, reason: status === "excluded" ? "Excluded from DJ export" : status === "tentative" ? "Recording not confirmed" : "No confirmed recording" });
+          problems.push({ ...at, title, reason: status === "excluded" ? "Excluded from DJ export" : status === "tentative" ? "Recording not confirmed" : status === "stale" ? "Saved choice belongs to a different song at this position" : "No confirmed recording" });
           return;
         }
         if (status === "local") localChoices++;
@@ -139,7 +186,7 @@
         }
         if (!wrote) omitted++;
       });
-      sections.push({ section, label, entries });
+      sections.push({ section, label: sectionLabel(event, section, label), entries });
     }
     return { sections, problems, summary: { requested, approved: recordings.size, omitted, unavailable, localChoices } };
   }
@@ -179,5 +226,5 @@
 
   const safeFileName = s => single(s).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "_").slice(0, 120) || "Event";
 
-  return { SECTIONS, fullPath, norm, songKey, songIdentity, cachedSelection, effectiveSelection, songStatus, buildIndex, search, exportPlan, m3u, readinessText, safeFileName, unsafePath };
+  return { SECTIONS, fullPath, norm, normalizeKey, dedupeKey, songKey, songIdentity, cachedSelection, effectiveSelection, songStatus, buildIndex, search, exportPlan, m3u, readinessText, safeFileName, unsafePath, sectionLabel };
 });

@@ -49,30 +49,58 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     return { preparedAt: wrapper.preparedAt, backup: validate(wrapper.backup, inner.account) };
   }
 
+  // In-memory session fence. Revocation is synchronous at IPC entry; every marker
+  // mutation is serialized, and a prepare commits only if no revocation happened.
+  let generation = 0, sessionHash = null, chain = Promise.resolve();
+  const listeners = new Set();
+  const serial = fn => { const run = chain.then(fn, fn); chain = run.catch(() => {}); return run; };
+  const revoke = () => { generation++; for (const l of listeners) { try { l(); } catch { /* listener errors never block revocation */ } } };
+  const unlinkMarker = async () => { try { await fs.promises.unlink(activeFile); } catch (e) { if (e.code !== "ENOENT") throw e; } };
+  const fenced = gen => { if (gen !== generation) throw Error("Account or session changed; offline access was not prepared."); };
+
   /** Trusted, signed-in web origin only (caller enforces). raw is a full validated backup. */
-  async function prepare(raw, account) {
-    if (!accountOk(account)) throw Error("Sign in before preparing offline access.");
-    const backup = validate(raw, account);
-    const hash = sha(account), preparedAt = new Date().toISOString();
-    const wrapper = JSON.stringify({ version: 1, preparedAt, backup: raw });
-    const current = await readOrNull(snapFile(hash));
-    // Keep the previous good copy as a fallback before replacing it.
-    if (current !== null) { try { parseSnapshot(current, hash); await atomicWrite(prevFile(hash), current, r => parseSnapshot(r, hash)); } catch { /* corrupt current is never promoted to last-good */ } }
-    await atomicWrite(snapFile(hash), wrapper, r => parseSnapshot(r, hash));
-    await atomicWrite(activeFile, JSON.stringify({ version: 1, account: hash, preparedAt }), parseActive);
-    return { ok: true, preparedAt, events: backup.events.length, tracks: backup.sources.reduce((n, s) => n + s.tracks.length, 0) };
+  function prepare(raw, account) {
+    if (!accountOk(account)) return Promise.reject(Error("Sign in before preparing offline access."));
+    const hash = sha(account);
+    if (sessionHash !== null && sessionHash !== hash) return Promise.reject(Error("Account changed; offline access was not prepared."));
+    let backup;
+    try { backup = validate(raw, account); } catch (e) { return Promise.reject(e); }
+    sessionHash = hash;
+    const gen = generation;
+    return serial(async () => {
+      fenced(gen);
+      const preparedAt = new Date().toISOString();
+      const wrapper = JSON.stringify({ version: 1, preparedAt, backup: raw });
+      const current = await readOrNull(snapFile(hash));
+      fenced(gen);
+      // Keep the previous good copy as a fallback before replacing it.
+      if (current !== null) { try { parseSnapshot(current, hash); await atomicWrite(prevFile(hash), current, r => parseSnapshot(r, hash)); } catch { /* corrupt current is never promoted to last-good */ } }
+      fenced(gen);
+      await atomicWrite(snapFile(hash), wrapper, r => parseSnapshot(r, hash));
+      fenced(gen);
+      await atomicWrite(activeFile, JSON.stringify({ version: 1, account: hash, preparedAt }), parseActive);
+      if (gen !== generation) { await unlinkMarker(); fenced(gen); }
+      return { ok: true, preparedAt, events: backup.events.length, tracks: backup.sources.reduce((n, s) => n + s.tracks.length, 0) };
+    });
   }
 
-  async function invalidate() {
-    try { await fs.promises.unlink(activeFile); } catch (e) { if (e.code !== "ENOENT") throw e; }
+  function invalidate() {
+    sessionHash = null;
+    revoke();
+    return serial(unlinkMarker);
   }
-  /** Any different signed-in account immediately removes offline availability. */
-  async function accountSeen(account) {
+  /** Any different signed-in account immediately revokes offline availability. */
+  function accountSeen(account) {
     if (!accountOk(account)) return invalidate();
-    const raw = await readOrNull(activeFile);
-    if (raw === null) return;
-    let active; try { active = parseActive(raw); } catch { return invalidate(); }
-    if (active.account !== sha(account)) await invalidate();
+    const hash = sha(account);
+    if (sessionHash !== null && sessionHash !== hash) revoke();
+    sessionHash = hash;
+    return serial(async () => {
+      const raw = await readOrNull(activeFile);
+      if (raw === null) return;
+      let active; try { active = parseActive(raw); } catch { active = null; }
+      if (!active || active.account !== hash) { revoke(); await unlinkMarker(); }
+    });
   }
   async function status(account) {
     if (!accountOk(account)) return { prepared: false };
@@ -118,7 +146,7 @@ function createOfflineStore(userData, fs = require("node:fs")) {
   }
 
   /** set: { section, index, path } explicit approval; or { section, index, clear:true }. */
-  async function setChoice(hash, backup, eventId, change) {
+  async function setChoice(hash, backup, eventId, change, fence = () => {}) {
     const event = backup.events.find(e => e.id === eventId);
     if (!event) throw Error("Event not in the offline copy.");
     const { section, index } = change || {};
@@ -127,6 +155,7 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     if (!song) throw Error("Song not in this event.");
     const version = eventVersion(event);
     const overlay = await readOverlay(hash, eventId, version);
+    fence();
     const key = `${section}:${index}`;
     const next = { version: 1, eventId, snapshotVersion: version, selections: { ...overlay.selections } };
     if (change.clear) delete next.selections[key];
@@ -137,10 +166,11 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     }
     const raw = JSON.stringify(next);
     if (Buffer.byteLength(raw) > MAX_OVERLAY) throw Error("Too many local choices.");
+    fence();
     await atomicWrite(overlayFile(hash, eventId, version), raw, r => { if (r !== raw) throw Error("Write verification failed."); });
     return next;
   }
 
-  return { prepare, invalidate, accountSeen, status, loadActive, readOverlay, setChoice, eventVersion, staleOverlayCount, dir };
+  return { prepare, invalidate, accountSeen, status, generation: () => generation, onRevoke: fn => { listeners.add(fn); return () => listeners.delete(fn); }, loadActive, readOverlay, setChoice, eventVersion, staleOverlayCount, dir };
 }
 module.exports = { createOfflineStore };

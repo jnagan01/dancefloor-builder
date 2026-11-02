@@ -7,7 +7,7 @@ if (process.type === "browser") {
   const { dialog } = require("electron");
   dialog.showMessageBox = async (_w, o) => {
     const options = o || _w;
-    fs.appendFileSync(path.join(p, "dialogs.log"), JSON.stringify(options.buttons) + "\n");
+    fs.appendFileSync(path.join(p, "dialogs.log"), JSON.stringify({ buttons: options.buttons, detail: options.detail }) + "\n");
     const i = options.buttons.indexOf("Open Offline Workspace");
     return { response: i >= 0 ? i : options.cancelId ?? 0 };
   };
