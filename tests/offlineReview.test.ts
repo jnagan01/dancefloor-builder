@@ -10,6 +10,8 @@ import { dedupeKey } from "@/lib/danceFloor";
 const require = createRequire(import.meta.url);
 const core = require("../desktop/offline/core.js");
 const { createOfflineStore } = require("../desktop/offline-store.cjs");
+// The store accepts a prepare only for the account most recently reported as signed in.
+const seen = async <T extends { accountSeen(a: string): Promise<void> }>(s: T, account: string) => { await s.accountSeen(account); return s; };
 const { createOfflineWorkspace, ENTRY } = require("../desktop/offline-window.cjs");
 const { harness, deferred } = require("./helpers/workspaceHarness.cjs").createHarnessModules({ vdj, bridge, audio, identity, metadata, cache, safety, workspaceIndexes, trackRevisions, backups });
 
@@ -31,7 +33,7 @@ describe("finding 1: prepare is fenced and serialized in the main process", () =
   for (const [label, hold] of [["while writing the snapshot", 1], ["while writing the marker", 2]] as const) {
     it(`sign-out ${label} prevents the marker, also after cold restart`, async () => {
       const dir = tmp(), d = delayedFs(hold), store = createOfflineStore(dir, d.f);
-      const p = store.prepare(raw(), A);
+      const p = (await seen(store, A)).prepare(raw(), A);
       await d.reached.promise;
       const out = store.invalidate();
       d.latch.resolve();
@@ -43,7 +45,7 @@ describe("finding 1: prepare is fenced and serialized in the main process", () =
   }
   it("a different account seen mid-prepare revokes; a stale prepare cannot recreate access", async () => {
     const dir = tmp(), d = delayedFs(1), store = createOfflineStore(dir, d.f);
-    const p = store.prepare(raw(), A);
+    const p = (await seen(store, A)).prepare(raw(), A);
     await d.reached.promise;
     const seen = store.accountSeen("synthetic-owner-b");
     d.latch.resolve();
@@ -74,7 +76,7 @@ function fakeElectron(dir: string) {
 
 describe("finding 2: open offline window is closed and in-flight responses denied on revocation", () => {
   it("load in flight when another account signs in returns no data and closes the window", async () => {
-    const dir = tmp(), store = createOfflineStore(dir); await store.prepare(raw(), A);
+    const dir = tmp(), store = createOfflineStore(dir); await (await seen(store, A)).prepare(raw(), A);
     const gate = deferred(), realLoad = store.loadActive;
     store.loadActive = async () => { await gate.promise; return realLoad(); };
     const fe = fakeElectron(dir), ws = createOfflineWorkspace({ electron: fe.electron, store }); ws.register(); ws.open();
@@ -85,7 +87,7 @@ describe("finding 2: open offline window is closed and in-flight responses denie
     expect(res.ok).toBe(false); expect(res.events).toBeUndefined(); expect(fe.isDestroyed()).toBe(true);
   });
   it("choose in flight during sign-out is denied", async () => {
-    const dir = tmp(), store = createOfflineStore(dir); await store.prepare(raw(), A);
+    const dir = tmp(), store = createOfflineStore(dir); await (await seen(store, A)).prepare(raw(), A);
     const fe = fakeElectron(dir), ws = createOfflineWorkspace({ electron: fe.electron, store }); ws.register(); ws.open();
     expect((await fe.call("offline:load")).state).toBe("ready");
     const gate = deferred(), realRead = store.readOverlay;
@@ -115,7 +117,7 @@ describe("finding 3: saved choices match exact canonical song identity", () => {
   it("cocktail/dinner lists are labelled, other saved lists are reported not silently dropped", async () => {
     expect(core.sectionLabel({ listType: "dinner" }, "warmUp", "Warm Up")).toBe("Dinner list");
     const dir = tmp(), store = createOfflineStore(dir);
-    await store.prepare(raw(A, { warmUp: songs, transition: [], peak: [], extraList: [{ artist: "x", song: "y" }] }, { songs: [], listType: "cocktail" }), A);
+    await (await seen(store, A)).prepare(raw(A, { warmUp: songs, transition: [], peak: [], extraList: [{ artist: "x", song: "y" }] }, { songs: [], listType: "cocktail" }), A);
     const fe = fakeElectron(dir), ws = createOfflineWorkspace({ electron: fe.electron, store }); ws.register(); ws.open();
     const res = await fe.call("offline:load");
     expect(res.events[0]).toMatchObject({ listType: "cocktail", otherLists: ["extraList"] });
@@ -124,10 +126,10 @@ describe("finding 3: saved choices match exact canonical song identity", () => {
 
 describe("finding 4: portable exclusive all-or-nothing export publication", () => {
   async function exportWith(patch: (f: typeof fs) => any) {
-    const dir = tmp(), out = tmp(), store = createOfflineStore(dir); await store.prepare(raw(A, { warmUp: songs, transition: songs, peak: [], selections: { [core.songKey("warmUp", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true }, [core.songKey("transition", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true } } }), A);
+    const dir = tmp(), out = tmp(), store = createOfflineStore(dir); await (await seen(store, A)).prepare(raw(A, { warmUp: songs, transition: songs, peak: [], selections: { [core.songKey("warmUp", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true }, [core.songKey("transition", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true } } }), A);
     const s2 = JSON.parse(raw()); s2.sources[0].tracks.push({ filePath: "/abs/a.mp3", artist: "Test Artist", title: "Song" });
     await createOfflineStore(dir).invalidate(); const st = createOfflineStore(dir);
-    await st.prepare(JSON.stringify({ ...s2, events: JSON.parse(raw(A, { warmUp: songs, transition: songs, peak: [], selections: { [core.songKey("warmUp", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true }, [core.songKey("transition", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true } } })).events }), A);
+    await (await seen(st, A)).prepare(JSON.stringify({ ...s2, events: JSON.parse(raw(A, { warmUp: songs, transition: songs, peak: [], selections: { [core.songKey("warmUp", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true }, [core.songKey("transition", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true } } })).events }), A);
     const statFs = { ...fs, promises: { ...fs.promises, stat: async (p: string) => p === "/abs/a.mp3" ? { isFile: () => true } : fs.promises.stat(p), access: async (p: string, m?: number) => p === "/abs/a.mp3" ? undefined : fs.promises.access(p, m) } };
     const fe = fakeElectron(out), ws = createOfflineWorkspace({ electron: fe.electron, store: st, fs: patch(statFs as typeof fs) }); ws.register(); ws.open();
     await fe.call("offline:load");

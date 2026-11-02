@@ -8,6 +8,8 @@ import { prepareOfflineAccess, reportOfflineSession } from "@/lib/offlineAccess"
 const require = createRequire(import.meta.url);
 const core = require("../desktop/offline/core.js");
 const { createOfflineStore } = require("../desktop/offline-store.cjs");
+// The store accepts a prepare only for the account most recently reported as signed in.
+const seen = async <T extends { accountSeen(a: string): Promise<void> }>(s: T, account: string) => { await s.accountSeen(account); return s; };
 const pkg = require("../desktop/package.json");
 
 const owner = "synthetic-owner-a";
@@ -74,7 +76,7 @@ describe("offline store", () => {
   it("prepare -> active-only load; another account or sign-out revokes availability", async () => {
     const dir = tmp(), store = createOfflineStore(dir);
     expect((await store.loadActive()).state).toBe("none");
-    const r = await store.prepare(JSON.stringify(backup()), owner);
+    const r = await (await seen(store, owner)).prepare(JSON.stringify(backup()), owner);
     expect(r).toMatchObject({ ok: true, events: 1, tracks: 4 });
     expect((await store.status(owner)).prepared).toBe(true);
     expect((await store.status("someone-else")).prepared).toBe(false);
@@ -96,18 +98,18 @@ describe("offline store", () => {
   });
   it("failed mid-write keeps the last-good offline copy", async () => {
     const dir = tmp();
-    await createOfflineStore(dir).prepare(JSON.stringify(backup()), owner);
+    await (await seen(createOfflineStore(dir), owner)).prepare(JSON.stringify(backup()), owner);
     const before = (await createOfflineStore(dir).loadActive()).preparedAt;
     const faulty = { ...fs, promises: { ...fs.promises, open: async (...a: Parameters<typeof fs.promises.open>) => { const h = await fs.promises.open(...a); return { writeFile: async (raw: string) => { await h.writeFile(raw.slice(0, 10)); throw Object.assign(Error("ENOSPC"), { code: "ENOSPC" }); }, sync: () => h.sync(), close: () => h.close() }; } } };
-    await expect(createOfflineStore(dir, faulty).prepare(JSON.stringify(backup()), owner)).rejects.toThrow("ENOSPC");
+    await expect((await seen(createOfflineStore(dir, faulty), owner)).prepare(JSON.stringify(backup()), owner)).rejects.toThrow("ENOSPC");
     const after = await createOfflineStore(dir).loadActive();
     expect(after.state).toBe("ready"); expect(after.preparedAt).toBe(before);
     expect(fs.readdirSync(path.join(dir, "offline/snapshots")).filter(n => n.endsWith(".tmp"))).toEqual([]);
   });
   it("corrupt current copy falls back to the labelled earlier copy, without rewriting it", async () => {
     const dir = tmp(), store = createOfflineStore(dir);
-    await store.prepare(JSON.stringify(backup()), owner);
-    await store.prepare(JSON.stringify(backup()), owner);
+    await (await seen(store, owner)).prepare(JSON.stringify(backup()), owner);
+    await (await seen(store, owner)).prepare(JSON.stringify(backup()), owner);
     const snaps = path.join(dir, "offline/snapshots"), current = fs.readdirSync(snaps).find(n => !n.includes("prev"))!;
     fs.writeFileSync(path.join(snaps, current), "{corrupt");
     const loaded = await store.loadActive();
@@ -118,7 +120,7 @@ describe("offline store", () => {
   });
   it("local choices are explicit, version-scoped, durable and never alter the cached snapshot", async () => {
     const dir = tmp(), store = createOfflineStore(dir);
-    await store.prepare(JSON.stringify(backup()), owner);
+    await (await seen(store, owner)).prepare(JSON.stringify(backup()), owner);
     const a = await store.loadActive();
     const snapBytes = fs.readFileSync(path.join(dir, "offline/snapshots", fs.readdirSync(path.join(dir, "offline/snapshots"))[0]));
     await expect(store.setChoice(a.hash, a.backup, "E1", { section: "peak", index: 0, path: "/not/in/library.mp3" })).rejects.toThrow("not in the saved library");
