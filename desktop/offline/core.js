@@ -2,10 +2,10 @@
  * native main process (export/validation) and the bundled offline renderer
  * (search/display). No DOM, no network, no Node APIs. */
 (function (root, factory) {
-  const api = factory();
+  const api = factory(typeof module === "object" && module.exports ? require("./policy.cjs") : root.PreparationPolicy);
   if (typeof module === "object" && module.exports) module.exports = api;
   else root.OfflineCore = api;
-})(typeof self !== "undefined" ? self : this, function () {
+})(typeof self !== "undefined" ? self : this, function (policy) {
   "use strict";
   const SECTIONS = [
     ["warmUp", "Warm Up"],
@@ -156,7 +156,7 @@
     const sections = [];
     const problems = [];
     const recordings = new Set();
-    let requested = 0, omitted = 0, unavailable = 0, localChoices = 0;
+    let requested = 0, omitted = 0, unavailable = 0, localChoices = 0, approved = 0, excluded = 0, unapproved = 0, missing = 0, cleanBlocked = 0;
     for (const [section, label] of SECTIONS) {
       const songs = (event.lists[section] || []);
       if (!songs.length) continue;
@@ -168,6 +168,7 @@
         const status = songStatus(sel);
         const at = { section, index: i };
         if (status !== "confirmed" && status !== "local") {
+          if (status === "excluded") excluded += Math.max(1, sel?.paths?.length || 0); else unapproved += Math.max(1, sel?.paths?.length || 0);
           omitted++;
           problems.push({ ...at, title, reason: status === "excluded" ? "Excluded from DJ export" : status === "tentative" ? "Track not confirmed" : status === "stale" ? "Saved choice belongs to a different song at this position" : "No confirmed track" });
           return;
@@ -176,19 +177,22 @@
         let wrote = 0;
         for (const p of [...new Set(sel.paths)]) {
           const ti = index.byPath.get(p);
-          if (ti === undefined) { problems.push({ ...at, title, reason: "Chosen file is not in the saved library" }); continue; }
+          if (ti === undefined) { missing++; problems.push({ ...at, title, reason: "Chosen file is not in the saved library" }); continue; }
+          const clean = policy.cleanReason(index.tracks[ti], policy.requiresClean(event.inputs));
+          if (clean) { cleanBlocked++; problems.push({ ...at, title, reason: clean }); continue; }
           const full = fullPath(p, roots);
-          if (!full) { problems.push({ ...at, title, reason: unsafePath(p) ? "Unsafe file path" : "Unknown music folder location" }); continue; }
-          if (availability && availability[full] !== "available") { unavailable++; problems.push({ ...at, title, reason: "File missing on this Mac" }); continue; }
+          if (!full) { missing++; problems.push({ ...at, title, reason: unsafePath(p) ? "Unsafe file path" : "Unknown music folder location" }); continue; }
+          if (availability && availability[full] !== "available") { unavailable++; missing++; problems.push({ ...at, title, reason: "File missing on this Mac" }); continue; }
           entries.push({ track: index.tracks[ti], path: full, at });
           recordings.add(full);
           wrote++;
+          approved++;
         }
         if (!wrote) omitted++;
       });
       sections.push({ section, label: sectionLabel(event, section, label), entries });
     }
-    return { sections, problems, summary: { requested, approved: recordings.size, omitted, unavailable, localChoices } };
+    return { sections, problems, summary: { requested, approved, omitted, unavailable, localChoices, excluded, unapproved, missing, cleanBlocked } };
   }
 
   const single = v => String(v == null ? "" : v).replace(/[\r\n]+/g, " ").trim();

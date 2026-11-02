@@ -39,6 +39,7 @@
       "offline/index.html",
       "offline/app.js",
       "offline/core.js",
+      "offline/policy.cjs",
       "offline/offline.css",
       "build-info.json",
       "package.json",

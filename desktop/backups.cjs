@@ -26,6 +26,7 @@ function validate(raw,account){
  for(const root of Object.values(b.roots)){if(rootPaths.has(root))throw Error('Conflicting root labels.');rootPaths.add(root);}
  for(const e of b.events){if(!e||typeof e.id!=='string'||!e.snapshot||typeof e.snapshot.name!=='string'||!e.snapshot.inputs||!e.snapshot.lists)throw Error('Invalid event.');if(ids.has(e.id))throw Error('Duplicate event.');ids.add(e.id);for(const section of ['warmUp','transition','peak']){const songs=e.snapshot.lists[section];if(songs!==undefined&&(!Array.isArray(songs)||songs.length>2000||songs.some(s=>!s||typeof s.artist!=='string'||typeof s.song!=='string')))throw Error('Invalid songs.');}
   const selections=e.snapshot.lists.selections;
+  for(const key of ['ownedOnlyExpansion','includeSeasonalTracks','requireCleanVersions'])if(e.snapshot.inputs[key]!==undefined&&typeof e.snapshot.inputs[key]!=='boolean')throw Error('Invalid event preparation policy.');
   if(selections!==undefined){if(!selections||typeof selections!=='object'||Array.isArray(selections))throw Error('Invalid selections.');for(const selection of Object.values(selections)){if(!selection||!Array.isArray(selection.paths)||['confirmed','excluded'].some(k=>selection[k]!==undefined&&typeof selection[k]!=='boolean')||selection.paths.some(p=>typeof p!=='string'||p.length>4000||/[\r\n\0]/.test(p)||p.split(/[\\/]/).includes('..')))throw Error('Unsafe selected track path.');}}
  }
  return b;
