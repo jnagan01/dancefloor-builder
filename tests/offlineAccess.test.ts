@@ -82,6 +82,8 @@ describe("offline store", () => {
     expect((await store.loadActive()).state).toBe("ready");
     await store.accountSeen("synthetic-owner-b");
     expect((await store.loadActive()).state).toBe("none");
+    await expect(store.prepare(JSON.stringify(backup()), owner)).rejects.toThrow("Account changed");
+    await store.accountSeen(owner);
     await store.prepare(JSON.stringify(backup()), owner);
     await store.invalidate();
     expect((await store.loadActive()).state).toBe("none");
