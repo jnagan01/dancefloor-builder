@@ -18,7 +18,7 @@ const tracks = [
   { filePath: T('b/Song.mp3'), artist: 'Queen', title: 'Song A', remix: 'Club Remix', genre: 'Dance', bpm: '128', songLength: '420', year: '1999', playCount: 0 },
   { filePath: T('Hit (Clean Edit).mp3'), artist: 'Band', title: 'Hit (Clean Edit)', genre: 'Pop', bpm: '100', playCount: 0 },
   { filePath: T('Hit.mp3'), artist: 'Band', title: 'Hit', genre: 'Pop', bpm: '101', songLength: '180', playCount: 40 },
-  { filePath: T('unknown.mp3'), artist: 'Other', title: 'Unknown', playCount: 0 },
+  { filePath: T('unknown.mp3'), artist: 'Other', title: 'Unknown' }, // no play history at all
   { filePath: T('Song B.mp3'), artist: 'Queen', title: 'Song B', genre: 'Rock', bpm: '118', songLength: '210', year: '1981', playCount: 0 },
   { filePath: T('deep.mp3'), artist: 'Discovery Artist', title: 'Deep Cut', genre: 'Indie', bpm: '110', playCount: 0 },
   { filePath: T('classic.mp3'), artist: 'Familiar Act', title: 'Classic', genre: 'Indie', bpm: '115', playCount: 90 },
@@ -89,9 +89,16 @@ try {
     await expect(sheet().getByTestId('detail-exact-file')).toHaveText(T('b/Song.mp3'));
     await expect(sheet().getByRole('region', { name: 'Version comparison' })).toContainText('Club Remix');
     await expect(sheet().getByText('Different files are different tracks')).toBeVisible();
+    const plays = () => sheet().locator('dt', { hasText: /^Plays$/ }).locator('xpath=following-sibling::dd[1]');
+    await expect(plays()).toHaveText(/^0\b/); // known zero is shown as 0, not Unknown
     await sheet().getByRole('button', { name: 'Preview waveform' }).click();
     expect((await page.evaluate(() => window.__previews)).at(-1).filePath).toBe(T('b/Song.mp3'));
     await narrow('detail-sheet');
+    await page.keyboard.press('Escape');
+    await page.locator('tbody tr', { hasText: 'unknown.mp3' }).getByRole('button', { name: /Details for Unknown/ }).click();
+    await expect(plays()).toHaveText('Unknown'); // missing history stays unknown
+    await page.keyboard.press('Escape');
+    await page.locator('tbody tr', { hasText: 'b/Song.mp3' }).getByRole('button', { name: /Details for Song A/ }).click();
   });
 
   await check('tags save while typing a note never loses the note; explicit saves; reopen persistence', async () => {
