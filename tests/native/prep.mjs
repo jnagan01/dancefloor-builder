@@ -236,9 +236,9 @@ try {
   await check('shortlist: add, dedupe, status, link exact file, add-to-section stays unapproved, group copy', async () => {
     await prepTab(/Shortlist/).click();
     const region = page.getByRole('region', { name: 'Event preparation' });
-    await region.getByLabel('Shortlist artist').fill('Band'); await region.getByLabel('Shortlist title').fill('Hit'); await region.getByLabel('Desired version').fill('clean edit');
+    await region.getByLabel('Shortlist artist').fill('Band'); await region.getByLabel('Shortlist title').fill('Hit'); await region.getByLabel('Desired version', { exact: true }).fill('clean edit');
     await region.getByRole('button', { name: 'Add', exact: true }).click();
-    await region.getByLabel('Shortlist artist').fill('band'); await region.getByLabel('Shortlist title').fill('hit'); await region.getByLabel('Desired version').fill('clean edit');
+    await region.getByLabel('Shortlist artist').fill('band'); await region.getByLabel('Shortlist title').fill('hit'); await region.getByLabel('Desired version', { exact: true }).fill('clean edit');
     await region.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(region.getByRole('status')).toContainText('Already on the shortlist');
     await region.getByLabel('Status for Band – Hit').selectOption('selected');

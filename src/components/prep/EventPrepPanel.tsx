@@ -221,7 +221,7 @@ export function EventPrepPanel(p: Props) {
                 <Button size="sm" variant="ghost" className="h-7" aria-label="Details" onClick={() => p.onDetails({ artist: s.artist, song: s.song, track: linked })}><Info size={14} /></Button>
                 <Button size="sm" variant="ghost" className="h-7" aria-label={`Remove ${s.artist} – ${s.song} from shortlist`} onClick={() => void mutate(k => removeShortlist(k, p.eventId!, s.id))}><X size={14} /></Button>
               </div></div>
-            <Input key={`${s.id}:${s.versionNote}`} className="mt-1 h-7 text-xs" aria-label="Desired version note" placeholder="Desired version note" defaultValue={s.versionNote} onBlur={e => { if (e.target.value !== s.versionNote) void mutate(k => updateShortlist(k, p.eventId!, s.id, { versionNote: e.target.value })); }} />
+            <Input key={`${s.id}:${s.versionNote}`} className="mt-1 h-7 text-xs" aria-label={`Desired version note for ${s.artist} – ${s.song}`} placeholder="Desired version note" defaultValue={s.versionNote} onBlur={e => { if (e.target.value !== s.versionNote) void mutate(k => updateShortlist(k, p.eventId!, s.id, { versionNote: e.target.value })); }} />
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {linked ? <span>Linked file: <span className="font-mono">{linked.filePath.split(/[\\/]/).pop()}</span> <button type="button" className="underline" onClick={() => void mutate(k => linkShortlistFile(k, p.eventId!, s.id, undefined))}>Unlink</button></span>
                 : s.trackId ? <span className="text-warning">Linked file isn't in the current library</span>
