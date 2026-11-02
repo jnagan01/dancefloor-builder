@@ -30,3 +30,4 @@
 
 - Apply appearance before first paint and share semantic theme tokens through a single provider; System alone follows OS changes, because SSR and every workspace surface must agree.
 - Read sidebar installed versions from the bridged Electron app identity (or explicit currentVersion), never updater status.version; label browser versions separately because available updates are not installed versions.
+- Gate offline availability on an in-memory revoked flag plus a durable fsynced revocation epoch carried by the active marker; revoke synchronously outside the prepare queue and require a fresh accountSeen before prepare, because queued unlinks and crashes must never resurrect a revoked account.
