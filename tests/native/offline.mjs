@@ -167,7 +167,7 @@ async function launch({ deny, online, url, timeout = 30000 }) {
   if (online) env.DANCEFLOOR_URL = url || ORIGIN; else delete env.DANCEFLOOR_URL; // offline phases try the real published URL, blocked
   const args = [path.join(root, "tests/native/fixtures/offline-entry.cjs"), "--no-sandbox", ...(deny ? DENY : [])];
   const mark = telemetryLines().length; launches++;
-  try { app = deny ? await spawnAndAttach(args, env, timeout) : await electron.launch({ timeout, executablePath: bin, args, env }); }
+  try { app = deny ? await spawnAndAttach(args, env, timeout, mark) : await electron.launch({ timeout, executablePath: bin, args, env }); }
   catch (e) {
     // Launch never resolved: publish what the app itself recorded, then rerun the same profile WITHOUT
     // Playwright's startup coupling to distinguish a product failure from a harness/attach failure.
