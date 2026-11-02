@@ -23,7 +23,9 @@ printf '%s\\n' "$*" >> "$CALLS"
     return {status:result.status, calls:fs.readFileSync(calls,'utf8'),log:fs.existsSync(log)?fs.readFileSync(log,'utf8'):''};
   } finally {fs.rmSync(root,{recursive:true,force:true});}
 }
-describe('read-only Mac inner-app verification command gate',()=>{
+// Each case spawns real bash + stub binaries synchronously; under CPU load (e.g. parallel Electron runs)
+// this exceeded vitest's 5 s default and timed out. Give the subprocess cases an explicit budget.
+describe('read-only Mac inner-app verification command gate',{timeout:60000},()=>{
   it('captures verbose Authority chain then validates the inner-app ticket',()=>{const r=run();expect(r.status).toBe(0);expect(r.calls).toContain('--verify --deep --strict --verbose=2');expect(r.calls).toContain('-d --verbose=4');expect(r.log).toContain('Authority=Developer ID Application:');expect(r.calls).toContain('stapler validate');expect(r.calls).not.toContain('.dmg');});
   it.each(['verify','display','authority','staple'])('fails closed on %s failure',fault=>{const r=run(fault);expect(r.status).not.toBe(0);if(fault!=='staple')expect(r.calls).not.toContain('stapler validate');});
 });
