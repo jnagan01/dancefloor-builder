@@ -1,0 +1,2 @@
+export { DEFAULTS, cleanEvidence, requiresClean, cleanReason, seasonal, intended, buildResolver, omissionText } from '../../desktop/offline/policy.js';
+export type { PreparationInputs } from '../../desktop/offline/policy.js';
