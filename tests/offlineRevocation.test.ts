@@ -108,4 +108,14 @@ describe("offline revocation fence", () => {
     expect((await createOfflineStore(dir).loadActive()).state).toBe("none"); // abrupt restart
     expect(snapshots(dir).length).toBeGreaterThan(0);
   });
+
+  it("the marker is published synchronously (no awaited rename a sign-out or crash could interleave with)", async () => {
+    const dir = tmp(), calls: string[] = [];
+    const fsx = { ...fs, renameSync: (a: fs.PathLike, b: fs.PathLike) => { calls.push(`sync:${path.basename(String(b))}`); return fs.renameSync(a, b); },
+      promises: { ...fs.promises, rename: async (a: fs.PathLike, b: fs.PathLike) => { calls.push(`async:${path.basename(String(b))}`); return fs.promises.rename(a, b); } } };
+    const store = createOfflineStore(dir, fsx);
+    await store.accountSeen(owner); await store.prepare(backup(), owner);
+    expect(calls).toContain("sync:active.json");
+    expect(calls).not.toContain("async:active.json");
+  });
 });
