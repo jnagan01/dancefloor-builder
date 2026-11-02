@@ -19,13 +19,15 @@ import { createWorkspaceIndexes } from "@/lib/workspaceIndexes";
 import { createTrackRevisions } from "@/lib/trackRevisions";
 import { nativeScanProblem } from "@/lib/nativeScanSafety";
 import { prepStore } from "@/lib/prep/prepStore";
+import { noteDrafts } from "@/lib/prep/noteDrafts";
+import type { EventPrep } from "@/lib/prep/knowledge";
 
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
   /** Signed-in account id for account-scoped app-only data. */
   account: string | null;
   sources: Source[]; files: File[]; audioIndex: AudioIndex; library: VdjLibrary | null; loading: boolean; persistenceError: string | null;
-  backup: () => Promise<Backup>; restoreMetadata: (backup: Backup) => Promise<void>; prepareOffline: () => Promise<OfflineStatus>;
+  backup: () => Promise<Backup>; restoreMetadata: (backup: Backup) => Promise<void>; restorePrep: (backup: Backup) => Promise<number>; carryPrepToNewEvent: (entry: EventPrep, newEventId: string) => Promise<number>; prepareOffline: () => Promise<OfflineStatus>;
   addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => string;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
   /** Loads a remembered file from disk (desktop app) so it can be played. */
@@ -243,13 +245,16 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   if (backupSession.current.account !== userId) backupSession.current.generation++;
   backupSession.current.account = userId; backupSession.current.sources = sources;
   useEffect(() => {
-    const subscription = supabase.auth.onAuthStateChange?.((event, session) => { backupSession.current.generation++; backupSession.current.liveAccount = session?.user.id ?? null; if (!session?.user.id) void prepStore().setAccount(null); reportOfflineSession(event, session?.user.id); });
+    const subscription = supabase.auth.onAuthStateChange?.((event, session) => { backupSession.current.generation++; backupSession.current.liveAccount = session?.user.id ?? null; const liveId = session?.user.id ?? null; if (!liveId) { noteDrafts.clearAll(); void prepStore().setAccount(null); } else if (event === "SIGNED_IN" || event === "USER_UPDATED" || prepStore().get().account !== liveId) void prepStore().setAccount(liveId, true); reportOfflineSession(event, session?.user.id); });
     return () => { backupSession.current.generation++; subscription?.data.subscription.unsubscribe(); };
   }, []);
   function captureBackupOwner() {
     if (!userId || loading || persistenceBlocked.current || (backupSession.current.account !== userId || (backupSession.current.liveAccount !== undefined && backupSession.current.liveAccount !== userId))) throw Error("Sign in and resolve unreadable library data before backup.");
-    const owner = { account: userId, generation: backupSession.current.generation, sources: structuredClone(sources), roots: structuredClone(getFolderRoots()) };
+    const prepOwner = prepStore().owner();
+    if (!prepOwner || prepOwner.account !== userId) throw Error("Preparation notes are not loaded for this account yet. Try again in a moment.");
+    const owner = { account: userId, generation: backupSession.current.generation, prepOwner, sources: structuredClone(sources), roots: structuredClone(getFolderRoots()) };
     const check = () => {
+      const p = prepStore().get(); if (p.account !== owner.account || p.generation !== prepOwner.generation) throw Error("Account/session changed; operation stopped.");
       if (backupSession.current.account !== owner.account || backupSession.current.generation !== owner.generation || (backupSession.current.liveAccount !== undefined && backupSession.current.liveAccount !== owner.account)) throw Error("Account/session changed; operation stopped.");
     };
     check(); return { ...owner, check };
@@ -264,7 +269,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const snapshot = { name: row.name, inputs: row.inputs, lists: row.lists };
       readEventSnapshot(snapshot); return { id: row.id, snapshot };
     });
-    const prep = await prepStore().backupSection(owner.account); owner.check();
+    const prep = await prepStore().backupSection(owner.prepOwner); owner.check();
     const b = { format: "setarchitect-backup" as const, version: 1 as const, account: owner.account, createdAt: new Date().toISOString(), events, sources: owner.sources, roots: owner.roots, ...(prep ? { prep } : {}) } as Backup;
     validateBackup(JSON.stringify(b), owner.account); owner.check();
     await saveBackup(b); owner.check(); return b;
@@ -296,7 +301,19 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     owner.check();
     for (const [label, root] of Object.entries(plan.mappings)) setFolderRoot(label, root);
     setSources(prev => { owner.check(); return [...prev, ...plan.additions.filter(source => !prev.some(s => s.label === source.label))]; });
-    if (imported.prep) { owner.check(); await prepStore().restoreAdditive(owner.account, imported.prep); }
+    if (imported.prep) { owner.check(); await prepStore().restoreAdditive(owner.prepOwner, imported.prep); }
+  }
+  /** Preparation-only additive restore; works with zero library additions. A fresh backup is taken first. */
+  async function restorePrep(b: Backup): Promise<number> {
+    const owner = captureBackupOwner();
+    const imported = validateBackup(JSON.stringify(b), owner.account);
+    if (!imported.prep) return 0;
+    await backup(); owner.check();
+    return prepStore().restoreAdditive(owner.prepOwner, imported.prep);
+  }
+  async function carryPrepToNewEvent(entry: EventPrep, newEventId: string): Promise<number> {
+    const owner = captureBackupOwner();
+    return prepStore().carryToNewEvent(owner.prepOwner, entry, newEventId);
   }
   async function addFolder() {
     const rootProblem = folderRootsProblem();
@@ -496,7 +513,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSources(prev => prev.map(s => s.label === selected.label ? { ...s, tracks: s.tracks.map(t => trackIdentity(t.filePath, roots) === identity ? { ...t, ...patch, filePath: t.filePath } : t) } : s));
   }
   useEffect(() => { void prepStore().setAccount(userId); }, [userId, loading]);
-  return <Context.Provider value={{ account: userId, sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, backup, restoreMetadata, prepareOffline, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ account: userId, sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, backup, restoreMetadata, restorePrep, carryPrepToNewEvent, prepareOffline, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);
