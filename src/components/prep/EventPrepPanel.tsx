@@ -11,6 +11,7 @@ import { trackIdentity } from "@/lib/fileIdentity";
 import type { ResultSong } from "@/lib/danceFloor";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
 import { getArtistCrowdData } from "@/lib/lastfm.functions";
+import { requestFacts } from "@/lib/prep/requestFacts";
 import { EMPTY_FILTER, facetOptions, fmtDur, trackFacts, type FilterFacts, type FilterState } from "@/lib/prep/filters";
 import { buildDashboard, type DrillItem } from "@/lib/prep/dashboard";
 import { recommend, type Candidate, type RecControls, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
@@ -86,7 +87,7 @@ export function EventPrepPanel(p: Props) {
   const ownedKeys = useMemo(() => new Set(tracks.map(t => songIdentity(t.artist, t.title))), [tracks]);
   const roots = useMemo(() => getFolderRoots(), [tracks]); // eslint-disable-line react-hooks/exhaustive-deps
   const candidates = useMemo<Candidate[]>(() => {
-    const lib: Candidate[] = tracks.map(t => ({ artist: t.artist, song: t.title, facts: trackFacts(t), trackId: trackIdentity(t.filePath, roots), playCount: t.playCount ?? 0, origin: "library" }));
+    const lib: Candidate[] = tracks.map(t => ({ artist: t.artist, song: t.title, facts: trackFacts(t), trackId: trackIdentity(t.filePath, roots), playCount: t.playCount, origin: "library" }));
     const cat: Candidate[] = SONG_LIBRARY.map(s => {
       const owned = ownedKeys.has(songIdentity(s.artist, s.song));
       const facts: FilterFacts = { genre: s.genre || undefined, decade: s.decade || undefined, energy: s.energy, owned };
@@ -99,8 +100,7 @@ export function EventPrepPanel(p: Props) {
   const notesMap = useMemo(() => new Map(knowledge.tracks.map(n => [n.id, n])), [knowledge.tracks]);
   const inEvent = useMemo(() => p.sections.flatMap(s => s.songs), [p.sections]);
   const requests = useMemo(() => p.sections.flatMap(s => s.songs.map((song, i) => ({ song, i, s }))).filter(x => x.song.fromUpload).map(({ song, i, s }) => {
-    const m = p.matches[p.keyOf(s.key, i, song)]; const t = m?.trackIndex != null ? tracks[m.trackIndex] : undefined; const f = t ? trackFacts(t) : undefined;
-    return { artist: song.artist, song: song.song, genre: song.genre || f?.genre, decade: (song.year ? `${String(song.year).slice(0, 3)}0s` : undefined) || f?.decade };
+    return requestFacts(song, p.matches[p.keyOf(s.key, i, song)], tracks);
   }), [p.sections, p.matches, p.keyOf, tracks]); // eslint-disable-line react-hooks/exhaustive-deps
   const rec = useMemo(() => recommend({ candidates, requests, inEvent, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, controls, filter, limit: 40 }),
     [candidates, requests, inEvent, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, controls, filter]);

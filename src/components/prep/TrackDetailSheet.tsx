@@ -122,7 +122,7 @@ export function TrackDetailSheet({ subject, onClose, onPreview }: { subject: Det
             <Field label="Genre" value={t.genre} source={tagSrc} />
             <Field label="Remix/version" value={t.remix} source={tagSrc} />
             <Field label="Clean/explicit" value={facts?.clean} source={facts?.clean ? "guessed from file name — not verified" : undefined} />
-            <Field label="Plays" value={t.playCount ? String(t.playCount) : undefined} source="your VirtualDJ history" />
+            <Field label="Plays" value={t.playCount != null ? String(t.playCount) : undefined} source="your VirtualDJ history" />
           </dl>
         </section>}
         {versions.length > 1 && <section aria-label="Version comparison">
