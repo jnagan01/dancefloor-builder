@@ -112,6 +112,7 @@ describe("account-scoped preparation store", () => {
     const be = memBackend(), s = createPrepStore(be); await s.setAccount("A");
     let open!: () => void; be.gate = new Promise(r => { open = r; });
     const pending = s.update(own(s), k => setFeedback(k, "x", "y", "never"));
+    await new Promise(r => setTimeout(r, 0)); // the write is now in progress inside storage
     const toB = s.setAccount("B");
     open(); be.gate = undefined;
     await expect(pending).rejects.toThrow(/changed/);
