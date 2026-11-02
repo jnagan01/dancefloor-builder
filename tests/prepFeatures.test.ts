@@ -348,7 +348,7 @@ describe("lookup parsers and throttle (fixtures)", () => {
     let t = 0; const gate = createThrottle(1100, 4000, () => t, async ms => { t += 0 * ms; });
     const results = [];
     for (let i = 0; i < 8; i++) results.push(await gate());
-    expect(results.filter(Boolean).length).toBe(5); // waits 0,1.1,2.2,3.3,4.4? -> last allowed wait <= 4s
+    expect(results.filter(Boolean).length).toBe(4); // waits 0, 1.1, 2.2, 3.3 s; 4.4 s exceeds the 4 s cap
     expect(results.at(-1)).toBe(false);
   });
 });
