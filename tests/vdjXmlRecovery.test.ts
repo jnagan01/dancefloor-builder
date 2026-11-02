@@ -88,7 +88,7 @@ describe("malformed VirtualDJ database recovery", () => {
 
   it("decodes only predefined and valid numeric references", () => {
     expect(decodeXmlAttribute("a&amp;b&apos;c&lt;&gt;&quot;")).toBe("a&b'c<>\"");
-    expect(decodeXmlAttribute("&#233;&#xE9;&#x1F3B5;")).toBe("ééé".slice(0, 2) + "🎵");
+    expect(decodeXmlAttribute("&#233;&#xE9;&#x1F3B5;")).toBe("éé🎵");
     expect(decodeXmlAttribute("bare & and &custom; stay")).toBe("bare & and &custom; stay");
     expect(decodeXmlAttribute("&#0;")).toBeNull();
     expect(decodeXmlAttribute("&#xD800;")).toBeNull();
