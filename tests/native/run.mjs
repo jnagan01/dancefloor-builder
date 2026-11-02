@@ -320,5 +320,60 @@ try{
    await expect.poll(()=>page.evaluate(()=>window.__success.length),{timeout:15000}).toBe(2);
    expect(lengths()).toEqual(expected);
  });
+
+ await check('preparation policies: 31,250 library, wrong AI artists and holiday additions filtered, requests retained, exact clean versions and honest gaps',async()=>{
+   await app.close();
+   const defs=[
+    {artist:'Queen',title:'Radio Ga Ga (Dirty)'},{artist:'Queen',title:'Radio Ga Ga (Clean)'},
+    {artist:'Rammstein',title:'Radio (Clean)'},{artist:'Robyn',title:'Honey (Clean)'},
+    {artist:'John Mellencamp',title:'Fire In The Sky (Clean)'},{artist:'Janelle Monae',title:'Queen (Clean)'},
+    {artist:'Wham!',title:'Last Christmas (Clean)'},{artist:'Band',title:'Ordinary (Clean)',genre:'Holiday'}
+   ];
+   const small=defs.map((t,i)=>({...t,filePath:path.join(library,`policy-${i}.mp3`)}));small.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
+   const big=[...small,...Array.from({length:31242},(_,i)=>({artist:`Bulk ${i}`,title:`Filler ${i}`,filePath:path.join(library,`absent-${i}.mp3`)}))];
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:big,aiSuggestions:[{artist:'Queen',song:'Radio Ga Ga',energy:8,danceability:8,popularity:80,valence:50},{artist:'ABBA',song:'Honey Honey',energy:8,danceability:8,popularity:80,valence:50},{artist:'Anderson .Paak',song:'Fire In The Sky',energy:8,danceability:8,popularity:80,valence:50},{artist:'Queen',song:'Killer Queen',energy:8,danceability:8,popularity:80,valence:50},{artist:'Wham!',song:'Last Christmas',energy:8,danceability:8,popularity:80,valence:50}]}));
+   fs.writeFileSync(path.join(temp,'backend.json'),'{}');await launch();
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+   await expect(page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true})).toBeChecked();
+   await expect(page.getByRole('switch',{name:'Include seasonal/holiday tracks',exact:true})).not.toBeChecked();
+   await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Policy synthetic');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const upload=path.join(temp,'policies.csv');fs.writeFileSync(upload,'Artist,Song\nWham!,Last Christmas\nClient,Requested Unknown\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   await expect(page.locator('tbody tr')).toHaveCount(2);await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   await expect.poll(()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Policy synthetic'),{timeout:30000}).toBeTruthy();
+   const saved=Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Policy synthetic');
+   expect(saved.inputs).toMatchObject({ownedOnlyExpansion:true,includeSeasonalTracks:false,requireCleanVersions:true});
+   const all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
+   expect(all.some(t=>t.song==='Last Christmas'&&t.fromUpload)).toBe(true);expect(all.some(t=>t.song==='Requested Unknown'&&t.fromUpload)).toBe(true);
+   for(const t of all.filter(t=>!t.fromUpload))expect(small.some(f=>f.artist===t.artist&&f.title.replace(' (Clean)','')===t.song.replace(' (Clean)',''))).toBe(true);
+   expect(all.some(t=>t.song==='Honey Honey'||t.song==='Killer Queen'||t.artist==='Anderson .Paak')).toBe(false);
+   expect(all.some(t=>t.song==='Ordinary (Clean)')).toBe(false);
+   await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
+   expect(Object.values(saved.lists.selections).flatMap(v=>v.paths)).not.toContain(small[0].filePath);
+   await page.reload();await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
+ });
+ await check('clean policy toggle retains chosen dirty/extras; actual exported paths and omission reasons agree; save/reopen persists',async()=>{
+   await app.close();const file=path.join(library,'Policy clean.mp3'),dirty=path.join(library,'Policy dirty.mp3'),unknown=path.join(library,'Policy unknown.mp3');
+   const tt=[{filePath:dirty,artist:'Band',title:'Hit (Dirty)'},{filePath:file,artist:'Band',title:'Hit (Clean)'},{filePath:unknown,artist:'Band',title:'Hit'}];tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));const req={artist:'Band',song:'Hit',fromUpload:true};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Clean toggle',updated_at:'v1',inputs:{songs:[req],eventName:'Clean toggle',hours:'.25',buffer:2},lists:{warmUp:[req],transition:[],peak:[],selections:{'warmUp:0:band|hit':{paths:[dirty,file,unknown],confirmed:true}}}}}));
+   fs.rmSync(path.join(temp,'exports'),{recursive:true,force:true});await launch();
+   const toggle=page.getByRole('switch',{name:'Require clean versions',exact:true});await expect(toggle).not.toBeChecked();await toggle.click();
+   await expect(page.getByText('Clean version needed',{exact:true}).first()).toBeVisible();
+   await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();
+   await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toContain('clean-policy blocks');
+   const outputs=fs.readdirSync(path.join(temp,'exports'));const m3u=outputs.filter(n=>n.endsWith('.m3u')).map(n=>fs.readFileSync(path.join(temp,'exports',n),'utf8')).join('');
+   expect(m3u).toContain(file);expect(m3u).not.toContain(dirty);expect(m3u).not.toContain(unknown);
+   const report=fs.readFileSync(path.join(temp,'exports',outputs.find(n=>n.endsWith('export-readiness.txt'))),'utf8');expect(report).toContain('Clean-policy blocks: 2');expect(report).toContain('Approved tracks (including extras, in playlist order): 1');
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.requireCleanVersions,{timeout:15000}).toBe(true);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections['warmUp:0:band|hit'].paths).toEqual([dirty,file,unknown]);
+   await page.reload();await expect(toggle).toBeChecked();
+ });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
 }catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});throw e;}finally{await app?.close().catch(()=>{});}

@@ -294,7 +294,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     if (!cleanRequired) return fresh;
     const index = policyResolver.resolve(song);
     if (index !== undefined) return { status: "Matched", confidence: 1, trackIndex: index, confirmed: true, alternatives: fresh.alternatives };
-    return { ...fresh, confirmed: false };
+    return { ...fresh, status: fresh.trackIndex == null ? "Missing From Library" : "Possible Match", confirmed: false };
   }
   const [bpmOn, setBpmOn] = useState(false);
   const [bpmRange, setBpmRange] = useState<[number, number]>([110, 128]);
@@ -2999,7 +2999,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   </p>
                 )}
               </div>
-              <Switch checked={expand} onCheckedChange={editExpand} className="shrink-0" />
+              <Switch aria-label="Expand event with additional tracks" checked={expand} onCheckedChange={editExpand} className="shrink-0" />
             </div>
             <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Song buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer} onChange={e=>editBuffer(Number(e.target.value))}>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
             {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
