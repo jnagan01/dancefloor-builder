@@ -3168,6 +3168,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   <TabsContent key={sec} value={sec}>
                     <SectionView
                       labelOverride={background && sec === "warmUp" ? bgLabel : undefined}
+                      requireClean={cleanRequired}
                       section={sec}
                       songs={result[sec]}
                       matches={matches}
@@ -3502,6 +3503,7 @@ function statusBadge(status: MatchStatus) {
 }
 
 interface SectionViewProps {
+  requireClean?: boolean;
   section: SectionKey;
   songs: Song[];
   matches: Record<string, SongMatch>;
@@ -3640,8 +3642,9 @@ function SectionView(props: SectionViewProps) {
           const key = songKey(section, i, s);
           const m = matches[key];
           const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
-          const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
-          const inReview = m?.status === "Possible Match" || m?.status === "Multiple Matches";
+          const cleanBlock = !m?.excludedFromVdj && cleanReason(track, !!props.requireClean);
+          const isMatched = !cleanBlock && (m?.status === "Matched" || m?.status === "Manually Matched");
+          const inReview = !!cleanBlock || m?.status === "Possible Match" || m?.status === "Multiple Matches";
           if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
           const meta = s as BadgeSong;
           const musicalTrack = musicalMatchApproved(m) ? track : undefined;
@@ -3728,12 +3731,13 @@ function SectionView(props: SectionViewProps) {
 
               {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-                {library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
+                {cleanBlock ? <Badge variant="outline" className="border-warning text-warning">Clean version needed</Badge> : library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
+                {cleanBlock && <p className="w-full text-xs text-warning">{cleanBlock}</p>}
                 {m && track && <span className="text-[11px] text-muted-foreground">{Math.round(m.confidence * 100)}% confidence</span>}
                 {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected</span>}
                 <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
                 {library && inReview && m?.trackIndex != null && (
-                  <Button size="sm" className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
+                  <Button size="sm" disabled={!!cleanBlock} title={cleanBlock || undefined} className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
                     <Check className="mr-1 h-3 w-3" /> Confirm match
                   </Button>
                 )}

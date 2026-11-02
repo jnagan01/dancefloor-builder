@@ -44,15 +44,17 @@ function EventHost() {
   const [events, setEvents] = React.useState(initialEvents);
   const [eventId, setEventId] = React.useState<'E1' | 'E2'>('E1');
   const [detail, setDetail] = React.useState<DetailSubject | null>(null);
+  const [policy, setPolicy] = React.useState(w.__policy);
+  w.__setPolicy = (p: any) => { w.__policy = p; setPolicy(p); };
   const [playing, setPlaying] = React.useState<any>(null);
   const library = React.useMemo(() => buildLibrary(w.__fixture.tracks), []);
   const ev = events[eventId];
   const sections = (['warmUp', 'transition', 'peak'] as PrepSectionKey[]).map(k => ({ key: k, label: k === 'warmUp' ? 'Warm Up' : k === 'transition' ? 'Transition' : 'Peak', songs: ev.result[k] }));
   return <div className="space-y-3 p-3">
     <div className="flex gap-2"><button className="border px-2" onClick={() => setEventId('E1')}>Open event E1</button><button className="border px-2" onClick={() => setEventId('E2')}>Open event E2</button><span data-testid="current-event">{eventId}</span></div>
-    <EventPrepPanel key={eventId} eventId={eventId} sections={sections} matches={ev.matches} keyOf={keyOf} library={library}
+    <EventPrepPanel policies={policy} key={eventId} eventId={eventId} sections={sections} matches={ev.matches} keyOf={keyOf} library={library}
       onJump={(s, i) => { w.__jumps = [...(w.__jumps ?? []), `${s}:${i}`]; document.getElementById(`song-${s}-${i}`)?.scrollIntoView(); }}
-      onAddToSection={(section, song) => { const plan = planAddToSection(ev.result, section, song, library, {}, keyOf, matchSong); if ('error' in plan) return plan.error; setEvents(all => ({ ...all, [eventId]: { result: plan.result, matches: { ...all[eventId].matches, [plan.key]: plan.match } } })); return null; }}
+      onAddToSection={(section, song) => { const plan = planAddToSection(ev.result, section, song, library, {}, keyOf, matchSong, policy); if ('error' in plan) return plan.error; setEvents(all => ({ ...all, [eventId]: { result: plan.result, matches: { ...all[eventId].matches, [plan.key]: plan.match } } })); return null; }}
       onDetails={setDetail} />
     <ol aria-label="Event rows">{sections.flatMap(s => s.songs.map((song, i) => { const m = ev.matches[keyOf(s.key, i, song)]; return <li key={`${s.key}-${i}`} id={`song-${s.key}-${i}`} data-testid="event-row">
       {s.label} #{i + 1}: {song.artist} – {song.song} · {m ? (m.confirmed ? 'approved' : `not approved (${m.status})`) : 'no match'}{m?.trackIndex != null ? ` · ${library.tracks[m.trackIndex]?.filePath}` : ''}

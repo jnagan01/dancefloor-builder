@@ -305,7 +305,7 @@ try {
     expect(pathsIn(names[1])).toEqual([path.join(lib, "a/Other.mp3")]);
     expect(pathsIn(names[2])).toEqual([path.join(lib, "b/Song.mp3")]);
     const report = read(names[3]);
-    expect(report).toContain("Requested songs: 6");
+    expect(report).toContain("Requested tracks: 6");
     expect(report).toContain("warmUp #3. New Artist — Replaced Song — Saved choice belongs to a different song at this position"); expect(report).toContain("Local offline choices used (not synced): 2");
     expect(report).toContain("warmUp #2. Gone Artist — Gone — File missing on this Mac");
     expect(report).toContain("transition #2. Lost Artist — Lost — Unknown music folder location");
