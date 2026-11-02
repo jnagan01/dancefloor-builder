@@ -19,7 +19,7 @@ describe("recommendation play-history evidence", () => {
 });
 
 describe("client request taste facts", () => {
-  const tracks = [track({ genre: "Metal", year: 1985 })];
+  const tracks = [track({ genre: "Metal", year: "1985" })];
   const song = { artist: "Client", song: "Request" };
   it("use an approved linked track's genre/decade", () => {
     const m = { trackIndex: 0, status: "Matched", confirmed: true } as SongMatch;
