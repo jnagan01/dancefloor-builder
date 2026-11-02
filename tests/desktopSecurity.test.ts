@@ -185,6 +185,11 @@ describe("real main process wiring with mocks", () => {
     expect(pkg.build.files).toContain("security.cjs");
     expect(pkg.build.files).toContain("scan.cjs");
     expect(pkg.build.files).toContain("update-controller.cjs");
+    // Every local module the main process requires must ship, or the installed app fails to start.
+    const mainSource = readFileSync(new URL("../desktop/main.cjs", import.meta.url), "utf8");
+    const local = [...mainSource.matchAll(/require\("\.\/([^"]+)"\)/g)].map(m => m[1]);
+    expect(local).toContain("vdj-database.cjs");
+    for (const file of local) expect(pkg.build.files).toContain(file);
     expect(pkg.build.appId).toBe("com.exceptionalentertainment.dancefloorbuilder");
   });
 });
