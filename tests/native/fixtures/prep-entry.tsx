@@ -11,11 +11,12 @@ import { prepStore } from '../../../src/lib/prep/prepStore';
 import { emptyKnowledge } from '../../../src/lib/prep/knowledge';
 import { planAddToSection } from '../../../src/lib/prep/addToSection';
 import { validateBackup } from '../../../src/lib/backups';
-import { buildLibrary, matchSong, parseVdjDatabaseXml, type SongMatch } from '../../../src/lib/virtualDj';
+import { buildLibrary, matchSong, parseVdjDatabaseXml, parseVdjDatabaseXmlDetailed, type SongMatch } from '../../../src/lib/virtualDj';
 import { dedupeKey, type ResultSong } from '../../../src/lib/danceFloor';
 
 const w = window as any;
 w.__parseVdj = parseVdjDatabaseXml;
+w.__parseVdjDetailed = parseVdjDatabaseXmlDetailed;
 w.__prep = prepStore();
 // Test-only: optionally delay IndexedDB write completion so a save stays pending while the UI is used.
 w.__idbCompleteDelay = 0;

@@ -1,6 +1,7 @@
 // Real preparation-UI acceptance in a fenced synthetic Electron profile (network denied except loopback).
 import { build } from 'esbuild'; import { _electron as electron, expect } from '@playwright/test';
 import { compile } from '@tailwindcss/node'; import { Scanner } from '@tailwindcss/oxide';
+import { malformedVdjFixture } from './fixtures/malformed-vdj.mjs';
 import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'setarchitect-native-prep-')), bundle = path.join(temp, 'bundle');
@@ -45,6 +46,20 @@ try {
   await check('VirtualDJ SongLength parsed by real DOMParser in Electron', async () => {
     const r = await page.evaluate(() => window.__parseVdj(`<VirtualDJ_Database><Song FilePath="/x/a.mp3"><Tags Author="A" Title="T"/><Infos SongLength="215.6"/></Song><Song FilePath="/x/b.mp3"><Tags Author="B" Title="U"/><Infos SongLength="nope"/></Song></VirtualDJ_Database>`));
     expect(r.map(t => t.songLength ?? null)).toEqual(['216', null]);
+  });
+
+  await check('malformed VirtualDJ XML recovered per entry by real DOMParser, identical to tolerant reader, no DTD expansion', async () => {
+    const fx = malformedVdjFixture('/synthetic/Music');
+    const { dom, tolerant, valid } = await page.evaluate(xml => ({
+      dom: window.__parseVdjDetailed(xml), tolerant: window.__parseVdjDetailed(xml, { strictBlocks: false }),
+      valid: window.__parseVdjDetailed('<VirtualDJ_Database><Song FilePath="/x/A &amp; B&apos;s.mp3"><Tags Author="A" Title="T"/><Infos SongLength="290.352086"/></Song></VirtualDJ_Database>'),
+    }), fx.xml);
+    expect(valid.mode).toBe('strict'); expect(valid.tracks[0]).toMatchObject({ filePath: "/x/A & B's.mp3", songLength: '290' });
+    expect(dom.mode).toBe('recovered'); expect(dom.skippedCount).toBe(fx.skippedCount);
+    expect(Object.fromEntries(dom.tracks.map(t => [t.filePath, t.songLength ?? null]))).toEqual({ ...fx.expectedLength, [fx.files.zero]: null, [fx.files.bad]: null });
+    expect(dom.tracks).toEqual(tolerant.tracks); expect(dom.skipped).toEqual(tolerant.skipped);
+    expect(dom.tolerantCount).toBe(3); // broken, bare "&", undeclared entity; the rest parsed strictly
+    expect(JSON.stringify(dom)).not.toMatch(/EXPANDED|passwd/);
   });
 
   await check('library filters combine with explicit unknowns, save preset, persist across reload', async () => {
