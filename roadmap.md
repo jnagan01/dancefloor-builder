@@ -1,4 +1,11 @@
 # Workspace rebuild
+## Authorized preparation policies
+- [ ] Better expansion: compatible owned-only/seasonal controls, exact intended versions, honest gaps, all addition paths.
+- [ ] Event-wide clean requirement: preserved selections, fail-closed approval/export/readiness, offline capability gate.
+- [ ] Shared export count/reason wording, including extras and written outputs.
+- [ ] Synthetic unit and real Electron event/prep/offline/race/31,250-track/legacy roundtrips; retain macOS gate.
+- [ ] Report changed files, local results, revision and unverified macOS gate; no publication or user data access.
+
 - [x] Refine authenticated workspace to the approved noir-champagne direction.
 - [x] Add Home, Events, Library, Settings, Updates navigation and account-scoped library.
 - [x] Reorder event steps, add adjustable buffer and optional Spotify public link.
