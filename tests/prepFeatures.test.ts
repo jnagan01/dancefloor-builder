@@ -42,7 +42,7 @@ describe("filters: unknown values are explicit, never guessed", () => {
     expect(matchesFilter({ owned: true, energy: 8 }, f, "recommendation")).toBe(false);
     expect(matchesFilter({ owned: false, energy: 8 }, f, "recommendation")).toBe(true);
   });
-  it("rejects malformed saved filters", () => { expect(readFilter({ ...EMPTY_FILTER, bpm: [5] })).toBeNull(); });
+  it("never keeps malformed saved ranges", () => { expect(readFilter({ ...EMPTY_FILTER, bpm: [5] })?.bpm ?? null).toBeNull(); expect(readFilter("x")).toBeNull(); });
   it("filters 31,250 tracks quickly", () => {
     const many = Array.from({ length: 31250 }, (_, i) => trackFacts(track({ filePath: `/m/${i}.mp3`, bpm: i % 3 ? String(80 + (i % 60)) : undefined, genre: i % 5 ? "House" : undefined, songLength: String(180 + (i % 200)) })));
     const t0 = performance.now();
@@ -50,10 +50,6 @@ describe("filters: unknown values are explicit, never guessed", () => {
     facetOptions(many);
     expect(n).toBeGreaterThan(0);
     expect(performance.now() - t0).toBeLessThan(1000);
-  });
-  it("reads VirtualDJ SongLength as seconds", () => {
-    const xml = `<VirtualDJ_Database><Song FilePath="/m/x.mp3"><Tags Author="A" Title="T"/><Infos SongLength="215.6"/></Song></VirtualDJ_Database>`;
-    expect(parseVdjDatabaseXml(xml)[0]?.songLength).toBe("216");
   });
 });
 

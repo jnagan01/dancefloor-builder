@@ -207,9 +207,10 @@ export function mergeKnowledgeAdditive(current: PrepKnowledge, incoming: PrepKno
     ce.dismissed = add(ce.dismissed, ie.dismissed, d => d.key);
     ce.shortlist = add(ce.shortlist, ie.shortlist, s => itemIdentity(s));
   }
-  return { added, next: {
+  const next: PrepKnowledge = {
     version: 1, presets: add(current.presets, incoming.presets, p => p.id), tracks: add(current.tracks, incoming.tracks, t => t.id),
     groups: add(current.groups, incoming.groups, g => g.id), feedback: add(current.feedback, incoming.feedback, f => f.key),
     events, enrichment: add(current.enrichment, incoming.enrichment, e => `${e.source}:${e.key}`),
-  } };
+  };
+  return { next, added };
 }
