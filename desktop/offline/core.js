@@ -146,6 +146,11 @@
     return top;
   }
 
+  /** Cocktail/dinner events store their single list in warmUp. */
+  function sectionLabel(event, section, label) {
+    const t = event.listType;
+    return section === "warmUp" && (t === "cocktail" || t === "dinner") ? (t === "cocktail" ? "Cocktail list" : "Dinner list") : label;
+  }
   /** Exact identity plan for export. Unapproved, excluded, unknown or missing files are never written. */
   function exportPlan(event, overlay, index, roots, availability) {
     const sections = [];
@@ -181,7 +186,7 @@
         }
         if (!wrote) omitted++;
       });
-      sections.push({ section, label, entries });
+      sections.push({ section, label: sectionLabel(event, section, label), entries });
     }
     return { sections, problems, summary: { requested, approved: recordings.size, omitted, unavailable, localChoices } };
   }
@@ -221,5 +226,5 @@
 
   const safeFileName = s => single(s).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "_").slice(0, 120) || "Event";
 
-  return { SECTIONS, fullPath, norm, normalizeKey, dedupeKey, songKey, songIdentity, cachedSelection, effectiveSelection, songStatus, buildIndex, search, exportPlan, m3u, readinessText, safeFileName, unsafePath };
+  return { SECTIONS, fullPath, norm, normalizeKey, dedupeKey, songKey, songIdentity, cachedSelection, effectiveSelection, songStatus, buildIndex, search, exportPlan, m3u, readinessText, safeFileName, unsafePath, sectionLabel };
 });
