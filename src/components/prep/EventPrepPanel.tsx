@@ -75,8 +75,8 @@ export function EventPrepPanel(p: Props) {
   const dash = useMemo(() => buildDashboard(
     p.sections.map(s => ({ key: s.key, label: s.label, songs: s.songs })), p.matches,
     (sec, i, s) => p.keyOf(sec as PrepSectionKey, i, s as ResultSong),
-    i => { const t = tracks[i]; if (!t) return undefined; const f = trackFacts(t); return { durationSec: f.durationSec, genre: f.genre, decade: f.decade }; },
-  ), [p.sections, p.matches, p.keyOf, tracks]); // eslint-disable-line react-hooks/exhaustive-deps
+    i => { const t = tracks[i]; if (!t) return undefined; const f = trackFacts(t); return { durationSec: f.durationSec, genre: f.genre, decade: f.decade, cleanReason: cleanReason(t, requiresClean(p.policies)) }; },
+  ), [p.sections, p.matches, p.keyOf, tracks, p.policies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- recommendations ----
   const [controls, setControls] = useState<RecControls>({ familiarity: 0, clientSimilarity: 1, artistVariety: 0.5, ownedOnly: false });
@@ -107,7 +107,7 @@ export function EventPrepPanel(p: Props) {
     [p.sections, p.matches, p.keyOf, tracks, roots]); // eslint-disable-line react-hooks/exhaustive-deps
   const requests = useMemo(() => p.sections.flatMap(s => s.songs.map((song, i) => ({ song, i, s }))).filter(x => x.song.fromUpload).map(({ song, i, s }) => {
     return requestFacts(song, p.matches[p.keyOf(s.key, i, song)], tracks);
-  }), [p.sections, p.matches, p.keyOf, tracks]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [p.sections, p.matches, p.keyOf, tracks, p.policies]); // eslint-disable-line react-hooks/exhaustive-deps
   const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, controls, filter, limit: 40 }),
     [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, controls, filter]);
   const loadSimilar = async () => {

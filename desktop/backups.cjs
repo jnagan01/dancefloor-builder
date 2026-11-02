@@ -17,7 +17,7 @@ function inspectBackupValues(value,parts=[],depth=0,identifierValue=false){
 function validate(raw,account){
  if(typeof raw!=='string'||Buffer.byteLength(raw)>MAX)throw Error('Backup too large.');
  const b=JSON.parse(raw);
- if(!b||b.format!=='setarchitect-backup'||b.version!==1||b.account!==account||!Array.isArray(b.events)||b.events.length>500||!Array.isArray(b.sources)||!b.roots||typeof b.roots!=='object'||!Number.isFinite(Date.parse(b.createdAt)))throw Error('Invalid backup.');
+ if(!b||b.format!=='setarchitect-backup'||![1,2].includes(b.version)||b.account!==account||!Array.isArray(b.events)||b.events.length>500||!Array.isArray(b.sources)||!b.roots||typeof b.roots!=='object'||!Number.isFinite(Date.parse(b.createdAt)))throw Error('Invalid backup.');
  inspectBackupValues(b);
  if(b.prep!==undefined&&(!b.prep||typeof b.prep!=='object'||Array.isArray(b.prep)||b.prep.version!==1))throw Error('Invalid preparation notes.');
  const labels=new Set(),rootPaths=new Set(),ids=new Set();

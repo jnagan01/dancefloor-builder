@@ -8,7 +8,7 @@ const SCHEME = "setarchitect-offline";
 const ORIGIN = `${SCHEME}://app`;
 const ENTRY = `${ORIGIN}/index.html`;
 const PARTITION = "setarchitect-offline";
-const ASSETS = { "/index.html": "text/html", "/app.js": "text/javascript", "/core.js": "text/javascript", "/offline.css": "text/css" };
+const ASSETS = { "/index.html": "text/html", "/app.js": "text/javascript", "/core.js": "text/javascript", "/policy.cjs": "text/javascript", "/offline.css": "text/css" };
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; font-src 'none'; frame-src 'none'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'none'";
 
 function registerOfflineScheme(protocol) {
@@ -83,7 +83,7 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
   }
   const findEvent = (backup, id) => { const e = backup.events.find(x => x.id === id); if (!e) throw Error("Event not in the offline copy."); return e; };
   const KNOWN = new Set(["warmUp", "transition", "peak", "selections"]);
-  const view = e => ({ id: e.id, version: store.eventVersion(e), name: e.snapshot.name, listType: e.snapshot.inputs && e.snapshot.inputs.listType, otherLists: Object.keys(e.snapshot.lists).filter(k => !KNOWN.has(k) && Array.isArray(e.snapshot.lists[k]) && e.snapshot.lists[k].length).slice(0, 20), lists: { warmUp: e.snapshot.lists.warmUp || [], transition: e.snapshot.lists.transition || [], peak: e.snapshot.lists.peak || [], selections: e.snapshot.lists.selections || {} } });
+  const view = e => ({ id: e.id, version: store.eventVersion(e), name: e.snapshot.name, inputs: e.snapshot.inputs, listType: e.snapshot.inputs && e.snapshot.inputs.listType, otherLists: Object.keys(e.snapshot.lists).filter(k => !KNOWN.has(k) && Array.isArray(e.snapshot.lists[k]) && e.snapshot.lists[k].length).slice(0, 20), lists: { warmUp: e.snapshot.lists.warmUp || [], transition: e.snapshot.lists.transition || [], peak: e.snapshot.lists.peak || [], selections: e.snapshot.lists.selections || {} } });
 
   async function availability(paths) {
     const out = {};
@@ -147,7 +147,7 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
       captured = { hash: loaded.hash, preparedAt: loaded.preparedAt };
       const b = loaded.backup;
       const tracks = [];
-      for (const s of b.sources) for (const t of s.tracks) tracks.push({ filePath: t.filePath, artist: t.artist, title: t.title, remix: t.remix, bpm: t.bpm, key: t.key, playCount: t.playCount, source: s.label });
+      for (const s of b.sources) for (const t of s.tracks) tracks.push({ filePath: t.filePath, artist: t.artist, title: t.title, remix: t.remix, bpm: t.bpm, key: t.key, playCount: t.playCount, comment: t.comment, explicit: t.explicit, source: s.label });
       const events = await Promise.all(b.events.map(async e => ({ ...view(e), staleOverlays: await store.staleOverlayCount(loaded.hash, e.id, store.eventVersion(e)) })));
       fence();
       return { ok: true, state: "ready", preparedAt: loaded.preparedAt, fallback: loaded.fallback, events, tracks, roots: { ...b.roots } };

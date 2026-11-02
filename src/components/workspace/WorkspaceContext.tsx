@@ -1,7 +1,7 @@
 import { saveBackup } from "@/lib/backupClient";
 import { prepareOfflineAccess, reportOfflineSession, type OfflineStatus } from "@/lib/offlineAccess";
 import { lockUpdateEditing } from "@/lib/updatePreservation";
-import { previewMetadataRestore, validateBackup, type Backup } from "@/lib/backups";
+import { previewMetadataRestore, validateBackup, backupVersion, type Backup } from "@/lib/backups";
 import { readEventSnapshot } from "@/lib/snapshotSafety";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -276,7 +276,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       readEventSnapshot(snapshot); return { id: row.id, snapshot };
     });
     const prep = await prepStore().backupSection(owner.prepOwner); owner.check();
-    const b = { format: "setarchitect-backup" as const, version: 1 as const, account: owner.account, createdAt: new Date().toISOString(), events, sources: owner.sources, roots: owner.roots, ...(prep ? { prep } : {}) } as Backup;
+    const b = { format: "setarchitect-backup" as const, version: backupVersion(events), account: owner.account, createdAt: new Date().toISOString(), events, sources: owner.sources, roots: owner.roots, ...(prep ? { prep } : {}) } as Backup;
     validateBackup(JSON.stringify(b), owner.account); owner.check();
     await saveBackup(b); owner.check(); return b;
   }
