@@ -141,6 +141,7 @@ try {
     expect(report).toContain("transition #2. Lost Artist — Lost — Unknown music folder location");
     await w.locator(".report").getByRole("button", { name: "warmUp #2" }).click();
     expect(await w.evaluate(() => document.activeElement?.closest(".song")?.id)).toBe("song-warmUp-1");
+    for (const theme of ["dark", "light"]) { await w.locator("#theme").selectOption(theme); await w.screenshot({ path: path.join(diagnostics, `offline-theme-${theme}.png`) }); }
   });
 
   await check("failed export and failed choice writes keep last-good state and never report success", w, async () => {
