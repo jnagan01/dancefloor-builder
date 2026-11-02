@@ -130,7 +130,6 @@
         for (const p of [...new Set(sel.paths)]) {
           const ti = index.byPath.get(p);
           if (ti === undefined) { problems.push({ ...at, title, reason: "Chosen file is not in the saved library" }); continue; }
-          if (index.duplicates.has(p)) { problems.push({ ...at, title, reason: "Saved library lists this file twice; choose again online" }); continue; }
           const full = fullPath(p, roots);
           if (!full) { problems.push({ ...at, title, reason: unsafePath(p) ? "Unsafe file path" : "Unknown music folder location" }); continue; }
           if (availability && availability[full] !== "available") { unavailable++; problems.push({ ...at, title, reason: "File missing on this Mac" }); continue; }
