@@ -1,4 +1,5 @@
 import { saveBackup } from "@/lib/backupClient";
+import { prepareOfflineAccess, reportOfflineSession, type OfflineStatus } from "@/lib/offlineAccess";
 import { lockUpdateEditing } from "@/lib/updatePreservation";
 import { previewMetadataRestore, validateBackup, type Backup } from "@/lib/backups";
 import { readEventSnapshot } from "@/lib/snapshotSafety";
@@ -21,7 +22,7 @@ import { nativeScanProblem } from "@/lib/nativeScanSafety";
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
   sources: Source[]; files: File[]; audioIndex: AudioIndex; library: VdjLibrary | null; loading: boolean; persistenceError: string | null;
-  backup: () => Promise<Backup>; restoreMetadata: (backup: Backup) => Promise<void>;
+  backup: () => Promise<Backup>; restoreMetadata: (backup: Backup) => Promise<void>; prepareOffline: () => Promise<OfflineStatus>;
   addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => string;
   editTrack: (source: number, index: number, patch: Partial<VdjTrack>) => void;
   /** Loads a remembered file from disk (desktop app) so it can be played. */
@@ -239,7 +240,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   if (backupSession.current.account !== userId) backupSession.current.generation++;
   backupSession.current.account = userId; backupSession.current.sources = sources;
   useEffect(() => {
-    const subscription = supabase.auth.onAuthStateChange?.((_event, session) => { backupSession.current.generation++; backupSession.current.liveAccount = session?.user.id ?? null; });
+    const subscription = supabase.auth.onAuthStateChange?.((event, session) => { backupSession.current.generation++; backupSession.current.liveAccount = session?.user.id ?? null; reportOfflineSession(event, session?.user.id); });
     return () => { backupSession.current.generation++; subscription?.data.subscription.unsubscribe(); };
   }, []);
   function captureBackupOwner() {
@@ -278,6 +279,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     host.__setarchitectBeforeUpdate = capture;
     return () => { if (host.__setarchitectBeforeUpdate === capture) delete host.__setarchitectBeforeUpdate; };
   }, [userId, loading, sources]);
+  async function prepareOffline() {
+    const owner = captureBackupOwner();
+    return prepareOfflineAccess(owner, backup);
+  }
   async function restoreMetadata(b: Backup) {
     const owner = captureBackupOwner();
     const imported = validateBackup(JSON.stringify(b), owner.account);
@@ -485,7 +490,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     revisions.bump(selected.label, track.filePath, roots);
     setSources(prev => prev.map(s => s.label === selected.label ? { ...s, tracks: s.tracks.map(t => trackIdentity(t.filePath, roots) === identity ? { ...t, ...patch, filePath: t.filePath } : t) } : s));
   }
-  return <Context.Provider value={{ sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, backup, restoreMetadata, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, backup, restoreMetadata, prepareOffline, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);
