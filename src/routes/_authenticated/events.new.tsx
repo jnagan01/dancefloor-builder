@@ -116,8 +116,7 @@ import { validateTiming, boundedNumber, displayNumber, displayBuffer, MAX_EVENT_
 import { useAuth } from "@/hooks/useAuth";
 import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
 import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
-import { songIdentity } from "@/lib/prep/knowledge";
-import { trackIdentity } from "@/lib/fileIdentity";
+import { planAddToSection } from "@/lib/prep/addToSection";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -1706,20 +1705,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   /** Adds one song to the end of a section via the same path as rename; the new row is never pre-approved. */
   function addSongToSection(section: SectionKey, next: { artist: string; song: string; trackId?: string }): string | null {
     if (!result) return "Build the event first.";
-    const artist = next.artist.trim(), song = next.song.trim();
-    if (!artist && !song) return "Enter an artist or title.";
-    const id = songIdentity(artist, song);
-    const all = (["warmUp", "transition", "peak"] as SectionKey[]).flatMap(k => result[k] ?? []);
-    if (all.some(x => songIdentity(x.artist, x.song) === id)) return "That song is already in this event.";
+    const plan = planAddToSection(result, section, next, mergedLibrary, getFolderRoots(), songKey, matchSong);
+    if ("error" in plan) return plan.error;
     userEdited.current=true; autosave.dirty();
-    const added: ResultSong = { artist, song };
-    const list = [...result[section], added];
-    const key = songKey(section, list.length - 1, added);
-    setResult({ ...result, [section]: list });
-    const linkedIndex = next.trackId ? mergedLibrary.tracks.findIndex(t => trackIdentity(t.filePath, getFolderRoots()) === next.trackId) : -1;
-    const fresh = linkedIndex >= 0 ? { status: "Possible Match" as const, confidence: 1, trackIndex: linkedIndex, alternatives: [] }
-      : mergedLibrary.tracks.length ? matchSong(added, mergedLibrary) : undefined;
-    setMatches(prev => { const copy = { ...prev, [key]: fresh ? { ...fresh, confirmed: false } : { status: "Missing From Library" as const, confidence: 0, alternatives: [] } }; matchesRef.current = copy; return copy; });
+    setResult(plan.result);
+    setMatches(prev => { const copy = { ...prev, [plan.key]: plan.match }; matchesRef.current = copy; return copy; });
     return null;
   }
 

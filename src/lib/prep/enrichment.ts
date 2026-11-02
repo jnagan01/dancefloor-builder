@@ -31,7 +31,7 @@ export function compareCandidate(local: { artist: string; title: string; remix?:
   const versionMismatch = [...lv].some(w => !cv.has(w)) || [...cv].some(w => !lv.has(w));
   const durationDiff = local.durationSec && cand.lengthSec ? Math.abs(local.durationSec - cand.lengthSec) : null;
   const warnings: string[] = [];
-  if (versionMismatch) warnings.push("Different version words (remix/edit/clean/live) — may be another recording");
+  if (versionMismatch) warnings.push("Different version words (remix/edit/clean/live) — may be a different track");
   if (durationDiff !== null && durationDiff > 15) warnings.push(`Length differs by ${durationDiff} s from your file`);
   if (artistSim < 0.5) warnings.push("Artist name differs");
   const confidence = Math.round(100 * (0.55 * titleSim + 0.35 * artistSim + (durationDiff === null ? 0.05 : durationDiff <= 5 ? 0.1 : durationDiff <= 15 ? 0.05 : 0)) * (versionMismatch ? 0.6 : 1));

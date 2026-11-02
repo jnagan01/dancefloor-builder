@@ -70,3 +70,7 @@ The icon and production event/library data are unchanged. No publishing or GitHu
 ## Offline workspace gate
 
 `node tests/native/offline.mjs` launches the real `desktop/main.cjs` (via `fixtures/offline-entry.cjs`, which only answers native dialogs) in a fenced `setarchitect-offline-*` profile. Offline phases deny Chromium networking before launch and try the real published URL. A local stub page stands in for the signed-in origin only to call the real `electronOffline` preload API with a synthetic backup. `ELECTRON_BIN` may point at a pinned Electron 33.4.11 binary when `desktop/node_modules` is absent.
+
+## Preparation UI acceptance (`tests/native/prep.mjs`)
+
+Bundles the real Library page, filter panel, track details, event preparation panel and the real account-scoped prep store (IndexedDB) into a fenced `setarchitect-native-prep-*` Electron profile. Only loopback requests are allowed; MusicBrainz/Last.fm/crowd lookups, the workspace and the waveform player are local stand-ins with controllable delays. Backups go through the real browser validator and the real native `desktop/backups.cjs` store. It covers DOMParser SongLength parsing, filters/presets/reload, exact-file details and preview, notes/tags drafts, groups, overlapping/stale lookups, dashboard drilldowns, recommendation controls/tags/dismissals, shortlist/link/add-to-section/group copy, backup round-trip, cold restart and sign-out/account isolation, with desktop and 390px screenshots under `test-results/native/prep/`.
