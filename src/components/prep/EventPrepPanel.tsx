@@ -84,7 +84,7 @@ export function EventPrepPanel(p: Props) {
     const cat: Candidate[] = SONG_LIBRARY.map(s => {
       const owned = ownedKeys.has(songIdentity(s.artist, s.song));
       const facts: FilterFacts = { genre: s.genre || undefined, decade: s.decade || undefined, energy: s.energy, owned };
-      return { artist: s.artist, song: s.song, facts, origin: "catalogue" };
+      return { artist: s.artist, song: s.song, facts, origin: "catalogue" as const };
     }).filter(c => !c.facts.owned); // owned catalogue songs already appear as library files
     return [...lib, ...cat];
   }, [tracks, roots, ownedKeys]);
