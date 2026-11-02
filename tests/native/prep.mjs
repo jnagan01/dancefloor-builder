@@ -304,6 +304,6 @@ try {
   if (errors.length) throw Error(`Page errors: ${errors.join('; ')}`);
   console.log(`Preparation UI checks: ${count} passed. Isolated profile: ${temp}`);
 } catch (e) {
-  if (page) await page.screenshot({ path: path.join(diagnostics, 'failure.png') }).catch(() => {});
+  if (page) { await page.screenshot({ path: path.join(diagnostics, 'failure.png') }).catch(() => {}); console.error('TOASTS', JSON.stringify(await page.evaluate(() => window.__toasts).catch(() => null))); }
   console.error(e); process.exitCode = 1;
 } finally { await close(); }
