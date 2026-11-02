@@ -49,11 +49,38 @@ const server = http.createServer((req, res) => { requests++; if (req.url.startsW
 await new Promise(r => server.listen(0, "127.0.0.1", r));
 const ORIGIN = `http://127.0.0.1:${server.address().port}`;
 
-let app, count = 0;
+let app, count = 0, launches = 0;
+const telemetryFile = path.join(temp, "startup-telemetry.log");
+const telemetryLines = () => { try { return fs.readFileSync(telemetryFile, "utf8").split("\n").filter(Boolean); } catch { return []; } };
+// Diagnostic only: spawn the identical command directly, watch the app's telemetry for 30s, then stop it.
+async function decoupledRun(args, env) {
+  const { spawn } = await import("node:child_process");
+  const mark = telemetryLines().length;
+  const child = spawn(bin, args, { env, stdio: ["ignore", "pipe", "pipe"] });
+  let out = ""; child.stdout.on("data", d => { out += d; }); child.stderr.on("data", d => { out += d; });
+  let opened = false;
+  for (let i = 0; i < 300 && !opened && child.exitCode === null; i++) { await new Promise(r => setTimeout(r, 100)); opened = telemetryLines().slice(mark).some(l => l.includes('"did-finish-load"') && l.includes("setarchitect-offline://")); }
+  const exited = child.exitCode;
+  if (exited === null) { child.kill("SIGTERM"); await new Promise(r => setTimeout(r, 3000)); if (child.exitCode === null) child.kill("SIGKILL"); }
+  const lines = telemetryLines().slice(mark);
+  fs.writeFileSync(path.join(diagnostics, `decoupled-${launches}-telemetry.log`), lines.join("\n") + "\n--- process output ---\n" + out);
+  return `offline workspace loaded: ${opened}; exited early: ${exited !== null ? exited : "no"}\n${lines.join("\n")}\n--- process output (tail) ---\n${out.slice(-4000)}`;
+}
 async function launch({ deny, online, url, timeout = 30000 }) {
   const env = { ...process.env, SETARCHITECT_TEST_USERDATA: temp};
   if (online) env.DANCEFLOOR_URL = url || ORIGIN; else delete env.DANCEFLOOR_URL; // offline phases try the real published URL, blocked
-  app = await electron.launch({ timeout, executablePath: bin, args: [path.join(root, "tests/native/fixtures/offline-entry.cjs"), "--no-sandbox", ...(deny ? DENY : [])], env });
+  const args = [path.join(root, "tests/native/fixtures/offline-entry.cjs"), "--no-sandbox", ...(deny ? DENY : [])];
+  const mark = telemetryLines().length; launches++;
+  try { app = await electron.launch({ timeout, executablePath: bin, args, env }); }
+  catch (e) {
+    // Launch never resolved: publish what the app itself recorded, then rerun the same profile WITHOUT
+    // Playwright's startup coupling to distinguish a product failure from a harness/attach failure.
+    const early = telemetryLines().slice(mark);
+    fs.writeFileSync(path.join(diagnostics, `launch-${launches}-failed-telemetry.log`), early.join("\n"));
+    console.log(`launch ${launches} failed: ${e.message.split("\n")[0]}\n--- app telemetry before failure ---\n${early.join("\n")}`);
+    console.log(`--- decoupled relaunch of the same profile (no Playwright) ---\n${await decoupledRun(args, env)}`);
+    throw e;
+  }
   const proc = app.process(); const log = fs.createWriteStream(path.join(diagnostics, `offline-main-${proc.pid}.log`));
   proc.stdout?.pipe(log); proc.stderr?.pipe(log);
   return app;
