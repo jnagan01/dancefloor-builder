@@ -127,11 +127,11 @@ export function EventPrepPanel(p: Props) {
   const [copyNote, setCopyNote] = useState<string | null>(null);
 
   const ns = <p className="rounded border border-border bg-muted/30 p-2 text-xs">Save this event first to keep a shortlist and event dismissals.</p>;
-  return <section aria-label="Event preparation" className="space-y-3 border border-border bg-card p-3">
+  return <section aria-label="Event preparation" className="min-w-0 max-w-full space-y-3 overflow-hidden border border-border bg-card p-3">
     <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Preparation</h2>
       {state.status === "blocked" && <span className="text-xs text-destructive">{state.error}</span>}</div>
     <Tabs defaultValue="overview">
-      <TabsList><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="recs">Recommendations</TabsTrigger><TabsTrigger value="shortlist">Shortlist ({ep.shortlist.length})</TabsTrigger><TabsTrigger value="groups">Groups ({knowledge.groups.length})</TabsTrigger></TabsList>
+      <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="recs">Recommendations</TabsTrigger><TabsTrigger value="shortlist">Shortlist ({ep.shortlist.length})</TabsTrigger><TabsTrigger value="groups">Groups ({knowledge.groups.length})</TabsTrigger></TabsList>
 
       <TabsContent value="overview" className="space-y-3">
         <p className="text-xs text-muted-foreground">{dash.totals.songs} songs · {dash.totals.confirmed} confirmed recordings · confirmed length {fmtDur(dash.totals.knownSec)}. This is a planning check, not a prediction of how the night will go.</p>
