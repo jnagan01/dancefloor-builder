@@ -22,7 +22,7 @@ app.whenReady().then(() => {
     ipcMain.handle('prep:blocked', () => blocked);
     ipcMain.handle('prep:backup-save', (_e, raw, account) => { if (!account.startsWith('synthetic-')) throw Error('Real account blocked'); return backups.save(raw, account); });
     ipcMain.handle('prep:backup-latest', (_e, account) => { if (!account.startsWith('synthetic-')) throw Error('Real account blocked'); return backups.latest(account); });
-    const win = new BrowserWindow({ width: 1280, height: 1000, show: false, webPreferences: { preload: path.join(__dirname, 'prep-preload.cjs'), contextIsolation: true, sandbox: false } });
+    const win = new BrowserWindow({ width: 1280, height: 1000, show: true, webPreferences: { preload: path.join(__dirname, 'prep-preload.cjs'), contextIsolation: true, sandbox: false } });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     win.loadURL(origin + '/');
   });
