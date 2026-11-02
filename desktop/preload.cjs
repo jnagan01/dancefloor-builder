@@ -27,6 +27,12 @@ contextBridge.exposeInMainWorld("electronBackups", {
   save: (raw, account) => ipcRenderer.invoke("backup:save", raw, account),
   latest: account => ipcRenderer.invoke("backup:latest", account),
 });
+contextBridge.exposeInMainWorld("electronOffline", {
+  prepare: (raw, account) => ipcRenderer.invoke("offline:prepare", raw, account),
+  status: account => ipcRenderer.invoke("offline:status", account),
+  accountSeen: account => ipcRenderer.invoke("offline:account-seen", account),
+  signedOut: () => ipcRenderer.invoke("offline:signed-out"),
+});
 contextBridge.exposeInMainWorld("electronAvailability", { check: paths => ipcRenderer.invoke("fs:availability", paths) });
 
 const journal = (action, key, raw) => { const result = ipcRenderer.sendSync("recovery:journal", action, key, raw); if (!result?.ok) throw Error(result?.error || "Recovery journal unavailable."); return result.value ?? null; };
