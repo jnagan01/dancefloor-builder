@@ -40,7 +40,7 @@ describe("offline export plan", () => {
     const plan = core.exportPlan(event, { selections: {} }, index, roots, { "/Volumes/Synthetic Music/a/Song.mp3": "available" });
     const paths = plan.sections.flatMap((s: { entries: { path: string }[] }) => s.entries.map(e => e.path));
     expect(paths).toEqual(["/Volumes/Synthetic Music/a/Song.mp3"]);
-    expect(plan.problems.map((p: { reason: string }) => p.reason)).toEqual(["Unknown music folder location", "Recording not confirmed", "No confirmed recording"]);
+    expect(plan.problems.map((p: { reason: string }) => p.reason)).toEqual(["Unknown music folder location", "Track not confirmed", "No confirmed track"]);
     expect(plan.summary).toMatchObject({ requested: 4, approved: 1, omitted: 3, localChoices: 0 });
   });
   it("tentative candidates need explicit local approval; overlay must match the same song", () => {

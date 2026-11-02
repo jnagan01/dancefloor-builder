@@ -3037,7 +3037,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
               <section className="space-y-2 border-y border-border py-3" aria-label="Export readiness">
                 <Button variant="outline" size="sm" disabled={readinessBusy} onClick={previewReadiness}><CheckCircle2 className="mr-2 size-4" />{readinessBusy ? "Checking files…" : "Check export readiness"}</Button>
-                {readiness && <><p className="text-sm">{readiness.requested} requested songs · {readiness.approved} approved recordings · {readiness.omitted} omitted songs · {readiness.unavailable} unavailable files · {readiness.unknown} availability unknown</p>
+                {readiness && <><p className="text-sm">{readiness.requested} requested songs · {readiness.approved} approved tracks · {readiness.omitted} omitted songs · {readiness.unavailable} unavailable files · {readiness.unknown} availability unknown</p>
                 <div className="max-h-40 overflow-auto">{readiness.problems.map((problem, i) => <Button key={i} variant="ghost" size="sm" className="block h-auto max-w-full whitespace-normal text-left" onClick={() => { const identity = problem.identity; if (!identity) return; const song = result[identity.section]?.[identity.index]; if (!song || songKey(identity.section, identity.index, song) !== identity.key) { setReadiness(null); return; } setActiveSection(identity.section); setTimeout(() => document.getElementById(`song-${identity.section}-${identity.index}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }}>{problem.title} — {problem.reason}</Button>)}</div></>}
               </section>
               <EventEnergyRamp

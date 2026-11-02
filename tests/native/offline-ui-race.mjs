@@ -38,6 +38,19 @@ try {
   const detail = page.locator("#detail");
   const nav = name => page.locator("#events").getByRole("button", { name });
   await expect(detail.locator("h2")).toHaveText("Event A");
+  const noStrayText = async when => {
+    const bad = await page.evaluate(() => { const w = document.createTreeWalker(document.getElementById("detail"), NodeFilter.SHOW_TEXT); const out = []; for (let n; (n = w.nextNode());) if (/\b(null|undefined)\b/.test(n.textContent)) out.push(n.textContent); return out; });
+    if (bad.length) throw Error(`literal null/undefined rendered ${when}: ${JSON.stringify(bad)}`);
+  };
+
+  await step("absent optional notice/report never render literal null or undefined", async () => {
+    await expect(detail.getByRole("button", { name: "Export VirtualDJ playlists" })).toBeVisible();
+    await noStrayText("before export");
+    await nav("Event B").click(); await expect(detail.locator("h2")).toHaveText("Event B");
+    await noStrayText("after switching events");
+    await nav("Event A").click(); await expect(detail.locator("h2")).toHaveText("Event A");
+    await noStrayText("after switching back");
+  });
 
   await step("delayed load of A arriving after B is opened never replaces B", async () => {
     await page.evaluate(() => window.__bridge.delay.event.add("A"));
@@ -52,10 +65,10 @@ try {
     await expect(nav("Event B")).toHaveAttribute("aria-current", "true");
   });
 
-  await step("delayed choice on A disables navigation, lands only on A, and B keeps its own recording", async () => {
+  await step("delayed choice on A disables navigation, lands only on A, and B keeps its own track", async () => {
     await nav("Event A").click(); await expect(detail.locator("h2")).toHaveText("Event A");
     await page.evaluate(() => { window.__bridge.delay.choose = true; });
-    await detail.getByRole("button", { name: /Choose recording/ }).click();
+    await detail.getByRole("button", { name: /Choose track/ }).click();
     await detail.locator(".results > li").filter({ hasText: "/m/a.mp3" }).getByRole("button", { name: /^Use / }).click();
     await expect(nav("Event B")).toBeDisabled();
     await nav("Event B").click({ force: true }).catch(() => {}); // disabled: must not switch
@@ -79,6 +92,7 @@ try {
     await expect(detail.locator(".report")).toContainText("A-report.txt");
     await nav("Event B").click(); await expect(detail.locator("h2")).toHaveText("Event B");
     await expect(detail.locator(".report")).toHaveCount(0);
+    await noStrayText("after export and event switch");
   });
 } finally { await browser.close(); }
 if (failed) process.exit(1);

@@ -33,7 +33,7 @@ export function validateBackup(raw: string, account: string): Backup {
     ids.add(event.id); const checked = readEventSnapshot(event.snapshot).snapshot;
     if (checked.inputs.songs.length > 2000) throw Error("Event too large.");
     for (const selection of Object.values(checked.lists.selections ?? {})) for (const path of selection.paths) {
-      if (path.length > 4000 || /[\r\n\u0000]/.test(path) || path.split(/[\\/]/).includes("..")) throw Error("Unsafe selected recording path.");
+      if (path.length > 4000 || /[\r\n\u0000]/.test(path) || path.split(/[\\/]/).includes("..")) throw Error("Unsafe selected track path.");
     }
     for (const section of ["warmUp", "transition", "peak"]) if ((event.snapshot.lists[section]?.length ?? 0) > 2000) throw Error("Event too large.");
   }
