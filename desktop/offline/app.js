@@ -14,7 +14,10 @@
     for (const kid of kids) if (kid !== null && kid !== undefined && kid !== false) n.append(kid);
     return n;
   };
-  const state = { data: null, index: null, event: null, overlay: {}, availability: {}, picker: null, report: null, busy: false };
+  const state = { data: null, index: null, event: null, overlay: {}, availability: {}, picker: null, report: null, busy: false, gen: 0 };
+  // Every event load bumps gen; load/choice/export responses apply only if the captured id+gen is still current,
+  // so a delayed response for event A can never be applied to or displayed on event B (A's overlay stays saved).
+  const current = (id, gen) => state.event !== null && state.event.id === id && state.gen === gen;
   const status = (text, kind) => { const s = $("status"); s.textContent = text || ""; s.className = `status ${kind || ""}`; };
   const when = iso => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "unknown time" : d.toLocaleString(); };
 
@@ -40,12 +43,14 @@
   }
 
   function renderEvents() {
-    $("events").replaceChildren(...state.data.events.map(e => el("button", { type: "button", "aria-current": state.event && state.event.id === e.id ? "true" : "false", text: e.name || "Untitled event", on: { click: () => openEvent(e.id) } })));
+    $("events").replaceChildren(...state.data.events.map(e => el("button", { type: "button", "aria-current": state.event && state.event.id === e.id ? "true" : "false", disabled: state.busy, text: e.name || "Untitled event", on: { click: () => { if (!state.busy) openEvent(e.id); } } })));
   }
 
   async function openEvent(id) {
     const ev = state.data.events.find(e => e.id === id);
+    const gen = ++state.gen;
     const res = await api.event(id);
+    if (gen !== state.gen) return; // a newer event was opened meanwhile
     if (!res.ok) { status(res.error, "error"); return; }
     Object.assign(state, { event: ev, overlay: res.overlay, availability: res.availability, picker: null, report: null });
     renderEvents(); renderDetail();
@@ -93,26 +98,30 @@
   }
 
   async function choose(section, index, change) {
-    if (state.busy) return; state.busy = true;
+    if (state.busy || !state.event) return; state.busy = true; renderEvents();
+    const id = state.event.id, gen = state.gen;
     try {
-      const res = await api.choose(state.event.id, { section, index, ...change });
+      const res = await api.choose(id, { section, index, ...change });
+      if (!current(id, gen)) return;
       if (!res.ok) { status(res.error, "error"); return; }
       state.overlay = res.overlay; state.availability = res.availability; state.picker = null;
       status(change.clear ? "Offline choice removed." : "Recording confirmed on this Mac. Your saved online event is unchanged.", "ok");
       renderDetail(`song-${section}-${index}`, true);
-    } finally { state.busy = false; }
+    } finally { state.busy = false; if (state.data) renderEvents(); }
   }
 
   async function doExport() {
-    if (state.busy) return; state.busy = true;
+    if (state.busy || !state.event) return; state.busy = true; renderEvents();
+    const id = state.event.id, gen = state.gen;
     try {
       status("Choose a folder for the playlists…");
-      const res = await api.exportPlaylists(state.event.id);
+      const res = await api.exportPlaylists(id);
+      if (!current(id, gen)) return;
       if (res.canceled) { status("Export cancelled."); return; }
       state.report = res;
       status(res.ok ? `Exported ${res.written.length} files.` : (res.error || "Export failed."), res.ok ? "ok" : "error");
       renderDetail();
-    } finally { state.busy = false; }
+    } finally { state.busy = false; if (state.data) renderEvents(); }
   }
 
   function report() {
