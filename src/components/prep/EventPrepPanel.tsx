@@ -240,7 +240,7 @@ export function EventPrepPanel(p: Props) {
         <div className="flex gap-2"><Input className="h-8 w-56 text-xs" placeholder="New group (e.g. Wedding singalongs)" aria-label="New group name" value={groupName} onChange={e => setGroupName(e.target.value)} />
           <Button size="sm" disabled={!ready || !groupName.trim()} onClick={async () => { if (await mutate(k => createGroup(k, groupName))) setGroupName(""); }}>Create</Button></div>
         <p className="text-xs text-muted-foreground">Groups belong to your account and are reusable. Copying a group into this event's shortlist leaves the group unchanged. Add songs to groups from any song's details.</p>
-        {knowledge.groups.map(g => <details key={g.id} className="rounded border border-border p-2 text-xs">
+        {knowledge.groups.map(g => <details key={g.id} open={renamingGroup?.id === g.id ? true : undefined} className="rounded border border-border p-2 text-xs">
           <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2"><span className="text-sm font-medium">{g.name} ({g.items.length})</span>
             <span className="flex gap-1">
               <Button size="sm" variant="outline" className="h-7" disabled={!canEvent || !g.items.length} onClick={async e => { e.preventDefault(); let n = { added: 0, skipped: 0 }; const ok = await mutate(k => { const r = copyGroupToEvent(k, g.id, p.eventId!); n = r; return r.next; }); if (ok) setCopyNote(`Copied ${n.added} song${n.added === 1 ? "" : "s"} to the shortlist${n.skipped ? `, ${n.skipped} already there` : ""}.`); }}>Copy to shortlist</Button>
