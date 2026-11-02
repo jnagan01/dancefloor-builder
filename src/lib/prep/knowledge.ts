@@ -14,7 +14,7 @@ export interface TrackGroup { id: string; name: string; items: GroupItem[] }
 export interface Feedback { key: string; label: string; kind: "never" | "favor"; at: number }
 export interface Dismissal { key: string; label: string; at: number }
 export interface ShortItem { id: string; artist: string; song: string; status: ShortStatus; versionNote: string; trackId?: string; addedAt: number }
-export interface EventPrep { eventId: string; dismissed: Dismissal[]; shortlist: ShortItem[] }
+export interface EventPrep { eventId: string; dismissed: Dismissal[]; shortlist: ShortItem[]; /** Your preparation tags this event should favour in recommendations. */ tags?: string[] }
 export interface Enrichment { key: string; source: "musicbrainz" | "lastfm"; label: string; url?: string; data: Record<string, string | number | string[]>; fetchedAt: number }
 export interface PrepKnowledge {
   version: 1; presets: FilterPreset[]; tracks: TrackNote[]; groups: TrackGroup[];
@@ -73,8 +73,10 @@ export function readKnowledge(v: unknown): PrepKnowledge | null {
     const events = arr(o.events, LIMITS.events)?.map(e => {
       const eventId = str(e?.eventId, 200), dismissed = arr(e?.dismissed, LIMITS.dismissed), shortlist = arr(e?.shortlist, LIMITS.shortlist);
       if (!eventId || !dismissed || !shortlist) throw 0;
+      let tags: string[] | undefined;
+      if (e.tags !== undefined) { const t = arr(e.tags, LIMITS.tags); if (!t || !t.every((x: unknown) => str(x, 60))) throw 0; tags = t as string[]; }
       return {
-        eventId,
+        eventId, ...(tags ? { tags } : {}),
         dismissed: dismissed.map(d => { const key = str(d?.key, 700), label = str(d?.label, 700), at = num(d?.at); if (!key || label === null || at === null) throw 0; return { key, label, at }; }),
         shortlist: shortlist.map(s => {
           const base = item(s), id = str(s?.id, 80), at = num(s?.addedAt), note = str(s?.versionNote ?? "", 300);
@@ -154,6 +156,16 @@ export function dismissForEvent(k: PrepKnowledge, eventId: string, artist: strin
   if (e.dismissed.some(d => d.key === key)) return k;
   return withEvent(k, { ...e, dismissed: [...e.dismissed, { key, label: `${artist} – ${song}`, at: Date.now() }] });
 }
+export function setEventTags(k: PrepKnowledge, eventId: string, tags: string[]): PrepKnowledge {
+  const e = eventOf(k, eventId), t = normTags(tags);
+  const { tags: _old, ...rest } = e;
+  return withEvent(k, t.length ? { ...rest, tags: t } : rest);
+}
+/** Additively copy a backed-up event's shortlist/dismissals/tags onto another event id. */
+export function carryEventPrep(k: PrepKnowledge, entry: EventPrep, toId: string): { next: PrepKnowledge; added: number } {
+  const r = mergeKnowledgeAdditive(k, { ...emptyKnowledge(), events: [{ ...structuredClone(entry), eventId: toId }] });
+  return r;
+}
 export const undoDismiss = (k: PrepKnowledge, eventId: string, key: string): PrepKnowledge => {
   const e = eventOf(k, eventId); return withEvent(k, { ...e, dismissed: e.dismissed.filter(d => d.key !== key) });
 };
@@ -203,7 +215,8 @@ export function mergeKnowledgeAdditive(current: PrepKnowledge, incoming: PrepKno
   const events = current.events.map(e => ({ ...e }));
   for (const ie of incoming.events) {
     const ce = events.find(e => e.eventId === ie.eventId);
-    if (!ce) { events.push(structuredClone(ie)); added += ie.dismissed.length + ie.shortlist.length; continue; }
+    if (!ce) { events.push(structuredClone(ie)); added += ie.dismissed.length + ie.shortlist.length + (ie.tags?.length ?? 0); continue; }
+    if (ie.tags?.length) { const before = ce.tags?.length ?? 0; ce.tags = normTags([...(ce.tags ?? []), ...ie.tags]); added += ce.tags.length - before; }
     ce.dismissed = add(ce.dismissed, ie.dismissed, d => d.key);
     ce.shortlist = add(ce.shortlist, ie.shortlist, s => itemIdentity(s));
   }
