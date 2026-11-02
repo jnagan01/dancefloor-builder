@@ -257,6 +257,19 @@ try {
     await expect(page.getByTestId('event-row').filter({ hasText: 'Peak #1: Queen – Song B' })).toContainText('not approved');
     await prepTab(/Groups/).click();
     await expect(region).toContainText('Wedding singalongs (2)'); // group unchanged by copy
+    await region.getByLabel('New group name').fill('Temp group'); await region.getByRole('button', { name: 'Create', exact: true }).click();
+    const temp = region.locator('details', { hasText: 'Temp group' });
+    await temp.getByRole('button', { name: 'Rename' }).click();
+    await temp.getByLabel('New name for Temp group').fill('Temp renamed'); await temp.getByRole('button', { name: 'Save name' }).click();
+    await expect(region).toContainText('Temp renamed (0)');
+    page.once('dialog', d => d.accept());
+    await region.locator('details', { hasText: 'Temp renamed' }).getByRole('button', { name: 'Delete' }).click();
+    await expect(region).not.toContainText('Temp renamed');
+    await prepTab(/Shortlist/).click();
+    const note = region.getByLabel('Desired version note for Band – Hit');
+    await note.fill('clean radio edit'); await note.blur();
+    await expect.poll(() => page.evaluate(() => window.__prep.get().knowledge.events.find(e => e.eventId === 'E1').shortlist[0].versionNote)).toBe('clean radio edit');
+    await prepTab(/Groups/).click();
     await narrow('shortlist');
   });
 
