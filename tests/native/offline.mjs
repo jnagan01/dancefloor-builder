@@ -1,7 +1,8 @@
 // Offline workspace release gate: drives the REAL desktop/main.cjs, offline
 // window, protocol, preload and IPC in fenced synthetic Electron profiles.
 // Network is denied at the Chromium level before launch for every offline phase.
-import { _electron as electron, expect } from "@playwright/test";
+import { _electron as electron, chromium, expect } from "@playwright/test";
+import { spawn } from "node:child_process";
 import fs from "node:fs"; import path from "node:path"; import os from "node:os"; import http from "node:http"; import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
@@ -66,12 +67,35 @@ async function decoupledRun(args, env) {
   fs.writeFileSync(path.join(diagnostics, `decoupled-${launches}-telemetry.log`), lines.join("\n") + "\n--- process output ---\n" + out);
   return `offline workspace loaded: ${opened}; exited early: ${exited !== null ? exited : "no"}\n${lines.join("\n")}\n--- process output (tail) ---\n${out.slice(-4000)}`;
 }
+// Network-denied phases start the app exactly as production does: a plain process with no Playwright
+// loader holding back the "ready" event, then attach over CDP once it is running. Playwright's
+// electron.launch couples its own startup handshake to the app's first windows; on macOS CI the cached
+// cold restart hung in that handshake (launch never resolved) while the app itself kept running.
+async function spawnAndAttach(args, env, timeout) {
+  const child = spawn(bin, [...args, "--remote-debugging-port=0"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const log = fs.createWriteStream(path.join(diagnostics, `offline-main-${child.pid}.log`));
+  child.stdout.pipe(log);
+  const ws = await new Promise((resolve, reject) => {
+    let buf = "";
+    const timer = setTimeout(() => reject(Error(`App did not expose DevTools within ${timeout}ms`)), timeout);
+    child.stderr.on("data", d => { log.write(d); buf += d; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(timer); resolve(m[1]); } });
+    child.once("exit", code => { clearTimeout(timer); reject(Error(`App exited during startup (${code})`)); });
+  });
+  const browser = await chromium.connectOverCDP(ws, { timeout });
+  return {
+    process: () => child,
+    windows: () => browser.contexts().flatMap(c => c.pages()),
+    async firstWindow() { for (let i = 0; i < 300; i++) { const w = this.windows()[0]; if (w) return w; await new Promise(r => setTimeout(r, 100)); } throw Error("No window opened."); },
+    evaluate: () => { throw Error("Main-process evaluate is only available in Playwright-launched online phases."); },
+    async close() { await browser.close().catch(() => {}); if (child.exitCode === null && !child.signalCode) child.kill("SIGTERM"); },
+  };
+}
 async function launch({ deny, online, url, timeout = 30000 }) {
   const env = { ...process.env, SETARCHITECT_TEST_USERDATA: temp};
   if (online) env.DANCEFLOOR_URL = url || ORIGIN; else delete env.DANCEFLOOR_URL; // offline phases try the real published URL, blocked
   const args = [path.join(root, "tests/native/fixtures/offline-entry.cjs"), "--no-sandbox", ...(deny ? DENY : [])];
   const mark = telemetryLines().length; launches++;
-  try { app = await electron.launch({ timeout, executablePath: bin, args, env }); }
+  try { app = deny ? await spawnAndAttach(args, env, timeout) : await electron.launch({ timeout, executablePath: bin, args, env }); }
   catch (e) {
     // Launch never resolved: publish what the app itself recorded, then rerun the same profile WITHOUT
     // Playwright's startup coupling to distinguish a product failure from a harness/attach failure.
@@ -81,6 +105,7 @@ async function launch({ deny, online, url, timeout = 30000 }) {
     console.log(`--- decoupled relaunch of the same profile (no Playwright) ---\n${await decoupledRun(args, env)}`);
     throw e;
   }
+  if (deny) return app;
   const proc = app.process(); const log = fs.createWriteStream(path.join(diagnostics, `offline-main-${proc.pid}.log`));
   proc.stdout?.pipe(log); proc.stderr?.pipe(log);
   return app;
