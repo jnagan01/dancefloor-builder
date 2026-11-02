@@ -88,7 +88,11 @@ async function spawnAndAttach(args, env, timeout) {
   child.stdout.pipe(log);
   // Bounded protocol log of the attach, so a hang names the CDP method still waiting for a reply.
   const protocol = [];
-  const logger = { isEnabled: name => name === "protocol", log: (_n, _s, message) => { protocol.push(`${Date.now()} ${String(message).slice(0, 400)}`); if (protocol.length > 2000) protocol.shift(); } };
+  const { debug } = createRequire(import.meta.url)("playwright-core/lib/utilsBundle");
+  const previousLog = debug.log;
+  debug.log = (...parts) => { protocol.push(parts.join(" ").replace(/\u001b\[[0-9;]*m/g, "").slice(0, 400)); if (protocol.length > 2000) protocol.shift(); };
+  debug.enable("pw:protocol");
+  const stopProtocol = () => { debug.disable(); debug.log = previousLog; };
   try {
     const ws = await new Promise((resolve, reject) => {
       let buf = "";
@@ -96,7 +100,8 @@ async function spawnAndAttach(args, env, timeout) {
       child.stderr.on("data", d => { log.write(d); buf += d; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(timer); resolve(m[1]); } });
       child.once("exit", code => { clearTimeout(timer); reject(Error(`App exited during startup (${code})`)); });
     });
-    const browser = await chromium.connectOverCDP(ws, { timeout, logger });
+    const browser = await chromium.connectOverCDP(ws, { timeout });
+    stopProtocol();
     return {
       process: () => child,
       windows: () => browser.contexts().flatMap(c => c.pages()),
@@ -106,6 +111,7 @@ async function spawnAndAttach(args, env, timeout) {
     };
   } catch (e) {
     // Own the child even when attach fails: no leaked app holding the profile lock or the job open.
+    stopProtocol();
     await stopChild(child); log.end();
     const pending = pendingCalls(protocol);
     fs.writeFileSync(path.join(diagnostics, `attach-${launches}-protocol.log`), protocol.join("\n"));
@@ -119,7 +125,7 @@ function pendingCalls(lines) {
   for (const l of lines) {
     const json = l.slice(l.indexOf("{")); let m; try { m = JSON.parse(json); } catch { continue; }
     const key = `${m.sessionId || "browser"}:${m.id}`;
-    if (l.includes("SEND") && m.method) open.set(key, `${m.method} session=${m.sessionId || "browser"}`);
+    if (l.includes("SEND \u25BA") && m.method) open.set(key, `${m.method} session=${m.sessionId || "browser"}`);
     else if (m.id !== undefined) open.delete(key);
   }
   return [...open.values()];
