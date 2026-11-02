@@ -2,7 +2,7 @@
 - Subdirectories have their own `AGENTS.md`; read them before changing files there.
 - Keep the event builder under `/events/new` and the authenticated workspace shell under `_authenticated/route.tsx`, because Home must be the default landing page without resetting event state on unrelated pages.
 - Keep selected music source indexes in account-scoped IndexedDB; browser file access requires reconnecting folders and server storage must not hold local audio files.
-- Keep event autosave in the existing owner-scoped `workflow_history` JSON snapshot, because a new event table is unnecessary and old snapshots must remain readable.
+- Keep event autosave in the owner-scoped `workflow_history` JSON snapshot, because old snapshots must stay readable.
 - Keep workspace colors and typography in shared semantic CSS tokens and reuse the same local-file waveform player for library and event review, because visual changes must remain consistent without changing playback behavior.
 - Read and write song metadata tags only inside the Mac app (desktop/tags.cjs via node-taglib-sharp, cached by size+mtime in userData), because browsers cannot modify local files and edits must land in the music files themselves.
 - Keep event-type presets in `src/lib/eventTypes.ts`, separate from vibes, and apply their era/explicit rules only to added songs in `reorderForEnergyProgression`, because client uploads must always stay in the list.
@@ -21,7 +21,7 @@
 - Use generateLists for dance target rounding in restore and display and block missing-title uploads before full generation, because partial imports must never become invented songs or silently disappear.
 
 - Keep backup imports additive and account-scoped; share the JSON private-field policy across browser/native validators, distinguish dictionary IDs from properties, and require backups before rescans/updates to preserve recoverability.
-- Run the real event route in a separately fenced synthetic Electron profile before packaging; replace network/storage services only in test fixtures, because release checks must never reach user data.
+- Run the real event route in a fenced synthetic Electron profile before packaging, stubbing network/storage only in fixtures, so release checks never reach user data.
 
 - Fence backup/restore after every asynchronous boundary using account-session generation and captured sources/roots; compute conflict previews with identity maps and bounded samples, because late operations must not mix account data or stall large libraries.
 - Mirror native event recovery in an fsynced, account/event-key-hashed journal behind exact-origin main-frame IPC; keep existing browser recovery keys, because Chromium localStorage alone did not survive an abrupt process kill.
@@ -30,3 +30,4 @@
 
 - Apply appearance before first paint and share semantic theme tokens through a single provider; System alone follows OS changes, because SSR and every workspace surface must agree.
 - Read sidebar installed versions from the bridged Electron app identity (or explicit currentVersion), never updater status.version; label browser versions separately because available updates are not installed versions.
+- Compare web builds only by `__APP_BUILD_ID__` via no-store `/api/public/version`, never HTML meta/semver/time, because only the deployed worker knows what refresh loads.

@@ -14,6 +14,16 @@ const buildTimeIso =
 
 export const APP_BUILD_TIME = buildTimeIso;
 
+declare const __APP_BUILD_ID__: string | undefined;
+
+/**
+ * Unique identity of the built artifact (build time + random UUID), injected
+ * once per build into both client and server bundles. Null when not injected,
+ * so an unstamped build can never be reported as "up to date".
+ */
+export const APP_BUILD_ID: string | null =
+  typeof __APP_BUILD_ID__ === "string" && __APP_BUILD_ID__.length > 0 ? __APP_BUILD_ID__ : null;
+
 // Fixed locale + UTC keeps the string identical on server and browser.
 export function formatBuildDate(iso: string = buildTimeIso): string {
   const d = new Date(iso);

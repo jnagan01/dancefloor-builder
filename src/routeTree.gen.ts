@@ -19,6 +19,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedUpdatesRouteImport } from './routes/_authenticated/updates'
 import { Route as AuthenticatedEventsIndexRouteImport } from './routes/_authenticated/events.index'
 import { Route as AuthenticatedEventsNewRouteImport } from './routes/_authenticated/events.new'
+import { Route as ApiPublicVersionRouteImport } from './routes/api/public/version'
 import { Route as ApiPublicHooksWeeklyErrorDigestRouteImport } from './routes/api/public/hooks/weekly-error-digest'
 import { Route as ApiPublicSpotifyCallbackRouteImport } from './routes/api/public/spotify/callback'
 import { Route as LovableEmailTransactionalPreviewRouteImport } from './routes/lovable/email/transactional/preview'
@@ -73,6 +74,11 @@ const AuthenticatedEventsNewRoute = AuthenticatedEventsNewRouteImport.update({
   path: '/new',
   getParentRoute: () => AuthenticatedEventsRoute,
 } as any)
+const ApiPublicVersionRoute = ApiPublicVersionRouteImport.update({
+  id: '/api/public/version',
+  path: '/api/public/version',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPublicHooksWeeklyErrorDigestRoute =
   ApiPublicHooksWeeklyErrorDigestRouteImport.update({
     id: '/api/public/hooks/weekly-error-digest',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/updates': typeof AuthenticatedUpdatesRoute
   '/events/new': typeof AuthenticatedEventsNewRoute
+  '/api/public/version': typeof ApiPublicVersionRoute
   '/events/': typeof AuthenticatedEventsIndexRoute
   '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
   '/api/public/spotify/callback': typeof ApiPublicSpotifyCallbackRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByTo {
   '/updates': typeof AuthenticatedUpdatesRoute
   '/': typeof AuthenticatedIndexRoute
   '/events/new': typeof AuthenticatedEventsNewRoute
+  '/api/public/version': typeof ApiPublicVersionRoute
   '/events': typeof AuthenticatedEventsIndexRoute
   '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
   '/api/public/spotify/callback': typeof ApiPublicSpotifyCallbackRoute
@@ -130,6 +138,7 @@ export interface FileRoutesById {
   '/_authenticated/updates': typeof AuthenticatedUpdatesRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/events/new': typeof AuthenticatedEventsNewRoute
+  '/api/public/version': typeof ApiPublicVersionRoute
   '/_authenticated/events/': typeof AuthenticatedEventsIndexRoute
   '/api/public/hooks/weekly-error-digest': typeof ApiPublicHooksWeeklyErrorDigestRoute
   '/api/public/spotify/callback': typeof ApiPublicSpotifyCallbackRoute
@@ -146,6 +155,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/updates'
     | '/events/new'
+    | '/api/public/version'
     | '/events/'
     | '/api/public/hooks/weekly-error-digest'
     | '/api/public/spotify/callback'
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/updates'
     | '/'
     | '/events/new'
+    | '/api/public/version'
     | '/events'
     | '/api/public/hooks/weekly-error-digest'
     | '/api/public/spotify/callback'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/_authenticated/updates'
     | '/_authenticated/'
     | '/_authenticated/events/new'
+    | '/api/public/version'
     | '/_authenticated/events/'
     | '/api/public/hooks/weekly-error-digest'
     | '/api/public/spotify/callback'
@@ -184,6 +196,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ApiPublicVersionRoute: typeof ApiPublicVersionRoute
   ApiPublicHooksWeeklyErrorDigestRoute: typeof ApiPublicHooksWeeklyErrorDigestRoute
   ApiPublicSpotifyCallbackRoute: typeof ApiPublicSpotifyCallbackRoute
   LovableEmailTransactionalPreviewRoute: typeof LovableEmailTransactionalPreviewRoute
@@ -261,6 +274,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedEventsNewRouteImport
       parentRoute: typeof AuthenticatedEventsRoute
     }
+    '/api/public/version': {
+      id: '/api/public/version'
+      path: '/api/public/version'
+      fullPath: '/api/public/version'
+      preLoaderRoute: typeof ApiPublicVersionRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/hooks/weekly-error-digest': {
       id: '/api/public/hooks/weekly-error-digest'
       path: '/api/public/hooks/weekly-error-digest'
@@ -321,6 +341,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ApiPublicVersionRoute: ApiPublicVersionRoute,
   ApiPublicHooksWeeklyErrorDigestRoute: ApiPublicHooksWeeklyErrorDigestRoute,
   ApiPublicSpotifyCallbackRoute: ApiPublicSpotifyCallbackRoute,
   LovableEmailTransactionalPreviewRoute: LovableEmailTransactionalPreviewRoute,
