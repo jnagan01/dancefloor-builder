@@ -136,6 +136,6 @@ export function validSavedLibrary(value: unknown): value is SavedLibraryPayload 
   return v.version === 1 && Number.isFinite(v.savedAt) && Array.isArray(v.sources) && v.sources.every(s =>
     s && typeof s.label === "string" && Array.isArray(s.tracks) && s.tracks.every(t =>
       t && typeof t.filePath === "string" && typeof t.artist === "string" && typeof t.title === "string" &&
-      ["bpm","key","genre","year","album","comment","fileSize","decade","remix","lastPlayTime"].every(k => (t as unknown as Record<string, unknown>)[k] === undefined || typeof (t as unknown as Record<string, unknown>)[k] === "string") &&
+      ["bpm","key","genre","year","album","comment","fileSize","decade","remix","lastPlayTime","songLength"].every(k => (t as unknown as Record<string, unknown>)[k] === undefined || typeof (t as unknown as Record<string, unknown>)[k] === "string") &&
       (t.playCount === undefined || Number.isFinite(t.playCount))));
 }

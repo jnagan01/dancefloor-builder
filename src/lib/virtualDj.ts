@@ -35,6 +35,8 @@ export interface VdjTrack {
   fromTags?: boolean;
   playCount?: number;
   lastPlayTime?: string;
+  /** Track length in seconds as reported by VirtualDJ (Infos SongLength); absent = unknown. */
+  songLength?: string;
 }
 
 /**
@@ -141,6 +143,8 @@ function trackFromNode(node: Element): VdjTrack | null {
   const rawPlays = attr(infos, "PlayCount", "Playcount", "playcount");
   const playCount = rawPlays && /^\d+$/.test(rawPlays.trim()) ? Number(rawPlays.trim()) : undefined;
   const lastPlayTime = attr(infos, "LastPlayTime", "Lastplaytime");
+  const rawLength = attr(infos, "SongLength", "Songlength", "songlength");
+  const songLength = rawLength && /^\d+(?:\.\d+)?$/.test(rawLength.trim()) && Number(rawLength) > 0 ? String(Math.round(Number(rawLength))) : undefined;
 
   // Fallback: derive from filename
   if (!artist || !title) {
@@ -171,6 +175,7 @@ function trackFromNode(node: Element): VdjTrack | null {
     remix: remixTag || remix,
     playCount,
     lastPlayTime,
+    ...(songLength ? { songLength } : {}),
   };
 }
 
