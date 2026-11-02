@@ -6,8 +6,14 @@
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import { loadEnv } from "vite";
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+
+// One identity per config load = one per built artifact; shared by the client
+// and server bundles so /api/public/version and the loaded page agree.
+const BUILD_TIME = new Date().toISOString();
+const BUILD_ID = `${BUILD_TIME}.${randomUUID()}`;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -38,7 +44,8 @@ export default defineConfig({
       },
     },
     define: {
-      __APP_BUILD_TIME__: JSON.stringify(new Date().toISOString()),
+      __APP_BUILD_TIME__: JSON.stringify(BUILD_TIME),
+      __APP_BUILD_ID__: JSON.stringify(BUILD_ID),
     },
     resolve: {
       alias: {
