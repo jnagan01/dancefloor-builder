@@ -70,7 +70,7 @@ describe('owned-only expansion and conservative seasonal evidence', () => {
     const client = [{ artist: 'Wham!', song: 'Last Christmas' }];
     const r = dance.generateLists({ uploaded: client, hours: .25, expand: true, buffer: 2, prefs: { artists: [], decades: [], doNotPlay: [], additionAllowed: () => false } });
     expect([...r.warmUp, ...r.transition, ...r.peak].map(s => s.song)).toEqual(['Last Christmas']);
-    expect(r.finalShortfall?.total).toBeGreaterThan(0);
+    expect(dance.currentShortfall(r).total).toBeGreaterThan(0);
     const topped = dance.topUpSectionsFromLibrary(r, { artists: [], decades: [], doNotPlay: [], additionAllowed: () => false });
     expect([...topped.warmUp, ...topped.transition, ...topped.peak]).toHaveLength(1);
   });
