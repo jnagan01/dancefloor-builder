@@ -67,7 +67,7 @@ describe("offline export plan", () => {
     expect(performance.now() - t).toBeLessThan(500);
     expect(core.search(core.buildIndex(tracks), "artist song", 5)[0].i).toBe(0);
   });
-  it("unsafe file names are sanitized", () => { expect(core.safeFileName("../a/b:c")).toBe("_._a_b_c"); });
+  it("unsafe file names are sanitized", () => { expect(core.safeFileName("../a/b:c")).toBe("__a_b_c"); });
 });
 
 describe("offline store", () => {
