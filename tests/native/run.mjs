@@ -337,12 +337,13 @@ try{
    await expect(page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true})).toBeChecked();
    await expect(page.getByRole('switch',{name:'Include seasonal/holiday tracks',exact:true})).not.toBeChecked();
    await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
+   if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Policy synthetic');
    await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
    const upload=path.join(temp,'policies.csv');fs.writeFileSync(upload,'Artist,Song\nWham!,Last Christmas\nClient,Requested Unknown\n');
    await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
    await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
-   await expect(page.locator('tbody tr')).toHaveCount(2);await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await expect(page.locator('tbody tr')).toHaveCount(2);await page.getByRole('button',{name:'Continue',exact:true}).click();
    await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
