@@ -18,13 +18,13 @@ export function createLookupGuard() {
 }
 
 const VERSION_WORDS = /\b(remix|mix|edit|version|live|acoustic|instrumental|extended|radio|clean|dirty|explicit|remaster(?:ed)?|dub|vip|bootleg|mashup|cover|karaoke|acapella)\b/gi;
+const VW = new RegExp(VERSION_WORDS.source, "i");
 const words = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/\(.*?\)|\[.*?\]/g, m => ` ${m} `).replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter(Boolean);
 const versionSet = (s: string) => new Set((s.match(VERSION_WORDS) ?? []).map(w => w.toLowerCase()));
 
 /** Compare a local file to an external candidate without merging different versions. */
 export function compareCandidate(local: { artist: string; title: string; remix?: string; durationSec?: number }, cand: { artist: string; title: string; disambiguation?: string; lengthSec?: number | null }) {
-  const lt = new Set(words(local.title).filter(w => !VERSION_WORDS.test(w))), ct = new Set(words(cand.title).filter(w => !VERSION_WORDS.test(w)));
-  VERSION_WORDS.lastIndex = 0;
+  const lt = new Set(words(local.title).filter(w => !VW.test(w))), ct = new Set(words(cand.title).filter(w => !VW.test(w)));
   const overlap = (a: Set<string>, b: Set<string>) => { if (!a.size || !b.size) return 0; let n = 0; a.forEach(x => { if (b.has(x)) n++; }); return n / Math.max(a.size, b.size); };
   const titleSim = overlap(lt, ct), artistSim = overlap(new Set(words(local.artist)), new Set(words(cand.artist)));
   const lv = versionSet(`${local.title} ${local.remix ?? ""}`), cv = versionSet(`${cand.title} ${cand.disambiguation ?? ""}`);

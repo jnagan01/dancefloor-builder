@@ -18,9 +18,12 @@ import { withoutSourceFiles, cachedFileIdentity } from "@/lib/workspaceFileCache
 import { createWorkspaceIndexes } from "@/lib/workspaceIndexes";
 import { createTrackRevisions } from "@/lib/trackRevisions";
 import { nativeScanProblem } from "@/lib/nativeScanSafety";
+import { prepStore } from "@/lib/prep/prepStore";
 
 type Source = { label: string; tracks: VdjTrack[] };
 type Workspace = {
+  /** Signed-in account id for account-scoped app-only data. */
+  account: string | null;
   sources: Source[]; files: File[]; audioIndex: AudioIndex; library: VdjLibrary | null; loading: boolean; persistenceError: string | null;
   backup: () => Promise<Backup>; restoreMetadata: (backup: Backup) => Promise<void>; prepareOffline: () => Promise<OfflineStatus>;
   addFolder: () => Promise<void>; rescan: () => Promise<void>; removeSource: (index: number) => void; addFile: (file: File) => string;
@@ -261,7 +264,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const snapshot = { name: row.name, inputs: row.inputs, lists: row.lists };
       readEventSnapshot(snapshot); return { id: row.id, snapshot };
     });
-    const b = { format: "setarchitect-backup" as const, version: 1 as const, account: owner.account, createdAt: new Date().toISOString(), events, sources: owner.sources, roots: owner.roots } as Backup;
+    const prep = await prepStore().backupSection(owner.account); owner.check();
+    const b = { format: "setarchitect-backup" as const, version: 1 as const, account: owner.account, createdAt: new Date().toISOString(), events, sources: owner.sources, roots: owner.roots, ...(prep ? { prep } : {}) } as Backup;
     validateBackup(JSON.stringify(b), owner.account); owner.check();
     await saveBackup(b); owner.check(); return b;
   }
@@ -292,6 +296,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     owner.check();
     for (const [label, root] of Object.entries(plan.mappings)) setFolderRoot(label, root);
     setSources(prev => { owner.check(); return [...prev, ...plan.additions.filter(source => !prev.some(s => s.label === source.label))]; });
+    if (imported.prep) { owner.check(); await prepStore().restoreAdditive(owner.account, imported.prep); }
   }
   async function addFolder() {
     const rootProblem = folderRootsProblem();
@@ -490,7 +495,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     revisions.bump(selected.label, track.filePath, roots);
     setSources(prev => prev.map(s => s.label === selected.label ? { ...s, tracks: s.tracks.map(t => trackIdentity(t.filePath, roots) === identity ? { ...t, ...patch, filePath: t.filePath } : t) } : s));
   }
-  return <Context.Provider value={{ sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, backup, restoreMetadata, prepareOffline, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
+  useEffect(() => { void prepStore().setAccount(loading ? (userId ?? null) : userId); }, [userId, loading]);
+  return <Context.Provider value={{ account: userId, sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, backup, restoreMetadata, prepareOffline, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
   const value = useContext(Context);
