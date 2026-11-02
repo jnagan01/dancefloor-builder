@@ -6,6 +6,22 @@ export function metadataResolver(metadata: readonly VdjTrack[], tracks: readonly
   return createIdentityIndex(metadata, t => t.filePath, roots, tracks.map(t => t.filePath));
 }
 
+/**
+ * Report for a VirtualDJ sync: library tracks with exactly one metadata entry
+ * (`matched`) and how many of those end up with a valid length after merging.
+ */
+export function vdjSyncSummary(metadata: readonly VdjTrack[], sources: ReadonlyArray<{ tracks: readonly VdjTrack[] }>, roots: Record<string, string>) {
+  const all = sources.flatMap(s => s.tracks);
+  const resolver = metadataResolver(metadata, all, roots);
+  let matched = 0, withLength = 0;
+  for (const track of all) {
+    const info = resolver.resolve(track.filePath);
+    if (info) matched++;
+    if (validSongLength(mergeTrackMetadata(track, info, true).songLength)) withLength++;
+  }
+  return { matched, withLength };
+}
+
 /** Positive finite whole-second length as a string; anything else is unknown. */
 export function validSongLength(v: unknown): string | undefined {
   if (typeof v !== "string" || !/^\d+(?:\.\d+)?$/.test(v.trim())) return undefined;

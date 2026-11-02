@@ -13,7 +13,7 @@ import { saveDirHandle, saveDirHandleMeta, loadDirHandle, verifyReadWrite, type 
 import { toast } from "sonner";
 import { buildAudioIndex, resolveAudioFile, type AudioIndex } from "@/lib/audioMatch";
 import { allocateSourceLabel, relabelScan, normalizeFilePath, trackIdentity, createIdentityIndex } from "@/lib/fileIdentity";
-import { metadataResolver, mergeTrackMetadata, carryRescanMetadata } from "@/lib/trackMetadataIdentity";
+import { metadataResolver, mergeTrackMetadata, carryRescanMetadata, vdjSyncSummary } from "@/lib/trackMetadataIdentity";
 import { withoutSourceFiles, cachedFileIdentity } from "@/lib/workspaceFileCache";
 import { createWorkspaceIndexes } from "@/lib/workspaceIndexes";
 import { createTrackRevisions } from "@/lib/trackRevisions";
