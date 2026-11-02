@@ -290,7 +290,7 @@ try{
    const lib=[{filePath:F.bill,artist:'Bill Withers',title:"Ain't No Sunshine"},{filePath:F.billOther,artist:'Bill Withers',title:"Ain't No Sunshine"},{filePath:F.simon,artist:'Simon & Garfunkel',title:'Cecilia'},{filePath:F.zero,artist:'Zed',title:'Zero',songLength:'111'},{filePath:F.bad,artist:'Zed',title:'Bad',songLength:'222'},{filePath:F.unclosed,artist:'Unclosed',title:'Quote',songLength:'333',genre:'Kept'},{filePath:F.entity,artist:'Entity',title:'Boom'},{filePath:F.after,artist:'Zed',title:'After'}];
    lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib,vdjRefresh:true}));
-   fs.writeFileSync(path.join(temp,'vdj.xml'),fx.xml);const xmlBefore=fs.readFileSync(path.join(temp,'vdj.xml'));
+   const nulXml=fx.xml.replace('\n <Song FilePath="'+dir+'/Zed - After.mp3','\n\u0000 <Song FilePath="'+dir+'/Zed - After.mp3')+'\n\u0000';expect(nulXml).toContain('\u0000 <Song');fs.writeFileSync(path.join(temp,'vdj.xml'),nulXml);const xmlBefore=fs.readFileSync(path.join(temp,'vdj.xml'));
    const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
    const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
    const request={artist:'Bill Withers',song:"Ain't No Sunshine",fromUpload:true};

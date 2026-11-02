@@ -136,7 +136,8 @@ export function parseBlockTolerant(block: string): { node: TolerantNode } | { er
   return { node: song };
 }
 
-const BLOCK_START = /(^|[\n>])[ \t]*<(Song|Track)(?=[\s>/])/gi;
+// Stray C0 controls (e.g. a lone NUL at a line start) between entries must not hide the next Song.
+const BLOCK_START = /(^|[\n>])[ \t\x00-\x08\x0B\x0C\x0E-\x1F]*<(Song|Track)(?=[\s>/])/gi;
 
 function blockEnd(chunk: string): number {
   const closeRe = /<\/\s*(?:song|track)\s*>/gi;

@@ -60,6 +60,9 @@ try {
     expect(dom.tracks).toEqual(tolerant.tracks); expect(dom.skipped).toEqual(tolerant.skipped);
     expect(dom.tolerantCount).toBe(3); // broken, bare "&", undeclared entity; the rest parsed strictly
     expect(JSON.stringify(dom)).not.toMatch(/EXPANDED|passwd/);
+    const nul = await page.evaluate(() => { const s = (n, l) => ` <Song FilePath="/x/${n}"><Tags Title="${n}"/><Infos SongLength="${l}"/></Song>`; return ['<VirtualDJ_Database>', s('Ain&apos;t.mp3', '290.352086'), '\u0000' + s('B &amp; C.mp3', '200'), s('D.mp3', '100'), '</VirtualDJ_Database>', '\u0000'].join('\n'); }).then(xml => page.evaluate(x => window.__parseVdjDetailed(x), xml));
+    expect(nul.mode).toBe('recovered'); expect(nul.skippedCount).toBe(0);
+    expect(nul.tracks.map(t => [t.filePath, t.songLength])).toEqual([["/x/Ain't.mp3", '290'], ['/x/B & C.mp3', '200'], ['/x/D.mp3', '100']]);
   });
 
   await check('library filters combine with explicit unknowns, save preset, persist across reload', async () => {
