@@ -82,7 +82,36 @@ async function stopChild(child) {
   child.kill("SIGTERM");
   if (!await Promise.race([exited.then(() => true), new Promise(r => setTimeout(() => r(false), 5000))])) { child.kill("SIGKILL"); await Promise.race([exited, new Promise(r => setTimeout(r, 5000))]); }
 }
-async function spawnAndAttach(args, env, timeout) {
+// macOS CI evidence (run 41485655370): attaching while the windows were still committing their first
+// navigations left Page.getFrameTree unanswered on BOTH page sessions, although both pages reached
+// dom-ready/did-finish-load and the main process kept running. DevTools is announced on stderr before any
+// window exists, so the old attach raced Electron's startup navigations (main window -> failed online URL
+// -> error page; offline window -> bundled page). Attach only once the app's OWN startup telemetry shows
+// the offline workspace finished loading and no window is still loading. This is a readiness signal, not
+// a sleep; a product that never opens the offline workspace still fails here with its telemetry printed.
+function startupSettled(mark) {
+  const events = telemetryLines().slice(mark).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  const loading = new Map(); let offlineLoaded = false;
+  for (const e of events) {
+    if (e.event === "did-start-loading") loading.set(e.id, true);
+    else if (e.event === "did-stop-loading" || e.event === "web-contents-destroyed") loading.set(e.id, false);
+    else if (e.event === "did-finish-load" && String(e.url).startsWith("setarchitect-offline://app/")) offlineLoaded = true;
+    else if (e.event === "exit" || e.event === "quit") return { failed: `app quit before the offline workspace settled (${e.event})` };
+  }
+  return { ready: offlineLoaded && ![...loading.values()].some(Boolean), offlineLoaded, loading: [...loading].filter(([, v]) => v).map(([id]) => id) };
+}
+async function waitForStartupSettled(mark, child, timeout) {
+  const deadline = Date.now() + timeout; let s;
+  while (Date.now() < deadline) {
+    s = startupSettled(mark);
+    if (s.failed) throw Error(s.failed);
+    if (child.exitCode !== null || child.signalCode) throw Error(`App exited before the offline workspace settled (${child.exitCode ?? child.signalCode})`);
+    if (s.ready) return;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  throw Error(`Offline workspace did not settle within ${timeout}ms (offline loaded: ${s?.offlineLoaded}; still loading webContents: ${s?.loading?.join(",") || "none"})`);
+}
+async function spawnAndAttach(args, env, timeout, mark) {
   const child = spawn(bin, [...args, ...ATTACH_SWITCHES, "--remote-debugging-port=0"], { env, stdio: ["ignore", "pipe", "pipe"] });
   const log = fs.createWriteStream(path.join(diagnostics, `offline-main-${child.pid}.log`));
   child.stdout.pipe(log);
@@ -91,7 +120,6 @@ async function spawnAndAttach(args, env, timeout) {
   const { debug } = createRequire(import.meta.url)("playwright-core/lib/utilsBundle");
   const previousLog = debug.log;
   debug.log = (...parts) => { protocol.push(parts.join(" ").replace(/\u001b\[[0-9;]*m/g, "").slice(0, 400)); if (protocol.length > 2000) protocol.shift(); };
-  debug.enable("pw:protocol");
   const stopProtocol = () => { debug.disable(); debug.log = previousLog; };
   try {
     const ws = await new Promise((resolve, reject) => {
@@ -100,6 +128,10 @@ async function spawnAndAttach(args, env, timeout) {
       child.stderr.on("data", d => { log.write(d); buf += d; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(timer); resolve(m[1]); } });
       child.once("exit", code => { clearTimeout(timer); reject(Error(`App exited during startup (${code})`)); });
     });
+    const t0 = Date.now();
+    await waitForStartupSettled(mark, child, timeout);
+    console.log(`  startup settled ${Date.now() - t0}ms after DevTools was announced; attaching`);
+    debug.enable("pw:protocol");
     const browser = await chromium.connectOverCDP(ws, { timeout });
     stopProtocol();
     return {

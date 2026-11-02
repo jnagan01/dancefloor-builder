@@ -33,6 +33,8 @@ if (process.type === "browser") {
   app.on("web-contents-created", (_e, wc) => {
     const id = wc.id; log("web-contents-created", { id, type: wc.getType() });
     wc.on("did-start-loading", () => log("did-start-loading", { id, url: wc.getURL() }));
+    wc.on("did-stop-loading", () => log("did-stop-loading", { id, url: wc.getURL() }));
+    wc.on("did-navigate", (_x, url, code) => log("did-navigate", { id, url, code }));
     wc.on("did-fail-load", (_x, code, desc, url, main) => log("did-fail-load", { id, code, desc, url, main }));
     wc.on("did-finish-load", () => log("did-finish-load", { id, url: wc.getURL() }));
     wc.on("dom-ready", () => log("dom-ready", { id, url: wc.getURL() }));
