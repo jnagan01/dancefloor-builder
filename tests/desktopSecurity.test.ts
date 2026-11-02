@@ -94,7 +94,7 @@ async function loadMain(update = { blocked: false, authorized: false }) {
   const app = { setPath: vi.fn(), getPath: () => "/mock", requestSingleInstanceLock: () => true, on: (name: string, fn: Function) => appListeners.set(name,fn), whenReady: async () => {}, quit: vi.fn() };
   const electron = { app, BrowserWindow: function () { return win; }, shell: { openExternal: external }, Menu: { buildFromTemplate: () => [], setApplicationMenu: vi.fn() }, dialog: { showOpenDialog }, ipcMain: { on: (name: string, fn: Function) => handlers.set(name, fn), handle: (name: string, fn: Function) => handlers.set(name, fn) } };
   runInNewContext(readFileSync(new URL("../desktop/main.cjs", import.meta.url), "utf8"), {
-    require: (name: string) => name === "electron" ? electron : name === "node:fs" ? fs : name === "./security.cjs" ? require("../desktop/security.cjs") : name === "./scan.cjs" ? { scanFolder } : name === "./tags.cjs" ? { createTagCache: () => ({ forget: vi.fn(), flush: async () => {} }), writeTags } : name === "./backups.cjs" ? { createBackupStore: () => ({ save: async () => {}, latest: async () => null }) } : name === "./offline-window.cjs" ? { registerOfflineScheme: () => {}, createOfflineWorkspace: () => ({ open: () => {}, register: () => {} }) } : name === "./offline-store.cjs" ? { createOfflineStore: () => ({ prepare: async () => ({ ok: true }), status: async () => ({ prepared: false }), accountSeen: async () => {}, invalidate: async () => {} }) } : name === "./recovery.cjs" ? { createRecoveryStore: () => ({ get: () => null, set: () => {}, remove: () => {} }) } : name === "./updater.cjs" ? { checkForUpdates: async () => {}, getController: () => ({status:()=>({phase:"idle"}),check:async()=>{},install:async()=>{},cancel:()=>{}}), updateBlocksQuit:()=>update.blocked, updateBlocksNavigation:()=>update.blocked, updateInstallAuthorized:()=>update.authorized } : require(name),
+    require: (name: string) => name === "electron" ? electron : name === "node:fs" ? fs : name === "./security.cjs" ? require("../desktop/security.cjs") : name === "./vdj-database.cjs" ? require("../desktop/vdj-database.cjs") : name === "./scan.cjs" ? { scanFolder } : name === "./tags.cjs" ? { createTagCache: () => ({ forget: vi.fn(), flush: async () => {} }), writeTags } : name === "./backups.cjs" ? { createBackupStore: () => ({ save: async () => {}, latest: async () => null }) } : name === "./offline-window.cjs" ? { registerOfflineScheme: () => {}, createOfflineWorkspace: () => ({ open: () => {}, register: () => {} }) } : name === "./offline-store.cjs" ? { createOfflineStore: () => ({ prepare: async () => ({ ok: true }), status: async () => ({ prepared: false }), accountSeen: async () => {}, invalidate: async () => {} }) } : name === "./recovery.cjs" ? { createRecoveryStore: () => ({ get: () => null, set: () => {}, remove: () => {} }) } : name === "./updater.cjs" ? { checkForUpdates: async () => {}, getController: () => ({status:()=>({phase:"idle"}),check:async()=>{},install:async()=>{},cancel:()=>{}}), updateBlocksQuit:()=>update.blocked, updateBlocksNavigation:()=>update.blocked, updateInstallAuthorized:()=>update.authorized } : require(name),
     process: { env: {}, platform: "darwin" }, __dirname: "/mock/desktop", setTimeout: vi.fn(), clearTimeout: vi.fn(), console,
   });
   await Promise.resolve();
@@ -185,6 +185,11 @@ describe("real main process wiring with mocks", () => {
     expect(pkg.build.files).toContain("security.cjs");
     expect(pkg.build.files).toContain("scan.cjs");
     expect(pkg.build.files).toContain("update-controller.cjs");
+    // Every local module the main process requires must ship, or the installed app fails to start.
+    const mainSource = readFileSync(new URL("../desktop/main.cjs", import.meta.url), "utf8");
+    const local = [...mainSource.matchAll(/require\("\.\/([^"]+)"\)/g)].map(m => m[1]);
+    expect(local).toContain("vdj-database.cjs");
+    for (const file of local) expect(pkg.build.files).toContain(file);
     expect(pkg.build.appId).toBe("com.exceptionalentertainment.dancefloorbuilder");
   });
 });

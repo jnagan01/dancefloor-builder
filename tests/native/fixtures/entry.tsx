@@ -7,6 +7,7 @@ import {WorkspaceProvider,useWorkspace} from '../../../src/components/workspace/
 import {Route} from '../../../src/routes/_authenticated/events.new';
 const windowValue=window as any;
 windowValue.__testState={account:'synthetic-owner',eventId:'A',version:0,page:windowValue.__fixture.startBackups?'backups':'event'};
+function VdjRefreshFixture(){const workspace=useWorkspace();return <button onClick={()=>void workspace.refreshVdj()}>Fixture VirtualDJ refresh</button>;}
 function RescanFixture(){const workspace=useWorkspace();return <button onClick={()=>void workspace.rescan()}>Fixture rescan</button>;}
-const Root=()=>{const [version,setVersion]=React.useState(0);windowValue.__rerender=()=>setVersion(v=>v+1);return <AppearanceProvider><WorkspaceProvider><React.Fragment key={version}>{windowValue.__testState.page==='backups'?<><AppearanceSettings/><BackupSettings/>{windowValue.__fixture.startBackups&&<RescanFixture/>}</>:<Route.component/>}</React.Fragment></WorkspaceProvider></AppearanceProvider>;};
+const Root=()=>{const [version,setVersion]=React.useState(0);windowValue.__rerender=()=>setVersion(v=>v+1);return <AppearanceProvider><WorkspaceProvider>{windowValue.__fixture.vdjRefresh&&<VdjRefreshFixture/>}<React.Fragment key={version}>{windowValue.__testState.page==='backups'?<><AppearanceSettings/><BackupSettings/>{windowValue.__fixture.startBackups&&<RescanFixture/>}</>:<Route.component/>}</React.Fragment></WorkspaceProvider></AppearanceProvider>;};
 createRoot(document.getElementById('root') as HTMLElement).render(<Root/>);

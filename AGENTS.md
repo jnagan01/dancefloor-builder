@@ -32,3 +32,4 @@
 - Apply appearance before first paint and share semantic theme tokens through a single provider; System alone follows OS changes, because SSR and every workspace surface must agree.
 - Read sidebar installed versions from the bridged Electron app identity (or explicit currentVersion), never updater status.version; label browser versions separately because available updates are not installed versions.
 - Compare web builds only by `__APP_BUILD_ID__` via no-store `/api/public/version`, never HTML meta/semver/time, because only the deployed worker knows what refresh loads.
+- Parse VirtualDJ database.xml strictly first; on malformed XML or any DOCTYPE recover per Song block (strict block, then tolerant attributes decoding only predefined/numeric references) and skip/report unsafe paths, because one damaged entry must not discard every track's metadata nor invent file identities.

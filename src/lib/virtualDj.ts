@@ -3,6 +3,7 @@ import type { Song } from "./danceFloor";
 import { normalizeKey } from "./danceFloor";
 import { supportsNativeFolders, chooseNativeFolder } from "./desktopBridge";
 import { fullFilePath, normalizeFilePath, createIdentityIndex, qualifiedFilePath } from "./fileIdentity";
+import { recoverVdjBlocks, domBlockParser, type XmlNodeLike, type SkippedVdjEntry } from "./vdjXmlRecovery";
 import {
   makeSubject,
   scorePair,
@@ -102,7 +103,7 @@ function stripRemix(title: string): { base: string; remix?: string } {
 // --- XML parsing ---
 
 /** Case-insensitive attribute lookup (VirtualDJ casing varies across versions). */
-function attr(el: Element | null | undefined, ...names: string[]): string | undefined {
+function attr(el: XmlNodeLike | null | undefined, ...names: string[]): string | undefined {
   if (!el) return undefined;
   for (const n of names) {
     const direct = el.getAttribute(n);
@@ -116,7 +117,7 @@ function attr(el: Element | null | undefined, ...names: string[]): string | unde
   return undefined;
 }
 
-function childByName(el: Element, name: string): Element | undefined {
+function childByName(el: XmlNodeLike, name: string): XmlNodeLike | undefined {
   const lower = name.toLowerCase();
   for (let i = 0; i < el.children.length; i++) {
     const c = el.children[i];
@@ -125,7 +126,7 @@ function childByName(el: Element, name: string): Element | undefined {
   return undefined;
 }
 
-function trackFromNode(node: Element): VdjTrack | null {
+function trackFromNode(node: XmlNodeLike): VdjTrack | null {
   const filePath = attr(node, "FilePath", "path", "Path", "FilePathName") || "";
   if (!filePath) return null;
   const fileSize = attr(node, "FileSize", "size");
@@ -179,45 +180,61 @@ function trackFromNode(node: Element): VdjTrack | null {
   };
 }
 
-export function parseVdjDatabaseXml(text: string): VdjTrack[] {
+export interface VdjParseReport {
+  tracks: VdjTrack[];
+  /** "strict" = valid XML; "recovered" = malformed file read block by block. */
+  mode: "strict" | "recovered";
+  /** Blocks that failed strict parsing but were read tolerantly. */
+  tolerantCount: number;
+  /** Entries that could not be read safely (first few reported with line numbers). */
+  skipped: SkippedVdjEntry[];
+  skippedCount: number;
+}
+
+export function parseVdjDatabaseXmlDetailed(text: string, options: { strictBlocks?: boolean } = {}): VdjParseReport {
   // Strip BOM / leading whitespace; some VDJ exports include both.
   const cleaned = text.replace(/^\uFEFF/, "").trimStart();
-  const doc = new DOMParser().parseFromString(cleaned, "application/xml");
-  const err = doc.querySelector("parsererror");
   const tracks: VdjTrack[] = [];
-
-  if (!err) {
-    // Accept <Song>, <song>, <Track> nodes anywhere in the document.
-    const all = doc.getElementsByTagName("*");
-    for (let i = 0; i < all.length; i++) {
-      const node = all[i];
-      const tag = node.tagName.toLowerCase();
-      if (tag !== "song" && tag !== "track") continue;
-      const t = trackFromNode(node);
-      if (t) tracks.push(t);
+  const hasDom = typeof DOMParser !== "undefined" && options.strictBlocks !== false;
+  // A DOCTYPE can declare custom/external entities; never let the parser expand
+  // them. Such files are read block by block, where no DTD is in scope.
+  const firstSong = cleaned.search(/<(Song|Track)[\s>/]/i);
+  const declaresDtd = /<!DOCTYPE/i.test(firstSong < 0 ? cleaned : cleaned.slice(0, firstSong));
+  let invalid = !hasDom || declaresDtd;
+  if (hasDom && !declaresDtd) {
+    const doc = new DOMParser().parseFromString(cleaned, "application/xml");
+    invalid = doc.getElementsByTagName("parsererror").length > 0;
+    if (!invalid) {
+      // Accept <Song>, <song>, <Track> nodes anywhere in the document.
+      const all = doc.getElementsByTagName("*");
+      for (let i = 0; i < all.length; i++) {
+        const node = all[i];
+        const tag = node.tagName.toLowerCase();
+        if (tag !== "song" && tag !== "track") continue;
+        const t = trackFromNode(node as unknown as XmlNodeLike);
+        if (t) tracks.push(t);
+      }
+      if (tracks.length) return { tracks, mode: "strict", tolerantCount: 0, skipped: [], skippedCount: 0 };
     }
-    if (tracks.length) return tracks;
   }
 
-  // Fallback: regex scan for FilePath attributes when the XML is malformed
-  // (unescaped & in paths is common in older VirtualDJ databases).
-  const re = /<\s*(?:Song|Track)\b[^>]*?\b(?:FilePath|path)\s*=\s*"([^"]+)"([^>]*)>/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(cleaned)) !== null) {
-    const filePath = m[1];
-    const rest = m[2] || "";
-    const size = /\bFileSize\s*=\s*"([^"]*)"/i.exec(rest)?.[1];
-    const fname = filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, "") || "";
-    const dashIdx = fname.indexOf(" - ");
-    const artist = dashIdx > 0 ? fname.slice(0, dashIdx).trim() : "";
-    const title = dashIdx > 0 ? fname.slice(dashIdx + 3).trim() : fname;
-    if (!title) continue;
-    const { remix } = stripRemix(title);
-    tracks.push({ filePath, fileSize: size, artist, title, remix });
+  // Malformed (or no DOM available): read each Song block independently so one
+  // damaged entry keeps every other track's Tags/Scan/Infos metadata.
+  const recovered = recoverVdjBlocks(cleaned, hasDom ? domBlockParser() : null);
+  let tolerantCount = 0;
+  const skipped = [...recovered.skipped];
+  let skippedCount = recovered.skippedCount;
+  for (const block of recovered.blocks) {
+    const t = trackFromNode(block.node);
+    if (t) { tracks.push(t); if (block.tolerant) tolerantCount++; }
+    else { skippedCount++; if (skipped.length < 50) skipped.push({ line: block.line, reason: "no usable title" }); }
   }
+  if (!tracks.length && invalid && hasDom) throw new Error("Invalid VirtualDJ database XML");
+  return { tracks, mode: "recovered", tolerantCount, skipped, skippedCount };
+}
 
-  if (!tracks.length && err) throw new Error("Invalid VirtualDJ database XML");
-  return tracks;
+export function parseVdjDatabaseXml(text: string): VdjTrack[] {
+  return parseVdjDatabaseXmlDetailed(text).tracks;
 }
 
 
