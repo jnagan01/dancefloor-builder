@@ -69,7 +69,7 @@ function LibraryPage() {
     </div>
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="relative min-w-0 flex-1 sm:max-w-sm"><Search size={16} className="absolute left-3 top-3 text-muted-foreground"/><Input className="pl-9" placeholder="Search tracks and file paths" aria-label="Search library" value={query} onChange={e=>{setQuery(e.target.value);setPage(1)}}/></div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <Button size="sm" variant={filtersOpen ? "default" : "outline"} aria-expanded={filtersOpen} onClick={()=>setFiltersOpen(o=>!o)}><SlidersHorizontal size={15} className="mr-1"/>Filters{activeChips(filter,"library").length ? ` (${activeChips(filter,"library").length})` : ""}</Button>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">Sort by
           <select className="h-9 rounded-md border border-border bg-background px-2 text-sm text-foreground" aria-label="Sort tracks by" value={sort.key} onChange={e=>{setSort({key:e.target.value as "Title"|"Artist"|"Plays", dir:e.target.value==="Plays"?"desc":"asc"});setPage(1)}}>
