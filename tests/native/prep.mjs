@@ -345,6 +345,21 @@ try {
     await expect(page.getByRole('region', { name: 'Event preparation' }).getByRole('tab', { name: /Groups/ })).toHaveText('Groups (0)');
   });
 
+
+  await check('event policies constrain real recommendations and shortlist addition, toggle does not alter knowledge', async()=>{
+    await page.evaluate(async()=>{await window.__switchAccount('synthetic-policy');});
+    await page.getByRole('button',{name:'Go event'}).click();
+    await page.evaluate(()=>window.__setPolicy({ownedOnlyExpansion:true,includeSeasonalTracks:false,requireCleanVersions:true}));
+    await prepTab('Recommendations').click();const region=page.getByRole('region',{name:'Event preparation'});
+    await expect(region.getByRole('button',{name:'Details for Band – Hit (Clean Edit)',exact:true})).toBeVisible();
+    await expect(region.getByRole('button',{name:'Details for Queen – Song B',exact:true})).toHaveCount(0);
+    await prepTab(/Shortlist/).click();await region.getByLabel('Shortlist artist').fill('Other');await region.getByLabel('Shortlist title').fill('Unknown');
+    await region.getByRole('button',{name:'Add',exact:true}).click();await expect(region.locator('li',{hasText:'Other – Unknown'})).toBeVisible();
+    await region.locator('li',{hasText:'Other – Unknown'}).getByRole('button',{name:'Add to section',exact:true}).click();
+    await expect.poll(()=>toasts()).toContainEqual(['error','Clean version needed — choose a labelled clean file or explicitly change this event’s policy.']);
+    await page.evaluate(()=>window.__setPolicy({requireCleanVersions:false}));await prepTab('Recommendations').click();
+    await expect(region.getByRole('button',{name:'Details for Queen – Song B',exact:true})).toBeVisible();
+  });
   const blocked = await page.evaluate(() => window.prepNative.blocked());
   if (blocked.length) throw Error(`Network requests left loopback: ${blocked.join(', ')}`);
   if (errors.length) throw Error(`Page errors: ${errors.join('; ')}`);
