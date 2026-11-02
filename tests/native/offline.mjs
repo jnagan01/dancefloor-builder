@@ -45,7 +45,7 @@ const backup = (account = ACCOUNT) => JSON.stringify({ format: "setarchitect-bac
 
 // Local stand-in for the trusted web origin; counts every request so offline phases can assert none.
 let requests = 0;
-const server = http.createServer((req, res) => { requests++; if (req.url.startsWith("/stall")) return; // never answers res.setHeader("Content-Type", "text/html"); res.end("<!doctype html><title>Synthetic online origin</title><p>stub</p>"); });
+const server = http.createServer((req, res) => { requests++; if (req.url.startsWith("/stall")) return; /* never answers */ res.setHeader("Content-Type", "text/html"); res.end("<!doctype html><title>Synthetic online origin</title><p>stub</p>"); });
 await new Promise(r => server.listen(0, "127.0.0.1", r));
 const ORIGIN = `http://127.0.0.1:${server.address().port}`;
 
