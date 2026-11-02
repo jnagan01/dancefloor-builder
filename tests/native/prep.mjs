@@ -356,7 +356,7 @@ try {
     await prepTab(/Shortlist/).click();await region.getByLabel('Shortlist artist').fill('Other');await region.getByLabel('Shortlist title').fill('Unknown');
     await region.getByRole('button',{name:'Add',exact:true}).click();await expect(region.locator('li',{hasText:'Other – Unknown'})).toBeVisible();
     await region.locator('li',{hasText:'Other – Unknown'}).getByRole('button',{name:'Add to section',exact:true}).click();
-    await expect.poll(()=>toasts()).toContainEqual(['error','Clean version needed — choose a labelled clean file or explicitly change this event’s policy.']);
+    await expect(region.getByRole('status')).toHaveText('Clean version needed — choose a labelled clean file or explicitly change this event’s policy.');
     await page.evaluate(()=>window.__setPolicy({requireCleanVersions:false}));await prepTab('Recommendations').click();
     await expect(region.getByRole('button',{name:'Details for Queen – Song B',exact:true})).toBeVisible();
   });
