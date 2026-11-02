@@ -45,9 +45,9 @@ const ORIGIN = `http://127.0.0.1:${server.address().port}`;
 
 let app, count = 0;
 async function launch({ deny, online }) {
-  const env = { ...process.env, SETARCHITECT_TEST_USERDATA: temp, NODE_OPTIONS: `--require ${path.join(root, "tests/native/fixtures/offline-hook.cjs")}` };
+  const env = { ...process.env, SETARCHITECT_TEST_USERDATA: temp};
   if (online) env.DANCEFLOOR_URL = ORIGIN; else delete env.DANCEFLOOR_URL; // offline phases try the real published URL, blocked
-  app = await electron.launch({ executablePath: bin, args: [path.join(root, "desktop/main.cjs"), "--no-sandbox", ...(deny ? DENY : [])], env });
+  app = await electron.launch({ executablePath: bin, args: [path.join(root, "tests/native/fixtures/offline-entry.cjs"), "--no-sandbox", ...(deny ? DENY : [])], env });
   return app;
 }
 async function offlineWindow() {
