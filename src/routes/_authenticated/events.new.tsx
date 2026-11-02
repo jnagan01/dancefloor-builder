@@ -114,6 +114,10 @@ import { storeEventDraft, loadEventDraft, confirmEventDraft, checkpointEventDraf
 import { eventRevision } from "@/lib/eventRevision";
 import { validateTiming, boundedNumber, displayNumber, displayBuffer, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "@/lib/inputSafety";
 import { useAuth } from "@/hooks/useAuth";
+import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
+import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
+import { songIdentity } from "@/lib/prep/knowledge";
+import { trackIdentity } from "@/lib/fileIdentity";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -361,6 +365,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [searchOpen, setSearchOpen] = useState<{ section: SectionKey; idx: number; key: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [previewTarget, setPreviewTarget] = useState<PreviewTarget | null>(null);
+  const [detail, setDetail] = useState<DetailSubject | null>(null);
   // Bumped whenever the workflow is reset or a saved workflow is loaded.
   // Used as a React `key` on workflow-scoped components so any internal state
   // they hold is dropped — guarantees no cross-workflow leakage in the UI.
@@ -1698,6 +1703,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   // Edit a song's title/artist in place; carries its file match over to the new key.
+  /** Adds one song to the end of a section via the same path as rename; the new row is never pre-approved. */
+  function addSongToSection(section: SectionKey, next: { artist: string; song: string; trackId?: string }): string | null {
+    if (!result) return "Build the event first.";
+    const artist = next.artist.trim(), song = next.song.trim();
+    if (!artist && !song) return "Enter an artist or title.";
+    const id = songIdentity(artist, song);
+    const all = (["warmUp", "transition", "peak"] as SectionKey[]).flatMap(k => result[k] ?? []);
+    if (all.some(x => songIdentity(x.artist, x.song) === id)) return "That song is already in this event.";
+    userEdited.current=true; autosave.dirty();
+    const added: ResultSong = { artist, song };
+    const list = [...result[section], added];
+    const key = songKey(section, list.length - 1, added);
+    setResult({ ...result, [section]: list });
+    const linkedIndex = next.trackId ? mergedLibrary.tracks.findIndex(t => trackIdentity(t.filePath, getFolderRoots()) === next.trackId) : -1;
+    const fresh = linkedIndex >= 0 ? { status: "Possible Match" as const, confidence: 1, trackIndex: linkedIndex, alternatives: [] }
+      : mergedLibrary.tracks.length ? matchSong(added, mergedLibrary) : undefined;
+    setMatches(prev => { const copy = { ...prev, [key]: fresh ? { ...fresh, confirmed: false } : { status: "Missing From Library" as const, confidence: 0, alternatives: [] } }; matchesRef.current = copy; return copy; });
+    return null;
+  }
+
   function renameSong(section: SectionKey, idx: number, next: { artist: string; song: string }) {
     if (!result) return;
     const old = result[section]?.[idx];
@@ -3046,6 +3071,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: sectionName(sec), songs: withFileBpm(sec, result[sec] ?? []) }))}
                 onSelect={(sec) => setActiveSection(sec)}
               />
+              <EventPrepPanel
+                eventId={savedEventId}
+                sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: background && sec === "warmUp" ? bgLabel : sectionName(sec), songs: result[sec] ?? [] }))}
+                matches={matches}
+                keyOf={songKey}
+                library={mergedLibrary}
+                onJump={(sec, idx) => { setShowVibe(false); setActiveSection(sec); setTimeout(() => document.getElementById(`song-${sec}-${idx}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }}
+                onAddToSection={addSongToSection}
+                onDetails={setDetail}
+              />
 
               <Tabs value={showVibe && targets ? "vibe" : activeSection} onValueChange={v=>{ if (v === "vibe") setShowVibe(true); else { setShowVibe(false); setActiveSection(v as SectionKey); } }}>
                  <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 border-b border-border bg-transparent p-0">
@@ -3127,10 +3162,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                      onOpenSearch={openSearch}
                      onPickLocalFile={pickLocalFileForMatch}
                       onPreview={(t) => setPreviewTarget(t)}
+                      onDetails={(idx) => { const song = result[sec][idx]; if (!song) return; const m = matches[songKey(sec, idx, song)]; setDetail({ artist: song.artist, song: song.song, match: m, track: m?.trackIndex != null ? mergedLibrary.tracks[m.trackIndex] : undefined, alternatives: (m?.alternatives ?? []).map(i => mergedLibrary.tracks[i]).filter(Boolean) }); }}
                     />
                   </TabsContent>
                 ))}
               </Tabs>
+              <TrackDetailSheet subject={detail} onClose={() => setDetail(null)} onPreview={(t) => setPreviewTarget({ artist: t.artist, song: t.title, filePath: t.filePath })} />
             </div>
           </StepPanel>
         )}
@@ -3455,6 +3492,7 @@ interface SectionViewProps {
   onOpenSearch?: (section: SectionKey, idx: number, s: Song) => void;
   onPickLocalFile?: (key: string, file: File) => void;
   onPreview?: (target: PreviewTarget) => void;
+  onDetails?: (idx: number) => void;
   matchLimit: number; matcherOn: boolean; software: string;
   labelOverride?: string;
   reviewMode: "first" | "most" | "all" | "none";
@@ -3462,7 +3500,7 @@ interface SectionViewProps {
 }
 
 function SectionView(props: SectionViewProps) {
-  const { section, songs, matches, library, songKey, onExportCsv, onExportPdf, onExportXml, onExportM3u, onExportSpotify, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onPickLocalFile, matchLimit, matcherOn, software, reviewMode, onReviewModeChange } = props;
+  const { section, songs, matches, library, songKey, onExportCsv, onExportPdf, onExportXml, onExportM3u, onExportSpotify, onExportXmlToVdj, onExportM3uToVdj, canWriteToVdj, vdjFolderName, onConfirm, onChoose, onMarkUnresolved, onToggleExclude, onToggleExtra, onPreview, onDetails, onPickLocalFile, matchLimit, matcherOn, software, reviewMode, onReviewModeChange } = props;
   const sectionLabel = props.labelOverride ?? (section === "warmUp" ? "Warm Up" : section === "transition" ? "Transition" : "Peak");
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filter,setFilter] = useState("all");
@@ -3578,7 +3616,7 @@ function SectionView(props: SectionViewProps) {
           const needsAttention = !isMatched;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
           return (
-            <div id={`song-${section}-${i}`} key={key} className={`panel overflow-hidden ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
+            <div id={`song-${section}-${i}`} key={key} className={`panel relative overflow-hidden ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
               {/* Track header */}
               <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] items-stretch gap-3 p-3 sm:grid-cols-[auto_auto_minmax(0,1fr)_auto]">
                 <div className="flex w-8 flex-col items-center justify-center gap-1">
@@ -3593,6 +3631,7 @@ function SectionView(props: SectionViewProps) {
                 >
                   <Music className="size-6" />
                 </button>
+                {onDetails && <button type="button" onClick={() => onDetails(i)} aria-label={`Details for ${s.artist} – ${s.song}`} title="Song details, versions and notes" className="absolute right-2 top-2 rounded p-1 text-muted-foreground hover:text-primary"><Info className="size-4" /></button>}
                 <div className="hairline-y min-w-0">
                   <div className="px-3 py-1.5">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Title</p>
