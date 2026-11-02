@@ -55,6 +55,8 @@ const asFileLike = (files: ReadonlyArray<{ name: string; size?: number; relative
 const Context = createContext<Workspace | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [sources, setSources] = useState<Source[]>([]);
+  const sourcesRef = useRef(sources);
+  sourcesRef.current = sources;
   const [files, setFiles] = useState<File[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
