@@ -69,8 +69,9 @@ async function decoupledRun(args, env) {
 }
 // Network-denied phases start the app exactly as production does: a plain process with no Playwright
 // loader holding back the "ready" event, then attach over CDP once it is running. Playwright's
-// electron.launch couples its own startup handshake to the app's first windows; on macOS CI the cached
-// cold restart hung in that handshake (launch never resolved) while the app itself kept running.
+// electron.launch gates the app's "ready" event behind its own debugger handshake; on macOS CI the cached
+// cold restart timed out inside electron.launch, so these phases no longer depend on that handshake. If the
+// app itself fails, offlineWindow() still fails and the startup telemetry is printed.
 async function spawnAndAttach(args, env, timeout) {
   const child = spawn(bin, [...args, "--remote-debugging-port=0"], { env, stdio: ["ignore", "pipe", "pipe"] });
   const log = fs.createWriteStream(path.join(diagnostics, `offline-main-${child.pid}.log`));
@@ -308,6 +309,7 @@ try {
 } catch (e) {
   console.error(e);
   if (app) for (const p of app.windows()) await p.screenshot({ path: path.join(diagnostics, `failure-${p.url().startsWith("setarchitect") ? "offline" : "main"}.png`) }).catch(() => {});
+  console.log(`--- app startup telemetry (last launch) ---\n${telemetryLines().filter(l => !l.includes('"heartbeat"')).slice(-80).join("\n")}`);
   process.exitCode = 1;
 } finally {
   await close(); server.close();
