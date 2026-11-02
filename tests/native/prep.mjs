@@ -237,8 +237,16 @@ try {
     await prepTab(/Shortlist/).click();
     const region = page.getByRole('region', { name: 'Event preparation' });
     await region.getByLabel('Shortlist artist').fill('Band'); await region.getByLabel('Shortlist title').fill('Hit'); await region.getByLabel('Desired version', { exact: true }).fill('clean edit');
+    // Keep the first save pending while the next entry is typed: the typing must survive and Add is locked.
+    await page.evaluate(() => { window.__idbCompleteDelay = 800; });
     await region.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(region.getByRole('button', { name: 'Adding…' })).toBeDisabled();
     await region.getByLabel('Shortlist artist').fill('band'); await region.getByLabel('Shortlist title').fill('hit'); await region.getByLabel('Desired version', { exact: true }).fill('clean edit');
+    await expect.poll(() => page.evaluate(() => window.__prep.get().knowledge.events.find(e => e.eventId === 'E1')?.shortlist.length ?? 0)).toBe(1);
+    await page.evaluate(() => { window.__idbCompleteDelay = 0; });
+    await expect(region.getByRole('button', { name: 'Add', exact: true })).toBeEnabled();
+    await expect(region.getByLabel('Shortlist artist')).toHaveValue('band');
+    await expect(region.getByLabel('Shortlist title')).toHaveValue('hit');
     await region.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(region.getByRole('status')).toContainText('Already on the shortlist');
     await region.getByLabel('Status for Band – Hit').selectOption('selected');
