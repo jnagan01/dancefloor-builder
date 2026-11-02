@@ -55,8 +55,6 @@ const asFileLike = (files: ReadonlyArray<{ name: string; size?: number; relative
 const Context = createContext<Workspace | null>(null);
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [sources, setSources] = useState<Source[]>([]);
-  const sourcesRef = useRef(sources);
-  sourcesRef.current = sources;
   const [files, setFiles] = useState<File[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -165,7 +163,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       const roots = getFolderRoots();
       // Count from the current library synchronously: React may defer the
       // functional update below, so counting inside it reported 0 matches.
-      const summary = vdjSyncSummary(tracks, sourcesRef.current, roots);
+      const summary = vdjSyncSummary(tracks, backupSession.current.sources, roots);
       setSources(prev => {
         const resolver = metadataResolver(tracks, prev.flatMap(s => s.tracks), roots);
         return prev.map(source => ({ ...source, tracks: source.tracks.map(track => mergeTrackMetadata(track, resolver.resolve(track.filePath), true)) }));
