@@ -258,7 +258,7 @@ try{
    const esc=s=>s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
    const len=['215.4','0','abc','200'];
    fs.writeFileSync(path.join(temp,'vdj.xml'),`<?xml version="1.0"?><VirtualDJ_Database>${q.map((t,i)=>`<Song FilePath="${esc(t.filePath)}"><Tags Author="${esc(t.artist)}" Title="${esc(t.title)}"/><Infos SongLength="${len[i]}"/></Song>`).join('')}</VirtualDJ_Database>`);
-   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'neutral',alias:{'@':path.join(root,'src')}});
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
    const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
    const k=`warmUp:0:${dedupeKey(request.artist,request.song)}`;
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Queen',updated_at:'2026-11-02T01:59:00Z',inputs:{eventName:'Queen',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[k]:{paths:[q[0].filePath],confirmed:true}}}}}));
