@@ -39,7 +39,7 @@ function createOfflineStore(userData, fs = require("node:fs")) {
 
   function parseActive(raw) {
     const a = JSON.parse(raw);
-    if (!a || a.version !== 1 || !/^[a-f0-9]{64}$/.test(a.account) || !Number.isFinite(Date.parse(a.preparedAt))) throw Error("Offline access marker is unreadable.");
+    if (!a || a.version !== 1 || !/^[a-f0-9]{64}$/.test(a.account) || !Number.isFinite(Date.parse(a.preparedAt)) || (a.epoch !== undefined && !(Number.isSafeInteger(a.epoch) && a.epoch >= 0))) throw Error("Offline access marker is unreadable.");
     return a;
   }
   function parseSnapshot(raw, hash) {
