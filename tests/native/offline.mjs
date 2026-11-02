@@ -116,11 +116,16 @@ async function spawnAndAttach(args, env, timeout, mark) {
   const child = spawn(bin, [...args, ...ATTACH_SWITCHES, "--remote-debugging-port=0"], { env, stdio: ["ignore", "pipe", "pipe"] });
   const log = fs.createWriteStream(path.join(diagnostics, `offline-main-${child.pid}.log`));
   child.stdout.pipe(log);
-  // Bounded protocol log of the attach, so a hang names the CDP method still waiting for a reply.
-  const protocol = [];
+  // Bounded protocol log of the attach. Lines are kept INTACT (never truncated before parsing: a
+  // Page.getFrameTree reply is far longer than any per-line cap and would be misread as unanswered).
+  // The bound is an overall byte/message cap that drops whole oldest lines and is reported.
+  const protocol = []; protocol.bytes = 0; protocol.dropped = 0;
   const { debug } = createRequire(import.meta.url)("playwright-core/lib/utilsBundle");
   const previousLog = debug.log;
-  debug.log = (...parts) => { protocol.push(parts.join(" ").replace(/\u001b\[[0-9;]*m/g, "").slice(0, 400)); if (protocol.length > 2000) protocol.shift(); };
+  debug.log = (...parts) => {
+    const line = parts.join(" ").replace(/\u001b\[[0-9;]*m/g, ""); protocol.push(line); protocol.bytes += line.length;
+    while (protocol.length > 1 && (protocol.length > 20000 || protocol.bytes > 32e6)) { protocol.bytes -= protocol.shift().length; protocol.dropped++; }
+  };
   const stopProtocol = () => { debug.disable(); debug.log = previousLog; };
   try {
     const ws = await new Promise((resolve, reject) => {
@@ -135,6 +140,9 @@ async function spawnAndAttach(args, env, timeout, mark) {
     debug.enable("pw:protocol");
     const browser = await chromium.connectOverCDP(ws, { timeout });
     stopProtocol();
+    const a = analyzeProtocol(protocol);
+    fs.writeFileSync(path.join(diagnostics, `attach-${launches}-protocol.log`), protocol.join("\n"));
+    console.log(`  attach identity: ${a.identity.join(" | ") || "(no frame trees)"}${a.unparsed ? `; unparsed lines: ${a.unparsed}` : ""}`);
     return {
       process: () => child,
       windows: () => browser.contexts().flatMap(c => c.pages()),
@@ -146,22 +154,37 @@ async function spawnAndAttach(args, env, timeout, mark) {
     // Own the child even when attach fails: no leaked app holding the profile lock or the job open.
     stopProtocol();
     await stopChild(child); log.end();
-    const pending = pendingCalls(protocol);
+    const a = analyzeProtocol(protocol);
     fs.writeFileSync(path.join(diagnostics, `attach-${launches}-protocol.log`), protocol.join("\n"));
-    console.log(`CDP calls without a reply when attach failed (full log: attach-${launches}-protocol.log):\n${pending.join("\n") || "(none)"}`);
+    console.log([`CDP attach analysis (intact log: attach-${launches}-protocol.log; ${protocol.length} lines, ${protocol.dropped} oldest dropped by cap, ${a.unparsed} unparseable):`,
+      `calls without a reply: ${a.pending.join("; ") || "(none)"}`, `target vs frame identity: ${a.identity.join(" | ") || "(no frame trees)"}`].join("\n"));
     e.attachFailed = true;
     throw e;
   }
 }
-function pendingCalls(lines) {
-  const open = new Map();
+// Parse the INTACT log, then summarize. Reports unanswered calls (only when every line parsed or the
+// unparsed count is shown), and per session: attached targetId/url vs Page.getFrameTree main frame id/url
+// (Playwright issue 41397 hypothesis: hang when the main frame id differs from the targetId after navigation).
+function analyzeProtocol(lines) {
+  const open = new Map(), sent = new Map(), sessions = new Map(); let unparsed = 0;
+  const sess = id => { if (!sessions.has(id)) sessions.set(id, {}); return sessions.get(id); };
   for (const l of lines) {
-    const json = l.slice(l.indexOf("{")); let m; try { m = JSON.parse(json); } catch { continue; }
-    const key = `${m.sessionId || "browser"}:${m.id}`;
-    if (l.includes("SEND \u25BA") && m.method) open.set(key, `${m.method} session=${m.sessionId || "browser"}`);
-    else if (m.id !== undefined) open.delete(key);
+    const at = l.indexOf("{"); if (at < 0) continue;
+    let m; try { m = JSON.parse(l.slice(at)); } catch { unparsed++; continue; }
+    const sid = m.sessionId || "browser", key = `${sid}:${m.id}`;
+    if (l.includes("SEND \u25BA") && m.method) { open.set(key, `${m.method} session=${sid}`); sent.set(key, m.method); continue; }
+    if (m.method === "Target.attachedToTarget") { const t = m.params.targetInfo; Object.assign(sess(m.params.sessionId), { targetId: t.targetId, type: t.type, targetUrl: t.url, waiting: m.params.waitingForDebugger }); }
+    else if (m.method === "Target.detachedFromTarget") sess(m.params.sessionId).detached = true;
+    else if (m.method === "Target.targetInfoChanged") for (const s of sessions.values()) if (s.targetId === m.params.targetInfo.targetId) s.targetUrl = m.params.targetInfo.url;
+    else if (m.id !== undefined) {
+      open.delete(key);
+      if (sent.get(key) === "Page.getFrameTree" && m.result) { const f = m.result.frameTree.frame; Object.assign(sess(sid), { frameId: f.id, frameUrl: f.url, loaderId: f.loaderId }); }
+      if (sent.get(key) === "Page.getFrameTree" && m.error) sess(sid).frameTreeError = m.error.message;
+    }
   }
-  return [...open.values()];
+  const identity = [...sessions].filter(([, s]) => s.type === "page" || s.frameId).map(([id, s]) =>
+    `session=${id} target=${s.targetId} frame=${s.frameId ?? (s.frameTreeError ? `error:${s.frameTreeError}` : "no reply")}${s.frameId && s.targetId && s.frameId !== s.targetId ? " MISMATCH" : ""} url=${s.frameUrl ?? s.targetUrl}${s.waiting ? " waitingForDebugger" : ""}${s.detached ? " detached" : ""}`);
+  return { pending: [...open.values()], identity, unparsed };
 }
 async function launch({ deny, online, url, timeout = 30000 }) {
   const env = { ...process.env, SETARCHITECT_TEST_USERDATA: temp};
