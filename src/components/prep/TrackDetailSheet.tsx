@@ -12,6 +12,7 @@ import { addToGroup, createGroup, removeEnrichment, saveEnrichment, setFeedback,
 import { compareCandidate, createLookupGuard } from "@/lib/prep/enrichment";
 import { lookupLastfmTrack, lookupMusicBrainz, type LastfmTrackInfo, type MbCandidate } from "@/lib/prep/lookup.functions";
 import type { Evidence } from "@/lib/prep/recommend";
+import { prepStore } from "@/lib/prep/prepStore";
 import { usePrep } from "./usePrep";
 
 export interface DetailSubject {
@@ -156,5 +157,4 @@ export function TrackDetailSheet({ subject, onClose, onPreview }: { subject: Det
   </Sheet>;
 }
 
-import { prepStore } from "@/lib/prep/prepStore";
 const prepStoreAccount = () => prepStore().get().account;
