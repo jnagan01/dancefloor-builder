@@ -54,10 +54,9 @@ try {
     await expect(page.locator('tbody tr')).toHaveCount(7); // unknown BPM kept by default
     await panel.getByLabel('BPM: unknown values').selectOption('exclude');
     await expect(page.locator('tbody tr')).toHaveCount(6);
-    await panel.getByRole('checkbox').filter({ has: page.locator('xpath=..') }).first().waitFor();
     await panel.locator('label', { hasText: 'Rock' }).getByRole('checkbox').check();
     await expect(page.locator('tbody tr')).toHaveCount(2); // Rock ∧ 100–125 BPM
-    await expect(panel.getByRole('button', { name: /Remove filter/ })).toHaveCount(3);
+    await expect(panel.getByRole('button', { name: /Remove filter/ })).toHaveCount(2); // BPM range+unknown mode, genre
     await panel.getByLabel('Saved filter name').fill('Rock mid tempo');
     await panel.getByRole('button', { name: 'Save' }).click();
     await expect(panel.getByRole('button', { name: 'Rock mid tempo' })).toBeVisible();
