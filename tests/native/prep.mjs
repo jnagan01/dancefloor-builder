@@ -73,8 +73,9 @@ try {
 
   await check('preset rename/delete and account isolation', async () => {
     const panel = page.getByRole('region', { name: 'Filters' });
-    page.once('dialog', d => d.accept('Rock renamed'));
     await panel.getByRole('button', { name: 'Rename Rock mid tempo' }).click();
+    await panel.getByLabel('New name for Rock mid tempo').fill('Rock renamed');
+    await panel.getByRole('button', { name: 'Save name' }).click();
     await expect(panel.getByRole('button', { name: 'Rock renamed', exact: true })).toBeVisible();
     await page.evaluate(() => window.__switchAccount('synthetic-b'));
     await expect(page.getByRole('region', { name: 'Filters' }).getByRole('button', { name: 'Rock renamed', exact: true })).toHaveCount(0);

@@ -30,6 +30,7 @@ export function FilterPanel({ context, options, value, onChange, shown }: { cont
   const { knowledge, ready, mutate } = usePrep();
   const [genreQuery, setGenreQuery] = useState("");
   const [presetName, setPresetName] = useState("");
+  const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [rev, setRev] = useState(0); // remount range inputs after reset/preset
   const chips = activeChips(value, context);
   const set = (patch: Partial<FilterState>) => onChange({ ...value, ...patch });
@@ -75,9 +76,14 @@ export function FilterPanel({ context, options, value, onChange, shown }: { cont
     </div>
     <div className="flex flex-wrap items-center gap-2 border-t border-border pt-2">
       <span className="text-xs text-muted-foreground">Saved filters:</span>
-      {presets.map(p => <span key={p.id} className="inline-flex items-center gap-0.5 rounded border border-border px-1">
+      {presets.map(p => renaming?.id === p.id
+        ? <form key={p.id} className="inline-flex items-center gap-1" onSubmit={async e => { e.preventDefault(); if (await mutate(k => renamePreset(k, p.id, renaming.name))) setRenaming(null); }}>
+            <Input className="h-7 w-36 text-xs" aria-label={`New name for ${p.name}`} value={renaming.name} autoFocus onChange={e => setRenaming({ id: p.id, name: e.target.value })} onKeyDown={e => { if (e.key === "Escape") setRenaming(null); }} />
+            <Button size="sm" type="submit" className="h-7 text-xs" disabled={!renaming.name.trim()}>Save name</Button>
+            <Button size="sm" type="button" variant="ghost" className="h-7 text-xs" onClick={() => setRenaming(null)}>Cancel</Button></form>
+        : <span key={p.id} className="inline-flex items-center gap-0.5 rounded border border-border px-1">
         <Button size="sm" variant="ghost" className="h-7 px-1.5 text-xs" onClick={() => apply(p.filter)}>{p.name}</Button>
-        <button type="button" aria-label={`Rename ${p.name}`} className="p-1 hover:text-primary" onClick={() => { const n = window.prompt("Rename saved filter", p.name); if (n) void mutate(k => renamePreset(k, p.id, n)); }}><Pencil size={12} /></button>
+        <button type="button" aria-label={`Rename ${p.name}`} className="p-1 hover:text-primary" onClick={() => setRenaming({ id: p.id, name: p.name })}><Pencil size={12} /></button>
         <button type="button" aria-label={`Delete ${p.name}`} className="p-1 hover:text-destructive" onClick={() => void mutate(k => deletePreset(k, p.id))}><Trash2 size={12} /></button>
       </span>)}
       <Input className="h-8 w-40 text-xs" placeholder="Name this filter" aria-label="Saved filter name" value={presetName} onChange={e => setPresetName(e.target.value)} />

@@ -132,6 +132,7 @@ export function EventPrepPanel(p: Props) {
 
   // ---- groups ----
   const [groupName, setGroupName] = useState("");
+  const [renamingGroup, setRenamingGroup] = useState<{ id: string; name: string } | null>(null);
   const [copyNote, setCopyNote] = useState<string | null>(null);
 
   const ns = <p className="rounded border border-border bg-muted/30 p-2 text-xs">Save this event first to keep a shortlist and event dismissals.</p>;
@@ -243,9 +244,12 @@ export function EventPrepPanel(p: Props) {
           <summary className="flex cursor-pointer flex-wrap items-center justify-between gap-2"><span className="text-sm font-medium">{g.name} ({g.items.length})</span>
             <span className="flex gap-1">
               <Button size="sm" variant="outline" className="h-7" disabled={!canEvent || !g.items.length} onClick={async e => { e.preventDefault(); let n = { added: 0, skipped: 0 }; const ok = await mutate(k => { const r = copyGroupToEvent(k, g.id, p.eventId!); n = r; return r.next; }); if (ok) setCopyNote(`Copied ${n.added} song${n.added === 1 ? "" : "s"} to the shortlist${n.skipped ? `, ${n.skipped} already there` : ""}.`); }}>Copy to shortlist</Button>
-              <Button size="sm" variant="ghost" className="h-7" onClick={e => { e.preventDefault(); const n = window.prompt("Rename group", g.name); if (n) void mutate(k => renameGroup(k, g.id, n)); }}>Rename</Button>
+              <Button size="sm" variant="ghost" className="h-7" onClick={e => { e.preventDefault(); setRenamingGroup({ id: g.id, name: g.name }); }}>Rename</Button>
               <Button size="sm" variant="ghost" className="h-7" onClick={e => { e.preventDefault(); if (window.confirm(`Delete group “${g.name}”? Events already copied from it keep their songs.`)) void mutate(k => deleteGroup(k, g.id)); }}>Delete</Button>
             </span></summary>
+          {renamingGroup?.id === g.id && <form className="mt-1 flex flex-wrap gap-1" onSubmit={async e => { e.preventDefault(); if (await mutate(k => renameGroup(k, g.id, renamingGroup.name))) setRenamingGroup(null); }}>
+            <Input className="h-7 w-48 text-xs" aria-label={`New name for ${g.name}`} value={renamingGroup.name} autoFocus onChange={e => setRenamingGroup({ id: g.id, name: e.target.value })} />
+            <Button size="sm" type="submit" className="h-7" disabled={!renamingGroup.name.trim()}>Save name</Button><Button size="sm" type="button" variant="ghost" className="h-7" onClick={() => setRenamingGroup(null)}>Cancel</Button></form>}
           <ul className="mt-1">{g.items.map(i => <li key={itemIdentity(i)} className="flex items-center justify-between"><span>{i.artist} – {i.song}{i.versionNote ? ` (${i.versionNote})` : ""}{i.trackId ? " · linked file" : ""}</span>
             <Button size="sm" variant="ghost" className="h-6" aria-label={`Remove ${i.artist} – ${i.song} from group`} onClick={() => void mutate(k => removeFromGroup(k, g.id, itemIdentity(i)))}><X size={12} /></Button></li>)}</ul>
         </details>)}
