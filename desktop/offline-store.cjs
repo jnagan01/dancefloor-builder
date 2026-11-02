@@ -207,6 +207,9 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     else {
       const tracks = backup.sources.flatMap(s => s.tracks);
       if (typeof change.path !== "string" || !tracks.some(t => t.filePath === change.path)) throw Error("That track is not in the saved library.");
+      const policy = require("./offline/policy.cjs");
+      const blocked = policy.cleanReason(tracks.find(t => t.filePath === change.path), policy.requiresClean(event.snapshot.inputs));
+      if (blocked) throw Error(blocked);
       next.selections[key] = { paths: [change.path], confirmed: true, song: { artist: song.artist, song: song.song }, at: new Date().toISOString() };
     }
     const raw = JSON.stringify(next);

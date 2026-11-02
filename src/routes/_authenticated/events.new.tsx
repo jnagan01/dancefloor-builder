@@ -504,7 +504,6 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // before connecting an entire folder.
   const emptyLibrary = useMemo(() => buildLibrary([]), []);
   const mergedLibrary = workspace.library ?? emptyLibrary;
-  const additionResolver = useMemo(() => buildResolver(mergedLibrary.tracks, { ...policies, eventType }), [mergedLibrary, policies, eventType]);
 
 
   useEffect(() => {
