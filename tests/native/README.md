@@ -66,3 +66,7 @@ Release CI stamps `1.2.<workflow run number>` from base `1.2.0`, creates matchin
 Commands: `bunx vitest run` (404/404); `LD_LIBRARY_PATH="$(printf '%s:' /nix/store/*/lib)" xvfb-run -a node tests/native/run.mjs` (16/16); `NODE_PATH=/dev-server/node_modules bun /tmp/setarchitect-stress/adversarial.cjs` (33/33) and `more.cjs` (16/16). Automatic preview build/typecheck: build OK. Dependency changes resolved with `bun install --lockfile-only --ignore-scripts`; no packages/live app were installed. Both tracked lockfiles agree with their manifests. Clean frozen installs with CI Bun 1.3.5 remain for GitHub (local Bun is 1.4.4).
 
 The icon and production event/library data are unchanged. No publishing or GitHub execution was requested or performed.
+
+## Offline workspace gate
+
+`node tests/native/offline.mjs` launches the real `desktop/main.cjs` (via `fixtures/offline-entry.cjs`, which only answers native dialogs) in a fenced `setarchitect-offline-*` profile. Offline phases deny Chromium networking before launch and try the real published URL. A local stub page stands in for the signed-in origin only to call the real `electronOffline` preload API with a synthetic backup. `ELECTRON_BIN` may point at a pinned Electron 33.4.11 binary when `desktop/node_modules` is absent.

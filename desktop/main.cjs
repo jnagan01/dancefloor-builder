@@ -1,10 +1,18 @@
 /* SetArchitect — macOS desktop shell (Electron main process) */
-const { app, BrowserWindow, shell, Menu, dialog, ipcMain } = require("electron");
+const electron = require("electron");
+const { app, BrowserWindow, shell, Menu, dialog, ipcMain, protocol } = electron;
 const path = require("node:path");
 const fs = require("node:fs");
 
 // Keep the pre-rebrand data folder so window state, tag cache and tag backups carry over.
-app.setPath("userData", path.join(app.getPath("appData"), "Dancefloor Builder"));
+// Unpackaged regression runs may use a fenced synthetic profile; release copies never do.
+const testProfile = process.env.SETARCHITECT_TEST_USERDATA;
+if (testProfile && !app.isPackaged && path.isAbsolute(testProfile) && path.basename(testProfile).startsWith("setarchitect-offline-") && fs.existsSync(path.join(testProfile, "ISOLATED"))) app.setPath("userData", testProfile);
+else app.setPath("userData", path.join(app.getPath("appData"), "Dancefloor Builder"));
+const { registerOfflineScheme, createOfflineWorkspace } = require("./offline-window.cjs");
+registerOfflineScheme(protocol);
+const offlineStore = require("./offline-store.cjs").createOfflineStore(app.getPath("userData"));
+const offline = createOfflineWorkspace({ electron, store: offlineStore });
 
 const { createBackupStore } = require("./backups.cjs");
 const backups = createBackupStore(app.getPath("userData"));
@@ -119,25 +127,44 @@ function createWindow() {
   });
   mainWindow.webContents.on("will-attach-webview", event => event.preventDefault());
 
-  mainWindow.webContents.on("did-fail-load", (_e, code, description, failedUrl, isMainFrame) => {
-    if (!isMainFrame || code === -3) return;
+  // A failed or stalled online start offers the bundled offline workspace instead of a blank window.
+  let booted = false, offering = false, bootTimer = null;
+  const offerOffline = detail => {
+    if (offering || !mainWindow || mainWindow.isDestroyed() || updateBlocksNavigation()) return;
+    offering = true;
     dialog
       .showMessageBox(mainWindow, {
         type: "warning",
         title: "Can't reach SetArchitect",
-        message: "SetArchitect couldn't load.",
-        detail: `Check your internet connection and try again.\n\n(${description} — ${failedUrl})`,
-        buttons: ["Try again", "Quit"],
+        message: "SetArchitect couldn't load online.",
+        detail: `You can open your saved offline copy, or check your internet connection and try again.\n\n(${detail})`,
+        buttons: ["Open Offline Workspace", "Try again", "Quit"],
         defaultId: 0,
         cancelId: 1,
       })
       .then(({ response }) => {
-        if (response === 0) mainWindow.loadURL(APP_URL);
+        offering = false;
+        if (response === 0) offline.open();
+        else if (response === 1) { if (mainWindow) startOnline(); }
         else app.quit();
-      });
+      })
+      .catch(() => { offering = false; });
+  };
+  const startOnline = () => {
+    booted = false;
+    clearTimeout(bootTimer);
+    bootTimer = setTimeout(() => { if (!booted) offerOffline("The online app is taking too long to start."); }, 20000);
+    mainWindow.loadURL(APP_URL);
+  };
+  mainWindow.webContents.on("did-finish-load", () => { booted = true; clearTimeout(bootTimer); });
+  mainWindow.on("closed", () => clearTimeout(bootTimer));
+  mainWindow.webContents.on("did-fail-load", (_e, code, description, failedUrl, isMainFrame) => {
+    if (!isMainFrame || code === -3) return;
+    booted = true; clearTimeout(bootTimer);
+    offerOffline(`${description} — ${failedUrl}`);
   });
 
-  mainWindow.loadURL(APP_URL);
+  startOnline();
 }
 
 function buildMenu() {
@@ -173,6 +200,12 @@ function buildMenu() {
           label: "Home",
           accelerator: "CmdOrCtrl+Shift+H",
           click: () => mainWindow && !updateBlocksNavigation() && mainWindow.loadURL(APP_URL),
+        },
+        {
+          id: "open-offline",
+          label: "Open Offline Workspace",
+          accelerator: "CmdOrCtrl+Shift+O",
+          click: () => offline.open(),
         },
         { type: "separator" },
         { role: "close" },
@@ -231,6 +264,12 @@ function registerVirtualDjHandlers() {
   handle("update:install", () => getController().install());
   handle("update:cancel", () => getController().cancel());
   handle("backup:save", async (_event, raw, account) => { try { await backups.save(raw, account); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } });
+  // Trusted signed-in web origin only: prepare, report and revoke offline availability.
+  handle("offline:prepare", async (_event, raw, account) => { try { return await offlineStore.prepare(raw, account); } catch (e) { return { ok: false, error: e.message }; } });
+  handle("offline:status", async (_event, account) => { try { return { ok: true, ...(await offlineStore.status(account)) }; } catch (e) { return { ok: false, error: e.message }; } });
+  handle("offline:account-seen", async (_event, account) => { try { await offlineStore.accountSeen(account); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } });
+  handle("offline:signed-out", async () => { try { await offlineStore.invalidate(); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } });
+  offline.register();
   handle("backup:latest", async (_event, account) => { try { return { ok: true, raw: await backups.latest(account) }; } catch (e) { return { ok: false, error: e.message }; } });
   handle("fs:availability", async (_event, paths) => {
     if (!Array.isArray(paths) || paths.length > 10000 || paths.some(p => typeof p !== "string" || !path.isAbsolute(p) || /[\r\n\0]/.test(p))) return { ok: false, error: "Invalid availability request." };

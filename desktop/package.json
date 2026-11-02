@@ -32,6 +32,13 @@
       "backups.cjs",
       "backup-policy.json",
       "recovery.cjs",
+      "offline-store.cjs",
+      "offline-window.cjs",
+      "offline-preload.cjs",
+      "offline/index.html",
+      "offline/app.js",
+      "offline/core.js",
+      "offline/offline.css",
       "build-info.json",
       "package.json",
       "node_modules/**/*"

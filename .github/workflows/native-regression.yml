@@ -30,10 +30,14 @@ jobs:
         run: bunx vitest run
       - name: Actual isolated Electron flows and artifacts
         run: node tests/native/run.mjs
+      - name: Offline workspace Electron flows (network denied, fenced profiles)
+        run: node tests/native/offline.mjs
       - name: Synthetic diagnostics only
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: isolated-native-diagnostics
-          path: test-results/native/
+          path: |
+            test-results/native/
+            test-results/native-offline/
           if-no-files-found: ignore
