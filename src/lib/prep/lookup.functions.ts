@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { createThrottle, parseLastfm, parseMbRecordings, type LastfmTrackInfo, type MbCandidate } from "./lookupParse";
+export type { LastfmTrackInfo, MbCandidate } from "./lookupParse";
 
 /**
  * On-demand song information for the track details panel.
@@ -15,11 +17,9 @@ const cache = new Map<string, { at: number; value: unknown }>();
 const cached = <T,>(k: string): T | undefined => { const h = cache.get(k); return h && Date.now() - h.at < CACHE_MS ? h.value as T : undefined; };
 const store = (k: string, value: unknown) => { if (cache.size > 2000) cache.clear(); cache.set(k, { at: Date.now(), value }); };
 
-export interface MbCandidate { id: string; title: string; artist: string; disambiguation: string; lengthSec: number | null; firstRelease: string | null; releases: string[]; tags: string[]; isrcs: string[]; score: number; url: string }
 export type LookupResult<T> = { ok: true; items: T; cached: boolean } | { ok: false; error: string; retryable: boolean };
 
-let mbNext = 0;
-async function mbThrottle() { const wait = mbNext - Date.now(); mbNext = Math.max(Date.now(), mbNext) + 1100; if (wait > 0) await new Promise(r => setTimeout(r, wait)); }
+const mbGate = createThrottle(1100, 4000);
 
 export const lookupMusicBrainz = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -34,26 +34,12 @@ export const lookupMusicBrainz = createServerFn({ method: "POST" })
     url.searchParams.set("query", artist ? `recording:${q(title)} AND artist:${q(artist)}` : `recording:${q(title)}`);
     url.searchParams.set("fmt", "json"); url.searchParams.set("limit", "8");
     try {
-      await mbThrottle();
+      if (!(await mbGate())) return { ok: false, error: "Too many MusicBrainz lookups are queued. Wait a few seconds and try again.", retryable: true };
       const res = await fetch(url, { headers: { "User-Agent": "SetArchitect/1.2 ( https://dancefloor-builder.lovable.app )", Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
       if (res.status === 503 || res.status === 429) return { ok: false, error: "MusicBrainz is rate limiting requests. Try again in a few seconds.", retryable: true };
       if (!res.ok) { console.error(`MusicBrainz ${res.status}: ${(await res.text()).slice(0, 300)}`); return { ok: false, error: `MusicBrainz returned an error (${res.status}).`, retryable: res.status >= 500 }; }
       const body = await res.json() as { recordings?: Array<Record<string, unknown>> };
-      const items: MbCandidate[] = (body.recordings ?? []).slice(0, 8).map(r => {
-        const credit = Array.isArray(r["artist-credit"]) ? (r["artist-credit"] as Array<{ name?: string; joinphrase?: string }>).map(a => `${a.name ?? ""}${a.joinphrase ?? ""}`).join("") : "";
-        const releases = Array.isArray(r.releases) ? (r.releases as Array<{ title?: string }>).map(x => clean(x.title, 200)).filter(Boolean) : [];
-        const id = clean(r.id, 60);
-        return {
-          id, title: clean(r.title), artist: clean(credit, 200), disambiguation: clean(r.disambiguation, 200),
-          lengthSec: typeof r.length === "number" && r.length > 0 ? Math.round(r.length / 1000) : null,
-          firstRelease: typeof r["first-release-date"] === "string" ? clean(r["first-release-date"], 20) : null,
-          releases: [...new Set(releases)].slice(0, 5),
-          tags: Array.isArray(r.tags) ? (r.tags as Array<{ name?: string; count?: number }>).sort((a, b) => (b.count ?? 0) - (a.count ?? 0)).map(t => clean(t.name, 60)).filter(Boolean).slice(0, 10) : [],
-          isrcs: Array.isArray(r.isrcs) ? (r.isrcs as unknown[]).map(x => clean(x, 20)).slice(0, 5) : [],
-          score: typeof r.score === "number" ? r.score : 0,
-          url: `https://musicbrainz.org/recording/${encodeURIComponent(id)}`,
-        };
-      }).filter(c => /^[0-9a-f-]{36}$/.test(c.id));
+      const items = parseMbRecordings(body);
       store(k, items);
       return { ok: true, items, cached: false };
     } catch (e) {
@@ -62,7 +48,6 @@ export const lookupMusicBrainz = createServerFn({ method: "POST" })
     }
   });
 
-export interface LastfmTrackInfo { available: boolean; tags: string[]; similar: { artist: string; title: string; match: number }[]; url: string | null }
 export const lookupLastfmTrack = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Input.parse(d))
@@ -84,10 +69,7 @@ export const lookupLastfmTrack = createServerFn({ method: "POST" })
     };
     try {
       const [tags, sim] = await Promise.all([call("track.gettoptags"), call("track.getsimilar", { limit: "15" })]);
-      const tagList = ((tags?.toptags as { tag?: Array<{ name?: string }> } | undefined)?.tag ?? []).map(t => clean(t.name, 60)).filter(Boolean).slice(0, 12);
-      const simList = ((sim?.similartracks as { track?: Array<{ name?: string; match?: unknown; artist?: { name?: string } }> } | undefined)?.track ?? [])
-        .map(t => ({ artist: clean(t.artist?.name, 200), title: clean(t.name), match: Math.max(0, Math.min(1, Number(t.match) || 0)) })).filter(t => t.artist && t.title).slice(0, 15);
-      const items = { available: true, tags: tagList, similar: simList, url: `https://www.last.fm/music/${encodeURIComponent(artist)}/_/${encodeURIComponent(title)}` };
+      const items = parseLastfm(tags, sim, artist, title);
       store(k, items);
       return { ok: true, items, cached: false };
     } catch (e) {
