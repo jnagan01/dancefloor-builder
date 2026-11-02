@@ -25,7 +25,7 @@ export interface DetailSubject {
   evidence?: Evidence[]; origin?: string;
 }
 
-const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p;
+const fileName = (p: string) => p.split(/[\\/]/).slice(-2).join("/"); // folder + name: duplicate basenames stay distinguishable
 
 function Field({ label, value, source }: { label: string; value?: string; source?: string }) {
   return <div className="grid grid-cols-[6.5rem_1fr] gap-2 py-1 text-sm">
