@@ -286,5 +286,6 @@ try {
   process.exitCode = 1;
 } finally {
   await close(); server.close();
+  try { fs.copyFileSync(telemetryFile, path.join(diagnostics, "startup-telemetry.log")); } catch { /* none recorded */ }
   fs.rmSync(temp, { recursive: true, force: true });
 }
