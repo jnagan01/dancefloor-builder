@@ -30,9 +30,12 @@ function delayedFs(hold: number) {
 }
 
 describe("finding 1: prepare is fenced and serialized in the main process", () => {
-  for (const [label, hold] of [["while writing the snapshot", 1], ["while writing the marker", 2]] as const) {
+  // The marker itself is committed synchronously after the last await, so the latest interleaving point
+  // is the final snapshot write (hold 3 = replacement copy after a baseline prepare: snapshot, prev, snapshot).
+  for (const [label, hold] of [["while writing the snapshot", 1], ["while writing the replacement copy just before the marker", 3]] as const) {
     it(`sign-out ${label} prevents the marker, also after cold restart`, async () => {
       const dir = tmp(), d = delayedFs(hold), store = createOfflineStore(dir, d.f);
+      if (hold === 3) { await (await seen(store, A)).prepare(raw(), A); }
       const p = (await seen(store, A)).prepare(raw(), A);
       await d.reached.promise;
       const out = store.invalidate();
