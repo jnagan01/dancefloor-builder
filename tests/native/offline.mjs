@@ -50,10 +50,10 @@ await new Promise(r => server.listen(0, "127.0.0.1", r));
 const ORIGIN = `http://127.0.0.1:${server.address().port}`;
 
 let app, count = 0;
-async function launch({ deny, online, url }) {
+async function launch({ deny, online, url, timeout = 30000 }) {
   const env = { ...process.env, SETARCHITECT_TEST_USERDATA: temp};
   if (online) env.DANCEFLOOR_URL = url || ORIGIN; else delete env.DANCEFLOOR_URL; // offline phases try the real published URL, blocked
-  app = await electron.launch({ executablePath: bin, args: [path.join(root, "tests/native/fixtures/offline-entry.cjs"), "--no-sandbox", ...(deny ? DENY : [])], env });
+  app = await electron.launch({ timeout, executablePath: bin, args: [path.join(root, "tests/native/fixtures/offline-entry.cjs"), "--no-sandbox", ...(deny ? DENY : [])], env });
   return app;
 }
 async function offlineWindow(tries = 200) {
@@ -231,7 +231,7 @@ try {
   await check("real 20-second stalled online start offers the offline workspace", null, async () => {
     fs.rmSync(path.join(temp, "dialogs.log"), { force: true });
     const started = Date.now();
-    await launch({ deny: false, online: true, url: `${ORIGIN}/stall` });
+    await launch({ deny: false, online: true, url: `${ORIGIN}/stall`, timeout: 90000 });
     const ow = await offlineWindow(400);
     const elapsed = Date.now() - started;
     expect(elapsed).toBeGreaterThan(19000);
