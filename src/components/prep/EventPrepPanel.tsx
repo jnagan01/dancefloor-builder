@@ -11,7 +11,7 @@ import { trackIdentity } from "@/lib/fileIdentity";
 import type { ResultSong } from "@/lib/danceFloor";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
 import { getArtistCrowdData } from "@/lib/lastfm.functions";
-import { libraryCandidate, requestFacts } from "@/lib/prep/requestFacts";
+import { libraryCandidate, requestFacts, selectedTrackIds } from "@/lib/prep/requestFacts";
 import { EMPTY_FILTER, facetOptions, fmtDur, trackFacts, type FilterFacts, type FilterState } from "@/lib/prep/filters";
 import { buildDashboard, type DrillItem } from "@/lib/prep/dashboard";
 import { recommend, type Candidate, type RecControls, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
@@ -99,11 +99,14 @@ export function EventPrepPanel(p: Props) {
   const recOptions = useMemo(() => facetOptions(recFacts), [recFacts]);
   const notesMap = useMemo(() => new Map(knowledge.tracks.map(n => [n.id, n])), [knowledge.tracks]);
   const inEvent = useMemo(() => p.sections.flatMap(s => s.songs), [p.sections]);
+  // Files the event rows already point at (selected primary + explicit extras), by exact identity only.
+  const inEventTrackIds = useMemo(() => selectedTrackIds(p.sections, p.matches, p.keyOf, tracks, roots),
+    [p.sections, p.matches, p.keyOf, tracks, roots]); // eslint-disable-line react-hooks/exhaustive-deps
   const requests = useMemo(() => p.sections.flatMap(s => s.songs.map((song, i) => ({ song, i, s }))).filter(x => x.song.fromUpload).map(({ song, i, s }) => {
     return requestFacts(song, p.matches[p.keyOf(s.key, i, song)], tracks);
   }), [p.sections, p.matches, p.keyOf, tracks]); // eslint-disable-line react-hooks/exhaustive-deps
-  const rec = useMemo(() => recommend({ candidates, requests, inEvent, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, controls, filter, limit: 40 }),
-    [candidates, requests, inEvent, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, controls, filter]);
+  const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, controls, filter, limit: 40 }),
+    [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, controls, filter]);
   const loadSimilar = async () => {
     const artists = [...new Set(requests.map(r => r.artist).filter(Boolean))].slice(0, 20);
     if (!artists.length) { setSimState({ busy: false, note: "No client requests to compare with yet." }); return; }

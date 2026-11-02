@@ -14,6 +14,8 @@ export interface Evidence { kind: "artist" | "genre" | "decade" | "lastfm" | "fa
 export interface Recommendation extends Candidate { key: string; score: number; evidence: Evidence[] }
 export interface RecInput {
   candidates: Candidate[]; requests: ClientRequest[]; inEvent: { artist: string; song: string }[];
+  /** Exact case-sensitive file identities already selected by event rows (primary + explicit extras). */
+  inEventTrackIds?: Iterable<string>;
   feedback: Feedback[]; dismissed: Dismissal[]; notes?: Map<string, TrackNote>; eventTags?: string[];
   similar?: SimilarArtistEvidence[]; controls: RecControls; filter?: FilterState; limit?: number;
 }
@@ -33,6 +35,7 @@ export function recommend(input: RecInput): RecOutput {
   const favor = new Set(input.feedback.filter(f => f.kind === "favor").map(f => f.key));
   const dismissed = new Set(input.dismissed.map(d => d.key));
   const inEvent = new Set(input.inEvent.map(s => songIdentity(s.artist, s.song)));
+  const inEventFiles = new Set(input.inEventTrackIds ?? []);
   const reqArtists = new Map<string, ClientRequest>();
   const genreCount = new Map<string, number>(), decadeCount = new Map<string, number>();
   for (const r of input.requests) {
@@ -48,7 +51,7 @@ export function recommend(input: RecInput): RecOutput {
   const seen = new Set<string>();
   for (const cand of input.candidates) {
     const key = songIdentity(cand.artist, cand.song);
-    if (inEvent.has(key)) { hidden.inEvent++; continue; }
+    if (inEvent.has(key) || (cand.trackId !== undefined && inEventFiles.has(cand.trackId))) { hidden.inEvent++; continue; }
     if (never.has(key)) { hidden.never++; continue; }
     if (dismissed.has(key)) { hidden.dismissed++; continue; }
     if (input.controls.ownedOnly && !cand.facts.owned) { hidden.notOwned++; continue; }
