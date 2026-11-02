@@ -58,15 +58,15 @@ try {
     await expect(page.locator('tbody tr')).toHaveCount(2); // Rock ∧ 100–125 BPM
     await expect(panel.getByRole('button', { name: /Remove filter/ })).toHaveCount(2); // BPM range+unknown mode, genre
     await panel.getByLabel('Saved filter name').fill('Rock mid tempo');
-    await panel.getByRole('button', { name: 'Save' }).click();
-    await expect(panel.getByRole('button', { name: 'Rock mid tempo' })).toBeVisible();
+    await panel.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'Rock mid tempo', exact: true })).toBeVisible();
     await panel.getByRole('button', { name: 'Reset all' }).click();
     await expect(page.locator('tbody tr')).toHaveCount(8);
-    await panel.getByRole('button', { name: 'Rock mid tempo' }).click();
+    await panel.getByRole('button', { name: 'Rock mid tempo', exact: true }).click();
     await expect(page.locator('tbody tr')).toHaveCount(2);
     await page.reload(); await page.getByRole('button', { name: 'Go library' }).waitFor();
     await expect(page.locator('tbody tr')).toHaveCount(2); // last filter remembered for this account
-    await expect(page.getByRole('region', { name: 'Filters' }).getByRole('button', { name: 'Rock mid tempo' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Filters' }).getByRole('button', { name: 'Rock mid tempo', exact: true })).toBeVisible();
     await page.getByRole('region', { name: 'Filters' }).getByRole('button', { name: 'Reset all' }).click();
     await narrow('library-filters');
   });
@@ -75,11 +75,11 @@ try {
     const panel = page.getByRole('region', { name: 'Filters' });
     page.once('dialog', d => d.accept('Rock renamed'));
     await panel.getByRole('button', { name: 'Rename Rock mid tempo' }).click();
-    await expect(panel.getByRole('button', { name: 'Rock renamed' })).toBeVisible();
+    await expect(panel.getByRole('button', { name: 'Rock renamed', exact: true })).toBeVisible();
     await page.evaluate(() => window.__switchAccount('synthetic-b'));
-    await expect(page.getByRole('region', { name: 'Filters' }).getByRole('button', { name: 'Rock renamed' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Filters' }).getByRole('button', { name: 'Rock renamed', exact: true })).toHaveCount(0);
     await page.evaluate(() => window.__switchAccount('synthetic-a'));
-    await expect(page.getByRole('region', { name: 'Filters' }).getByRole('button', { name: 'Rock renamed' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Filters' }).getByRole('button', { name: 'Rock renamed', exact: true })).toBeVisible();
   });
 
   await check('detail sheet binds exact duplicate-basename file, versions, preview', async () => {
@@ -129,11 +129,11 @@ try {
   await check('overlapping MusicBrainz + Last.fm lookups both finish; subject switch and close discard late results', async () => {
     await page.evaluate(() => { window.__lookup.mbDelay = 900; window.__lookup.lfDelay = 200; });
     await page.locator('tbody tr', { hasText: 'Song B.mp3' }).getByRole('button', { name: /Details for Song B/ }).click();
-    await sheet().getByRole('button', { name: 'MusicBrainz' }).click();
+    await sheet().getByRole('button', { name: 'MusicBrainz', exact: true }).click();
     await sheet().getByRole('button', { name: 'Last.fm tags & similar' }).click();
     await expect(sheet().getByLabel('Last.fm results')).toContainText('lf-song-b');
     await expect(sheet().getByLabel('MusicBrainz results')).toBeVisible({ timeout: 5000 });
-    await expect(sheet().getByRole('button', { name: 'MusicBrainz' })).toBeEnabled();
+    await expect(sheet().getByRole('button', { name: 'MusicBrainz', exact: true })).toBeEnabled();
     await expect(sheet().getByRole('button', { name: 'Last.fm tags & similar' })).toBeEnabled();
     await expect(sheet().getByLabel('MusicBrainz results')).toContainText('Different version words');
     await sheet().getByLabel('MusicBrainz results').getByRole('button', { name: 'Keep as reference' }).first().click();
@@ -141,12 +141,12 @@ try {
     // Start slow lookups then switch to a different exact file of the same song: late results must not appear.
     await page.keyboard.press('Escape');
     await page.locator('tbody tr', { hasText: 'a/Song.mp3' }).getByRole('button', { name: /Details for Song A/ }).click();
-    await sheet().getByRole('button', { name: 'MusicBrainz' }).click();
+    await sheet().getByRole('button', { name: 'MusicBrainz', exact: true }).click();
     await page.keyboard.press('Escape');
     await page.locator('tbody tr', { hasText: 'b/Song.mp3' }).getByRole('button', { name: /Details for Song A/ }).click();
     await page.waitForTimeout(1200);
     await expect(sheet().getByLabel('MusicBrainz results')).toHaveCount(0);
-    await expect(sheet().getByRole('button', { name: 'MusicBrainz' })).toBeEnabled();
+    await expect(sheet().getByRole('button', { name: 'MusicBrainz', exact: true })).toBeEnabled();
     await page.keyboard.press('Escape');
     expect(errors).toEqual([]);
   });
