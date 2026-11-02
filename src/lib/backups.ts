@@ -12,8 +12,8 @@ export interface Backup {
   prep?: PrepKnowledge;
 }
 /** Policy-bearing output uses v2 so pre-policy native validators fail closed. */
-export function backupVersion(events: Backup["events"]): 1 | 2 {
-  return events.some(e => ["ownedOnlyExpansion", "includeSeasonalTracks", "requireCleanVersions"].some(k => e.snapshot.inputs[k] !== undefined)) ? 2 : 1;
+export function backupVersion(events: { snapshot: { inputs: unknown } }[]): 1 | 2 {
+  return events.some(e => ["ownedOnlyExpansion", "includeSeasonalTracks", "requireCleanVersions"].some(k => !!e.snapshot.inputs && typeof e.snapshot.inputs === "object" && k in e.snapshot.inputs)) ? 2 : 1;
 }
 export function validateBackup(raw: string, account: string): Backup {
   if (new TextEncoder().encode(raw).length > MAX_BACKUP_BYTES) throw Error("Backup exceeds 32 MB; original preserved.");
