@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ExternalLink, Info, Plus, Undo2, Ban, X, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { buildDashboard, type DrillItem } from "@/lib/prep/dashboard";
 import { recommend, type Candidate, type RecControls, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
 import {
   addShortlist, copyGroupToEvent, createGroup, deleteGroup, dismissForEvent, eventPrep, itemIdentity, linkShortlistFile, removeFromGroup,
-  removeShortlist, renameGroup, setFeedback, songIdentity, undoDismiss, updateShortlist, type ShortStatus,
+  removeShortlist, renameGroup, setEventTags, setFeedback, songIdentity, undoDismiss, updateShortlist, addToGroup, type ShortStatus,
 } from "@/lib/prep/knowledge";
 import { FilterPanel } from "./FilterPanel";
 import type { DetailSubject } from "./TrackDetailSheet";
@@ -59,8 +59,13 @@ function Drill({ title, items, onJump, empty }: { title: string; items: DrillIte
 
 export function EventPrepPanel(p: Props) {
   const { state, knowledge, ready, mutate } = usePrep();
+  // Live identity for async results: a response is applied only if account, session and event are unchanged.
+  const live = useRef({ account: state.account, generation: state.generation, eventId: p.eventId });
+  live.current = { account: state.account, generation: state.generation, eventId: p.eventId };
   const canEvent = ready && !!p.eventId;
-  const ep = p.eventId ? eventPrep(knowledge, p.eventId) : { eventId: "", dismissed: [], shortlist: [] };
+  const ep = p.eventId ? eventPrep(knowledge, p.eventId) : { eventId: "", dismissed: [], shortlist: [], tags: [] as string[] };
+  const eventTags = ep.tags ?? [];
+  const allTags = useMemo(() => [...new Set(knowledge.tracks.flatMap(n => n.tags))].sort(), [knowledge.tracks]);
   const tracks = p.library.tracks;
 
   // ---- dashboard ----
@@ -76,6 +81,7 @@ export function EventPrepPanel(p: Props) {
   const [similar, setSimilar] = useState<SimilarArtistEvidence[]>([]);
   const [simState, setSimState] = useState<{ busy: boolean; note?: string }>({ busy: false });
   const simGen = useRef(0);
+  useEffect(() => { simGen.current++; setSimilar([]); setSimState({ busy: false }); return () => { simGen.current++; }; }, [state.account, state.generation, p.eventId]);
   const crowdFn = useServerFn(getArtistCrowdData);
   const ownedKeys = useMemo(() => new Set(tracks.map(t => songIdentity(t.artist, t.title))), [tracks]);
   const roots = useMemo(() => getFolderRoots(), [tracks]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -96,19 +102,21 @@ export function EventPrepPanel(p: Props) {
     const m = p.matches[p.keyOf(s.key, i, song)]; const t = m?.trackIndex != null ? tracks[m.trackIndex] : undefined; const f = t ? trackFacts(t) : undefined;
     return { artist: song.artist, song: song.song, genre: song.genre || f?.genre, decade: (song.year ? `${String(song.year).slice(0, 3)}0s` : undefined) || f?.decade };
   }), [p.sections, p.matches, p.keyOf, tracks]); // eslint-disable-line react-hooks/exhaustive-deps
-  const rec = useMemo(() => recommend({ candidates, requests, inEvent, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, similar, controls, filter, limit: 40 }),
-    [candidates, requests, inEvent, knowledge.feedback, ep.dismissed, notesMap, similar, controls, filter]);
+  const rec = useMemo(() => recommend({ candidates, requests, inEvent, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, controls, filter, limit: 40 }),
+    [candidates, requests, inEvent, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, controls, filter]);
   const loadSimilar = async () => {
     const artists = [...new Set(requests.map(r => r.artist).filter(Boolean))].slice(0, 20);
     if (!artists.length) { setSimState({ busy: false, note: "No client requests to compare with yet." }); return; }
-    const gen = ++simGen.current, account = state.account, event = p.eventId; setSimState({ busy: true });
+    const gen = ++simGen.current, started = { ...live.current };
+    const stillCurrent = () => gen === simGen.current && live.current.account === started.account && live.current.generation === started.generation && live.current.eventId === started.eventId;
+    setSimState({ busy: true });
     try {
       const r = await crowdFn({ data: { artists } });
-      if (gen !== simGen.current || account !== state.account || event !== p.eventId) return;
+      if (!stillCurrent()) return;
       if (!r.available) { setSimState({ busy: false, note: "Last.fm isn't configured for this app." }); return; }
       setSimilar(r.artists.flatMap(a => a.similar.map(s => ({ artist: s.name, similarTo: a.name, match: s.match }))));
       setSimState({ busy: false, note: `Using Last.fm similar artists for ${r.artists.length} requested artist${r.artists.length === 1 ? "" : "s"}.` });
-    } catch { if (gen === simGen.current) setSimState({ busy: false, note: "Couldn't reach Last.fm. Recommendations work without it." }); }
+    } catch { if (stillCurrent()) setSimState({ busy: false, note: "Couldn't reach Last.fm. Recommendations work without it." }); }
   };
 
   // ---- shortlist ----
@@ -134,20 +142,22 @@ export function EventPrepPanel(p: Props) {
       <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="recs">Recommendations</TabsTrigger><TabsTrigger value="shortlist">Shortlist ({ep.shortlist.length})</TabsTrigger><TabsTrigger value="groups">Groups ({knowledge.groups.length})</TabsTrigger></TabsList>
 
       <TabsContent value="overview" className="space-y-3">
-        <p className="text-xs text-muted-foreground">{dash.totals.songs} songs · {dash.totals.confirmed} confirmed recordings · confirmed length {fmtDur(dash.totals.knownSec)}. This is a planning check, not a prediction of how the night will go.</p>
+        <p className="text-xs text-muted-foreground">{dash.totals.songs} songs · {dash.totals.confirmed} confirmed tracks · approved length {fmtDur(dash.totals.knownSec)}. Uses the same approval rule as export. File presence on disk is checked by "Check export readiness". This is a planning check, not a prediction of how the night will go.</p>
         <div className="grid gap-2 md:grid-cols-2">
-          <Drill title="Waiting for your approval" items={dash.sections.flatMap(s => s.pending)} onJump={p.onJump} empty="Every matched file is approved." />
-          <Drill title="No local file" items={dash.sections.flatMap(s => s.missing)} onJump={p.onJump} empty="Every song has a local file." />
-          <Drill title="Alternate versions to compare" items={dash.sections.flatMap(s => s.alternates)} onJump={p.onJump} empty="No unapproved songs with several candidate files." />
-          <Drill title="Unknown length" items={dash.sections.flatMap(s => s.unknownDuration)} onJump={p.onJump} empty="Every confirmed recording has a known length." />
+          <Drill title="Waiting for your approval" items={dash.sections.flatMap(s => s.pending)} onJump={p.onJump} empty="Every linked track is approved." />
+          <Drill title="No track linked" items={dash.sections.flatMap(s => s.notLinked)} onJump={p.onJump} empty="Every song has a linked track." />
+          <Drill title="Linked track missing from library" items={dash.sections.flatMap(s => s.linkedMissing)} onJump={p.onJump} empty="Every linked track is still in your library index." />
+          <Drill title="Excluded from DJ export" items={dash.sections.flatMap(s => s.excluded)} onJump={p.onJump} empty="No songs are excluded." />
+          <Drill title="Alternate versions to compare" items={dash.sections.flatMap(s => s.alternates)} onJump={p.onJump} empty="No unapproved songs with several candidate tracks." />
+          <Drill title="Unknown length" items={dash.sections.flatMap(s => s.unknownDuration)} onJump={p.onJump} empty="Every approved track has a known length." />
         </div>
-        <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-muted-foreground"><th className="py-1">Section</th><th>Songs</th><th>Confirmed</th><th>Known length</th><th>Estimated total</th></tr></thead>
+        <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-muted-foreground"><th className="py-1">Section</th><th>Songs</th><th>Confirmed</th><th>Approved length</th><th>Estimated total</th></tr></thead>
           <tbody>{dash.sections.map(s => <tr key={s.key} className="border-t border-border align-top"><td className="py-1">{s.label}</td><td>{s.count}</td><td>{s.confirmed}</td><td>{fmtDur(s.knownSec)}{s.unknownDuration.length ? ` + ${s.unknownDuration.length} unknown` : ""}</td>
             <td>{s.estimatedSec != null ? <>{s.estimateBasis ? "≈ " : ""}{fmtDur(s.estimatedSec)}{s.estimateBasis && <span className="block text-[11px] text-muted-foreground">{s.estimateBasis}</span>}</> : "—"}</td></tr>)}</tbody></table></div>
         <div className="grid gap-3 md:grid-cols-3 text-xs">
           <div><p className="font-medium">Artists repeated</p>{dash.artistRepeats.length ? <ul>{dash.artistRepeats.slice(0, 10).map(a => <li key={a.artist}><button type="button" className="hover:underline" onClick={() => p.onJump(a.where[0].section as PrepSectionKey, a.where[0].index)}>{a.artist} × {a.count}</button></li>)}</ul> : <p className="text-muted-foreground">No repeats.</p>}</div>
-          <div><p className="font-medium">Genres</p><ul>{dash.genres.map(g => <li key={g.label}>{g.label} · {g.count}</li>)}</ul>{dash.unknownGenre > 0 && <p className="text-muted-foreground">{dash.unknownGenre} unknown</p>}</div>
-          <div><p className="font-medium">Decades</p><ul>{dash.decades.map(d => <li key={d.label}>{d.label} · {d.count}</li>)}</ul>{dash.unknownDecade > 0 && <p className="text-muted-foreground">{dash.unknownDecade} unknown</p>}</div>
+          <div><p className="font-medium">Genres</p><ul>{dash.genres.map(g => <li key={g.label}>{g.label} · {g.count}</li>)}</ul>{dash.unknownGenre > 0 && <p className="text-muted-foreground">{dash.unknownGenre} unknown</p>}{dash.tentativeGenre > 0 && <p className="text-muted-foreground">{dash.tentativeGenre} from event details (tentative, not track tags)</p>}</div>
+          <div><p className="font-medium">Decades</p><ul>{dash.decades.map(d => <li key={d.label}>{d.label} · {d.count}</li>)}</ul>{dash.unknownDecade > 0 && <p className="text-muted-foreground">{dash.unknownDecade} unknown</p>}{dash.tentativeDecade > 0 && <p className="text-muted-foreground">{dash.tentativeDecade} from event details (tentative, not track tags)</p>}</div>
         </div>
       </TabsContent>
 
@@ -160,6 +170,11 @@ export function EventPrepPanel(p: Props) {
           <label className="space-y-1 text-xs"><span>Artist variety</span><Slider aria-label="Artist variety" min={0} max={1} step={0.1} value={[controls.artistVariety]} onValueChange={([v]) => setControls(c => ({ ...c, artistVariety: v }))} /></label>
           <label className="flex items-center gap-2 text-xs"><Switch checked={controls.ownedOnly} onCheckedChange={v => setControls(c => ({ ...c, ownedOnly: v }))} aria-label="Only songs I own" />Only songs I own</label>
         </div>
+        <fieldset className="space-y-1 text-xs"><legend className="font-medium">Your tags to favour for this event</legend>
+          {allTags.length ? <div className="flex flex-wrap gap-1">{allTags.map(t => { const on = eventTags.includes(t); return <Button key={t} size="sm" variant={on ? "default" : "outline"} className="h-7 px-2 text-xs" aria-pressed={on} disabled={!canEvent} onClick={() => void mutate(k => setEventTags(k, p.eventId!, on ? eventTags.filter(x => x !== t) : [...eventTags, t]))}>{t}</Button>; })}</div>
+            : <p className="text-muted-foreground">Tag tracks in their details (e.g. "first dance", "singalong") to use them here.</p>}
+          {!p.eventId && allTags.length > 0 && <p className="text-muted-foreground">Save the event to choose tags for it.</p>}
+        </fieldset>
         <div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" disabled={simState.busy} onClick={loadSimilar}>{simState.busy && <Loader2 size={14} className="mr-1 animate-spin" />}Add Last.fm similar artists</Button>{simState.note && <span className="text-xs text-muted-foreground">{simState.note}</span>}</div>
         <FilterPanel context="recommendation" options={recOptions} value={filter} onChange={setFilter} shown={rec.items.length} />
         <p className="text-xs text-muted-foreground">Client requests always stay in the event. Hidden: {rec.hidden.inEvent} already in event, {rec.hidden.dismissed} dismissed here, {rec.hidden.never} never recommend, {rec.hidden.filtered} filtered{controls.ownedOnly ? `, ${rec.hidden.notOwned} not owned` : ""}.</p>
@@ -176,7 +191,7 @@ export function EventPrepPanel(p: Props) {
         {(ep.dismissed.length > 0 || knowledge.feedback.some(f => f.kind === "never")) && <details className="text-xs"><summary className="cursor-pointer">Manage hidden songs</summary>
           <div className="mt-2 grid gap-3 md:grid-cols-2">
             <div><p className="font-medium">Dismissed for this event</p>{ep.dismissed.map(d => <p key={d.key} className="flex items-center justify-between">{d.label}<Button size="sm" variant="ghost" className="h-6" onClick={() => void mutate(k => undoDismiss(k, p.eventId!, d.key))}><Undo2 size={12} className="mr-1" />Undo</Button></p>)}</div>
-            <div><p className="font-medium">Never recommend (all events)</p>{knowledge.feedback.filter(f => f.kind === "never").map(f => { const [a, s] = f.label.split(" – "); return <p key={f.key} className="flex items-center justify-between">{f.label}<Button size="sm" variant="ghost" className="h-6" onClick={() => void mutate(k => ({ ...k, feedback: k.feedback.filter(x => x.key !== f.key) }))}><Undo2 size={12} className="mr-1" />Allow{a && s ? "" : ""}</Button></p>; })}</div>
+            <div><p className="font-medium">Never recommend (all events)</p>{knowledge.feedback.filter(f => f.kind === "never").map(f => { return <p key={f.key} className="flex items-center justify-between">{f.label}<Button size="sm" variant="ghost" className="h-6" onClick={() => void mutate(k => ({ ...k, feedback: k.feedback.filter(x => x.key !== f.key) }))}><Undo2 size={12} className="mr-1" />Allow</Button></p>; })}</div>
           </div></details>}
       </TabsContent>
 
@@ -190,14 +205,18 @@ export function EventPrepPanel(p: Props) {
           </form>
           {copyNote && <p className="text-xs text-muted-foreground" role="status">{copyNote}</p>}
           <div className="flex items-center gap-2 text-xs"><span>Add to section:</span><select aria-label="Section to add shortlist songs to" className="h-8 rounded-md border border-border bg-background px-2" value={targetSection} onChange={e => setTargetSection(e.target.value as PrepSectionKey)}>{p.sections.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}</select>
-            <span className="text-muted-foreground">Added songs still need their recording approved in the event.</span></div>
+            <span className="text-muted-foreground">Added songs still need their track approved in the event.</span></div>
+          {knowledge.groups.length > 0 && <div className="flex flex-wrap items-center gap-2 text-xs"><span>Copy a saved group into this shortlist:</span>
+            <select aria-label="Copy group into shortlist" className="h-8 rounded-md border border-border bg-background px-2" value="" disabled={!canEvent} onChange={async e => { const gid = e.target.value; if (!gid) return; let n = { added: 0, skipped: 0 }; const ok = await mutate(k => { const r = copyGroupToEvent(k, gid, p.eventId!); n = r; return r.next; }); if (ok) setCopyNote(`Copied ${n.added} song${n.added === 1 ? "" : "s"} to the shortlist${n.skipped ? `, ${n.skipped} already there` : ""}.`); }}>
+              <option value="">Choose group…</option>{knowledge.groups.map(g => <option key={g.id} value={g.id}>{g.name} ({g.items.length})</option>)}</select></div>}
           {!ep.shortlist.length && <p className="text-xs text-muted-foreground">Nothing shortlisted yet. Add songs here or from Recommendations.</p>}
           <ul className="space-y-1.5">{ep.shortlist.map(s => { const linked = s.trackId ? trackById.get(s.trackId) : undefined; return <li key={s.id} className="rounded border border-border p-2 text-xs">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-medium">{s.artist} – {s.song}</p>
               <div className="flex flex-wrap items-center gap-1">
                 <select aria-label={`Status for ${s.artist} – ${s.song}`} className="h-7 rounded border border-border bg-background px-1" value={s.status} onChange={e => void mutate(k => updateShortlist(k, p.eventId!, s.id, { status: e.target.value as ShortStatus }))}>{(Object.keys(STATUS_LABEL) as ShortStatus[]).map(v => <option key={v} value={v}>{STATUS_LABEL[v]}</option>)}</select>
-                <Button size="sm" variant="outline" className="h-7" onClick={() => { const err = p.onAddToSection(targetSection, { artist: s.artist, song: s.song, trackId: s.trackId }); setCopyNote(err ?? `Added to ${p.sections.find(x => x.key === targetSection)?.label}. Approve its recording in the event.`); }}>Add to section</Button>
+                <Button size="sm" variant="outline" className="h-7" onClick={() => { const err = p.onAddToSection(targetSection, { artist: s.artist, song: s.song, trackId: s.trackId }); setCopyNote(err ?? `Added to ${p.sections.find(x => x.key === targetSection)?.label}. Approve its track in the event.`); }}>Add to section</Button>
+                {knowledge.groups.length > 0 && <select aria-label={`Save ${s.artist} – ${s.song} to group`} className="h-7 rounded border border-border bg-background px-1" value="" onChange={e => { const gid = e.target.value; if (gid) void mutate(k => addToGroup(k, gid, { artist: s.artist, song: s.song, ...(s.versionNote ? { versionNote: s.versionNote } : {}), ...(s.trackId ? { trackId: s.trackId } : {}) })); }}><option value="">Save to group…</option>{knowledge.groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}</select>}
                 <Button size="sm" variant="ghost" className="h-7" aria-label="Details" onClick={() => p.onDetails({ artist: s.artist, song: s.song, track: linked })}><Info size={14} /></Button>
                 <Button size="sm" variant="ghost" className="h-7" aria-label={`Remove ${s.artist} – ${s.song} from shortlist`} onClick={() => void mutate(k => removeShortlist(k, p.eventId!, s.id))}><X size={14} /></Button>
               </div></div>
