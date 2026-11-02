@@ -37,9 +37,9 @@ const row = (inputs = {}) => ({ id: 'A', name: 'Synthetic', updated_at: 'v1', in
 describe('owned-only expansion and conservative seasonal evidence', () => {
   it('new defaults are owned-only, seasonal excluded, clean required; legacy fields are absent', async () => {
     const h = harness({ eventId: null }); await h.flush();
-    expect(h.current.eventSnapshot().inputs).toMatchObject(DEFAULTS); h.unmount();
+    expect(h.current.eventSnapshot(h.current.result ?? { warmUp: [], transition: [], peak: [] }, h.current.matches).inputs).toMatchObject(DEFAULTS); h.unmount();
     const old = harness({ rows: { A: row() } }); await old.flush();
-    for (const k of Object.keys(DEFAULTS)) expect(old.current.eventSnapshot().inputs[k]).toBeUndefined();
+    for (const k of Object.keys(DEFAULTS)) expect(old.current.eventSnapshot(old.current.result, old.current.matches).inputs[k]).toBeUndefined();
     expect(old.requests).toEqual([]); old.unmount();
   });
   it('intended song/version resolver never pads wrong artist/title, live/remix, or basename matches', () => {
@@ -68,7 +68,7 @@ describe('owned-only expansion and conservative seasonal evidence', () => {
   });
   it('empty eligible pool yields honest gaps while requested seasonal track remains', () => {
     const client = [{ artist: 'Wham!', song: 'Last Christmas' }];
-    const r = dance.generateLists(client, .25, { expand: true, buffer: 2, prefs: { additionAllowed: () => false } });
+    const r = dance.generateLists({ uploaded: client, hours: .25, expand: true, buffer: 2, prefs: { additionAllowed: () => false } });
     expect([...r.warmUp, ...r.transition, ...r.peak].map(s => s.song)).toEqual(['Last Christmas']);
     expect(r.finalShortfall?.total).toBeGreaterThan(0);
     const topped = dance.topUpSectionsFromLibrary(r, { additionAllowed: () => false });
@@ -79,7 +79,6 @@ describe('owned-only expansion and conservative seasonal evidence', () => {
     const args = [empty, 'warmUp', { artist: 'ABBA', song: 'Honey Honey' }, lib, {}, () => 'new', vdj.matchSong, DEFAULTS] as const;
     expect(planAddToSection(...args)).toHaveProperty('error');
     expect(planAddToSection(empty, 'warmUp', { artist: 'Wham!', song: 'Last Christmas' }, lib, {}, () => 'new', vdj.matchSong, DEFAULTS)).toHaveProperty('error');
-    const id = (p: string) => require('../node_modules/typescript') && `file:${p}`;
     // Actual identities use the shared helper, not title/basename.
     expect(planAddToSection(empty, 'warmUp', request, lib, {}, () => 'new', vdj.matchSong, DEFAULTS)).toMatchObject({ match: { confirmed: false } });
     expect(empty.warmUp).toEqual([]);
@@ -94,11 +93,12 @@ describe('event-wide clean policy and terminal export counts', () => {
   });
   it('every DJ writer exports exact clean files in order, extras blocked independently, no substitutions', () => {
     const lib = vdj.buildLibrary(tracks), refs: vdj.ExportSongRef[] = [{ song: request, requireClean: true, match: { status: 'Manually Matched', confidence: 1, trackIndex: 0, extraTrackIndices: [1, 2, 4, 5], confirmed: true, alternatives: [] } }];
-    for (const text of [vdj.buildM3u(refs, lib, {}), vdj.buildVirtualDjXml(refs, lib), vdj.buildTxtPlaylist(refs, lib, { matchedOnly: true })]) {
+    for (const text of [vdj.buildM3u(refs, lib, {}), vdj.buildVirtualDjXml(refs, lib)]) {
       expect(text).toContain(tracks[1].filePath); expect(text).toContain(tracks[2].filePath);
       expect(text.indexOf(tracks[1].filePath)).toBeLessThan(text.indexOf(tracks[2].filePath));
       for (const i of [0, 3, 4, 5]) expect(text).not.toContain(tracks[i].filePath);
     }
+    expect(vdj.buildTxtPlaylist(refs, lib, { matchedOnly: true }).split("\r\n")).toEqual(["1. Queen - Radio Ga Ga (Clean)", "   + Queen - Radio Ga Ga (Clean)", ""]);
     expect(vdj.buildTxtPlaylist(refs, lib)).toContain('Radio Ga Ga');
     expect(vdj.countMatchedForExport(refs, lib)).toBe(2);
   });
@@ -118,16 +118,16 @@ describe('event-wide clean policy and terminal export counts', () => {
     vi.useFakeTimers();
     try {
       const h = harness({ rows: { A: row() } }); await h.flush(); h.library(vdj.buildLibrary(tracks)); await h.flush();
-      const before = structuredClone(h.current.eventSnapshot().lists.selections);
+      const before = structuredClone(h.current.eventSnapshot(h.current.result ?? { warmUp: [], transition: [], peak: [] }, h.current.matches).lists.selections);
       h.interact((n: any) => n.props?.['aria-label'] === 'Require clean versions', 'onCheckedChange', true);
-      expect(h.current.eventSnapshot().lists.selections).toEqual(before);
+      expect(h.current.eventSnapshot(h.current.result ?? { warmUp: [], transition: [], peak: [] }, h.current.matches).lists.selections).toEqual(before);
       h.interact((n: any) => n.props?.onConfirm, 'onConfirm', key);
       expect(h.errors.at(-1)).toContain('Clean version needed');
       await h.flush(); await vi.advanceTimersByTimeAsync(1000); await h.flush();
       expect(h.requests.at(-1).inputs.requireCleanVersions).toBe(true);
       const saved = h.requests.at(-1); h.unmount();
       const reopened = harness({ rows: { A: { ...row(), inputs: saved.inputs, lists: saved.lists } } }); await reopened.flush(); reopened.library(vdj.buildLibrary(tracks)); await reopened.flush();
-      expect(reopened.current.eventSnapshot().inputs.requireCleanVersions).toBe(true); expect(reopened.requests).toEqual([]); reopened.unmount();
+      expect(reopened.current.eventSnapshot(reopened.current.result, reopened.current.matches).inputs.requireCleanVersions).toBe(true); expect(reopened.requests).toEqual([]); reopened.unmount();
     } finally { vi.useRealTimers(); }
   });
   it('policy change while actual export waits for availability stops all outputs', async () => {
@@ -159,7 +159,7 @@ describe('backup/recovery/offline compatibility without mutating legacy snapshot
   it('old native reader rejects v2 and web preparation revokes older offline capability', async () => {
     const fs = require('node:fs'), vm = require('node:vm');
     const source = fs.readFileSync('desktop/backups.cjs', 'utf8').replace('![1,2].includes(b.version)', 'b.version!==1');
-    const mod = { exports: {} }; vm.runInNewContext(source, { module: mod, exports: mod.exports, require });
+    const mod = { exports: {} }; vm.runInNewContext(source, { module: mod, exports: mod.exports, require: createRequire(new URL("../desktop/backups.cjs", import.meta.url)) });
     expect(() => (mod.exports as any).validate(JSON.stringify(backup(true)), 'synthetic')).toThrow();
     let revoked = 0, prepared = 0;
     const bridge = { signedOut: async () => { revoked++; return { ok: true }; }, accountSeen: async () => ({ ok: true }), status: async () => ({ prepared: false }), prepare: async () => { prepared++; return { ok: true }; } };
