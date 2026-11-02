@@ -53,4 +53,11 @@ describe("actual Workspace backup with preparation notes", () => {
     expect(k.events[0].shortlist[0].song).toBe("V");
     expect(h.render().sources).toEqual([source]);
   });
+  it("a startup backup that runs before preparation notes have loaded waits for them instead of failing", async () => {
+    const be = mem({ "prepKnowledge:synthetic": setFeedback(emptyKnowledge(), "A", "T", "favor") }); const store = createPrepStore(be); // not yet loaded
+    const saved: backups.Backup[] = [];
+    const h = harness([source], false, { saved, prepStore: { prepStore: () => store } });
+    await h.render().backup();
+    expect(saved[0].prep?.feedback).toHaveLength(1);
+  });
 });
