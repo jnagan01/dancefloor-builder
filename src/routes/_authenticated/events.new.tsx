@@ -102,7 +102,7 @@ import { getWorkflow, saveWorkflowSafely } from "@/lib/history.functions";
 import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
-import { UserCog, Music2 } from "lucide-react";
+import { UserCog, Music2, Info } from "lucide-react";
 import { SpotifyExportDialog, type SpotifyExportJob } from "@/components/SpotifyExportDialog";
 import { VIBES, getVibe, resolveTargets } from "@/lib/vibes";
 import { EVENT_TYPES, getEventType } from "@/lib/eventTypes";
