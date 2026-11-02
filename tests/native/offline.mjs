@@ -74,7 +74,8 @@ async function decoupledRun(args, env) {
 // app itself fails, offlineWindow() still fails and the startup telemetry is printed.
 // Playwright's own Chromium switches (as electron.launch's loader adds them): keep occluded/background
 // windows rendering so CDP commands that need a renderer are answered. macOS occludes the main window
-// behind the offline window; Linux/Xvfb has no occlusion. Test-only; the product is unchanged.
+// behind the offline window. Run 41485655370 showed these alone do not prevent the getFrameTree hang
+// (see startupSettled below); they stay to match electron.launch. Test-only; the product is unchanged.
 const ATTACH_SWITCHES = ["--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding"];
 async function stopChild(child) {
   if (child.exitCode !== null || child.signalCode) return;
