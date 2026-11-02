@@ -45,6 +45,8 @@ handle('test:auto-update',async(_e,action)=>{
  else if(action!=='status')throw Error('Invalid action');
  return updateController.status();
 });
+// Synthetic VirtualDJ database only: the file inside the isolated profile, whatever path the app asks for.
+handle('test:vdj',async()=>{const f=path.join(profile,'vdj.xml');return fs.existsSync(f)?{ok:true,path:f,xml:fs.readFileSync(f,'utf8')}:{ok:false,path:'',error:'No synthetic VirtualDJ database'};});
 handle('test:read' ,(_e,id)=>read()[id]);
 handle('test:late-write',(_e,action,id)=>{
  if(id!=='A')throw Error('Synthetic event required');

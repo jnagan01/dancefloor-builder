@@ -247,5 +247,40 @@ try{
    await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('light'))).toBe(true);await page.emulateMedia({colorScheme:'dark'});
    await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dark'))).toBe(true);
  });
+
+ await check('production VDJ read merges lengths, recommendations skip the exact selected file, shortfall follows shortlist add',async()=>{
+   await app.close();
+   const dir=path.join(library,'dsmn'),other=path.join(library,'other');fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(other,{recursive:true});
+   const request={artist:'Queen',song:"Don't Stop Me Now",fromUpload:true};
+   const q=[{filePath:path.join(dir,"Queen - Don't Stop Me Now (Clean).mp3"),artist:'Queen',title:"Don't Stop Me Now (Clean)"},{filePath:path.join(dir,"Queen - Don't Stop Me Now.mp3"),artist:'Queen',title:"Don't Stop Me Now",songLength:'187'},{filePath:path.join(other,"Queen - Don't Stop Me Now (Clean).mp3"),artist:'Queen',title:"Don't Stop Me Now (Clean)"},{filePath:path.join(dir,'Band - Hit.mp3'),artist:'Band',title:'Hit'}];
+   q.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:q}));
+   const esc=s=>s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+   const len=['215.4','0','abc','200'];
+   fs.writeFileSync(path.join(temp,'vdj.xml'),`<?xml version="1.0"?><VirtualDJ_Database>${q.map((t,i)=>`<Song FilePath="${esc(t.filePath)}"><Tags Author="${esc(t.artist)}" Title="${esc(t.title)}"/><Infos SongLength="${len[i]}"/></Song>`).join('')}</VirtualDJ_Database>`);
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const k=`warmUp:0:${dedupeKey(request.artist,request.song)}`;
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Queen',updated_at:'2026-11-02T01:59:00Z',inputs:{eventName:'Queen',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[k]:{paths:[q[0].filePath],confirmed:true}}}}}));
+   await launch();
+   await page.evaluate(r=>localStorage.setItem('dancefloor:vdjRoot',r),temp);await page.reload();await page.locator('[role="status"], #backups').first().waitFor();
+   const lengths=()=>{try{return Object.fromEntries(JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8')).flatMap(s=>s.tracks).map(t=>[t.filePath,t.songLength??null]));}catch{return {};}};
+   await expect.poll(()=>lengths()[q[0].filePath],{timeout:15000}).toBe('215');
+   expect(lengths()).toEqual({[q[0].filePath]:'215',[q[1].filePath]:'187',[q[2].filePath]:null,[q[3].filePath]:'200'});
+   const prep=page.getByRole('region',{name:'Event preparation'});
+   await prep.getByRole('tab',{name:'Recommendations'}).click();
+   await expect(prep.getByRole('button',{name:"Details for Queen – Don't Stop Me Now (Clean)"})).toHaveCount(1); // other-folder copy stays
+   await expect(prep).toContainText('2 already in event'); // exact selected file + same-title alternative
+   const tab=()=>page.getByRole('tab',{name:/^Warm Up \(/}).first().innerText();
+   const before=(await tab()).match(/Warm Up \((\d+) \/ (\d+), -(\d+)\)/);expect(before).toBeTruthy();
+   const [,n,target,shortBy]=before.map(Number);
+   await prep.getByRole('tab',{name:/Shortlist/}).click();
+   await prep.getByLabel('Shortlist artist').fill('Band');await prep.getByLabel('Shortlist title').fill('Hit');
+   await prep.getByRole('button',{name:'Add',exact:true}).click();
+   await prep.getByLabel('Section to add shortlist songs to').selectOption('warmUp');
+   await prep.locator('li',{hasText:'Band – Hit'}).getByRole('button',{name:'Add to section'}).click();
+   await expect.poll(tab).toContain(`Warm Up (${n+1} / ${target}, -${shortBy-1})`);
+   await expect(page.getByText(`-${shortBy-1} short`,{exact:true}).first()).toBeVisible();
+ });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
 }catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});throw e;}finally{await app?.close().catch(()=>{});}
