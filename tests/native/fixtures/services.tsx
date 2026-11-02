@@ -20,6 +20,7 @@ export const validSavedLibrary=(v:any)=>v?.version===1&&Array.isArray(v.sources)
 
 export const toast={error:(text:any)=>w.__errors.push(String(text)),warning:(text:any)=>w.__warnings.push(String(text)),success:(text:any)=>w.__success.push(String(text)),info:()=>{}};
 export const recommendSongsForSection=async()=>({suggestions:[]}),getArtistNeighbors=async()=>({clusters:[]}),getArtistCrowdData=async()=>({artists:[]}),enrichSongs=async()=>({results:[]}),importSpotifyPlaylist=async()=>({songs:[]});
+export const lookupMusicBrainz=async()=>({ok:false,error:'Lookups are disabled in the isolated fixture.',retryable:false}),lookupLastfmTrack=async()=>({ok:true,cached:false,items:{available:false,tags:[],similar:[],url:null}});
 export function useDebounce(v:any){return v;}
 export function useProfileSettings(){return {settings:null};}
 export function DjAccountBar(){return null;}export function SpotifyExportDialog(){return null;}export function ProfileSettingsDialog(){return null;}
