@@ -243,7 +243,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   if (backupSession.current.account !== userId) backupSession.current.generation++;
   backupSession.current.account = userId; backupSession.current.sources = sources;
   useEffect(() => {
-    const subscription = supabase.auth.onAuthStateChange?.((event, session) => { backupSession.current.generation++; backupSession.current.liveAccount = session?.user.id ?? null; reportOfflineSession(event, session?.user.id); });
+    const subscription = supabase.auth.onAuthStateChange?.((event, session) => { backupSession.current.generation++; backupSession.current.liveAccount = session?.user.id ?? null; if (!session?.user.id) void prepStore().setAccount(null); reportOfflineSession(event, session?.user.id); });
     return () => { backupSession.current.generation++; subscription?.data.subscription.unsubscribe(); };
   }, []);
   function captureBackupOwner() {
@@ -495,7 +495,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     revisions.bump(selected.label, track.filePath, roots);
     setSources(prev => prev.map(s => s.label === selected.label ? { ...s, tracks: s.tracks.map(t => trackIdentity(t.filePath, roots) === identity ? { ...t, ...patch, filePath: t.filePath } : t) } : s));
   }
-  useEffect(() => { void prepStore().setAccount(loading ? (userId ?? null) : userId); }, [userId, loading]);
+  useEffect(() => { void prepStore().setAccount(userId); }, [userId, loading]);
   return <Context.Provider value={{ account: userId, sources, files, audioIndex, library, loading, persistenceError, vdjSyncedAt, vdjPath, vdjSyncing, syncVirtualDj, vdjRoot, vdjTrackCount, chooseVdjFolder, useDefaultVdjFolder, refreshVdj, backup, restoreMetadata, prepareOffline, addFolder, rescan, addFile, ensureLocalFile, saveTrackTags, removeSource, editTrack }}>{children}</Context.Provider>;
 }
 export function useWorkspace() {
