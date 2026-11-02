@@ -169,7 +169,7 @@ try {
     const blocked = path.join(temp, "not-a-folder"); fs.writeFileSync(blocked, "file");
     fs.writeFileSync(path.join(temp, "export-dir"), blocked);
     await w.getByRole("button", { name: "Export VirtualDJ playlists" }).click();
-    await expect(w.locator(".report")).toContainText("No playlists were left in the folder");
+    await expect(w.locator(".report")).toContainText("The files this export started were removed");
     const overlays = path.join(temp, "offline", "overlays"), [hash] = fs.readdirSync(overlays);
     const saved = fs.readFileSync(path.join(overlays, hash, fs.readdirSync(path.join(overlays, hash))[0]), "utf8");
     fs.renameSync(path.join(overlays, hash), path.join(overlays, "moved")); fs.writeFileSync(path.join(overlays, hash), "blocker");
