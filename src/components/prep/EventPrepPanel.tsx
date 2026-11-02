@@ -121,6 +121,7 @@ export function EventPrepPanel(p: Props) {
 
   // ---- shortlist ----
   const [draft, setDraft] = useState({ artist: "", song: "", versionNote: "" });
+  const [adding, setAdding] = useState(false);
   const [targetSection, setTargetSection] = useState<PrepSectionKey>(p.sections[0]?.key ?? "warmUp");
   const [linking, setLinking] = useState<string | null>(null), [linkQuery, setLinkQuery] = useState("");
   const linkResults = useMemo(() => {
@@ -198,11 +199,21 @@ export function EventPrepPanel(p: Props) {
 
       <TabsContent value="shortlist" className="space-y-3">
         {!p.eventId ? ns : <>
-          <form className="flex flex-wrap gap-2" onSubmit={async e => { e.preventDefault(); const ev = p.eventId!; let dup = false; const ok = await mutate(k => { const r = addShortlist(k, ev, draft); dup = !r.added; return r.next; }); if (ok && !dup) setDraft({ artist: "", song: "", versionNote: "" }); if (dup) setCopyNote("Already on the shortlist (same song and version note)."); }}>
+          <form className="flex flex-wrap gap-2" onSubmit={async e => {
+            e.preventDefault(); if (adding) return;
+            const ev = p.eventId!, submitted = draft; let dup = false;
+            setAdding(true); setCopyNote(null);
+            try {
+              const ok = await mutate(k => { const r = addShortlist(k, ev, submitted); dup = !r.added; return r.next; });
+              // Clear only what was submitted; anything typed while saving is kept.
+              if (ok && !dup) setDraft(d => d.artist === submitted.artist && d.song === submitted.song && d.versionNote === submitted.versionNote ? { artist: "", song: "", versionNote: "" } : d);
+              if (dup) setCopyNote("Already on the shortlist (same song and version note).");
+            } finally { setAdding(false); }
+          }}>
             <Input className="h-8 w-40 text-xs" placeholder="Artist" aria-label="Shortlist artist" value={draft.artist} onChange={e => setDraft(d => ({ ...d, artist: e.target.value }))} />
             <Input className="h-8 w-48 text-xs" placeholder="Title" aria-label="Shortlist title" value={draft.song} onChange={e => setDraft(d => ({ ...d, song: e.target.value }))} />
             <Input className="h-8 w-48 text-xs" placeholder="Desired version (e.g. clean radio edit)" aria-label="Desired version" value={draft.versionNote} onChange={e => setDraft(d => ({ ...d, versionNote: e.target.value }))} />
-            <Button size="sm" type="submit" disabled={!canEvent || !(draft.artist.trim() || draft.song.trim())}>Add</Button>
+            <Button size="sm" type="submit" disabled={adding || !canEvent || !(draft.artist.trim() || draft.song.trim())}>{adding ? "Adding…" : "Add"}</Button>
           </form>
           {copyNote && <p className="text-xs text-muted-foreground" role="status">{copyNote}</p>}
           <div className="flex items-center gap-2 text-xs"><span>Add to section:</span><select aria-label="Section to add shortlist songs to" className="h-8 rounded-md border border-border bg-background px-2" value={targetSection} onChange={e => setTargetSection(e.target.value as PrepSectionKey)}>{p.sections.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}</select>

@@ -17,6 +17,11 @@ import { dedupeKey, type ResultSong } from '../../../src/lib/danceFloor';
 const w = window as any;
 w.__parseVdj = parseVdjDatabaseXml;
 w.__prep = prepStore();
+// Test-only: optionally delay IndexedDB write completion so a save stays pending while the UI is used.
+w.__idbCompleteDelay = 0;
+{ const desc = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete')!;
+  Object.defineProperty(IDBTransaction.prototype, 'oncomplete', { configurable: true, get() { return desc.get!.call(this); },
+    set(fn) { desc.set!.call(this, fn && function (this: IDBTransaction, ev: Event) { const d = w.__idbCompleteDelay; if (d) setTimeout(() => fn.call(this, ev), d); else fn.call(this, ev); }); } }); }
 w.__switchAccount = async (account: string | null, force = false) => { const p = prepStore().setAccount(account, force); w.__setWorkspaceAccount(account); await p; };
 type Lists = { warmUp: ResultSong[]; transition: ResultSong[]; peak: ResultSong[] };
 const keyOf = (s: PrepSectionKey, i: number, song: { artist: string; song: string }) => `${s}:${i}:${dedupeKey(song.artist, song.song)}`;

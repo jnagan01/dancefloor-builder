@@ -18,7 +18,7 @@ const tracks = [
   { filePath: T('b/Song.mp3'), artist: 'Queen', title: 'Song A', remix: 'Club Remix', genre: 'Dance', bpm: '128', songLength: '420', year: '1999', playCount: 0 },
   { filePath: T('Hit (Clean Edit).mp3'), artist: 'Band', title: 'Hit (Clean Edit)', genre: 'Pop', bpm: '100', playCount: 0 },
   { filePath: T('Hit.mp3'), artist: 'Band', title: 'Hit', genre: 'Pop', bpm: '101', songLength: '180', playCount: 40 },
-  { filePath: T('unknown.mp3'), artist: 'Other', title: 'Unknown', playCount: 0 },
+  { filePath: T('unknown.mp3'), artist: 'Other', title: 'Unknown' }, // no play history at all
   { filePath: T('Song B.mp3'), artist: 'Queen', title: 'Song B', genre: 'Rock', bpm: '118', songLength: '210', year: '1981', playCount: 0 },
   { filePath: T('deep.mp3'), artist: 'Discovery Artist', title: 'Deep Cut', genre: 'Indie', bpm: '110', playCount: 0 },
   { filePath: T('classic.mp3'), artist: 'Familiar Act', title: 'Classic', genre: 'Indie', bpm: '115', playCount: 90 },
@@ -89,9 +89,16 @@ try {
     await expect(sheet().getByTestId('detail-exact-file')).toHaveText(T('b/Song.mp3'));
     await expect(sheet().getByRole('region', { name: 'Version comparison' })).toContainText('Club Remix');
     await expect(sheet().getByText('Different files are different tracks')).toBeVisible();
+    const plays = () => sheet().locator('dt', { hasText: /^Plays$/ }).locator('xpath=following-sibling::dd[1]');
+    await expect(plays()).toHaveText(/^0\b/); // known zero is shown as 0, not Unknown
     await sheet().getByRole('button', { name: 'Preview waveform' }).click();
     expect((await page.evaluate(() => window.__previews)).at(-1).filePath).toBe(T('b/Song.mp3'));
     await narrow('detail-sheet');
+    await page.keyboard.press('Escape');
+    await page.locator('tbody tr', { hasText: 'unknown.mp3' }).getByRole('button', { name: /Details for Unknown/ }).click();
+    await expect(plays()).toHaveText('Unknown'); // missing history stays unknown
+    await page.keyboard.press('Escape');
+    await page.locator('tbody tr', { hasText: 'b/Song.mp3' }).getByRole('button', { name: /Details for Song A/ }).click();
   });
 
   await check('tags save while typing a note never loses the note; explicit saves; reopen persistence', async () => {
@@ -237,8 +244,16 @@ try {
     await prepTab(/Shortlist/).click();
     const region = page.getByRole('region', { name: 'Event preparation' });
     await region.getByLabel('Shortlist artist').fill('Band'); await region.getByLabel('Shortlist title').fill('Hit'); await region.getByLabel('Desired version', { exact: true }).fill('clean edit');
+    // Keep the first save pending while the next entry is typed: the typing must survive and Add is locked.
+    await page.evaluate(() => { window.__idbCompleteDelay = 800; });
     await region.getByRole('button', { name: 'Add', exact: true }).click();
+    await expect(region.getByRole('button', { name: 'Adding…' })).toBeDisabled();
     await region.getByLabel('Shortlist artist').fill('band'); await region.getByLabel('Shortlist title').fill('hit'); await region.getByLabel('Desired version', { exact: true }).fill('clean edit');
+    await expect.poll(() => page.evaluate(() => window.__prep.get().knowledge.events.find(e => e.eventId === 'E1')?.shortlist.length ?? 0)).toBe(1);
+    await page.evaluate(() => { window.__idbCompleteDelay = 0; });
+    await expect(region.getByRole('button', { name: 'Add', exact: true })).toBeEnabled();
+    await expect(region.getByLabel('Shortlist artist')).toHaveValue('band');
+    await expect(region.getByLabel('Shortlist title')).toHaveValue('hit');
     await region.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(region.getByRole('status')).toContainText('Already on the shortlist');
     await region.getByLabel('Status for Band – Hit').selectOption('selected');
