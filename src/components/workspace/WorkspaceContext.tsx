@@ -156,25 +156,28 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
   function applyVdjXml(xml: string, silent = false): boolean {
     {
-      const tracks = parseVdjDatabaseXml(xml);
+      const report = parseVdjDatabaseXmlDetailed(xml);
+      const tracks = report.tracks;
       if (!tracks.length) { if (!silent) toast.error("No tracks found in that VirtualDJ database."); return false; }
       vdjInfo.current = tracks;
       const roots = getFolderRoots();
-      let matched = 0;
+      // Count from the current library synchronously: React may defer the
+      // functional update below, so counting inside it reported 0 matches.
+      const summary = vdjSyncSummary(tracks, sourcesRef.current, roots);
       setSources(prev => {
         const resolver = metadataResolver(tracks, prev.flatMap(s => s.tracks), roots);
-        return prev.map(source => ({ ...source, tracks: source.tracks.map(track => {
-          const info = resolver.resolve(track.filePath);
-          if (info) matched += 1;
-          return mergeTrackMetadata(track, info, true);
-        }) }));
+        return prev.map(source => ({ ...source, tracks: source.tracks.map(track => mergeTrackMetadata(track, resolver.resolve(track.filePath), true)) }));
       });
       const at = Date.now();
       setVdjSyncedAt(at);
       localStorage.setItem(VDJ_SYNC_KEY, String(at));
       setVdjTrackCount(tracks.length);
       localStorage.setItem(VDJ_COUNT_KEY, String(tracks.length));
-      if (!silent) toast.success(`Synced ${tracks.length.toLocaleString()} VirtualDJ tracks · ${matched.toLocaleString()} matched in your folders`);
+      if (report.skippedCount) console.warn("VirtualDJ database entries skipped (line: reason)", report.skipped.map(s => `${s.line}: ${s.reason}`));
+      if (!silent) {
+        toast.success(`Synced ${tracks.length.toLocaleString()} VirtualDJ tracks · ${summary.matched.toLocaleString()} matched in your folders · ${summary.withLength.toLocaleString()} with length`);
+        if (report.mode === "recovered" && report.skippedCount) toast.warning(`${report.skippedCount.toLocaleString()} damaged VirtualDJ ${report.skippedCount === 1 ? "entry was" : "entries were"} skipped; those tracks keep their saved details.`);
+      }
       return true;
     }
   }
