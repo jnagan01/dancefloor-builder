@@ -3020,26 +3020,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 </label>
               </div>
 
-              {result.finalShortfall && result.finalShortfall.total > 0 ? (
+              {liveShortfall && liveShortfall.total > 0 ? (
                  <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="w-full">
-                    <div className="font-medium">{background ? `${bgLabel} is ${result.finalShortfall.warmUp} songs (about ${Math.round(result.finalShortfall.warmUp * AVG_BACKGROUND_SONG_MIN)} min) short` : "Not enough songs to fully fill every section"}</div>
+                    <div className="font-medium">{background ? `${bgLabel} is ${liveShortfall.warmUp} songs (about ${Math.round(liveShortfall.warmUp * AVG_BACKGROUND_SONG_MIN)} min) short` : "Not enough songs to fully fill every section"}</div>
                     {!background && <div className="mt-1.5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Warm Up</div>
                         <div>{result.warmUp.length} / {sectionTargetFor(result, "warmUp")}</div>
-                         <div className="text-warning">-{result.finalShortfall.warmUp} short</div>
+                         <div className="text-warning">-{liveShortfall.warmUp} short</div>
                       </div>
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Transition</div>
                         <div>{result.transition.length} / {sectionTargetFor(result, "transition")}</div>
-                         <div className="text-warning">-{result.finalShortfall.transition} short</div>
+                         <div className="text-warning">-{liveShortfall.transition} short</div>
                       </div>
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Peak</div>
                         <div>{result.peak.length} / {sectionTargetFor(result, "peak")}</div>
-                         <div className="text-warning">-{result.finalShortfall.peak} short</div>
+                         <div className="text-warning">-{liveShortfall.peak} short</div>
                       </div>
                     </div>}
 
@@ -3077,7 +3077,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   {((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => {
                     const label = sectionName(sec);
                     const ps = summary?.perSection[sec];
-                    const shortfall = result.finalShortfall?.[sec] ?? 0;
+                    const shortfall = liveShortfall?.[sec] ?? 0;
                     return (
                        <TabsTrigger key={sec} value={sec} className="h-auto min-w-0 whitespace-normal rounded-none border-b-2 border-transparent px-3 py-2 text-left leading-tight data-[state=active]:border-primary data-[state=active]:bg-sidebar-accent">
                         <span className="flex flex-col gap-0.5">

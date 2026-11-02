@@ -1477,3 +1477,16 @@ export function downloadBlob(blob: Blob, filename: string) {
 export function formatMinutes(hours: number): number {
   return Math.round((hours * 60) / 3);
 }
+
+/**
+ * Gap per section derived from the current lists and the result's own (generateLists-rounded) targets,
+ * so labels follow additions/removals immediately instead of the shortfall captured at generation time.
+ */
+export function currentShortfall(
+  r: Pick<GenerationResult, "perSectionTarget" | "sectionTargets"> & Record<SectionKey, readonly unknown[]>,
+  sections: readonly SectionKey[] = ["warmUp", "transition", "peak"],
+): Record<SectionKey, number> & { total: number } {
+  const out = { warmUp: 0, transition: 0, peak: 0, total: 0 };
+  for (const k of sections) { out[k] = Math.max(0, sectionTargetFor(r, k) - (r[k]?.length ?? 0)); out.total += out[k]; }
+  return out;
+}
