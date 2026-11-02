@@ -293,19 +293,7 @@ function registerVirtualDjHandlers() {
 
   handle("vdj:read-database", async (_event, customPath) => {
     const target = typeof customPath === "string" && customPath.trim() ? customPath : defaultVdjPath();
-    try {
-      const xml = await fs.promises.readFile(target, "utf8");
-      return { ok: true, path: target, xml };
-    } catch (error) {
-      const code = error && error.code;
-      const message =
-        code === "ENOENT"
-          ? "No VirtualDJ database found at that location."
-          : code === "EPERM" || code === "EACCES"
-            ? "macOS blocked access to that folder. Allow file access for SetArchitect in System Settings › Privacy & Security › Files and Folders."
-            : `Couldn't read the VirtualDJ database (${String(code || error)}).`;
-      return { ok: false, path: target, error: message };
-    }
+    return readVdjDatabaseFile(fs, target);
   });
 
   // Native folder picking / writing. The browser File System Access API is
