@@ -242,6 +242,7 @@ try {
     await region.getByRole('button', { name: 'Add', exact: true }).click();
     await expect(region.getByRole('status')).toContainText('Already on the shortlist');
     await region.getByLabel('Status for Band – Hit').selectOption('selected');
+    await page.waitForTimeout(300); console.log('DEBUG', JSON.stringify(await page.evaluate(() => ({ s: window.__prep.get().status, g: window.__prep.get().generation, ev: window.__prep.get().knowledge.events }))));
     await expect(region.getByLabel('Status for Band – Hit')).toHaveValue('selected');
     await expect.poll(() => page.evaluate(() => window.__prep.get().knowledge.events.find(e => e.eventId === 'E1')?.shortlist[0]?.status)).toBe('selected');
     await region.getByRole('button', { name: 'Link a local file…' }).click();
