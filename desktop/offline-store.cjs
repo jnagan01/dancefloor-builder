@@ -57,9 +57,9 @@ function createOfflineStore(userData, fs = require("node:fs")) {
   //    can never be resurrected. Cache files are kept; only availability is revoked.
   // A prepare requires a fresh accountSeen for the same account after any sign-out.
   const epochFile = path.join(dir, "epoch.json");
-  let generation = 0, sessionHash = null, chain = Promise.resolve(), revoked = false, epoch = 0;
-  try { const e = JSON.parse(fs.readFileSync(epochFile, "utf8")).epoch; if (Number.isSafeInteger(e) && e >= 0) epoch = e; else revoked = true; }
-  catch (e) { if (e.code !== "ENOENT") revoked = true; } // unreadable fence: deny until prepared again
+  let generation = 0, sessionHash = null, chain = Promise.resolve(), revoked = false, epoch = 0, epochBroken = false;
+  try { const e = JSON.parse(fs.readFileSync(epochFile, "utf8")).epoch; if (Number.isSafeInteger(e) && e >= 0) epoch = e; else revoked = epochBroken = true; }
+  catch (e) { if (e.code !== "ENOENT") revoked = epochBroken = true; } // unreadable fence: deny until prepared again
   const listeners = new Set();
   const serial = fn => { const run = chain.then(fn, fn); chain = run.catch(() => {}); return run; };
   function writeEpochSync(next) {
@@ -78,7 +78,20 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     try { fs.unlinkSync(activeFile); durable = true; } catch (e) { if (e.code === "ENOENT") durable = true; }
     if (!durable) throw Error("Offline access was hidden for now but could not be revoked on disk.");
   };
-  const unlinkMarker = async () => { try { await fs.promises.unlink(activeFile); } catch (e) { if (e.code !== "ENOENT") throw e; } };
+  function commitMarkerSync(gen, hash, preparedAt) {
+    fenced(gen);
+    if (epochBroken) { writeEpochSync(epoch + 1); epoch++; epochBroken = false; } // repair an unreadable fence first
+    const raw = JSON.stringify({ version: 1, account: hash, preparedAt, epoch });
+    const temp = `${activeFile}.${crypto.randomUUID()}.tmp`;
+    try {
+      const fd = fs.openSync(temp, "wx", 0o600);
+      try { fs.writeFileSync(fd, raw); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+      parseActive(fs.readFileSync(temp, "utf8"));
+      fenced(gen);
+      fs.renameSync(temp, activeFile);
+    } catch (e) { try { fs.unlinkSync(temp); } catch { /* already gone */ } throw e; }
+    try { const d = fs.openSync(dir, "r"); try { fs.fsyncSync(d); } finally { fs.closeSync(d); } } catch { /* directory fsync unsupported */ }
+  }
   const fenced = gen => { if (gen !== generation) throw Error("Account or session changed; offline access was not prepared."); };
   const markerValid = a => !revoked && (a.epoch === undefined ? 0 : a.epoch) === epoch;
 
@@ -92,7 +105,6 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     const gen = generation;
     return serial(async () => {
       fenced(gen);
-      const myEpoch = epoch;
       const preparedAt = new Date().toISOString();
       const wrapper = JSON.stringify({ version: 1, preparedAt, backup: raw });
       const current = await readOrNull(snapFile(hash));
@@ -102,8 +114,9 @@ function createOfflineStore(userData, fs = require("node:fs")) {
       fenced(gen);
       await atomicWrite(snapFile(hash), wrapper, r => parseSnapshot(r, hash));
       fenced(gen);
-      await atomicWrite(activeFile, JSON.stringify({ version: 1, account: hash, preparedAt, epoch: myEpoch }), parseActive);
-      if (gen !== generation || myEpoch !== epoch) { await unlinkMarker().catch(() => {}); fenced(gen); throw Error("Account or session changed; offline access was not prepared."); }
+      // Marker commit is fully synchronous (no await between the final fence check and the rename), so a
+      // revocation can never interleave with publication; any failure leaves the last-good snapshots.
+      commitMarkerSync(gen, hash, preparedAt);
       revoked = false;
       return { ok: true, preparedAt, events: backup.events.length, tracks: backup.sources.reduce((n, s) => n + s.tracks.length, 0) };
     });
