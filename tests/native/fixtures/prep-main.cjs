@@ -15,7 +15,9 @@ app.whenReady().then(() => {
     res.setHeader('Content-Type', asset.endsWith('.js') ? 'text/javascript' : asset.endsWith('.css') ? 'text/css' : 'text/html');
     res.end(fs.readFileSync(path.join(bundle, asset)));
   });
-  server.listen(0, '127.0.0.1', () => {
+  const portFile = path.join(profile, 'port'); const port = fs.existsSync(portFile) ? Number(fs.readFileSync(portFile, 'utf8')) : 0;
+  server.listen(port, '127.0.0.1', () => {
+    fs.writeFileSync(portFile, String(server.address().port)); // same origin across restarts, so IndexedDB is the same store
     const origin = `http://127.0.0.1:${server.address().port}`;
     session.defaultSession.webRequest.onBeforeRequest((d, cb) => { const ok = d.url.startsWith(origin + '/') || d.url.startsWith('devtools:') || d.url.startsWith('data:'); if (!ok) blocked.push(d.url); cb({ cancel: !ok }); });
     ipcMain.handle('prep:fixture', () => fixture);
