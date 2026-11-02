@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SetArchitect — Offline workspace</title>
+<link rel="stylesheet" href="offline.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="top">
+  <div>
+    <p class="eyebrow">Offline workspace</p>
+    <h1>SetArchitect</h1>
+    <p id="cached" class="muted" aria-live="polite">Loading saved offline copy…</p>
+  </div>
+  <label class="theme">Appearance
+    <select id="theme" aria-label="Appearance">
+      <option value="system">System</option>
+      <option value="light">Light</option>
+      <option value="dark">Dark</option>
+    </select>
+  </label>
+</header>
+<p class="notice" id="online-only">Offline: generating lists, recommendations, cloud saving, sign-in, Spotify and tag editing need the internet and are turned off here. Choices you confirm here stay on this Mac only and do not change your saved events.</p>
+<main id="main" tabindex="-1">
+  <nav id="events" aria-label="Saved events" class="events"></nav>
+  <section id="detail" class="detail" aria-live="polite"></section>
+</main>
+<div id="status" role="status" class="status" aria-live="polite"></div>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

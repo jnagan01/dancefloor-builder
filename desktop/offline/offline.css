@@ -1,0 +1,55 @@
+/* Self-contained (no remote fonts). Same palette intent as the online workspace tokens. */
+:root {
+  --bg: #f6f4ef; --fg: #17151a; --muted: #5d5864; --card: #ffffff; --border: #d9d4cb;
+  --primary: #8a6a00; --primary-fg: #ffffff; --warn: #8a4b00; --ok: #23673a; --danger: #a12626; --focus: #1f5fbf;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0b0b0d; --fg: #f1efe9; --muted: #aaa4b0; --card: #16161a; --border: #2c2b31;
+  --primary: #e0b84a; --primary-fg: #141210; --warn: #f0b35a; --ok: #6fd391; --danger: #ff8a8a; --focus: #7fb0ff;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --bg: #0b0b0d; --fg: #f1efe9; --muted: #aaa4b0; --card: #16161a; --border: #2c2b31;
+    --primary: #e0b84a; --primary-fg: #141210; --warn: #f0b35a; --ok: #6fd391; --danger: #ff8a8a; --focus: #7fb0ff;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.skip { position: absolute; left: -999px; } .skip:focus { left: 8px; top: 8px; background: var(--card); padding: 6px; }
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; padding: 28px 24px 12px 88px; border-bottom: 1px solid var(--border); }
+h1 { margin: 2px 0; font-size: 22px; } h2 { font-size: 18px; margin: 0 0 4px; } h3 { font-size: 14px; margin: 20px 0 6px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.eyebrow { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--primary); }
+.muted { color: var(--muted); margin: 0; }
+.notice { margin: 0; padding: 10px 24px; border-bottom: 1px solid var(--border); color: var(--warn); font-size: 13px; }
+main { display: grid; grid-template-columns: 260px minmax(0, 1fr); min-height: calc(100vh - 140px); }
+.events { border-right: 1px solid var(--border); padding: 12px; overflow: auto; }
+.events button { display: block; width: 100%; text-align: left; margin-bottom: 4px; }
+.events button[aria-current="true"] { border-color: var(--primary); }
+.detail { padding: 16px 24px 80px; overflow: auto; }
+button, select, input { font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px; }
+button { cursor: pointer; } button:hover { border-color: var(--primary); }
+button.primary { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); }
+button:disabled { opacity: .5; cursor: not-allowed; }
+.theme { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+ol.songs { list-style: none; padding: 0; margin: 0; }
+.song { display: grid; grid-template-columns: 2.5em minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: var(--card); }
+.song:focus-within, .song.flash { border-color: var(--primary); }
+.num { color: var(--muted); text-align: right; }
+.title { font-weight: 600; overflow-wrap: anywhere; } .file { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.badge { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 999px; border: 1px solid var(--border); margin-left: 6px; }
+.badge.confirmed { color: var(--ok); border-color: var(--ok); } .badge.local { color: var(--primary); border-color: var(--primary); }
+.badge.tentative, .badge.none, .badge.missing { color: var(--warn); border-color: var(--warn); } .badge.excluded { color: var(--muted); }
+.picker { grid-column: 1 / -1; border-top: 1px dashed var(--border); padding-top: 8px; }
+.picker input { width: 100%; margin-bottom: 6px; }
+.results { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow: auto; }
+.results li { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.report { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: var(--card); margin: 12px 0; }
+.report ul { padding-left: 18px; } .report button { padding: 2px 6px; }
+.error { color: var(--danger); } .ok { color: var(--ok); }
+.status { position: fixed; bottom: 0; left: 0; right: 0; padding: 8px 24px; background: var(--card); border-top: 1px solid var(--border); min-height: 1.5em; }
+.empty { max-width: 560px; }
