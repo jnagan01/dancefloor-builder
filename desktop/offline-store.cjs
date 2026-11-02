@@ -137,7 +137,7 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     }
     const raw = JSON.stringify(next);
     if (Buffer.byteLength(raw) > MAX_OVERLAY) throw Error("Too many local choices.");
-    await atomicWrite(overlayFile(hash, eventId, version), raw, r => readOverlay.length && JSON.parse(r));
+    await atomicWrite(overlayFile(hash, eventId, version), raw, r => { if (r !== raw) throw Error("Write verification failed."); });
     return next;
   }
 
