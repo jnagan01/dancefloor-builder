@@ -23,6 +23,7 @@ const { createTagCache, writeTags } = require("./tags.cjs");
 const APP_URL = process.env.DANCEFLOOR_URL || "https://dancefloor-builder.lovable.app";
 const { createDesktopSecurity, parseWebUrl } = require("./security.cjs");
 const { scanFolder } = require("./scan.cjs");
+const { readVdjDatabaseFile } = require("./vdj-database.cjs");
 const security = createDesktopSecurity(APP_URL, () => mainWindow);
 
 const stateFile = path.join(app.getPath("userData"), "window-state.json");
