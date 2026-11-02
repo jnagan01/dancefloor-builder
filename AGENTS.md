@@ -30,3 +30,4 @@
 
 - Apply appearance before first paint and share semantic theme tokens through a single provider; System alone follows OS changes, because SSR and every workspace surface must agree.
 - Read sidebar installed versions from the bridged Electron app identity (or explicit currentVersion), never updater status.version; label browser versions separately because available updates are not installed versions.
+- Compare loaded vs published web builds only by the per-build `__APP_BUILD_ID__` via no-store `/api/public/version`; never by HTML meta, semver or build time, because only the deployed worker reports what refresh will load.
