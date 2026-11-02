@@ -2,7 +2,9 @@
 // responses can be delayed, to prove stale load/choice/export responses never land on another event.
 import fs from "node:fs";
 import path from "node:path";
-import { chromium, expect } from "@playwright/test";
+import { _electron as electron, expect } from "@playwright/test";
+import { createRequire } from "node:module";
+const bin = createRequire(path.resolve("desktop/package.json"))("electron");
 
 const dir = path.resolve("desktop/offline");
 const ORIGIN = "http://offline.test";
@@ -11,11 +13,11 @@ const lists = () => ({ cocktail: [], dinner: [], warmUp: [song], transition: [],
 const data = { ok: true, state: "ready", preparedAt: new Date().toISOString(), roots: {}, events: [{ id: "A", name: "Event A", lists: lists() }, { id: "B", name: "Event B", lists: lists() }],
   tracks: [{ filePath: "/m/a.mp3", artist: "Same Artist", title: "Same Song" }, { filePath: "/m/b.mp3", artist: "Same Artist", title: "Same Song" }] };
 
-const browser = await chromium.launch({ headless: true });
+const browser = await electron.launch({ executablePath: bin, args: [path.resolve("tests/native/fixtures/blank-window.cjs"), "--no-sandbox"] });
 let failed = false;
 const step = async (name, fn) => { try { await fn(); console.log(`PASS ${name}`); } catch (e) { failed = true; console.log(`FAIL ${name}\n${e.stack}`); } };
 try {
-  const page = await browser.newPage();
+  const page = await browser.firstWindow();
   await page.route(`${ORIGIN}/**`, r => { const f = path.join(dir, new URL(r.request().url()).pathname); r.fulfill({ path: f.startsWith(dir) && fs.existsSync(f) ? f : path.join(dir, "index.html") }); });
   await page.addInitScript(DATA => {
     const overlays = { A: {}, B: { "warmUp:0": { confirmed: true, paths: ["/m/b.mp3"], song: { artist: "Same Artist", song: "Same Song" } } } };
