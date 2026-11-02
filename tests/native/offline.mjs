@@ -72,24 +72,63 @@ async function decoupledRun(args, env) {
 // electron.launch gates the app's "ready" event behind its own debugger handshake; on macOS CI the cached
 // cold restart timed out inside electron.launch, so these phases no longer depend on that handshake. If the
 // app itself fails, offlineWindow() still fails and the startup telemetry is printed.
+// Playwright's own Chromium switches (as electron.launch's loader adds them): keep occluded/background
+// windows rendering so CDP commands that need a renderer are answered. macOS occludes the main window
+// behind the offline window; Linux/Xvfb has no occlusion. Test-only; the product is unchanged.
+const ATTACH_SWITCHES = ["--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding"];
+async function stopChild(child) {
+  if (child.exitCode !== null || child.signalCode) return;
+  const exited = new Promise(r => child.once("exit", r));
+  child.kill("SIGTERM");
+  if (!await Promise.race([exited.then(() => true), new Promise(r => setTimeout(() => r(false), 5000))])) { child.kill("SIGKILL"); await Promise.race([exited, new Promise(r => setTimeout(r, 5000))]); }
+}
 async function spawnAndAttach(args, env, timeout) {
-  const child = spawn(bin, [...args, "--remote-debugging-port=0"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(bin, [...args, ...ATTACH_SWITCHES, "--remote-debugging-port=0"], { env, stdio: ["ignore", "pipe", "pipe"] });
   const log = fs.createWriteStream(path.join(diagnostics, `offline-main-${child.pid}.log`));
   child.stdout.pipe(log);
-  const ws = await new Promise((resolve, reject) => {
-    let buf = "";
-    const timer = setTimeout(() => reject(Error(`App did not expose DevTools within ${timeout}ms`)), timeout);
-    child.stderr.on("data", d => { log.write(d); buf += d; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(timer); resolve(m[1]); } });
-    child.once("exit", code => { clearTimeout(timer); reject(Error(`App exited during startup (${code})`)); });
-  });
-  const browser = await chromium.connectOverCDP(ws, { timeout });
-  return {
-    process: () => child,
-    windows: () => browser.contexts().flatMap(c => c.pages()),
-    async firstWindow() { for (let i = 0; i < 300; i++) { const w = this.windows()[0]; if (w) return w; await new Promise(r => setTimeout(r, 100)); } throw Error("No window opened."); },
-    evaluate: () => { throw Error("Main-process evaluate is only available in Playwright-launched online phases."); },
-    async close() { await browser.close().catch(() => {}); if (child.exitCode === null && !child.signalCode) child.kill("SIGTERM"); },
-  };
+  // Bounded protocol log of the attach, so a hang names the CDP method still waiting for a reply.
+  const protocol = [];
+  const { debug } = createRequire(import.meta.url)("playwright-core/lib/utilsBundle");
+  const previousLog = debug.log;
+  debug.log = (...parts) => { protocol.push(parts.join(" ").replace(/\u001b\[[0-9;]*m/g, "").slice(0, 400)); if (protocol.length > 2000) protocol.shift(); };
+  debug.enable("pw:protocol");
+  const stopProtocol = () => { debug.disable(); debug.log = previousLog; };
+  try {
+    const ws = await new Promise((resolve, reject) => {
+      let buf = "";
+      const timer = setTimeout(() => reject(Error(`App did not expose DevTools within ${timeout}ms`)), timeout);
+      child.stderr.on("data", d => { log.write(d); buf += d; const m = buf.match(/DevTools listening on (ws:\/\/\S+)/); if (m) { clearTimeout(timer); resolve(m[1]); } });
+      child.once("exit", code => { clearTimeout(timer); reject(Error(`App exited during startup (${code})`)); });
+    });
+    const browser = await chromium.connectOverCDP(ws, { timeout });
+    stopProtocol();
+    return {
+      process: () => child,
+      windows: () => browser.contexts().flatMap(c => c.pages()),
+      async firstWindow() { for (let i = 0; i < 300; i++) { const w = this.windows()[0]; if (w) return w; await new Promise(r => setTimeout(r, 100)); } throw Error("No window opened."); },
+      evaluate: () => { throw Error("Main-process evaluate is only available in Playwright-launched online phases."); },
+      async close() { await Promise.race([browser.close().catch(() => {}), new Promise(r => setTimeout(r, 5000))]); await stopChild(child); log.end(); },
+    };
+  } catch (e) {
+    // Own the child even when attach fails: no leaked app holding the profile lock or the job open.
+    stopProtocol();
+    await stopChild(child); log.end();
+    const pending = pendingCalls(protocol);
+    fs.writeFileSync(path.join(diagnostics, `attach-${launches}-protocol.log`), protocol.join("\n"));
+    console.log(`CDP calls without a reply when attach failed (full log: attach-${launches}-protocol.log):\n${pending.join("\n") || "(none)"}`);
+    e.attachFailed = true;
+    throw e;
+  }
+}
+function pendingCalls(lines) {
+  const open = new Map();
+  for (const l of lines) {
+    const json = l.slice(l.indexOf("{")); let m; try { m = JSON.parse(json); } catch { continue; }
+    const key = `${m.sessionId || "browser"}:${m.id}`;
+    if (l.includes("SEND \u25BA") && m.method) open.set(key, `${m.method} session=${m.sessionId || "browser"}`);
+    else if (m.id !== undefined) open.delete(key);
+  }
+  return [...open.values()];
 }
 async function launch({ deny, online, url, timeout = 30000 }) {
   const env = { ...process.env, SETARCHITECT_TEST_USERDATA: temp};
@@ -103,7 +142,8 @@ async function launch({ deny, online, url, timeout = 30000 }) {
     const early = telemetryLines().slice(mark);
     fs.writeFileSync(path.join(diagnostics, `launch-${launches}-failed-telemetry.log`), early.join("\n"));
     console.log(`launch ${launches} failed: ${e.message.split("\n")[0]}\n--- app telemetry before failure ---\n${early.join("\n")}`);
-    console.log(`--- decoupled relaunch of the same profile (no Playwright) ---\n${await decoupledRun(args, env)}`);
+    // The spawn path is already decoupled (and its child is stopped); only Playwright-launched phases get a rerun.
+    if (!e.attachFailed) console.log(`--- decoupled relaunch of the same profile (no Playwright) ---\n${await decoupledRun(args, env)}`);
     throw e;
   }
   if (deny) return app;
@@ -316,3 +356,5 @@ try {
   try { fs.copyFileSync(telemetryFile, path.join(diagnostics, "startup-telemetry.log")); } catch { /* none recorded */ }
   fs.rmSync(temp, { recursive: true, force: true });
 }
+// Bounded teardown: never leave the CI job waiting on stray pipes or handles after the result is known.
+setTimeout(() => process.exit(process.exitCode ?? 0), 10000).unref();
