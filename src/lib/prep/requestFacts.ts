@@ -7,3 +7,6 @@ export function requestFacts(song: { artist: string; song: string; genre?: strin
   const f = t ? trackFacts(t) : undefined;
   return { artist: song.artist, song: song.song, genre: song.genre || f?.genre, decade: (song.year ? `${String(song.year).slice(0, 3)}0s` : undefined) || f?.decade };
 }
+
+/** A library track as a recommendation candidate. Missing play history stays undefined (unknown), never 0. */
+export const libraryCandidate = (t: VdjTrack, trackId: string) => ({ artist: t.artist, song: t.title, facts: trackFacts(t), trackId, playCount: t.playCount, origin: "library" as const });

@@ -11,7 +11,7 @@ import { trackIdentity } from "@/lib/fileIdentity";
 import type { ResultSong } from "@/lib/danceFloor";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
 import { getArtistCrowdData } from "@/lib/lastfm.functions";
-import { requestFacts } from "@/lib/prep/requestFacts";
+import { libraryCandidate, requestFacts } from "@/lib/prep/requestFacts";
 import { EMPTY_FILTER, facetOptions, fmtDur, trackFacts, type FilterFacts, type FilterState } from "@/lib/prep/filters";
 import { buildDashboard, type DrillItem } from "@/lib/prep/dashboard";
 import { recommend, type Candidate, type RecControls, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
@@ -87,7 +87,7 @@ export function EventPrepPanel(p: Props) {
   const ownedKeys = useMemo(() => new Set(tracks.map(t => songIdentity(t.artist, t.title))), [tracks]);
   const roots = useMemo(() => getFolderRoots(), [tracks]); // eslint-disable-line react-hooks/exhaustive-deps
   const candidates = useMemo<Candidate[]>(() => {
-    const lib: Candidate[] = tracks.map(t => ({ artist: t.artist, song: t.title, facts: trackFacts(t), trackId: trackIdentity(t.filePath, roots), playCount: t.playCount, origin: "library" }));
+    const lib: Candidate[] = tracks.map(t => libraryCandidate(t, trackIdentity(t.filePath, roots)));
     const cat: Candidate[] = SONG_LIBRARY.map(s => {
       const owned = ownedKeys.has(songIdentity(s.artist, s.song));
       const facts: FilterFacts = { genre: s.genre || undefined, decade: s.decade || undefined, energy: s.energy, owned };

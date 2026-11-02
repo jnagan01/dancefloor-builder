@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { recommend, type Candidate } from "../src/lib/prep/recommend";
-import { requestFacts } from "../src/lib/prep/requestFacts";
+import { libraryCandidate, requestFacts } from "../src/lib/prep/requestFacts";
 import { EMPTY_FILTER, trackFacts } from "../src/lib/prep/filters";
 import type { SongMatch, VdjTrack } from "../src/lib/virtualDj";
 
@@ -15,6 +15,12 @@ describe("recommendation play-history evidence", () => {
     const ev = (s: string) => r.items.find(i => i.song === s)!.evidence.map(e => e.kind);
     expect(ev("Zero")).toContain("discovery");
     expect(ev("Unknown")).not.toContain("discovery");
+  });
+  it("library candidates keep missing play history unknown and explicit zero as zero", () => {
+    expect(libraryCandidate(track({}), "id").playCount).toBeUndefined();
+    expect(libraryCandidate(track({ playCount: 0 }), "id").playCount).toBe(0);
+    const r = run([libraryCandidate(track({ title: "NoHistory" }), "a")]);
+    expect(r.items[0].evidence.map(e => e.kind)).not.toContain("discovery");
   });
 });
 
