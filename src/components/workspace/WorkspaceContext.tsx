@@ -250,6 +250,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }, []);
   function captureBackupOwner() {
     if (!userId || loading || persistenceBlocked.current || (backupSession.current.account !== userId || (backupSession.current.liveAccount !== undefined && backupSession.current.liveAccount !== userId))) throw Error("Sign in and resolve unreadable library data before backup.");
+    // userId was just verified as the live session account, so it is safe to start loading its
+    // notes here (startup backups can run before the effect below); backupSection waits for the load.
+    if (prepStore().get().account !== userId) void prepStore().setAccount(userId);
     const prepOwner = prepStore().owner();
     if (!prepOwner || prepOwner.account !== userId) throw Error("Preparation notes are not loaded for this account yet. Try again in a moment.");
     const owner = { account: userId, generation: backupSession.current.generation, prepOwner, sources: structuredClone(sources), roots: structuredClone(getFolderRoots()) };
