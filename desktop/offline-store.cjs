@@ -206,7 +206,7 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     if (change.clear) delete next.selections[key];
     else {
       const tracks = backup.sources.flatMap(s => s.tracks);
-      if (typeof change.path !== "string" || !tracks.some(t => t.filePath === change.path)) throw Error("That recording is not in the saved library.");
+      if (typeof change.path !== "string" || !tracks.some(t => t.filePath === change.path)) throw Error("That track is not in the saved library.");
       next.selections[key] = { paths: [change.path], confirmed: true, song: { artist: song.artist, song: song.song }, at: new Date().toISOString() };
     }
     const raw = JSON.stringify(next);

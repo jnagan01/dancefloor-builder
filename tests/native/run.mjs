@@ -132,10 +132,10 @@ try{
    expect(emitted).toContain(tracks[2].filePath);expect(emitted).not.toContain('/unchecked/');
    expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual([tracks[2].filePath]);
    await page.getByRole('tab',{name:/Warm/}).click();
-   await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed recording',exact:true}).click();
+   await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed track',exact:true}).click();
    expect(await page.getByRole('tab',{name:/Transition/}).getAttribute('data-state')).toBe('active');
    await page.getByRole('button',{name:'Unselect all',exact:true}).click();
-   await page.waitForTimeout(100);expect(await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed recording',exact:true}).count()).toBe(0);
+   await page.waitForTimeout(100);expect(await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed track',exact:true}).count()).toBe(0);
  });
  await check('build26 identifiers survive actual startup/rescan backup, Settings preview and restore',async()=>{
    await app.close();

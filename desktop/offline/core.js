@@ -169,7 +169,7 @@
         const at = { section, index: i };
         if (status !== "confirmed" && status !== "local") {
           omitted++;
-          problems.push({ ...at, title, reason: status === "excluded" ? "Excluded from DJ export" : status === "tentative" ? "Recording not confirmed" : status === "stale" ? "Saved choice belongs to a different song at this position" : "No confirmed recording" });
+          problems.push({ ...at, title, reason: status === "excluded" ? "Excluded from DJ export" : status === "tentative" ? "Track not confirmed" : status === "stale" ? "Saved choice belongs to a different song at this position" : "No confirmed track" });
           return;
         }
         if (status === "local") localChoices++;
@@ -215,7 +215,7 @@
       `Saved copy prepared: ${single(meta.preparedAt)}`,
       `Exported offline: ${single(meta.exportedAt)}`,
       `Requested songs: ${s.requested}`,
-      `Approved recordings (distinct, including extras): ${s.approved}`,
+      `Approved tracks (distinct, including extras): ${s.approved}`,
       `Local offline choices used (not synced): ${s.localChoices}`,
       `Omitted songs: ${s.omitted}`,
       `Missing files: ${s.unavailable}`,

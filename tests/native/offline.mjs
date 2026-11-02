@@ -268,7 +268,7 @@ try {
     await expect(w.locator("#online-only")).toContainText("need the internet");
     await expect(w.getByRole("heading", { name: "Synthetic <b>Wedding</b>" })).toBeVisible();
     expect(await w.evaluate(() => [window.__xss, document.querySelectorAll("img, b").length])).toEqual([undefined, 0]);
-    await expect(w.locator("#song-warmUp-0")).toContainText("Confirmed recording (saved)");
+    await expect(w.locator("#song-warmUp-0")).toContainText("Confirmed track (saved)");
     await expect(w.locator("#song-transition-0")).toContainText("Suggested, not confirmed");
     await expect(w.locator("#song-warmUp-1")).toContainText("file missing on this Mac");
     await expect(w.locator("#song-transition-1")).toContainText("unknown music folder location");
@@ -276,7 +276,7 @@ try {
   });
 
   await check("bounded search and explicit keyboard confirmation of a duplicate-basename recording", w, async () => {
-    await w.locator("#song-peak-0").getByRole("button", { name: /Choose recording/ }).click();
+    await w.locator("#song-peak-0").getByRole("button", { name: /Choose track/ }).click();
     await expect(w.locator("#song-peak-0 .results li")).toHaveCount(2);
     const big = await w.evaluate(() => { const t = performance.now(); const n = window.OfflineCore.search(window.OfflineCore.buildIndex(Array.from({ length: 31000 }, (_, i) => ({ filePath: `/x/${i}`, artist: "Bulk", title: `F ${i}` }))), "bulk", 25).length; return [n, performance.now() - t]; });
     expect(big[0]).toBe(25); expect(big[1]).toBeLessThan(1500);
@@ -286,7 +286,7 @@ try {
     await row.getByRole("button").focus(); await w.keyboard.press("Enter");
     await expect(w.locator("#song-peak-0")).toContainText("Chosen offline — this Mac only");
     expect(await use.count()).toBe(0);
-    await w.locator("#song-transition-0").getByRole("button", { name: /Choose recording/ }).click();
+    await w.locator("#song-transition-0").getByRole("button", { name: /Choose track/ }).click();
     await w.locator("#song-transition-0 .results li", { hasText: "Music/a/Other.mp3" }).getByRole("button").click();
     await expect(w.locator("#song-transition-0")).toContainText("Chosen offline");
     expect(digest(hashDir()[0])).toBe(snapDigest);
@@ -322,7 +322,7 @@ try {
     const overlays = path.join(temp, "offline", "overlays"), [hash] = fs.readdirSync(overlays);
     const saved = fs.readFileSync(path.join(overlays, hash, fs.readdirSync(path.join(overlays, hash))[0]), "utf8");
     fs.renameSync(path.join(overlays, hash), path.join(overlays, "moved")); fs.writeFileSync(path.join(overlays, hash), "blocker");
-    await w.locator("#song-warmUp-0").getByRole("button", { name: /Choose recording/ }).click();
+    await w.locator("#song-warmUp-0").getByRole("button", { name: /Choose track/ }).click();
     await w.locator("#song-warmUp-0 .results li", { hasText: "Music/b/Song.mp3" }).getByRole("button").click();
     // Wait for THIS choice's own failure: the export error above is already shown, so first see the pending
     // status, then a non-pending error, and only then remove the blocker.
@@ -330,7 +330,7 @@ try {
     await expect(w.locator("#status")).toHaveClass(/error/);
     await expect(w.locator("#status")).not.toContainText("The files this export started were removed");
     await expect(w.locator("#song-warmUp-0")).not.toContainText("Chosen offline");
-    await expect(w.locator("#song-warmUp-0")).toContainText("Confirmed recording (saved)");
+    await expect(w.locator("#song-warmUp-0")).toContainText("Confirmed track (saved)");
     fs.unlinkSync(path.join(overlays, hash)); fs.renameSync(path.join(overlays, "moved"), path.join(overlays, hash));
     expect(fs.readFileSync(path.join(overlays, hash, fs.readdirSync(path.join(overlays, hash))[0]), "utf8")).toBe(saved);
   });
@@ -349,7 +349,7 @@ try {
     await launch({ deny: true });
     const w2 = await offlineWindow();
     await expect(w2.locator("#song-peak-0")).toContainText("Chosen offline — this Mac only");
-    await expect(w2.locator("#song-warmUp-0")).toContainText("Confirmed recording (saved)");
+    await expect(w2.locator("#song-warmUp-0")).toContainText("Confirmed track (saved)");
     expect(digest(hashDir()[0])).toBe(snapDigest);
     expect(requests).toBe(before);
     await close();

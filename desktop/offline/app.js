@@ -60,7 +60,7 @@
 
   function songRow(section, i, song) {
     const sel = selectionFor(section, i), st = C.songStatus(sel);
-    const labels = { confirmed: "Confirmed recording (saved)", local: "Chosen offline — this Mac only", tentative: "Suggested, not confirmed — won't export", none: "No recording chosen", excluded: "Excluded from DJ export", stale: "Saved choice doesn't match this song — choose again" };
+    const labels = { confirmed: "Confirmed track (saved)", local: "Chosen offline — this Mac only", tentative: "Suggested, not confirmed — won't export", none: "No track chosen", excluded: "Excluded from DJ export", stale: "Saved choice doesn't match this song — choose again" };
     const files = ((st === "confirmed" || st === "local") && sel.paths || []).map(p => {
       const t = state.index.tracks[state.index.byPath.get(p)];
       const full = C.fullPath(p, state.data.roots);
@@ -72,7 +72,7 @@
       el("span", { class: "num", text: String(i + 1) }),
       el("div", {}, el("span", { class: "title", text: `${song.artist} — ${song.song}` }), el("span", { class: `badge ${st}`, text: labels[st] }), ...files),
       el("div", { class: "actions" },
-        el("button", { type: "button", "aria-expanded": state.picker === id ? "true" : "false", "aria-label": `Choose recording for ${song.artist} — ${song.song}`, text: "Choose recording", on: { click: () => { state.picker = state.picker === id ? null : id; renderDetail(id); } } }),
+        el("button", { type: "button", "aria-expanded": state.picker === id ? "true" : "false", "aria-label": `Choose track for ${song.artist} — ${song.song}`, text: "Choose track", on: { click: () => { state.picker = state.picker === id ? null : id; renderDetail(id); } } }),
         st === "local" ? el("button", { type: "button", text: "Undo offline choice", on: { click: () => choose(section, i, { clear: true }) } }) : null));
     if (state.picker === id) li.append(picker(section, i, song, id));
     return li;
@@ -80,15 +80,15 @@
 
   function picker(section, i, song, rowId) {
     const input = el("input", { type: "search", "aria-label": "Search saved library", value: `${song.artist} ${song.song}` });
-    const list = el("ul", { class: "results", "aria-label": "Matching recordings (up to 25)" });
+    const list = el("ul", { class: "results", "aria-label": "Matching tracks (up to 25)" });
     let timer = null;
     const run = () => {
       const hits = C.search(state.index, input.value, 25);
       list.replaceChildren(...(hits.length ? hits.map(h => {
         const t = state.index.tracks[h.i];
         return el("li", {}, el("div", {}, el("div", { class: "title", text: `${t.artist} — ${t.title}${t.remix ? ` (${t.remix})` : ""}` }), el("div", { class: "file", text: `${t.filePath}${t.bpm ? ` · ${t.bpm} BPM` : ""}${t.key ? ` · ${t.key}` : ""}${Number.isFinite(t.playCount) ? ` · played ${t.playCount}×` : ""}` })),
-          el("button", { type: "button", class: "primary", text: "Use this recording", "aria-label": `Use ${t.artist} — ${t.title}`, on: { click: () => choose(section, i, { path: t.filePath }) } }));
-      }) : [el("li", { class: "muted", text: "No matching recordings in the saved library." })]));
+          el("button", { type: "button", class: "primary", text: "Use this track", "aria-label": `Use ${t.artist} — ${t.title}`, on: { click: () => choose(section, i, { path: t.filePath }) } }));
+      }) : [el("li", { class: "muted", text: "No matching tracks in the saved library." })]));
     };
     input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 150); });
     const wrap = el("div", { class: "picker", on: { keydown: e => { if (e.key === "Escape") { state.picker = null; renderDetail(rowId, true); } } } }, input, list);
@@ -106,7 +106,7 @@
       if (!current(id, gen)) return;
       if (!res.ok) { status(res.error, "error"); return; }
       state.overlay = res.overlay; state.availability = res.availability; state.picker = null;
-      status(change.clear ? "Offline choice removed." : "Recording confirmed on this Mac. Your saved online event is unchanged.", "ok");
+      status(change.clear ? "Offline choice removed." : "Track confirmed on this Mac. Your saved online event is unchanged.", "ok");
       renderDetail(`song-${section}-${index}`, true);
     } finally { state.busy = false; if (state.data) renderEvents(); }
   }
@@ -131,7 +131,7 @@
     return el("div", { class: "report", "aria-label": "Export readiness" },
       el("h3", { text: r.ok ? "Export complete" : "Export problem" }),
       r.error ? el("p", { class: "error", text: r.error }) : null,
-      s ? el("p", { text: `Requested ${s.requested} songs · ${s.approved} approved recordings · ${s.localChoices} offline choices · ${s.omitted} omitted · ${s.unavailable} missing files` }) : null,
+      s ? el("p", { text: `Requested ${s.requested} songs · ${s.approved} approved tracks · ${s.localChoices} offline choices · ${s.omitted} omitted · ${s.unavailable} missing files` }) : null,
       r.written && r.written.length ? el("p", { text: `Written to ${r.folder}: ${r.written.join(", ")}` }) : null,
       r.problems && r.problems.length ? el("ul", {}, ...r.problems.slice(0, 200).map(p => el("li", {}, el("button", { type: "button", text: `${p.section} #${p.index + 1}`, on: { click: () => focusSong(`song-${p.section}-${p.index}`) } }), ` ${p.title} — ${p.reason}`))) : null);
   }
@@ -143,7 +143,7 @@
     const local = Object.keys(state.overlay).length;
     $("detail").replaceChildren(
       el("h2", { text: e.name || "Untitled event" }),
-      el("p", { class: "muted", text: `Saved event as of ${when(state.data.preparedAt)}. Unsaved edits from the online workspace are kept separately and are not shown here.${local ? ` ${local} recording choice(s) made offline on this Mac.` : ""}${e.staleOverlays ? ` ${e.staleOverlays} earlier offline choice set(s) for an older copy of this event are kept but not applied.` : ""}` }),
+      el("p", { class: "muted", text: `Saved event as of ${when(state.data.preparedAt)}. Unsaved edits from the online workspace are kept separately and are not shown here.${local ? ` ${local} track choice(s) made offline on this Mac.` : ""}${e.staleOverlays ? ` ${e.staleOverlays} earlier offline choice set(s) for an older copy of this event are kept but not applied.` : ""}` }),
       e.otherLists && e.otherLists.length ? el("p", { class: "notice", text: `Not available offline: ${e.otherLists.length} other saved list(s) (${e.otherLists.join(", ")}). Open them online.` }) : null,
       el("div", { class: "actions" }, el("button", { type: "button", class: "primary", text: "Export VirtualDJ playlists", on: { click: doExport } })),
       report(),

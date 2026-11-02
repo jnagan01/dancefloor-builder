@@ -55,7 +55,7 @@ try {
   await step("delayed choice on A disables navigation, lands only on A, and B keeps its own recording", async () => {
     await nav("Event A").click(); await expect(detail.locator("h2")).toHaveText("Event A");
     await page.evaluate(() => { window.__bridge.delay.choose = true; });
-    await detail.getByRole("button", { name: /Choose recording/ }).click();
+    await detail.getByRole("button", { name: /Choose track/ }).click();
     await detail.locator(".results > li").filter({ hasText: "/m/a.mp3" }).getByRole("button", { name: /^Use / }).click();
     await expect(nav("Event B")).toBeDisabled();
     await nav("Event B").click({ force: true }).catch(() => {}); // disabled: must not switch
