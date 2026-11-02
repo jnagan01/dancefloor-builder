@@ -3,6 +3,7 @@ import type { Song } from "./danceFloor";
 import { normalizeKey } from "./danceFloor";
 import { supportsNativeFolders, chooseNativeFolder } from "./desktopBridge";
 import { fullFilePath, normalizeFilePath, createIdentityIndex, qualifiedFilePath } from "./fileIdentity";
+import { recoverVdjBlocks, domBlockParser, type XmlNodeLike, type SkippedVdjEntry } from "./vdjXmlRecovery";
 import {
   makeSubject,
   scorePair,
