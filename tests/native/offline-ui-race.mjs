@@ -56,7 +56,7 @@ try {
     await nav("Event A").click(); await expect(detail.locator("h2")).toHaveText("Event A");
     await page.evaluate(() => { window.__bridge.delay.choose = true; });
     await detail.getByRole("button", { name: /Choose recording/ }).click();
-    await detail.getByRole("listitem").filter({ hasText: "/m/a.mp3" }).getByRole("button", { name: /^Use / }).click();
+    await detail.locator(".results > li").filter({ hasText: "/m/a.mp3" }).getByRole("button", { name: /^Use / }).click();
     await expect(nav("Event B")).toBeDisabled();
     await nav("Event B").click({ force: true }).catch(() => {}); // disabled: must not switch
     await expect(detail.locator("h2")).toHaveText("Event A");
