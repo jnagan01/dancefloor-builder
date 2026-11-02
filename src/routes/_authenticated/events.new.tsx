@@ -29,6 +29,7 @@ import {
   FAVORITE_ARTIST_CAP,
   equalSplit,
   sectionTargetFor,
+  currentShortfall,
   sectionTargetsFromSplit,
   type SectionSplit,
 } from "@/lib/danceFloor";
@@ -2231,6 +2232,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   // --- Summary ---
+  // Display-only gap from current lists + targets; never marks the event dirty.
+  const liveShortfall = useMemo(() => result ? currentShortfall(result, background ? ["warmUp"] : ["warmUp", "transition", "peak"]) : null, [result, background]);
 
   const summary = useMemo(() => {
     if (!result) return null;
