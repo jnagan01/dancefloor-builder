@@ -23,9 +23,18 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
   const isEntry = url => typeof url === "string" && (url === ENTRY || url.startsWith(`${ENTRY}#`));
   const trusted = event => Boolean(win && !win.isDestroyed() && event && event.sender === win.webContents &&
     event.senderFrame && event.senderFrame === event.sender.mainFrame && isEntry(event.senderFrame.url) && isEntry(event.sender.getURL()));
+  // Window generation: bumped (and the window closed) the moment the store revokes access.
+  let windowGeneration = 0;
+  const REVOKED = "Offline access changed (signed out or another account). This window was closed.";
+  store.onRevoke(() => {
+    windowGeneration++; captured = null;
+    if (win && !win.isDestroyed()) win.destroy();
+  });
   const handle = (name, fn) => ipcMain.handle(name, async (event, ...args) => {
     if (!trusted(event)) throw new Error("Offline access denied: untrusted page or frame.");
-    try { return await fn(...args); } catch (e) { return { ok: false, error: e.message }; }
+    const gen = windowGeneration, storeGen = store.generation();
+    const fence = () => { if (gen !== windowGeneration || storeGen !== store.generation() || !trusted(event)) throw Error(REVOKED); };
+    try { const result = await fn(fence, ...args); fence(); return result; } catch (e) { return { ok: false, error: e.message }; }
   });
 
   function ses() {
@@ -65,14 +74,16 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
     return win;
   }
 
-  async function activeOrThrow() {
+  async function activeOrThrow(fence) {
     const loaded = await store.loadActive();
+    fence();
     if (loaded.state !== "ready") throw Error(loaded.error || "Offline access is not prepared on this Mac.");
     if (!captured || captured.hash !== loaded.hash || captured.preparedAt !== loaded.preparedAt) throw Error("The offline copy changed or was signed out. Reopen the offline workspace.");
     return loaded;
   }
   const findEvent = (backup, id) => { const e = backup.events.find(x => x.id === id); if (!e) throw Error("Event not in the offline copy."); return e; };
-  const view = e => ({ id: e.id, version: store.eventVersion(e), name: e.snapshot.name, lists: { warmUp: e.snapshot.lists.warmUp || [], transition: e.snapshot.lists.transition || [], peak: e.snapshot.lists.peak || [], selections: e.snapshot.lists.selections || {} } });
+  const KNOWN = new Set(["warmUp", "transition", "peak", "selections"]);
+  const view = e => ({ id: e.id, version: store.eventVersion(e), name: e.snapshot.name, listType: e.snapshot.inputs && e.snapshot.inputs.listType, otherLists: Object.keys(e.snapshot.lists).filter(k => !KNOWN.has(k) && Array.isArray(e.snapshot.lists[k]) && e.snapshot.lists[k].length).slice(0, 20), lists: { warmUp: e.snapshot.lists.warmUp || [], transition: e.snapshot.lists.transition || [], peak: e.snapshot.lists.peak || [], selections: e.snapshot.lists.selections || {} } });
 
   async function availability(paths) {
     const out = {};
@@ -90,67 +101,74 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
     return paths;
   }
 
-  async function uniqueName(dir, name) {
+  async function uniqueName(dir, name, taken) {
     const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
     for (let n = 1; n < 1000; n++) {
       const candidate = n === 1 ? name : `${base} (${n})${ext}`;
+      if (taken.has(candidate)) continue;
       try { await fs.promises.access(path.join(dir, candidate)); } catch (e) { if (e.code === "ENOENT") return candidate; throw e; }
     }
     throw Error("Too many existing playlists with this name.");
   }
 
-  /** Writes all files as fsynced temps first; nothing is published if any temp fails. Never overwrites. */
-  async function writeExport(dir, files) {
-    const temps = [];
+  /** Portable (exFAT/FAT-safe, no hard links) all-or-nothing publication: each file is
+   * created exclusively ("wx", never overwrites), written and fsynced. On any failure every
+   * file created by THIS export is removed; anything that could not be removed is reported. */
+  async function writeExport(dir, files, fence) {
+    const created = [];
     try {
+      const taken = new Set();
       for (const f of files) {
-        const temp = path.join(dir, `.setarchitect-${crypto.randomUUID()}.tmp`);
-        const h = await fs.promises.open(temp, "wx", 0o644);
-        temps.push(temp);
+        const name = await uniqueName(dir, f.name, taken); taken.add(name);
+        fence();
+        const target = path.join(dir, name);
+        const h = await fs.promises.open(target, "wx", 0o644);
+        created.push({ name, target });
         try { await h.writeFile(f.contents, "utf8"); await h.sync(); } finally { await h.close(); }
       }
+      fence();
+      return { written: created.map(c => c.name), failed: [], leftover: [] };
     } catch (e) {
-      await Promise.all(temps.map(t => fs.promises.unlink(t).catch(() => {})));
-      throw Error(`Export stopped before any playlist was written (${e.code || e.message}).`);
+      const leftover = [];
+      for (const c of created) { try { await fs.promises.unlink(c.target); } catch (u) { if (u.code !== "ENOENT") leftover.push(c.name); } }
+      const reason = e.code || e.message;
+      return { written: [], failed: [reason], leftover, error: leftover.length
+        ? `Export failed (${reason}). These partial files could not be removed and should be deleted: ${leftover.join(", ")}`
+        : `Export failed (${reason}). No playlists were left in the folder.` };
     }
-    const written = [], failed = [];
-    for (let i = 0; i < files.length; i++) {
-      try { const name = await uniqueName(dir, files[i].name); await fs.promises.link(temps[i], path.join(dir, name)); written.push(name); }
-      catch (e) { failed.push(`${files[i].name} (${e.code || e.message})`); }
-      await fs.promises.unlink(temps[i]).catch(() => {});
-    }
-    return { written, failed };
   }
 
   function register() {
-    handle("offline:load", async () => {
+    handle("offline:load", async fence => {
       const loaded = await store.loadActive();
+      fence();
       if (loaded.state !== "ready") { captured = null; return { ok: true, state: loaded.state, error: loaded.error }; }
       captured = { hash: loaded.hash, preparedAt: loaded.preparedAt };
       const b = loaded.backup;
       const tracks = [];
       for (const s of b.sources) for (const t of s.tracks) tracks.push({ filePath: t.filePath, artist: t.artist, title: t.title, remix: t.remix, bpm: t.bpm, key: t.key, playCount: t.playCount, source: s.label });
       const events = await Promise.all(b.events.map(async e => ({ ...view(e), staleOverlays: await store.staleOverlayCount(loaded.hash, e.id, store.eventVersion(e)) })));
+      fence();
       return { ok: true, state: "ready", preparedAt: loaded.preparedAt, fallback: loaded.fallback, events, tracks, roots: { ...b.roots } };
     });
-    handle("offline:event", async id => {
-      const loaded = await activeOrThrow();
+    handle("offline:event", async (fence, id) => {
+      const loaded = await activeOrThrow(fence);
       const event = view(findEvent(loaded.backup, id));
       const overlay = await store.readOverlay(loaded.hash, event.id, event.version);
       return { ok: true, overlay: overlay.selections, availability: await availability(chosenPaths(event, overlay, loaded.backup.roots)) };
     });
-    handle("offline:choose", async (id, change) => {
-      const loaded = await activeOrThrow();
-      const next = await store.setChoice(loaded.hash, loaded.backup, id, change);
+    handle("offline:choose", async (fence, id, change) => {
+      const loaded = await activeOrThrow(fence);
+      const next = await store.setChoice(loaded.hash, loaded.backup, id, change, fence);
       const event = view(findEvent(loaded.backup, id));
       return { ok: true, overlay: next.selections, availability: await availability(chosenPaths(event, next, loaded.backup.roots)) };
     });
-    handle("offline:export", async id => {
-      await activeOrThrow();
+    handle("offline:export", async (fence, id) => {
+      await activeOrThrow(fence);
       const pick = await dialog.showOpenDialog(win, { title: "Choose a folder for VirtualDJ playlists", buttonLabel: "Export here", properties: ["openDirectory", "createDirectory"] });
       if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
       const dir = pick.filePaths[0];
-      const loaded = await activeOrThrow(); // re-check after the dialog await
+      const loaded = await activeOrThrow(fence); // re-check after the dialog await
       const raw = findEvent(loaded.backup, id), event = view(raw);
       const overlay = await store.readOverlay(loaded.hash, event.id, event.version);
       const index = core.buildIndex(loaded.backup.sources.flatMap(s => s.tracks));
@@ -158,10 +176,11 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
       const name = core.safeFileName(event.name);
       const files = plan.sections.filter(s => s.entries.length).map((s, i) => ({ name: `${name} - ${i + 1} ${s.label}.m3u`, contents: core.m3u(s.entries) }));
       files.push({ name: `${name} - offline readiness.txt`, contents: core.readinessText(plan, { name: event.name, preparedAt: loaded.preparedAt, exportedAt: new Date().toISOString() }) });
-      const result = await writeExport(dir, files);
-      return { ok: result.failed.length === 0, folder: dir, written: result.written, failed: result.failed, summary: plan.summary, problems: plan.problems, error: result.failed.length ? `Some files could not be written: ${result.failed.join(", ")}` : undefined };
+      fence();
+      const result = await writeExport(dir, files, fence);
+      return { ok: result.failed.length === 0, folder: dir, written: result.written, failed: result.failed, leftover: result.leftover, summary: plan.summary, problems: plan.problems, error: result.error };
     });
-    handle("offline:reveal", async folder => { if (typeof folder === "string" && path.isAbsolute(folder)) shell.showItemInFolder(folder); return { ok: true }; });
+    handle("offline:reveal", async (_fence, folder) => { if (typeof folder === "string" && path.isAbsolute(folder)) shell.showItemInFolder(folder); return { ok: true }; });
   }
 
   return { open, register, isEntry, get window() { return win; } };

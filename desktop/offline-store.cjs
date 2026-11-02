@@ -146,7 +146,7 @@ function createOfflineStore(userData, fs = require("node:fs")) {
   }
 
   /** set: { section, index, path } explicit approval; or { section, index, clear:true }. */
-  async function setChoice(hash, backup, eventId, change) {
+  async function setChoice(hash, backup, eventId, change, fence = () => {}) {
     const event = backup.events.find(e => e.id === eventId);
     if (!event) throw Error("Event not in the offline copy.");
     const { section, index } = change || {};
@@ -155,6 +155,7 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     if (!song) throw Error("Song not in this event.");
     const version = eventVersion(event);
     const overlay = await readOverlay(hash, eventId, version);
+    fence();
     const key = `${section}:${index}`;
     const next = { version: 1, eventId, snapshotVersion: version, selections: { ...overlay.selections } };
     if (change.clear) delete next.selections[key];
@@ -165,6 +166,7 @@ function createOfflineStore(userData, fs = require("node:fs")) {
     }
     const raw = JSON.stringify(next);
     if (Buffer.byteLength(raw) > MAX_OVERLAY) throw Error("Too many local choices.");
+    fence();
     await atomicWrite(overlayFile(hash, eventId, version), raw, r => { if (r !== raw) throw Error("Write verification failed."); });
     return next;
   }
