@@ -47,10 +47,10 @@ describe("finding 1: prepare is fenced and serialized in the main process", () =
     const dir = tmp(), d = delayedFs(1), store = createOfflineStore(dir, d.f);
     const p = (await seen(store, A)).prepare(raw(), A);
     await d.reached.promise;
-    const seen = store.accountSeen("synthetic-owner-b");
+    const seenB = store.accountSeen("synthetic-owner-b");
     d.latch.resolve();
     await expect(p).rejects.toThrow();
-    await seen;
+    await seenB;
     expect(marker(dir)).toBe(false);
     await expect(store.prepare(raw(), A)).rejects.toThrow("Account changed");
   });
@@ -143,7 +143,7 @@ describe("finding 4: portable exclusive all-or-nothing export publication", () =
   it("publication failure on a later file removes every earlier file of this export", async () => {
     let opens = 0;
     const { res, out } = await exportWith(f => ({ ...f, promises: { ...f.promises, open: async (...a: Parameters<typeof fs.promises.open>) => { if (String(a[0]).endsWith(".txt") && ++opens) throw Object.assign(Error("ENOTSUP"), { code: "ENOTSUP" }); return f.promises.open(...a); } } }));
-    expect(res.ok).toBe(false); expect(res.written).toEqual([]); expect(res.error).toContain("No playlists were left");
+    expect(res.ok).toBe(false); expect(res.written).toEqual([]); expect(res.error).toContain("The files this export started were removed");
     expect(fs.readdirSync(out)).toEqual([]);
   });
   it("mid-write ENOSPC rolls back; undeletable partial files are reported exactly", async () => {
