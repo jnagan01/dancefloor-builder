@@ -16,6 +16,9 @@
   function requiresClean(inputs) {
     return !!inputs && (inputs.requireCleanVersions === true || inputs.eventType === "school_dance" || inputs.eventType === "corporate");
   }
+  function needsPolicyConsumer(inputs) {
+    return !!inputs && (requiresClean(inputs) || ["ownedOnlyExpansion", "includeSeasonalTracks", "requireCleanVersions"].some(k => inputs[k] !== undefined));
+  }
   function cleanReason(track, required) {
     if (!required || cleanEvidence(track) === "clean") return null;
     const evidence = cleanEvidence(track);
@@ -36,9 +39,8 @@
     if (!song.artist || !(song.song || song.title) || !track.artist || !track.title || !track.filePath) return false;
     if (intendedKey(song) !== intendedKey(track)) return false;
     // A requested named mix must match the recording's actual mix as well.
-    const requestedVersion = /\b(live|remix|acoustic|instrumental|extended|dub)\b/i.exec(song.song || song.title || "");
-    if (requestedVersion && !new RegExp(`\\b${requestedVersion[0]}\\b`, "i").test([track.title, track.remix].join(" "))) return false;
-    if (!requestedVersion && /\b(live|remix|acoustic|instrumental|extended|dub)\b/i.test(track.remix || "")) return false;
+    const labels = v => [...new Set((String(v || "").toLowerCase().match(/\b(live|remix|acoustic|instrumental|extended|dub)\b/g) || []))].sort().join("|");
+    if (labels(song.song || song.title) !== labels([track.title, track.remix].join(" "))) return false;
     return true;
   }
   function buildResolver(tracks, inputs) {
@@ -46,7 +48,7 @@
     tracks.forEach((t, i) => { const k = intendedKey(t), b = buckets.get(k) || []; b.push(i); buckets.set(k, b); });
     const resolve = song => {
       const ids = buckets.get(intendedKey(song)) || [];
-      return ids.filter(i => intended(song, tracks[i]) && !cleanReason(tracks[i], requiresClean(inputs)))
+      return ids.filter(i => intended(song, tracks[i]) && !cleanReason(tracks[i], requiresClean(inputs)) && (inputs?.includeSeasonalTracks !== false || !seasonal(tracks[i])))
         .sort((a, b) => Number(cleanEvidence(tracks[b]) === "clean") - Number(cleanEvidence(tracks[a]) === "clean") || a - b)[0];
     };
     return { resolve, allowed: song => (!inputs || inputs.includeSeasonalTracks !== false || !seasonal(song)) && (!inputs || inputs.ownedOnlyExpansion !== true || resolve(song) !== undefined) };
@@ -59,5 +61,5 @@
     if (s.cleanBlocked) out.push(`${s.cleanBlocked} clean-policy block${s.cleanBlocked === 1 ? "" : "s"}`);
     return out.join(" · ");
   }
-  return { DEFAULTS, cleanEvidence, requiresClean, cleanReason, seasonal, intended, intendedKey, buildResolver, omissionText };
+  return { DEFAULTS, cleanEvidence, requiresClean, needsPolicyConsumer, cleanReason, seasonal, intended, intendedKey, buildResolver, omissionText };
 });

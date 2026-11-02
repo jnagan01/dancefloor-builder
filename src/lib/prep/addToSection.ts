@@ -33,6 +33,7 @@ export function planAddToSection<R extends Lists>(
   if (next.trackId) {
     const linked = library.tracks.findIndex(t => trackIdentity(t.filePath, roots) === next.trackId);
     if (linked < 0) return { error: "The linked file isn't in your current library. Reconnect its folder or unlink it first." };
+    if (policies?.includeSeasonalTracks === false && seasonal(library.tracks[linked])) return { error: "Seasonal/holiday additions are excluded for this event." };
     const blocked = cleanReason(library.tracks[linked], requiresClean(policies));
     if (blocked) return { error: blocked };
     match = { status: "Possible Match", confidence: 1, trackIndex: linked, alternatives: [], confirmed: false };

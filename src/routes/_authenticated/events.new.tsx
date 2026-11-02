@@ -1,4 +1,4 @@
-import { DEFAULTS, buildResolver, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
+import { DEFAULTS, buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
 import { exportReadiness, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
@@ -255,7 +255,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         next[key] = { ...previous, status: "Missing From Library", confidence: 0, confirmed: false, trackIndex: undefined, alternatives: [], extraTrackIndices: [] };
         return;
       }
-      const candidates = searchLibraryBySong(song.artist, song.song, mergedLibrary, matchLimit).filter(candidate => candidate.s >= 0.55 && !cleanReason(mergedLibrary.tracks[candidate.i], cleanRequired));
+      const candidates = searchLibraryBySong(song.artist, song.song, mergedLibrary, matchLimit).filter(candidate => candidate.s >= 0.55 && (!cleanRequired || intended(song, mergedLibrary.tracks[candidate.i])) && !cleanReason(mergedLibrary.tracks[candidate.i], cleanRequired));
       if (!candidates.length) return;
       const ranked = mode === "most" ? [...candidates].sort((a, b) => {
         const count = (i: number) => { const n = mergedLibrary.tracks[i]?.playCount; return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0; };
@@ -292,7 +292,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   function policyMatch(song: Song, library: VdjLibrary): SongMatch {
     const fresh = matchSong(song, library);
     if (!cleanRequired) return fresh;
-    const index = buildResolver(library.tracks, eventPolicy).resolve(song);
+    const index = policyResolver.resolve(song);
     if (index !== undefined) return { status: "Matched", confidence: 1, trackIndex: index, confirmed: true, alternatives: fresh.alternatives };
     return { ...fresh, confirmed: false };
   }
@@ -504,6 +504,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // before connecting an entire folder.
   const emptyLibrary = useMemo(() => buildLibrary([]), []);
   const mergedLibrary = workspace.library ?? emptyLibrary;
+  const policyResolver = useMemo(() => buildResolver(mergedLibrary.tracks, eventPolicy), [mergedLibrary, policies, eventType]);
+  const generationContext = useRef({ library: mergedLibrary, policies, eventType });
+  if (generationContext.current.library !== mergedLibrary || generationContext.current.policies !== policies || generationContext.current.eventType !== eventType) {
+    genTokenRef.current++; generationContext.current = { library: mergedLibrary, policies, eventType };
+  }
 
 
   useEffect(() => {

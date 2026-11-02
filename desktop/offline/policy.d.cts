@@ -3,6 +3,7 @@ export interface PolicyTrack { artist?: string; song?: string; title?: string; f
 export const DEFAULTS: Required<Omit<PreparationInputs, 'eventType'>>;
 export function cleanEvidence(track?: PolicyTrack): 'clean' | 'dirty' | 'unknown' | 'conflicting';
 export function requiresClean(inputs?: PreparationInputs): boolean;
+export function needsPolicyConsumer(inputs?: PreparationInputs): boolean;
 export function cleanReason(track: PolicyTrack | undefined, required: boolean | 'strict'): string | null;
 export function seasonal(track: PolicyTrack): boolean;
 export function intended(song: PolicyTrack, track: PolicyTrack): boolean;

@@ -1,3 +1,4 @@
+import { needsPolicyConsumer, type PreparationInputs } from "./preparationPolicy";
 import { validSavedLibrary, type SavedLibrarySource } from "./libraryStore";
 import { readEventSnapshot } from "./snapshotSafety";
 import { EVENT_REVISION_FIELD } from "./eventRevision";
@@ -13,7 +14,7 @@ export interface Backup {
 }
 /** Policy-bearing output uses v2 so pre-policy native validators fail closed. */
 export function backupVersion(events: { snapshot: { inputs: unknown } }[]): 1 | 2 {
-  return events.some(e => ["ownedOnlyExpansion", "includeSeasonalTracks", "requireCleanVersions"].some(k => !!e.snapshot.inputs && typeof e.snapshot.inputs === "object" && k in e.snapshot.inputs)) ? 2 : 1;
+  return events.some(e => !!e.snapshot.inputs && typeof e.snapshot.inputs === "object" && needsPolicyConsumer(e.snapshot.inputs as PreparationInputs)) ? 2 : 1;
 }
 export function validateBackup(raw: string, account: string): Backup {
   if (new TextEncoder().encode(raw).length > MAX_BACKUP_BYTES) throw Error("Backup exceeds 32 MB; original preserved.");
