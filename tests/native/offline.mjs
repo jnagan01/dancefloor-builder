@@ -58,7 +58,7 @@ async function offlineWindow() {
   }
   throw Error("Offline workspace did not open.");
 }
-async function close() { await app.close().catch(() => {}); app = null; }
+async function close() { if (app) await app.close().catch(() => {}); app = null; }
 async function check(name, page, fn) { await fn(); count++; if (page) await page.screenshot({ path: path.join(diagnostics, `offline-${count}.png`) }).catch(() => {}); console.log(`PASS ${name}`); }
 const snapshotDir = path.join(temp, "offline", "snapshots");
 const hashDir = () => fs.readdirSync(snapshotDir).filter(n => !n.includes(".prev.") && n.endsWith(".json")).map(n => path.join(snapshotDir, n));
