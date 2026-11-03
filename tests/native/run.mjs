@@ -372,7 +372,7 @@ try{
    expect(Object.values(saved.lists.selections).flatMap(v=>v.paths)).not.toContain(small[0].filePath);
    const holidaySelection=Object.entries(saved.lists.selections).find(([k])=>k.includes('wham')&&k.includes('last christmas'))?.[1];
    expect(holidaySelection).toMatchObject({confirmed:true,paths:[small[6].filePath]});
-   const policyId=saved.id;await page.reload();await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},policyId);await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
+   const policyId=saved.id;await page.reload();await page.waitForFunction(()=>!!window.__testState && typeof window.__rerender==='function');await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},policyId);await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
  });
  await check('owned clean local refill never bypasses do-not-play and year/genre/BPM constraints',async()=>{
    await app.close();
@@ -590,7 +590,7 @@ try{
    await assertBlank();await expect.poll(()=>page.evaluate(()=>typeof window.__releaseProfile)).toBe('function');
    await page.evaluate(()=>window.__releaseProfile());await expect.poll(()=>page.evaluate(()=>window.__profileReturned)).toBe(true);await assertBlank();
    expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
-   await page.reload();await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});await assertBlank();
+   await page.reload();await page.waitForFunction(()=>!!window.__testState && typeof window.__rerender==='function');await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});await assertBlank();
    await page.evaluate(()=>{window.__testState.eventId='A';window.__rerender();});
    await expect(page.getByRole('heading',{name:'Saved preferences',exact:true})).toBeVisible();
    await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
