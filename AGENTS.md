@@ -41,4 +41,4 @@
 - Derive section coverage from export readiness's unique case-sensitive files, separate event/buffer minutes, and cap artist/title mismatches in search fallback scores, because repeated minutes and cross-field tokens are not evidence.
 - Gate automatic expansion on this owner's READY prep knowledge (await queued writes); isolate providers; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
 - Rank pooled candidates once via `rankPool`; optional `inputs.eventFit` (none=no-op) uses only provenance-tagged track evidence (familiarity = verified provider popularity or catalogue membership); quality samples freeze context, so replays are exact.
-- Gather ranking facts via one per-generation `factsGather` (≤200 chunks, budget, attempt-once) before eligibility/rankPool; additions get no post-rank enrichment, because rankWhy must match shown facts.
+- Gather ranking facts once per generation via `factsGather` before rankPool, because rankWhy must match shown facts.
