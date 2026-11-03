@@ -49,7 +49,7 @@ async function settle(h: any, d: ReturnType<typeof deferredEnrich>, gen: Promise
 describe('owned-library facts are gathered BEFORE ranking (timing regression)', () => {
   it('holds ranking until the bounded lookup settles; rankWhy and fit facts agree; verified low energy+dance excludes, estimate only penalises', async () => {
     const d = deferredEnrich();
-    const h = harness({ rows: { A: row({ eventFit: { avoidSlow: true } }) }, services: { crowd, recommend: async () => ({ suggestions: [] }), enrich: d.enrich } });
+    const h = harness({ rows: { A: row({ hours: '4', eventFit: { avoidSlow: true } }) }, services: { crowd, recommend: async () => ({ suggestions: [] }), enrich: d.enrich } });
     await h.flush(); h.library(lib); await h.flush();
     const gen = h.current.generate();
     for (let i = 0; i < 10; i++) await h.flush();
@@ -65,7 +65,7 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     expect(rows.find((t: any) => t.song === 'Verified Slow')).toBeUndefined();
     expect(est, 'estimates never exclude').toBeTruthy();
     expect(est.energy).toBe(2); expect(est.danceability).toBe(2);
-    expect(est.rankWhy).toMatch(/Energy 2\/10 and danceability 2\/10 suggest a slow song \(estimate, advisory\)/);
+    expect(est.rankWhy).toMatch(/Energy 2\/10 .*danceability 2\/10 .*low-both slow risk/);
     expect(est.rankWhy).not.toMatch(/no energy or danceability data/);
     expect(up.energy).toBe(8); expect(up.year).toBe(1972); // verified file tag beats provider year
     // Each owned key was requested exactly once (final pass never re-requests attempted additions).

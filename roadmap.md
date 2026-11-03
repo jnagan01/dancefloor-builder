@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Active avoid-slow evidence ranking
+- [x] Strengthen bounded advisory slow-risk ranking and conditional uncertain familiarity; retain neutral/discovery defaults and requests.
+- [x] Freeze current scoring for original reports; add identical-evidence comparison, latest reported profile and held-out matrix.
+- [x] Local checks: 790 units, 35 event native, 20 prep, 16 offline, 4 race; automatic build OK; synthetic services/storage only.
+- [ ] Final-revision Mac CI acceptance requires the external macOS runner; existing read-only workflow covers changed source/tests.
 ## Recommendation accuracy (items 1–3)
 - [x] Review gaps: real per-attribute provenance through enrichment/cache/route with strict BPM/decade limits; READY-knowledge gate with awaited feedback writes; isolated providers, outage-safe Last.fm cache, expansion availability and stale panel evidence.
 - [x] Last.fm track.getSimilar evidence from distinct requested tracks (bounded, cached, truthful availability), in recommendations and automatic expansion with exact owned identity.

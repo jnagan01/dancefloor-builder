@@ -94,12 +94,13 @@ describe("avoid slow / ballad additions", () => {
     expect(out.items.map(i => i.song)).toEqual(["Dance"]); expect(out.hidden.slow).toBe(1);
   });
   it("one low value alone never excludes or penalises (e.g. energy 4, dance 7)", () => {
-    expect(evaluateFit(fit, { origin: "ai", ...slow(4, 7) })).toEqual({ lines: [], familiarEvidence: false });
+    const r = evaluateFit(fit, { origin: "ai", ...slow(4, 7) });
+    expect(r.lines).toEqual([]); expect(r.exclude).toBeUndefined(); expect(r.uncertain?.join()).toMatch(/groove is possible/);
   });
   it("estimates (AI and catalogue feel values) only lower the score", () => {
     for (const s of ["ai", "catalogue"] as const) {
       const r = evaluateFit(fit, { origin: "ai", ...slow(4, 4, s) });
-      expect(r.exclude).toBeUndefined(); expect(r.lines[0].points).toBe(-1);
+      expect(r.exclude).toBeUndefined(); expect(r.lines[0].points).toBe(-3);
     }
   });
   it("boundary 4 is low, 5 is not", () => {

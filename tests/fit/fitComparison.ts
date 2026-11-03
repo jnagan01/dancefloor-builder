@@ -10,7 +10,7 @@
  * an input to ranking.
  */
 import rows from "./realCacheRows.json";
-import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Candidate, type RecInput, type Recommendation } from "../../src/lib/prep/recommend";
+import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Candidate, type RecInput, type Recommendation } from "./archived/recommend.543920d";
 import { rowCandidate } from "../../src/lib/prep/expansionRanking";
 import { SONG_LIBRARY } from "../../src/lib/songLibrary";
 import { songIdentity } from "../../src/lib/prep/knowledge";
