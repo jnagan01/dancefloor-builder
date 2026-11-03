@@ -506,7 +506,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // before connecting an entire folder.
   const emptyLibrary = useMemo(() => buildLibrary([]), []);
   const mergedLibrary = workspace.library ?? emptyLibrary;
-  const policyResolver = useMemo(() => buildResolver(mergedLibrary.tracks, eventPolicy), [mergedLibrary, policies, eventType]);
+  // Matching existing/client tracks is not expansion: requested holidays still need their clean version.
+  const policyResolver = useMemo(() => buildResolver(mergedLibrary.tracks, { ...eventPolicy, includeSeasonalTracks: true }), [mergedLibrary, policies, eventType]);
   const generationContext = useRef({ library: mergedLibrary, policies, eventType });
   if (generationContext.current.library !== mergedLibrary || generationContext.current.policies !== policies || generationContext.current.eventType !== eventType) {
     genTokenRef.current++; generationContext.current = { library: mergedLibrary, policies, eventType };
@@ -1490,18 +1491,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
 
     for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) r[section] = r[section].filter(track => track.fromUpload || addedAllowed(track));
-    if ((fill || background) && generationPolicy.ownedOnlyExpansion) {
-      const pool = mergedLibrary.tracks.filter(t => t.artist && t.title && addedAllowed({ artist: t.artist, song: t.title, genre: t.genre }));
-      const seen = new SongKeySet();
-      for (const track of [...r.warmUp, ...r.transition, ...r.peak]) seen.add(track.artist, track.song);
-      // Bounded local work; no paths or audio are sent to any service.
-      for (const t of pool) {
-        const section = (["warmUp", "transition", "peak"] as SectionKey[]).find(k => r[k].length < sectionTargetFor(r, k));
-        if (!section) break;
-        if (!seen.tryAdd(t.artist, t.title)) continue;
-        r[section].push({ artist: t.artist, song: t.title, fromUpload: false, genre: t.genre, year: t.year ? Number(t.year) : undefined, bpm: parseBpm(t.bpm), metaSource: "Library", energy: 7, danceability: 6 });
-      }
-    }
+    // No library-order padding: the existing constrained selection paths may leave honest gaps.
 
     // Re-bucket + sort the merged set so uploads and AI picks interleave into
     // a single ascending energy ramp from the first warm-up song to the last

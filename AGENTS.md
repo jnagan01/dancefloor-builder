@@ -37,3 +37,4 @@
 - Share preparation policy evidence and intended-version resolution through desktop/offline/policy.cjs; optional inputs preserve legacy passive loads and policy-bearing backups use format v2, because old offline shells must reject rather than ignore clean restrictions.
 - Gate policy activation, recovery and saves on the installed desktop's explicit preparation capability; keep legacy inputs absent, because old-shell v1 backup validation must remain usable for the mandatory fresh-backup update path.
 - Export from captured exact selections and policy without padding or regeneration; count terminal omission reasons per selected recording including extras, because intended exclusions are not unmatched files.
+- Keep matching eligibility separate from expansion eligibility and never refill from raw library order; requested seasonal tracks need clean matching and constrained empty pools must remain honest gaps.

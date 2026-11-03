@@ -75,6 +75,32 @@ describe('owned-only expansion and conservative seasonal evidence', () => {
     const topped = dance.topUpSectionsFromLibrary(r, { artists: [], decades: [], doNotPlay: [], additionAllowed: () => false });
     expect([...topped.warmUp, ...topped.transition, ...topped.peak]).toHaveLength(1);
   });
+  it.each(['dance', 'dinner'])('real %s route never pads clean owned do-not-play/out-of-range tracks or invented evidence', async (listType) => {
+    const banned = [
+      { artist: 'Forbidden Artist', title: 'Forbidden Track (Clean)', filePath: '/synthetic/forbidden.mp3', year: '2015', genre: 'Pop', bpm: '120' },
+      { artist: 'Old Artist', title: 'Out Of Range (Clean)', filePath: '/synthetic/old.mp3', year: '1955', genre: 'Metal', bpm: '180' },
+    ];
+    const h = harness({ rows: { A: row({ ...DEFAULTS, listType, minutes: '60', expand: true, eventType: 'school_dance', decades: ['2010s'], genresInput: 'Pop', doNotPlayInput: 'Forbidden Artist - Forbidden Track', bpmRange: [110, 128] }) } });
+    await h.flush(); h.library(vdj.buildLibrary(banned)); await h.flush();
+    await h.current.generate(); await h.flush();
+    const result = h.current.result;
+    expect(result).toBeTruthy();
+    const added = [...result.warmUp, ...result.transition, ...result.peak].filter(t => !t.fromUpload);
+    expect(added).toEqual([]);
+    expect([...result.warmUp, ...result.transition, ...result.peak].some(t => t.fromUpload && t.song === request.song)).toBe(true);
+    expect(dance.currentShortfall(result).total).toBeGreaterThan(0);
+    h.unmount();
+  });
+  it('real route matches requested Christmas clean identity while holiday expansion stays disabled', async () => {
+    const holiday = { artist: 'Wham!', song: 'Last Christmas', fromUpload: true };
+    const h = harness({ rows: { A: { ...row(DEFAULTS), inputs: { ...row(DEFAULTS).inputs, songs: [holiday] }, lists: { warmUp: [holiday], transition: [], peak: [] } } } });
+    await h.flush(); h.library(vdj.buildLibrary(tracks)); await h.flush();
+    const match = Object.values(h.current.matches)[0] as vdj.SongMatch;
+    expect(match).toMatchObject({ confirmed: true, trackIndex: 7 });
+    expect(tracks[match.trackIndex ?? -1].filePath).toBe('/synthetic/Wham - Last Christmas Clean.mp3');
+    expect(buildResolver(tracks, DEFAULTS).allowed(holiday)).toBe(false);
+    expect(h.requests).toEqual([]); h.unmount();
+  });
   it('shortlist additions reject unowned/off-policy holiday/Dirty links; requests remain untouched', () => {
     const empty = { warmUp: [], transition: [], peak: [] }, lib = vdj.buildLibrary(tracks);
     const args = [empty, 'warmUp', { artist: 'ABBA', song: 'Honey Honey' }, lib, {}, () => 'new', vdj.matchSong, DEFAULTS] as const;

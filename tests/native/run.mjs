@@ -357,7 +357,25 @@ try{
    expect(all.some(t=>t.song==='Ordinary (Clean)')).toBe(false);
    await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
    expect(Object.values(saved.lists.selections).flatMap(v=>v.paths)).not.toContain(small[0].filePath);
+   const holidaySelection=Object.entries(saved.lists.selections).find(([k])=>k.includes('wham')&&k.includes('last christmas'))?.[1];
+   expect(holidaySelection).toMatchObject({confirmed:true,paths:[small[6].filePath]});
    await page.reload();await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
+ });
+ await check('owned clean local refill never bypasses do-not-play and year/genre/BPM constraints',async()=>{
+   await app.close();
+   const banned=[{artist:'Forbidden Artist',title:'Forbidden Track (Clean)',year:'2015',genre:'Pop',bpm:'120'},{artist:'Old Artist',title:'Out Of Range (Clean)',year:'1955',genre:'Metal',bpm:'180'}].map((t,i)=>({...t,filePath:path.join(library,`banned-${i}.mp3`)}));
+   banned.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:banned,aiSuggestions:[]}));
+   const req={artist:'Client',song:'Keep Request',fromUpload:true};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Constrained gap',updated_at:'v1',inputs:{songs:[req],eventName:'Constrained gap',hours:'.25',buffer:2,listType:'dance',expand:true,ownedOnlyExpansion:true,includeSeasonalTracks:false,requireCleanVersions:true,eventType:'school_dance',decades:['2010s'],genresInput:'Pop',doNotPlayInput:'Forbidden Artist - Forbidden Track',bpmRange:[110,128]},lists:{warmUp:[req],transition:[],peak:[]}}}));
+   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.__setarchitect_write_revision_v1,{timeout:15000}).toBeTruthy();
+   const saved=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A;
+   const all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
+   expect(all.filter(t=>!t.fromUpload)).toEqual([]);expect(all.some(t=>t.song==='Keep Request'&&t.fromUpload)).toBe(true);
  });
  await check('clean policy toggle retains chosen dirty/extras; actual exported paths and omission reasons agree; save/reopen persists',async()=>{
    await app.close();const file=path.join(library,'Policy clean.mp3'),dirty=path.join(library,'Policy dirty.mp3'),unknown=path.join(library,'Policy unknown.mp3');

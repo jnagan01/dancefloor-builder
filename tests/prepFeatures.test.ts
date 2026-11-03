@@ -238,7 +238,7 @@ describe("dashboard uses export-readiness semantics", () => {
     expect(sec.linkedMissing.map(x => x.index)).toEqual([3, 5]);
     expect(sec.linkedMissing[1].detail).toMatch(/1 of 2/);
     expect(sec.pending.map(x => x.index)).toEqual([1]);
-    expect(sec.confirmed).toBe(1); // a confirmed flag on a missing track is not confirmed
+    expect(sec.confirmed).toBe(2); // primary + eligible extra; missing indexes are not confirmed
   });
   it("adds explicitly selected extra tracks to length and labels estimates", () => {
     expect(sec.knownSec).toBe(300);
@@ -249,6 +249,17 @@ describe("dashboard uses export-readiness semantics", () => {
     expect(d.genres.find(g => g.label === "Rock")?.count).toBe(1);
     expect(d.tentativeGenre).toBe(1); // "Pop" came from the event row, not a track tag
     expect(d.tentativeDecade).toBe(1);
+  });
+  it('counts clean extras and their known durations while retaining dirty-primary review reason', () => {
+    const mixed = buildDashboard([{ key: 'warmUp', label: 'Warm Up', songs: [{ artist: 'Band', song: 'Hit' }] }], {
+      row: { status: 'Manually Matched', confidence: 1, trackIndex: 0, extraTrackIndices: [1, 2, 3], confirmed: true, alternatives: [] },
+    }, () => 'row', i => [
+      { durationSec: 999, cleanReason: 'Clean version needed — dirty label' },
+      { durationSec: 200 }, { durationSec: 100 }, {},
+    ][i]);
+    expect(mixed.totals).toMatchObject({ confirmed: 3, pending: 1, knownSec: 300, unknownDuration: 1 });
+    expect(mixed.sections[0].pending[0].detail).toContain('dirty label');
+    expect(mixed.sections[0].estimatedSec).toBe(450);
   });
 });
 
