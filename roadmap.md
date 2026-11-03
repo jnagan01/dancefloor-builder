@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Optional expansion and 1× baseline
+- [x] Review correction: covered-event rounded allocation gaps suppressed without changing targets; 40-track results/tabs gap-free before/after reopen. Local checks: 617 units, 32 native events, 19 prep, 16 offline flows, 4 races; compilation passed. External macOS gate unchanged and pending.
 - [x] Default/reset to 1× with expansion off; distinguish duration coverage from optional preparation using known lengths and honest estimates; no implicit background/preference-only filling.
 - [x] Isolated enough/short uploads, voluntary expansion, 1× roundtrip/reset and unchanged legacy buffers; full unit/native/prep/offline/race suites passed. External macOS gate remains unchanged and pending external execution.
 ## Entirely blank fresh events
