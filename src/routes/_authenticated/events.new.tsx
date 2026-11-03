@@ -2175,7 +2175,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     let matchedTotal = 0;
     let skippedTotal = 0;
     try { for (const section of sections) buildM3u(captured[section], files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
-    try { await guardedWrite(files, dir, `${prefix}export-readiness.txt`, readinessText(report)); } catch { toast.error("Readiness report could not be written. Export stopped."); return; }
+    try { await guardedWrite(files, dir, `${prefix}export-readiness.txt`, readinessText(report)); } catch(e) { toast.error(`Readiness report could not be written. Export stopped. ${e instanceof Error ? e.message : ""}`); return; }
     for (const section of sections) {
       const list = exportResult[section];
       if (!list.length) continue;
