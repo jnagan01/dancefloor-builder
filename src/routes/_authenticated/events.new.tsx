@@ -1346,11 +1346,21 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const catalogue = generateLists({ uploaded: uniqueSongs, preserveRequestedRows: true, hours: background ? minutesNum / 60 : hoursNum, averageTrackSeconds: clientCoverage.averageSeconds, expand: true, buffer: background ? 1 : buffer, split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined, prefs: localPrefs });
         for (const k of sectionOrder) for (const s of background ? [...catalogue.warmUp, ...catalogue.transition, ...catalogue.peak] : catalogue[k]) if (!s.fromUpload) offer(withProv({ ...s, metaSource: "Library" } as PRow, "catalogue"), k);
 
-        // Attach reliable facts before ranking: one bounded online lookup for non-owned candidates (AI first), then file tags.
-        const needFacts = [...pool.values()].filter((p) => p.trackIdx === undefined).sort((a, b) => Number(!a.row.aiSuggestion) - Number(!b.row.aiSuggestion) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)));
+        // Attach facts BEFORE strict eligibility, ranking and energy ordering, for owned as well as AI/catalogue candidates,
+        // so rankWhy and the displayed facts share one evidence set. Bounded, deterministic order (AI, owned, catalogue,
+        // then identity); owned rows keep their file tags (mergeMeta never lets provider/AI values replace tags).
+        const familiarityActive = !!normalizeEventFit(eventFit)?.familiarity;
+        const tier = (p: Pooled) => (p.row.aiSuggestion ? 0 : p.trackIdx !== undefined ? 1 : 2);
+        const needFacts = [...pool.values()].filter((p) => needsFacts(p.row, familiarityActive)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         if (needFacts.length) {
           const online = await enrichBatch(needFacts.map((p) => p.row));
-          for (const p of needFacts) p.row = enrichFromLibrary(applyOnlineEnrichment(p.row, online.get(`${p.row.artist}||${p.row.song}`)));
+          // Stale-generation/account fence after the await: never rank or apply with another run's or account's state.
+          if (genTokenRef.current !== myToken) return;
+          if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
+          for (const p of needFacts) {
+            const enriched = applyOnlineEnrichment(p.row, online.get(factsKey(p.row)));
+            p.row = (p.trackIdx !== undefined ? enriched : enrichFromLibrary(enriched)) as PRow;
+          }
         }
 
         // Strict eligibility BEFORE ranking, so excluded songs never take a slot or count toward artist variety.
