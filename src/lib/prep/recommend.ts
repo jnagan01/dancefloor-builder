@@ -139,7 +139,12 @@ export function recommend(input: RecInput): RecOutput {
       if (c.familiarity > 0 && plays > 0) push("familiar", `You've played it ${plays} time${plays === 1 ? "" : "s"} in VirtualDJ (your familiarity, not crowd data)`, c.familiarity * Math.min(2, Math.log10(plays + 1)));
       if (c.familiarity < 0 && plays === 0 && cand.playCount !== undefined) push("discovery", "Never played in your VirtualDJ history (discovery)", -c.familiarity * 1);
     }
-    for (const l of fitR.lines) push(l.kind, l.text, l.points);
+    // Popularity alone is not event fit: without any link to this event's requests/preferences, positive familiarity counts half.
+    const linked = ev.some(e => e.points > 0 && e.kind !== "familiar" && e.kind !== "discovery");
+    for (const l of fitR.lines) {
+      const half = l.points > 0 && l.kind === "familiarTrack" && !linked;
+      push(l.kind, half ? `${l.text} — counted half: no link to this event's requests or preferences` : l.text, half ? l.points / 2 : l.points);
+    }
     if (favor.has(key)) push("favor", "You marked this as a favourite to recommend", 1.5);
     const note = cand.trackId ? input.notes?.get(cand.trackId) : undefined;
     const tagHits = note && input.eventTags?.length ? note.tags.filter(t => input.eventTags!.includes(t)) : [];
