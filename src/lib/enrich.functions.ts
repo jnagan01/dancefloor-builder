@@ -19,6 +19,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { toCamelot } from "./musicTheory";
 import { normalizeKey } from "./danceFloor";
+import { decodeCacheSource, encodeCacheSource, type MetaProv } from "./prep/provenance";
 
 const InputSchema = z.object({
   songs: z
@@ -51,6 +52,8 @@ export interface EnrichedSong {
   genre?: string;
   year?: number;
   source: EnrichSource;
+  /** Per-attribute provenance. Absent from older servers; clients then decode `source` conservatively. */
+  prov?: MetaProv;
 }
 
 const CACHE_TTL_DAYS = 90;
@@ -117,6 +120,19 @@ interface ReccoBeatsFeatures {
   popularity?: number;
   bpm?: number;
   camelot?: string;
+  /** True only when the matched catalogue title and version equal the requested ones. */
+  exact: boolean;
+}
+
+const VERSION_WORDS = /\b(remix|mix|edit|live|extended|acoustic|remaster(?:ed)?|radio|club|dub|instrumental|clean|dirty|explicit|version|intro|redrum|bootleg|rework|vip)\b/gi;
+/** Version markers of a raw title, order-free ("Radio Edit" == "Edit (Radio)"). */
+export function versionMarkers(title: string): string {
+  return [...new Set((title.toLowerCase().match(VERSION_WORDS) ?? []).map(w => w.replace(/remastered/, "remaster")))].sort().join(" ");
+}
+/** Conservative recording check: same base title and same version markers. Provider data for a different version
+ * (a remix has a different tempo) is kept only as an estimate. */
+export function sameRecordingTitle(want: string, got: string): boolean {
+  return normalizeKey(cleanTitleForSearch(want) || want) === normalizeKey(cleanTitleForSearch(got) || got) && versionMarkers(want) === versionMarkers(got);
 }
 
 /**
@@ -176,9 +192,10 @@ async function fetchReccoBeats(
       `https://api.reccobeats.com/v1/track/${encodeURIComponent(match.id)}/audio-features`,
       { headers: { Accept: "application/json" } },
     );
+    const exact = sameRecordingTitle(song, match.trackTitle ?? "");
     if (!featRes.ok) {
       // Popularity alone is still useful.
-      return { popularity: popularityTo10(match.popularity) };
+      return { popularity: popularityTo10(match.popularity), exact };
     }
     const feat = (await featRes.json()) as {
       energy?: number;
@@ -205,6 +222,7 @@ async function fetchReccoBeats(
           ? Math.round(feat.tempo)
           : undefined,
       camelot,
+      exact,
     };
   } catch {
     return null;
@@ -214,6 +232,7 @@ async function fetchReccoBeats(
 interface MusicBrainzInfo {
   genre?: string;
   year?: number;
+  exact?: boolean;
 }
 
 async function fetchMusicBrainz(
@@ -245,18 +264,20 @@ async function fetchMusicBrainz(
       }>;
     };
     const recs = json.recordings ?? [];
-    const match = recs.find((r) => {
+    const byArtist = recs.filter((r) => {
       const credits = (r["artist-credit"] ?? [])
         .map((c) => c?.name ?? c?.artist?.name ?? "")
         .filter(Boolean);
       return credits.some((n) => artistLooseMatch(n, artist));
     });
+    const exactMatch = byArtist.find((r) => sameRecordingTitle(song, r.title ?? ""));
+    const match = exactMatch ?? byArtist[0];
     if (!match) return null;
     const year = parseYear(match["first-release-date"]);
     const topTag = (match.tags ?? [])
       .filter((t) => t?.name)
       .sort((a, b) => (b.count ?? 0) - (a.count ?? 0))[0]?.name;
-    return { year, genre: topTag };
+    return { year, genre: topTag, exact: !!exactMatch };
   } catch {
     return null;
   }
@@ -375,9 +396,7 @@ export const enrichSongs = createServerFn({ method: "POST" })
       for (const row of rows ?? []) {
         const fetchedMs = row.fetched_at ? new Date(row.fetched_at).getTime() : 0;
         if (fetchedMs < cutoffMs) continue; // stale — force refetch
-        cache.set(`${row.artist_key}\u0000${row.song_key}`, {
-          artist: "", // filled in from query
-          song: "",
+        const values = {
           energy: row.energy ?? undefined,
           danceability: row.danceability ?? undefined,
           valence: row.valence ?? undefined,
@@ -386,7 +405,15 @@ export const enrichSongs = createServerFn({ method: "POST" })
           camelot: row.camelot ?? undefined,
           genre: row.genre ?? undefined,
           year: row.year ?? undefined,
-          source: "cache",
+        };
+        // Cached rows keep their recorded per-attribute provenance (legacy rows decode conservatively).
+        const { summary, prov } = decodeCacheSource(row.source, values);
+        cache.set(`${row.artist_key}\u0000${row.song_key}`, {
+          artist: "", // filled in from query
+          song: "",
+          ...values,
+          source: (summary as EnrichSource) || "none",
+          prov,
         });
       }
     }
@@ -429,18 +456,28 @@ export const enrichSongs = createServerFn({ method: "POST" })
             ? Promise.resolve({ genre: prev.genre, year: prev.year } as MusicBrainzInfo)
             : fetchMusicBrainz(q.original.artist, q.original.song),
         ]);
+        const rs = reco?.exact ? "provider" : "estimate";
+        const reusedMb = !!(prev && (prev.genre || prev.year));
+        const ms = reusedMb ? undefined : mb?.exact ? "provider" : "estimate";
+        const prov: MetaProv = {};
+        const take = <A extends keyof MetaProv>(a: A, fresh: unknown, src: MetaProv[A], old: unknown) => {
+          if (fresh != null) { prov[a] = src; return fresh; }
+          if (old != null) { prov[a] = prev?.prov?.[a] ?? "estimate"; return old; }
+          return undefined;
+        };
         fetched.set(k, {
           artist: q.original.artist,
           song: q.original.song,
-          energy: reco?.energy,
-          danceability: reco?.danceability,
-          valence: reco?.valence,
-          popularity: reco?.popularity ?? prev?.popularity,
-          bpm: reco?.bpm ?? prev?.bpm,
-          camelot: reco?.camelot ?? prev?.camelot,
-          genre: mb?.genre,
-          year: mb?.year,
+          energy: take("energy", reco?.energy, rs, undefined) as number | undefined,
+          danceability: take("danceability", reco?.danceability, rs, undefined) as number | undefined,
+          valence: take("valence", reco?.valence, rs, undefined) as number | undefined,
+          popularity: take("popularity", reco?.popularity, rs, prev?.popularity) as number | undefined,
+          bpm: take("bpm", reco?.bpm, rs, prev?.bpm) as number | undefined,
+          camelot: take("camelot", reco?.camelot, rs, prev?.camelot) as string | undefined,
+          genre: take("genre", reusedMb ? undefined : mb?.genre, ms, prev?.genre) as string | undefined,
+          year: take("year", reusedMb ? undefined : mb?.year, ms, prev?.year) as number | undefined,
           source: pickSource(reco?.energy != null, !!(mb?.genre || mb?.year)),
+          prov,
         });
       }
     };
@@ -473,16 +510,24 @@ export const enrichSongs = createServerFn({ method: "POST" })
       needAi.forEach(({ q, k }, idx) => {
         const a = est[idx];
         if (!a) return;
-        const e = fetched.get(k) ?? { artist: q.original.artist, song: q.original.song, source: "none" as const };
+        const e: EnrichedSong = fetched.get(k) ?? { artist: q.original.artist, song: q.original.song, source: "none" as const };
+        // AI only fills gaps and every filled attribute is labelled an AI estimate.
+        const prov: MetaProv = { ...(e.prov ?? {}) };
+        const fill = <A extends "energy" | "danceability" | "valence" | "bpm" | "genre" | "year">(attr: A) => {
+          if (e[attr] != null) return e[attr];
+          if (a[attr] != null) prov[attr] = "ai";
+          return a[attr];
+        };
         fetched.set(k, {
           ...e,
-          energy: e.energy ?? a.energy,
-          danceability: e.danceability ?? a.danceability,
-          valence: e.valence ?? a.valence,
-          bpm: e.bpm ?? a.bpm,
-          genre: e.genre ?? a.genre,
-          year: e.year ?? a.year,
+          energy: fill("energy") as number | undefined,
+          danceability: fill("danceability") as number | undefined,
+          valence: fill("valence") as number | undefined,
+          bpm: fill("bpm") as number | undefined,
+          genre: fill("genre") as string | undefined,
+          year: fill("year") as number | undefined,
           source: e.source === "none" || e.source === "MusicBrainz" ? "AI" : e.source,
+          prov,
         });
       });
     }
@@ -503,7 +548,7 @@ export const enrichSongs = createServerFn({ method: "POST" })
           camelot: e.camelot ?? null,
           genre: e.genre ?? null,
           year: e.year ?? null,
-          source: e.source,
+          source: encodeCacheSource(e.source, e.prov ?? {}),
           fetched_at: new Date().toISOString(),
         };
       });
