@@ -3,7 +3,7 @@
 - Keep the event builder under `/events/new` and the authenticated workspace shell under `_authenticated/route.tsx`, because Home must be the default landing page without resetting event state on unrelated pages.
 - Keep selected music source indexes in account-scoped IndexedDB; browser file access requires reconnecting folders and server storage must not hold local audio files.
 - Keep event autosave in the owner-scoped `workflow_history` JSON snapshot, because old snapshots must stay readable.
-- Use shared semantic CSS tokens and one local-file waveform player for library/event review, for consistent visuals and playback.
+- Use shared CSS tokens and one local-file waveform player for consistent visuals/playback.
 - Keep app-only prep knowledge in the account-fenced `src/lib/prep` store, never in snapshots/audio, backed up as optional `prep`, because events must stay readable.
 - Use `freshEvent`, never profile defaults. Expansion-off never pads/truncates. Planning excludes DNP/missing titles/repeated identities, because estimates and allocation slots are not unique approved coverage.
 - Route every same-row event writer through owner/id plus the reserved inputs revision marker compare-and-set; initialize missing legacy markers atomically with the observed timestamp, use fresh UUIDs per logical edit stable through retry/reload, and never put full JSON in URL filters, because timestamps and payload ABA are insufficient.
