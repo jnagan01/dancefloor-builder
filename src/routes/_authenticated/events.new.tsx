@@ -1,8 +1,8 @@
 import { buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
-import { freshEvent, validateEventChoices } from "@/lib/freshEvent";
+import { freshEvent, validateEventChoices, preparationCoverage } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
-import { preventAutomaticDuplicates, sectionCoverage } from "@/lib/preparationDuplicates";
+import { preventAutomaticDuplicates, sectionCoverage, durationLabel } from "@/lib/preparationDuplicates";
 import { makeSubject, scorePair } from "@/lib/matchCore";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
@@ -644,6 +644,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const sectionMinutes = formatMinutes(hoursNum);
   const activeSplit: SectionSplit | undefined = splitOn && !background ? split : undefined;
   const splitTotal = split.warmUp + split.transition + split.peak;
+  const clientCoverage = preparationCoverage(songs.map(song => {
+    const index = policyResolver.resolve(song);
+    const track = index === undefined ? undefined : mergedLibrary.tracks[index];
+    return track ? Number(track.songLength) : undefined;
+  }), background ? minutesNum : hoursNum * 60, background ? 1 : buffer);
+  const coverageMessage = clientCoverage.baselineShortSeconds > 0
+    ? `${durationLabel(clientCoverage.baselineShortSeconds)} ${clientCoverage.unknown ? "estimated " : ""}time shortfall — add client tracks or enable optional expansion.`
+    : `${clientCoverage.unknown ? "Estimated baseline" : "Baseline duration"} covered — no additional tracks needed.`;
+  const planningMessage = `${durationLabel(clientCoverage.knownSeconds)} known client length${clientCoverage.unknown ? ` · ${clientCoverage.unknown} unknown lengths (estimated at 4 min each)` : ""} · ${coverageMessage}`;
+  const targetMessage = `${durationLabel(clientCoverage.baselineSeconds)} event baseline · ${background ? 1 : buffer}× preparation ${durationLabel(clientCoverage.targetSeconds)}${expand ? " · optional expansion on" : " · expansion off"}`;
+
 
   const doNotPlayEntries = useMemo(() => parseDoNotPlay(doNotPlayInput), [doNotPlayInput]);
 
@@ -913,11 +924,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const missingTitles = songs.filter(s => s.artist.trim() && !s.song.trim());
     if (missingTitles.length) { toast.error(`${missingTitles.length} uploaded row${missingTitles.length === 1 ? " is" : "s are"} missing a song title. Add the title in Uploaded songs before generating; every row has been kept.`); setStep(3); return; }
     const noUploads = !songs.some((x) => x.artist.trim() || x.song.trim());
-    if (noUploads && !artistsInput.trim() && !genresInput.trim() && decades.length === 0) {
-      toast.error("Upload songs or enter some artists, genres or decades first");
+    if (noUploads && (!expand || (!artistsInput.trim() && !genresInput.trim() && decades.length === 0))) {
+      toast.error("Upload client tracks first, or enable expansion and enter artists, genres or decades");
       return;
     }
-    const fill = expand || noUploads;
+    const fill = expand && clientCoverage.preparationShortSeconds > 0;
     if (background ? minutesNum <= 0 : hoursNum <= 0) {
       toast.error(background ? "Enter how many minutes the list should cover" : "Enter a valid dance floor length");
       return;
@@ -936,7 +947,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     let r = generateLists({
       uploaded: uniqueSongs,
       preserveRequestedRows: true,
-      hours: background ? 24 : hoursNum,
+      hours: background ? minutesNum / 60 : hoursNum,
+      averageTrackSeconds: clientCoverage.averageSeconds,
       expand: false,
       buffer: background ? 1 : buffer,
       split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined,
@@ -1025,7 +1037,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       );
     });
 
-    if (fill || background) {
+    if (fill) {
       {
         type FillLabel = "Warm Up" | "Transition" | "Peak" | "Cocktail Hour" | "Dinner";
         const gapSection = (l: FillLabel) => (l === "Cocktail Hour" || l === "Dinner" ? "Warm Up" : l);
@@ -1431,6 +1443,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             uploaded: uniqueSongs,
             preserveRequestedRows: true,
             hours: background ? minutesNum / 60 : hoursNum,
+            averageTrackSeconds: clientCoverage.averageSeconds,
             expand: true,
             buffer: background ? 1 : buffer,
             split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined,
@@ -1580,13 +1593,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Generation and subsequent edits share the same single-flight autosave queue.
     r.finalShortfall = currentShortfall(r, background ? ["warmUp"] : ["warmUp", "transition", "peak"]);
     const fs = r.finalShortfall;
-    if (fs && fs.total > 0) {
+    if (expand ? fs && fs.total > 0 : clientCoverage.baselineShortSeconds > 0) {
       const parts: string[] = [];
       if (fs.warmUp > 0) parts.push(`${fs.warmUp} short in Warm Up`);
       if (fs.transition > 0) parts.push(`${fs.transition} short in Transition`);
       if (fs.peak > 0) parts.push(`${fs.peak} short in Peak`);
       toast.warning(
-        `Not enough songs to fill every section — ${parts.join(", ")}. Lowest-energy songs are still first, highest last. Add more songs or enable AI/library expansion to close the gap.`,
+        expand ? `Optional preparation has gaps — ${parts.join(", ")}. Add tracks or review the expansion constraints.` : coverageMessage,
         { duration: 8000 },
       );
     } else {
@@ -2326,15 +2339,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [isPendingLive, startLiveTransition] = useTransition();
 
   function computeLiveTargets(songsArg: Song[], hoursArg: number) {
-    if (!listType || (!background && ![2,3,4].includes(buffer))) return { total: 0, perSection: 0, perSectionBase: 0, shortfall: {warmUp:0,transition:0,peak:0,total:0} };
+    if (!listType || (!background && ![1,2,3,4].includes(buffer))) return { total: 0, perSection: 0, perSectionBase: 0, shortfall: {warmUp:0,transition:0,peak:0,total:0} };
     const safeHours = displayNumber(hoursArg, MAX_EVENT_HOURS);
     let safeSplit = activeSplit;
-    try { validateTiming(safeHours, buffer, safeSplit); } catch { safeSplit = undefined; }
+    try { validateTiming(safeHours, background ? 1 : buffer, safeSplit); } catch { safeSplit = undefined; }
     const r = generateLists({
       uploaded: songsArg,
+      averageTrackSeconds: clientCoverage.averageSeconds,
       hours: safeHours,
       expand: false,
-      buffer: displayBuffer(buffer),
+      buffer: background ? 1 : displayBuffer(buffer),
       split: safeSplit && !snapshotReadOnly.current ? safeSplit : undefined,
       prefs: { artists: [], genres: [], decades: [], notes: "", doNotPlay: parseDoNotPlay(doNotPlayInput) },
     });
@@ -2356,7 +2370,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
     // debouncedExpand is intentionally part of deps for visual pending state only
     void debouncedExpand;
-  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer, splitOn, split, background, listType, minutes, doNotPlayInput]);
+  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer, splitOn, split, background, listType, minutes, doNotPlayInput, mergedLibrary, policies, eventType]);
 
 
   const [step, setStep] = useState(1);
@@ -2375,7 +2389,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     { id: 1, label: background ? bgLabel : "Dance floor", hint: background ? (minutesNum > 0 ? `${minutesNum} min` : "Set the length") : hoursNum > 0 ? `${hoursNum}h` : "Set the vibe", done: !!result || (danceFloorConfirmed && (background ? minutesNum > 0 : hoursNum > 0)) },
     { id: 2, label: "Upload lists", hint: "Optional · CSV or TXT", done: songs.length > 0 },
     { id: 3, label: "Review songs", hint: `${songs.length} imported`, done: songs.length > 0 },
-    ...(background ? [] : [{ id: 4, label: "Song expansion", hint: expand ? "On" : "Off", done: !!result }]),
+    ...(background ? [] : [{ id: 4, label: "Track expansion", hint: expand ? "On" : "Off", done: !!result }]),
     { id: 5, num: background ? 4 : 5, label: "Review & export", hint: result ? "Ready" : "Generate first", done: !!result, disabled: !result },
   ];
   const stepNumber = (id: number) => stepDefs.find((s) => s.id === id)?.num ?? id;
@@ -2496,7 +2510,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 <Input id="minutes" type="number" step="5" min="0" max={MAX_EVENT_MINUTES} value={minutes} onChange={(e) => editMinutes(e.target.value)} className="mt-1.5" />
                 {minutesNum > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    About {bgTarget} songs to cover {minutesNum} min · {songs.length} uploaded{songs.length < bgTarget ? ` · ${bgTarget - songs.length} will be added automatically` : ""}
+                    {planningMessage}
                   </p>
                 )}
               </div>
@@ -2517,7 +2531,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     {splitOn
                       ? <>Warm Up {split.warmUp} min · Transition {split.transition} min · Peak {split.peak} min</>
                       : <>Warm Up ~{sectionMinutes} min · Transition ~{sectionMinutes} min · Peak ~{sectionMinutes} min (equal thirds)</>}
-                    {" "}· Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs ({buffer}× buffer)
+                    {" "}· {targetMessage}
                   </p>
                 )}
                 {hoursNum > 0 && (
@@ -2575,7 +2589,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 </div>
                 {!background && hoursNum > 0 && buffer > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
-                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs{splitOn ? "" : <> · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section</>} ({buffer}× buffer)
+                    {targetMessage}
 
                   </p>
                 )}
@@ -2967,45 +2981,39 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         )}
 
 
-        {/* Step 4 — dance floor only; cocktail/dinner fill the gap automatically */}
+        {step === 3 && background && <div className="border-y border-border py-4 space-y-2">
+          <label className="flex items-center gap-3"><Switch aria-label="Expand event with additional tracks" checked={expand} onCheckedChange={editExpand} />Optional track expansion</label>
+          <p className="text-sm text-muted-foreground">{planningMessage}</p>
+        </div>}
+        {/* Step 4 — optional dance preparation */}
         {step === 4 && !background && (
 
         <StepPanel
           eyebrow="Step 4"
-          title="Song expansion"
-          description="Let the AI reach beyond the uploaded lists to fill each section."
+          title="Track expansion"
+          description="Optional additions beyond the client tracks."
         >
             <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4 rounded-lg border border-border/70 bg-surface/60 p-4">
               <div className="min-w-0">
-                <p className="font-medium">Add additional songs based on artist, genre, and decade preferences</p>
+                <p className="font-medium">Add additional tracks based on artist, genre, and decade preferences</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  When turned off, the app will only use songs from the uploaded files.
+                  Off keeps only client tracks, even when their duration is short.
                 </p>
                 {hoursNum > 0 && buffer > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground transition-opacity duration-150">
-                    Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs{splitOn ? "" : <> · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section</>} ({buffer}× buffer)
+                    {targetMessage}
                   </p>
                 )}
               </div>
               <Switch aria-label="Expand event with additional tracks" checked={expand} onCheckedChange={editExpand} className="shrink-0" />
             </div>
-            <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Preparation buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer || ""} onChange={e=>editBuffer(e.target.value ? Number(e.target.value) : 0)}><option value="">Choose a buffer</option>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
-            {hoursNum > 0 && buffer > 0 && !expand && liveTargets.shortfall.total > 0 && (
-              <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
-                <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
+            <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Preparation target</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer || ""} onChange={e=>editBuffer(e.target.value ? Number(e.target.value) : 0)}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
+            {hoursNum > 0 && <div className="mt-3 space-y-2 text-sm" aria-label="Client duration coverage">
+              <p>{planningMessage}</p>
+              {expand && clientCoverage.preparationShortSeconds === 0 && <p className="text-muted-foreground">Client tracks already cover this preparation target. Choose a higher multiplier for extra preparation tracks; every client track stays.</p>}
+              {expand && clientCoverage.preparationShortSeconds > 0 && <p className="text-muted-foreground">Optional additions toward {durationLabel(clientCoverage.targetSeconds)} preparation · {durationLabel(clientCoverage.preparationShortSeconds)} {clientCoverage.unknown ? "estimated " : ""}additional time. Eligible choices may leave an honest gap.</p>}
+            </div>}
 
-                <div>
-                  <p className="font-medium">Not enough uploaded songs to hit the {buffer}× buffer.</p>
-                  <p className="mt-1 text-xs">
-                    Short by <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.warmUp}</span> in Warm Up,
-                    {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.transition}</span> in Transition,
-                    {" "}<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.peak}</span> in Peak
-                    {" "}(<span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.shortfall.total}</span> total).
-                    Turn on song expansion above to fill the gap from the library.
-                  </p>
-                </div>
-              </div>
-            )}
 
           </StepPanel>
         )}
@@ -3050,12 +3058,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 </label>
               </div>
 
-              {liveShortfall && liveShortfall.total > 0 && <p className="text-xs text-warning">Eligible pool is short. Expansion will not substitute another artist/version, add excluded holiday tracks, or use unlabelled/Dirty files under the clean requirement. Add eligible files or explicitly adjust event choices.</p>}
-              {liveShortfall && liveShortfall.total > 0 ? (
+              {expand && liveShortfall && liveShortfall.total > 0 && <p className="text-xs text-warning">Eligible pool is short. Expansion will not substitute another artist/version, add excluded holiday tracks, or use unlabelled/Dirty files under the clean requirement. Add eligible files or explicitly adjust event choices.</p>}
+              {liveShortfall && liveShortfall.total > 0 && (expand || clientCoverage.baselineShortSeconds > 0) ? (
                  <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="w-full">
-                    <div className="font-medium">{background ? `${bgLabel} is ${liveShortfall.warmUp} songs (about ${Math.round(liveShortfall.warmUp * AVG_BACKGROUND_SONG_MIN)} min) short` : "Not enough songs to fully fill every section"}</div>
+                    <div className="font-medium">{background ? `${bgLabel} is ${liveShortfall.warmUp} songs (about ${Math.round(liveShortfall.warmUp * AVG_BACKGROUND_SONG_MIN)} min) short` : "Optional preparation track-count gaps"}</div>
                     {!background && <div className="mt-1.5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Warm Up</div>
@@ -3075,12 +3083,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     </div>}
 
                     {!background && <div className="mt-1.5 text-xs">
-                      Target {result.sectionTargets ? `${result.sectionTargets.warmUp} / ${result.sectionTargets.transition} / ${result.sectionTargets.peak} songs (Warm Up / Transition / Peak)` : `${result.perSectionTarget} songs per section`}. The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
+                      Target {result.sectionTargets ? `${result.sectionTargets.warmUp} / ${result.sectionTargets.transition} / ${result.sectionTargets.peak} songs (Warm Up / Transition / Peak)` : `${result.perSectionTarget} estimated tracks per section`}. Track counts are planning estimates, not confirmed duration. Add eligible tracks or choose a different optional preparation target.
                     </div>}
                   </div>
                 </div>
               ) : null}
 
+              <section className="space-y-1 border-y border-border py-3" aria-label="Event duration coverage">
+                <p className="text-sm">{targetMessage}</p>
+                <p className="text-sm">{durationLabel(coverage.report.knownSec)} approved usable unique length · {coverage.report.knownSec >= clientCoverage.baselineSeconds ? "Baseline duration covered — no additional tracks needed." : `${durationLabel(clientCoverage.baselineSeconds - coverage.report.knownSec)} baseline time not yet covered by known eligible files.`}</p>
+                <p className="text-xs text-muted-foreground">{coverage.report.unknownLength} eligible tracks with unknown length · {coverage.report.duplicateCount} repeated files not counted. {planningMessage} Client planning lengths do not confirm file selection or export eligibility.</p>
+              </section>
               <section className="space-y-2 border-y border-border py-3" aria-label="Export readiness">
                 <Button variant="outline" size="sm" disabled={readinessBusy} onClick={previewReadiness}><CheckCircle2 className="mr-2 size-4" />{readinessBusy ? "Checking files…" : "Check export readiness"}</Button>
                 {readiness && <><p className="text-sm">{readiness.requested} requested tracks · {summaryText(readiness)}</p>
@@ -3142,7 +3155,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                               )}
                             </span>
                           )}
-                          {coverage.bySection[sec] && <span className="max-w-72 text-[11px] font-normal" aria-label={`${label} duration`}>{coverage.bySection[sec]?.text}{coverage.bySection[sec]?.unknown ? ` · ${coverage.bySection[sec]?.unknown} unknown length` : ""}{coverage.bySection[sec]?.repeats ? ` · ${coverage.bySection[sec]?.repeats} repeated file (not counted)` : ""}</span>}
+                          {shortfall > 0 && <span className="text-[11px] font-normal">Estimated track-count gap; see duration coverage</span>}{coverage.bySection[sec] && <span className="max-w-72 text-[11px] font-normal" aria-label={`${label} duration`}>{coverage.bySection[sec]?.text}{coverage.bySection[sec]?.unknown ? ` · ${coverage.bySection[sec]?.unknown} unknown length` : ""}{coverage.bySection[sec]?.repeats ? ` · ${coverage.bySection[sec]?.repeats} repeated file (not counted)` : ""}</span>}
                         </span>
                       </TabsTrigger>
                     );
@@ -3227,11 +3240,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             <ChevronLeft className="mr-1 h-4 w-4" /> Back
           </Button>
           <p className="min-w-0 truncate text-center text-xs text-muted-foreground">
-            {background
-              ? minutesNum > 0 ? `${bgLabel} · about ${bgTarget} songs for ${minutesNum} min` : "Set the length to see the song target"
-              : hoursNum > 0 && buffer > 0
-              ? `Target ${result?.targetTotal ?? liveTargets.total} songs · ${result?.sectionTargets ? `${result.sectionTargets.warmUp} / ${result.sectionTargets.transition} / ${result.sectionTargets.peak}` : result?.perSectionTarget ?? liveTargets.perSection} per section (${buffer}× buffer)`
-              : !listType ? "Choose a list type" : hoursNum > 0 ? "Choose a preparation buffer" : "Set the dance floor length to see track targets"}
+            {!listType ? "Choose a list type" : (background ? minutesNum : hoursNum) > 0 ? targetMessage : "Set the length to see the preparation target"}
           </p>
           <div className="flex shrink-0 items-center gap-2">
             {step < lastInputStep && (

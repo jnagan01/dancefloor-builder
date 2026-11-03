@@ -452,6 +452,8 @@ export interface GenerationInput {
   hours: number;
   expand: boolean;
   buffer?: number;
+  /** Explicit planning average from available local lengths; omitted keeps legacy targets. */
+  averageTrackSeconds?: number;
   /** Custom minutes per section; omit for equal thirds. */
   split?: { warmUp: number; transition: number; peak: number };
 }
@@ -667,13 +669,13 @@ export function equalSplit(hours: number): SectionSplit {
 }
 
 /** Song target per section from its minutes, with buffer, growing to fit uploads by time share. */
-export function sectionTargetsFromSplit(split: SectionSplit, buffer: number, uploadCount = 0): SectionSplit {
+export function sectionTargetsFromSplit(split: SectionSplit, buffer: number, uploadCount = 0, songsPerHour = SONGS_PER_HOUR): SectionSplit {
   validateTiming(0, buffer, split);
   const sum = split.warmUp + split.transition + split.peak || 1;
   const one = (k: SectionKey) => {
     const m = Math.max(0, split[k]);
     if (m === 0) return 0;
-    const base = Math.ceil((m / 60) * SONGS_PER_HOUR);
+    const base = Math.ceil((m / 60) * songsPerHour);
     return Math.max(Math.ceil(base * buffer), Math.ceil((uploadCount * m) / sum));
   };
   return { warmUp: one("warmUp"), transition: one("transition"), peak: one("peak") };
@@ -886,7 +888,8 @@ export function generateLists(input: GenerationInput): GenerationResult {
   const bucketOf = (sec: Section) => (sec === "Warm Up" ? warmUp : sec === "Transition" ? transition : peak);
   scored.forEach((s) => bucketOf(s.section).push(s));
 
-  const totalSongsNeeded = Math.ceil(hours * SONGS_PER_HOUR);
+  const songsPerHour = typeof input.averageTrackSeconds === 'number' && Number.isFinite(input.averageTrackSeconds) && input.averageTrackSeconds > 0 ? 3600 / input.averageTrackSeconds : SONGS_PER_HOUR;
+  const totalSongsNeeded = Math.ceil(hours * songsPerHour);
   const perSectionBase = Math.ceil(totalSongsNeeded / 3);
   // Grow sections so all uploads fit evenly instead of piling into one section.
   const perSectionTarget = Math.max(
@@ -894,7 +897,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
     Math.ceil(cleanUploaded.length / 3),
   );
   const sectionTargets = input.split
-    ? sectionTargetsFromSplit(input.split, input.buffer ?? SECTION_BUFFER, cleanUploaded.length)
+    ? sectionTargetsFromSplit(input.split, input.buffer ?? SECTION_BUFFER, cleanUploaded.length, songsPerHour)
     : undefined;
   const tgt = (k: SectionKey) => sectionTargets?.[k] ?? perSectionTarget;
 

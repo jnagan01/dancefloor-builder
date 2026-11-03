@@ -19,6 +19,26 @@ function fabricated(count: number, titleHint: string, prefix: string): Song[] {
 const basePrefs = { artists: [], genres: [], decades: [], notes: "" };
 
 describe("generateLists buffered targets", () => {
+  it('1× retains all 40 requested tracks above baseline without any additions or truncation', () => {
+    const uploaded=fabricated(40,'Client','Original');
+    const r=generateLists({uploaded,preserveRequestedRows:true,prefs:basePrefs,hours:1,buffer:1,expand:false,averageTrackSeconds:240});
+    const all=[...r.warmUp,...r.transition,...r.peak];
+    expect(all).toHaveLength(40); expect(all.every(t=>t.fromUpload)).toBe(true);
+    expect(new Set(all.map(t=>dedupeKey(t.artist,t.song)))).toEqual(new Set(uploaded.map(t=>dedupeKey(t.artist,t.song))));
+  });
+  it('1× five client tracks stay five; explicit expansion can add constrained choices', () => {
+    const uploaded=fabricated(5,'Client','Original');
+    const input={uploaded,prefs:basePrefs,hours:1,buffer:1,averageTrackSeconds:240};
+    const off=generateLists({...input,expand:false});
+    expect([...off.warmUp,...off.transition,...off.peak]).toHaveLength(5);
+    const on=generateLists({...input,expand:true});
+    expect([...on.warmUp,...on.transition,...on.peak].filter(t=>t.fromUpload)).toHaveLength(5);
+    expect([...on.warmUp,...on.transition,...on.peak].length).toBeGreaterThan(5);
+  });
+  it('uses available average length while omitted length keeps legacy 2× targets', () => {
+    expect(generateLists({uploaded:[],prefs:basePrefs,hours:1,buffer:1,expand:false,averageTrackSeconds:120}).targetTotal).toBe(30);
+    expect(generateLists({uploaded:[],prefs:basePrefs,hours:1,expand:false}).targetTotal).toBe(30);
+  });
   it("computes perSectionTarget as 2× the base per-section need", () => {
     const r = generateLists({ uploaded: [], prefs: basePrefs, hours: 2, expand: false });
     const base = Math.ceil((2 * 15) / 3);
