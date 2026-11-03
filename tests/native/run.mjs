@@ -678,7 +678,15 @@ try{
    await page.screenshot({path:path.join(diagnostics,'optional-covered-1x.png')});
    const covered=await generateAndRead('Covered off',40);expect(covered.all).toHaveLength(40);expect(covered.r.inputs).toMatchObject({buffer:1,expand:false});
    await expect(page.getByLabel('Event duration coverage')).toContainText('160:00 approved usable unique length');
+   const assertCoveredWithoutAllocationGap=async()=>{
+     await expect(page.getByLabel('Event duration coverage')).toContainText('Baseline duration covered — no additional tracks needed.');
+     await expect(page.getByText('Optional preparation track-count gaps',{exact:true})).toHaveCount(0);
+     await expect(page.getByText('Estimated track-count gap; see duration coverage',{exact:true})).toHaveCount(0);
+     for(const name of [/^Warm Up \(/,/^Transition \(/,/^Peak \(/])expect(await page.getByRole('tab',{name}).first().innerText()).not.toMatch(/, -\d+/);
+   };
+   await assertCoveredWithoutAllocationGap();await page.screenshot({path:path.join(diagnostics,'optional-covered-results-no-gap.png')});
    await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},covered.r.id);await expect(page.getByRole('heading',{name:'Covered off',exact:true})).toBeVisible();expect(saved().find(r=>r.id===covered.r.id)).toEqual(covered.r);
+   await assertCoveredWithoutAllocationGap();
    await prepare(5,'Short off');await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');const short=await generateAndRead('Short off',5);expect(short.all).toHaveLength(5);
    await prepare(5,'Short expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();const expanded=await generateAndRead('Short expansion',5);expect(expanded.all.length).toBeGreaterThan(5);expect(expanded.r.inputs).toMatchObject({buffer:1,expand:true});
    await prepare(40,'Covered expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();await expect(page.getByLabel('Client duration coverage')).toContainText('Choose a higher multiplier');await page.locator('#buffer').selectOption('4');await expect(page.getByLabel('Client duration coverage')).toContainText('80:00 additional time');const extras=await generateAndRead('Covered expansion',40);expect(extras.all.length).toBeGreaterThan(40);expect(extras.r.inputs).toMatchObject({buffer:4,expand:true});

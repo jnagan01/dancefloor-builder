@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { freshEvent, validateEventChoices, preparationCoverage } from '../src/lib/freshEvent';
 import { requiresClean } from '../src/lib/preparationPolicy';
+import { generateLists } from '../src/lib/danceFloor';
 
 describe('explicit fresh event choices', () => {
   it('starts with blank content and only the explicit 1× baseline', () => {
@@ -37,6 +38,13 @@ describe('explicit fresh event choices', () => {
     const baseline = preparationCoverage(Array(40).fill(240),60,1);
     expect(baseline.baselineShortSeconds).toBe(0); expect(baseline.preparationShortSeconds).toBe(0);
     expect(preparationCoverage(Array(40).fill(240),60,4).preparationShortSeconds).toBe(4800);
+  });
+  it('40 uploads retain legacy 42-slot allocation without turning the two spare slots into missing baseline time', () => {
+    const uploaded=Array.from({length:40},(_,i)=>({artist:`Client ${i}`,song:`Normal track ${i}`}));
+    const result=generateLists({uploaded,preserveRequestedRows:true,prefs:{artists:[],genres:[],decades:[],notes:''},hours:1,buffer:1,expand:false});
+    expect(result.targetTotal).toBe(42);expect(result.shortfall.total).toBe(2);
+    expect([...result.warmUp,...result.transition,...result.peak]).toHaveLength(40);
+    expect(preparationCoverage(Array(40).fill(240),60,1).baselineShortSeconds).toBe(0);
   });
   it('five known four-minute tracks leave an honest forty-minute baseline gap', () => {
     expect(preparationCoverage(Array(5).fill(240),60,1)).toMatchObject({knownSeconds:1200,unknown:0,baselineShortSeconds:2400});

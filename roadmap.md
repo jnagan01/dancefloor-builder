@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Optional expansion and 1× baseline
+- [ ] Review correction: suppress covered-event rounded allocation gaps without changing stored targets; assert all section tabs/results remain gap-free for 40 tracks before and after reopen.
 - [x] Default/reset to 1× with expansion off; distinguish duration coverage from optional preparation using known lengths and honest estimates; no implicit background/preference-only filling.
 - [x] Isolated enough/short uploads, voluntary expansion, 1× roundtrip/reset and unchanged legacy buffers; full unit/native/prep/offline/race suites passed. External macOS gate remains unchanged and pending external execution.
 ## Entirely blank fresh events

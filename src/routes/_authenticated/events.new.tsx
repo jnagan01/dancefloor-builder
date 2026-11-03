@@ -2272,8 +2272,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   // --- Summary ---
-  // Display-only gap from current lists + targets; never marks the event dirty.
-  const liveShortfall = useMemo(() => result ? currentShortfall(result, background ? ["warmUp"] : ["warmUp", "transition", "peak"]) : null, [result, background]);
+  // Allocation rounds uploads up to section slots; it is not a duration deficit.
+  // Keep stored/generation targets intact, but do not show their rounding residue
+  // as missing tracks when clients already cover the relevant time target.
+  const liveShortfall = useMemo(() => {
+    if (!result) return null;
+    const timeShort = expand ? clientCoverage.preparationShortSeconds : clientCoverage.baselineShortSeconds;
+    if (timeShort === 0) return { warmUp: 0, transition: 0, peak: 0, total: 0 };
+    return currentShortfall(result, background ? ["warmUp"] : ["warmUp", "transition", "peak"]);
+  }, [result, background, expand, clientCoverage.preparationShortSeconds, clientCoverage.baselineShortSeconds]);
   const coverage = useMemo(() => {
     const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
     const refs: ExportSongRef[] = [];
