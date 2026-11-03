@@ -1242,7 +1242,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         //    identity. An owned exact file always supplies the facts, whichever source found the song.
         // 2) Enrich non-owned candidates once, then apply strict eligibility (policy, feedback, verified limits).
         // 3) Rank the combined eligible pool with the shared engine and place in rank order. Never pads.
-        type Pooled = { row: ResultSong; prefer?: SectionKey; trackIdx?: number };
+        type PRow = ResultSong & { aiReason?: string; aiSuggestion?: boolean };
+        type Pooled = { row: PRow; prefer?: SectionKey; trackIdx?: number };
         const POOL_CAP = 2000;
         const sectionOrder = sectionMap.map((m) => m.key);
         const pool = new Map<string, Pooled>();
@@ -1250,12 +1251,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         for (const s of [...r.warmUp, ...r.transition, ...r.peak]) taken.add(s.artist, s.song);
         const catalogueKeys = new Set(SONG_LIBRARY.map((s) => songIdentity(s.artist, s.song)));
         const secIdx = (k?: SectionKey) => (k ? sectionOrder.indexOf(k) : 99);
-        const ownedRow = (idx: number, reason?: string): ResultSong => {
+        const ownedRow = (idx: number, reason?: string): PRow => {
           const t = mergedLibrary.tracks[idx];
           const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
-          return withProv({ artist: t.artist, song: t.title, fromUpload: false, bpm: parseBpm(t.bpm), camelot: toCamelot(t.key), genre: t.genre, year: yearNum, explicit: detectExplicitFromTitle(t.title), metaSource: "Library", aiReason: reason } as ResultSong, "tags");
+          return withProv({ artist: t.artist, song: t.title, fromUpload: false, bpm: parseBpm(t.bpm), camelot: toCamelot(t.key), genre: t.genre, year: yearNum, explicit: detectExplicitFromTitle(t.title), metaSource: "Library", aiReason: reason } as PRow, "tags");
         };
-        const offer = (row: ResultSong, prefer?: SectionKey) => {
+        const offer = (row: PRow, prefer?: SectionKey) => {
           if (!row.artist || !row.song || taken.has(row.artist, row.song)) return false;
           const key = songIdentity(row.artist, row.song);
           const idx = generationResolver.resolve({ artist: row.artist, song: row.song });
@@ -1314,7 +1315,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   for (const sug of res.suggestions) {
                     const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
                     if (!owner || (counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
-                    if (offer(toAiSong(sug) as ResultSong, key)) { counts.set(owner, (counts.get(owner) ?? 0) + 1); added++; }
+                    if (offer(toAiSong(sug) as PRow, key)) { counts.set(owner, (counts.get(owner) ?? 0) + 1); added++; }
                   }
                   if (added === 0) break;
                 } catch (err) { console.error("Favorite-artist recommend failed", err); break; }
@@ -1331,7 +1332,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 if (!res.suggestions.length) break;
                 gotAny = true;
                 let added = 0;
-                for (const sug of res.suggestions) if (offer(toAiSong(sug) as ResultSong, key)) added++;
+                for (const sug of res.suggestions) if (offer(toAiSong(sug) as PRow, key)) added++;
                 if (added === 0) break;
               } catch (err) { console.error("AI recommend failed", err); break; }
             }
@@ -1341,7 +1342,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
         // Built-in catalogue candidates (local, no network), ranked alongside every other source.
         const catalogue = generateLists({ uploaded: uniqueSongs, preserveRequestedRows: true, hours: background ? minutesNum / 60 : hoursNum, averageTrackSeconds: clientCoverage.averageSeconds, expand: true, buffer: background ? 1 : buffer, split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined, prefs: localPrefs });
-        for (const k of sectionOrder) for (const s of background ? [...catalogue.warmUp, ...catalogue.transition, ...catalogue.peak] : catalogue[k]) if (!s.fromUpload) offer(withProv({ ...s, metaSource: "Library" } as ResultSong, "catalogue"), k);
+        for (const k of sectionOrder) for (const s of background ? [...catalogue.warmUp, ...catalogue.transition, ...catalogue.peak] : catalogue[k]) if (!s.fromUpload) offer(withProv({ ...s, metaSource: "Library" } as PRow, "catalogue"), k);
 
         // Attach reliable facts before ranking: one bounded online lookup for non-owned candidates (AI first), then file tags.
         const needFacts = [...pool.values()].filter((p) => p.trackIdx === undefined).sort((a, b) => Number(!a.row.aiSuggestion) - Number(!b.row.aiSuggestion) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)));
