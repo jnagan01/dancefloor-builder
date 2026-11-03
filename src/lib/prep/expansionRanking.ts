@@ -4,6 +4,7 @@ import type { SimilarTrackEvidence } from "./similarTracks";
 import { attrSource, type ProvRow } from "./provenance";
 import type { MetaSource } from "./metaConfidence";
 import type { FactSource } from "./filters";
+import { fitFactsFromRow } from "./eventFit";
 
 /**
  * Glue that lets automatic expansion use the exact ranking context the preparation panel uses.
@@ -62,5 +63,8 @@ export function rowCandidate(row: ProvRow & { artist: string; song: string; genr
   return { artist: row.artist, song: row.song, origin, facts: {
     genre: gs !== "unknown" ? row.genre : undefined, genreSource: row.genre ? fact(gs) : undefined,
     decade: ys !== "unknown" ? decade : undefined, decadeSource: decade && ys !== "unknown" ? fact(ys) : undefined,
-  } };
+  }, ...withFit(row) };
 }
+
+/** Adds row fit facts only when present, so candidates without evidence are unchanged. */
+export const withFit = (row: ProvRow) => { const fit = fitFactsFromRow(row); return fit ? { fit } : {}; };
