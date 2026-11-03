@@ -1346,12 +1346,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const catalogue = generateLists({ uploaded: uniqueSongs, preserveRequestedRows: true, hours: background ? minutesNum / 60 : hoursNum, averageTrackSeconds: clientCoverage.averageSeconds, expand: true, buffer: background ? 1 : buffer, split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined, prefs: localPrefs });
         for (const k of sectionOrder) for (const s of background ? [...catalogue.warmUp, ...catalogue.transition, ...catalogue.peak] : catalogue[k]) if (!s.fromUpload) offer(withProv({ ...s, metaSource: "Library" } as PRow, "catalogue"), k);
 
-        // Attach facts BEFORE strict eligibility, ranking and energy ordering, for owned as well as AI/catalogue candidates,
+        // Attach facts BEFORE strict eligibility, ranking and energy ordering: every non-owned candidate (provider years/BPM
+        // feed strict limits) and every owned candidate missing facts the active ranking uses,
         // so rankWhy and the displayed facts share one evidence set. Bounded, deterministic order (AI, owned, catalogue,
         // then identity); owned rows keep their file tags (mergeMeta never lets provider/AI values replace tags).
         const familiarityActive = !!normalizeEventFit(eventFit)?.familiarity;
         const tier = (p: Pooled) => (p.row.aiSuggestion ? 0 : p.trackIdx !== undefined ? 1 : 2);
-        const needFacts = [...pool.values()].filter((p) => needsFacts(p.row, familiarityActive)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
+        const needFacts = [...pool.values()].filter((p) => p.trackIdx === undefined || needsFacts(p.row, familiarityActive)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         if (needFacts.length) {
           const online = await enrichBatch(needFacts.map((p) => p.row));
           // Stale-generation/account fence after the await: never rank or apply with another run's or account's state.
