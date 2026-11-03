@@ -3,8 +3,8 @@
 - Keep the event builder under `/events/new` and the authenticated workspace shell under `_authenticated/route.tsx`, because Home must be the default landing page without resetting event state on unrelated pages.
 - Keep music source indexes in account-scoped IndexedDB; browsers must reconnect folders and the server never holds local audio.
 - Keep event autosave in the owner-scoped `workflow_history` JSON snapshot, because old snapshots must stay readable.
-- Use shared CSS tokens and one local-file waveform player for consistent visuals/playback.
-- Keep app-only prep knowledge in the account-fenced `src/lib/prep` store, never in snapshots/audio, backed up as optional `prep`, because events must stay readable.
+- Use shared CSS tokens and one local-file waveform player.
+- Keep app-only prep knowledge in the account-fenced `src/lib/prep` store, never in snapshots/audio, backed up as optional `prep`, so events stay readable.
 - Use `freshEvent`, never profile defaults. Expansion-off never pads/truncates. Planning excludes DNP/missing titles/repeated identities, because estimates and allocation slots are not unique approved coverage.
 - Route every same-row event writer through owner/id plus the reserved inputs revision marker compare-and-set; initialize missing legacy markers atomically with the observed timestamp, use fresh UUIDs per logical edit stable through retry/reload, and never put full JSON in URL filters, because timestamps and payload ABA are insufficient.
 - Native scans replace sources atomically and keep saved tracks on failed/partial/empty rescans, because inaccessible folders must not erase indexes.
@@ -39,5 +39,5 @@
 - Keep matching eligibility separate from expansion eligibility and never refill from raw library order; requested seasonal tracks need clean matching and constrained empty pools must remain honest gaps.
 - Keep saved keys unchanged; dedupe automatic additions with one AdditionKeySet (whole primary + full credit set) everywhere, promoting exact owned files order-independently and require explicit occurrence exclusions for repeated combined DJ export, because requests and legacy snapshots must stay intact.
 - Derive section coverage from export readiness's unique case-sensitive files, separate event/buffer minutes, and cap artist/title mismatches in search fallback scores, because repeated minutes and cross-field tokens are not evidence.
-- Gate automatic expansion on this owner's READY prep knowledge (await queued writes, never fall back); isolate each provider; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
+- Gate automatic expansion on this owner's READY prep knowledge (await queued writes); isolate providers; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
 - Rank pooled candidates once via `rankPool`; optional `inputs.eventFit` (none=no-op) uses only provenance-tagged track evidence (familiarity: verified provider popularity or version-aware catalogue membership); quality samples freeze context, so replays are exact.
