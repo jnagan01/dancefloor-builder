@@ -1033,7 +1033,8 @@ export function applyVarietyReranker(
   const seenKeys = new SongKeySet();
   const unique: ResultSong[] = [];
   for (const s of allowed) {
-    if (!seenKeys.tryAdd(s.artist, s.song)) continue;
+    if (!s.fromUpload && !seenKeys.tryAdd(s.artist, s.song)) continue;
+    if (s.fromUpload) seenKeys.add(s.artist, s.song);
     unique.push(s);
   }
 
@@ -1185,7 +1186,8 @@ export function reorderForEnergyProgression(
     // Event type rules (e.g. clean-only, modern-only) apply to added songs;
     // the client's own uploads always stay.
     if (!s.fromUpload && !allowedForEventType(s, evType)) continue;
-    if (!normalizeKey(s.song) || !seenAcross.tryAdd(s.artist, s.song)) continue;
+    if (!normalizeKey(s.song) || (!s.fromUpload && !seenAcross.tryAdd(s.artist, s.song))) continue;
+    if (s.fromUpload) seenAcross.add(s.artist, s.song);
     deduped.push(s);
   }
   // Bucket by *effective* intensity so pre-1990 songs bias into Warm Up and
