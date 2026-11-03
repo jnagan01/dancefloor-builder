@@ -70,7 +70,7 @@ describe('factsGather per-chunk deadline', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('concurrency bounded; a timeout in one worker stops further scheduling while in-flight results still land', async () => {
+  it('concurrency bounded; a timeout in one worker stops further scheduling and late in-flight results are ignored', async () => {
     vi.useFakeTimers();
     const ok = deferred();
     let calls = 0, inFlight = 0, peak = 0;
@@ -81,13 +81,15 @@ describe('factsGather per-chunk deadline', () => {
     });
     const g = createFactsGatherer<E>(fetch, factsKey, { timeoutMs: 100, batchSize: 1, concurrency: 2 });
     const run = g.gather(songs(5));
-    await vi.advanceTimersByTimeAsync(100); // chunk 1 times out while chunk 2 is still in flight
-    ok.resolve([]);
+    await vi.advanceTimersByTimeAsync(100); // both in-flight chunks reach their deadline together
     const rep = await run;
-    expect(rep.found).toBe(1); // in-flight chunk 2 (within its own deadline) still lands
+    ok.resolve([]); // chunk 2's late answer is ignored
+    await vi.advanceTimersByTimeAsync(10);
+    expect(rep.found).toBe(0);
+    expect(g.get({ artist: 'A', song: 'S1' })).toBeUndefined();
     expect(fetch).toHaveBeenCalledTimes(2);
     expect(peak).toBeLessThanOrEqual(2);
-    expect(rep.timedOutSongs).toBe(1);
+    expect(rep.timedOutSongs).toBe(2);
     expect(rep.found + rep.failedSongs + rep.skippedAfterTimeout).toBe(5);
     expect(rep.skippedAfterTimeout).toBe(3);
     expect(vi.getTimerCount()).toBe(0);
