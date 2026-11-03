@@ -363,7 +363,7 @@ try{
    await app.close();const file=path.join(library,'Policy clean.mp3'),dirty=path.join(library,'Policy dirty.mp3'),unknown=path.join(library,'Policy unknown.mp3');
    const tt=[{filePath:dirty,artist:'Band',title:'Hit (Dirty)'},{filePath:file,artist:'Band',title:'Hit (Clean)'},{filePath:unknown,artist:'Band',title:'Hit'}];tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));const req={artist:'Band',song:'Hit',fromUpload:true};
-   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Clean toggle',updated_at:'v1',inputs:{songs:[req],eventName:'Clean toggle',hours:'.25',buffer:2},lists:{warmUp:[req],transition:[],peak:[],selections:{'warmUp:0:band|hit':{paths:[dirty,file,unknown],confirmed:true}}}}}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Clean toggle',updated_at:'v1',inputs:{songs:[req],eventName:'Clean toggle',hours:'.25',buffer:2,listType:'dance'},lists:{warmUp:[req],transition:[],peak:[],selections:{'warmUp:0:band|hit':{paths:[dirty,file,unknown],confirmed:true}}}}}));
    fs.rmSync(path.join(temp,'exports'),{recursive:true,force:true});await launch();
    // Earlier tests configured a native folder; use the actual native write bridge, fenced to this profile.
    await page.evaluate(root=>localStorage.setItem('dancefloor:vdjRoot',root),path.join(temp,'VirtualDJ'));await page.reload();
