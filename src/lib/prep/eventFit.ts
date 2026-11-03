@@ -65,6 +65,7 @@ export interface FitResult {
   /** Reason the candidate is excluded (strong evidence only), else undefined. */ exclude?: string;
   /** Evidence lines to add (points may be negative). */ lines: { kind: "familiarTrack" | "unfamiliarTrack" | "slowEstimate" | "discoveryTrack"; text: string; points: number }[];
   /** True when there is positive track-level guest-familiarity evidence (used to keep similarity from dominating). */ familiarEvidence: boolean;
+  /** Plain statements of what an active choice could NOT verify for this track (shown, never scored). */ uncertain?: string[];
 }
 
 export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | "catalogue" | "ai"; fit?: FitFacts }): FitResult {
@@ -93,7 +94,9 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
     const lowE = e !== undefined && e <= 4, lowD = d !== undefined && d <= 4;
     if (lowE && lowD && es === "strong" && ds === "strong") r.exclude = `Low energy ${e}/10 and danceability ${d}/10 (${sourceLabel(f.energySource)}) — slow/ballad additions avoided for this event`;
     else if (lowE && lowD) r.lines.push({ kind: "slowEstimate", text: `Energy ${e}/10 and danceability ${d}/10 suggest a slow song (estimate, advisory)`, points: -1 });
+    if (!r.exclude && (es !== "strong" || ds !== "strong")) (r.uncertain ??= []).push(e === undefined && d === undefined ? "Slow/ballad status unknown: no energy or danceability data" : "Slow/ballad status unverified: energy/danceability are estimates or incomplete");
   }
+  if (fit.familiarity === "familiar" && !r.familiarEvidence) (r.uncertain ??= []).push(pop === undefined ? "Guest familiarity unknown: no track popularity data" : `Guest familiarity unverified: popularity ${Math.round(pop)}/10 is ${ps === "estimate" ? "an estimate" : "not supportive"}`);
   return r;
 }
 
