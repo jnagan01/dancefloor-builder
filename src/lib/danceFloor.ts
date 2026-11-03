@@ -443,6 +443,8 @@ function bestSection(scores: SectionScores): Section {
 
 export interface GenerationInput {
   uploaded: Song[];
+  /** Event preparation retains every client row; older utility callers may dedupe imports. */
+  preserveRequestedRows?: boolean;
   prefs: Preferences;
   hours: number;
   expand: boolean;
@@ -854,7 +856,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
       artist: (s.artist ?? "").trim() || "Unknown Artist",
       song: (s.song ?? "").trim() || (s.artist ?? "").trim(),
     }));
-  const dedupedUploaded = dedupeSongs(validUploaded);
+  const dedupedUploaded = input.preserveRequestedRows ? validUploaded : dedupeSongs(validUploaded);
   const cleanUploaded = dedupedUploaded.filter((s) => !isBlocked(s.artist, s.song, prefs.doNotPlay));
 
   const duplicatesRemoved = validUploaded.length - dedupedUploaded.length;

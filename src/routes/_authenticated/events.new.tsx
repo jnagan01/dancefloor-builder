@@ -929,7 +929,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const myToken = ++genTokenRef.current;
     setIsGenerating(true);
     try {
-    const uniqueSongs = dedupeSongs(songs);
+    const uniqueSongs = songs.slice();
     const prefs = buildCurrentPrefs();
     const generationPolicy = { ...policies, eventType };
     const generationResolver = buildResolver(mergedLibrary.tracks, generationPolicy);
@@ -939,6 +939,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // with the built-in library as a fallback if AI is unavailable.
     let r = generateLists({
       uploaded: uniqueSongs,
+      preserveRequestedRows: true,
       hours: background ? 24 : hoursNum,
       expand: false,
       buffer: background ? 1 : buffer,
@@ -1432,6 +1433,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         if (stillShort.length) {
           const fallback = generateLists({
             uploaded: uniqueSongs,
+            preserveRequestedRows: true,
             hours: hoursNum,
             expand: true,
             buffer,
