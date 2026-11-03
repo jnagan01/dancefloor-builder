@@ -98,6 +98,7 @@ describe('synthetic real-route batch: Traditional Wedding brief', () => {
       expect(() => parseSafeSaveRequest(s)).not.toThrow();
       expect(rowsOf(s).filter((r: any) => r.fromUpload).map((r: any) => `${r.artist}|${r.song}`).sort()).toEqual(REQUESTS.map(r => `${r.artist}|${r.song}`).sort());
     }
+    if (process.env.DBG2) console.log('ADDS', JSON.stringify({ b: rowsOf(before).filter((r: any) => !r.fromUpload).map((r: any) => r.song), a: rowsOf(after).filter((r: any) => !r.fromUpload).map((r: any) => r.song) }));
     const addsB = rowsOf(before).filter((r: any) => !r.fromUpload), addsA = rowsOf(after).filter((r: any) => !r.fromUpload);
     expect(addsA.length).toBeGreaterThan(0);
     expect(addsA.some((r: any) => kind(r) === 'slow')).toBe(false); // verified slow additions avoided
