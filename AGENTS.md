@@ -40,5 +40,5 @@
 - Keep saved keys unchanged; dedupe automatic additions with one AdditionKeySet (whole primary + full credit set) everywhere, promoting exact owned files order-independently and require explicit occurrence exclusions for repeated combined DJ export, because requests and legacy snapshots must stay intact.
 - Derive section coverage from export readiness's unique case-sensitive files, separate event/buffer minutes, and cap artist/title mismatches in search fallback scores, because repeated minutes and cross-field tokens are not evidence.
 - Gate automatic expansion on this owner's READY prep knowledge (await queued writes); isolate providers; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
-- Rank pooled candidates once via `rankPool`; optional `inputs.eventFit` (none=no-op) uses only provenance-tagged track evidence; quality samples freeze context.
-- Gather facts via `factsGather` before rankPool so rankWhy matches shown facts.
+- Rank candidates once via `rankPool`; optional `inputs.eventFit` (none=no-op) uses only provenance-tagged evidence; quality samples freeze context.
+- Gather facts via `factsGather` before rankPool; server enrich ends below the client cutoff, as late chunks lose cache hits.
