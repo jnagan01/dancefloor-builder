@@ -89,7 +89,7 @@ import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { getArtistNeighbors } from "@/lib/neighbors.functions";
-import { getArtistCrowdData, type ArtistCrowd } from "@/lib/lastfm.functions";
+import { getArtistCrowdData, getSimilarTracks, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
 import { importSpotifyPlaylist } from "@/lib/spotify.functions";
 import { type PreviewTarget } from "@/components/PreviewPlayer";
@@ -123,6 +123,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
 import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
 import { planAddToSection } from "@/lib/prep/addToSection";
+import { prepStore } from "@/lib/prep/prepStore";
+import { expansionFeedback, favoredFirst, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
+import { aggregateSimilar, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
+import { songIdentity } from "@/lib/prep/knowledge";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -319,6 +323,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const recommendFn = useServerFn(recommendSongsForSection);
   const neighborsFn = useServerFn(getArtistNeighbors);
   const crowdFn = useServerFn(getArtistCrowdData);
+  const similarTracksFn = useServerFn(getSimilarTracks);
   const enrichFn = useServerFn(enrichSongs);
   const [dragOver, setDragOver] = useState(false);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
@@ -939,7 +944,19 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const prefs = buildCurrentPrefs();
     const generationPolicy = { ...policies, eventType };
     const generationResolver = buildResolver(mergedLibrary.tracks, generationPolicy);
-    const addedAllowed = (track: Song & { genre?: string }) => generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
+    // Account-fenced preparation knowledge: global Never, event-only dismissals and favourites apply to
+    // automatic additions only (requests are never filtered). Read live so feedback changed mid-run is honoured.
+    const store = prepStore(), prepStart = store.get(), feedbackEvent = savedEventId, accountAtStart = accountRef.current;
+    if (prepStart.status === "blocked") toast.warning("Saved preparation notes are unreadable, so your Never/dismiss choices couldn't be applied to additions this run.");
+    let fbCache: { k: unknown; fb: ExpansionFeedback } | null = null;
+    const liveFeedback = (): ExpansionFeedback => {
+      const now = store.get();
+      const same = now.account === prepStart.account && now.generation === prepStart.generation && now.status === "ready";
+      const k = same ? now.knowledge : prepStart.status === "ready" ? prepStart.knowledge : null;
+      if (!fbCache || fbCache.k !== k) fbCache = { k, fb: expansionFeedback(k, feedbackEvent) };
+      return fbCache.fb;
+    };
+    const addedAllowed = (track: Song & { genre?: string }) => !liveFeedback().blocked(track.artist, track.song) && generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
     const localPrefs = { ...prefs, additionAllowed: addedAllowed };
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
@@ -1098,6 +1115,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // neighbours BEFORE the AI invents anything.
         let neighborArtists: string[] = [];
         let crowdArtists: Array<{ artist: string; listeners?: number; tags: string[] }> = [];
+        let simEvidence: SimilarTrackEvidence[] = [];
         try {
           const seedCounts = new Map<string, number>();
           for (const s of uniqueSongs) {
@@ -1120,7 +1138,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             // AI cluster and Last.fm crowd data in parallel: the model knows
             // vibe and context, Last.fm knows what real listeners actually
             // play together.
-            const [res, crowdRes] = await Promise.all([
+            // Track-level Last.fm evidence: only bounded artist/title seeds from distinct client requests.
+            const trackSeeds = seedsFromRequests(uniqueSongs.filter((x) => x.fromUpload !== false));
+            const [simTrackRes, res, crowdRes] = await Promise.all([
+              trackSeeds.length ? similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }).catch(() => null) : Promise.resolve(null),
               neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
               }),
@@ -1128,6 +1149,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 () => ({ available: false, artists: [] as ArtistCrowd[] }),
               ),
             ]);
+            simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
             const seedKeys = new Set(uniqueSeeds.map((a) => normalizeKey(a)));
             const seenNeighbor = new Set<string>();
             const ordered: Array<{ name: string; seed: string; score: number }> = [];
