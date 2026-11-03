@@ -201,9 +201,17 @@ describe("saved-event evidence (Let It Be / Chasing Cars as actually stored)", (
     const cc = find("Chasing Cars"), lib = find("Let It Be");
     for (const r of [cc, lib].filter(Boolean)) {
       expect(r.evidence.some((e: any) => e.kind === "slowStrong")).toBe(false);
-      expect(r.evidence.some((e: any) => e.kind === "familiarTrack")).toBe(false);
+      expect(r.evidence.some((e: any) => e.kind === "familiarTrack" && !/advisory/.test(e.text))).toBe(false);
+      expect(r.evidence.find((e: any) => e.kind === "lastfm")?.text).toMatch(/counted half/);
       expect(r.uncertain?.join(" ")).toMatch(/unverified|unknown/);
     }
     if (lib) expect(lib.evidence.some((e: any) => e.kind === "slowEstimate" && e.points < 0)).toBe(true);
   });
+});
+it("saved-event evidence keeps Chasing Cars and Let It Be out of the 14 with fit on, without excluding them", async () => {
+  const { recommend } = await import("../src/lib/prep/recommend"); const { input, AFTER_FIT } = await import("./fit/fitComparison");
+  const items = recommend({ ...input(AFTER_FIT, true), limit: 999 } as any).items;
+  const idx = (s: string) => items.findIndex((r: any) => r.song === s);
+  expect(idx("Chasing Cars")).toBeGreaterThanOrEqual(14); expect(idx("Let It Be")).toBeGreaterThanOrEqual(14);
+  expect(idx("Chasing Cars")).toBeGreaterThanOrEqual(0); expect(idx("Let It Be")).toBeGreaterThanOrEqual(0);
 });
