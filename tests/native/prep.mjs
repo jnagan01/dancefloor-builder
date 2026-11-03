@@ -353,9 +353,9 @@ try {
     await prepTab('Recommendations').click();const region=page.getByRole('region',{name:'Event preparation'});
     await expect(region.getByRole('button',{name:'Details for Band – Hit (Clean Edit)',exact:true})).toBeVisible();
     await expect(region.getByRole('button',{name:'Details for Queen – Song B',exact:true})).toHaveCount(0);
-    await prepTab(/Shortlist/).click();await region.getByLabel('Shortlist artist').fill('Other');await region.getByLabel('Shortlist title').fill('Unknown');
-    await region.getByRole('button',{name:'Add',exact:true}).click();await expect(region.locator('li',{hasText:'Other – Unknown'})).toBeVisible();
-    await region.locator('li',{hasText:'Other – Unknown'}).getByRole('button',{name:'Add to section',exact:true}).click();
+    await prepTab(/Shortlist/).click();await region.getByLabel('Shortlist artist').fill('Discovery Artist');await region.getByLabel('Shortlist title').fill('Deep Cut');
+    await region.getByRole('button',{name:'Add',exact:true}).click();await expect(region.locator('li',{hasText:'Discovery Artist – Deep Cut'})).toBeVisible();
+    await region.locator('li',{hasText:'Discovery Artist – Deep Cut'}).getByRole('button',{name:'Add to section',exact:true}).click();
     await expect(region.getByRole('status')).toHaveText('Clean version needed — choose a labelled clean file or explicitly change this event’s policy.');
     await page.evaluate(()=>window.__setPolicy({requireCleanVersions:false}));await prepTab('Recommendations').click();
     await expect(region.getByRole('button',{name:'Details for Queen – Song B',exact:true})).toBeVisible();
