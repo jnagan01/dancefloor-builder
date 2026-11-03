@@ -137,6 +137,42 @@ try{
    expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
    expect((await page.evaluate(()=>window.__errors)).filter(e=>/save/i.test(e))).toEqual([]);
  });
+ await check('wedding brief: notes suggestion applied explicitly, fit choices saved, requests kept, synthetic batch recorded',async()=>{
+   // SYNTHETIC real-route batch: real event screen + real ranking/save contract; AI suggestions and online details come from
+   // tests/fit/realCacheRows.json (read-only metadata-cache snapshot). Not live native generation, not the original candidate pool.
+   const cache=JSON.parse(fs.readFileSync(path.join(root,'tests/fit/realCacheRows.json'),'utf8'));
+   await page.evaluate(cache=>{window.__fixture.aiSuggestions=cache.map(r=>({artist:r.artist,song:r.song,reason:'synthetic fixture suggestion'}));
+     window.__fixture.enrichResults=cache.map(r=>({artist:r.artist,song:r.song,energy:r.energy,danceability:r.danceability,...(r.popularity!==undefined?{popularity:r.popularity}:{}),source:r.metaProv.energy==='provider'?'ReccoBeats':'AI',prov:r.metaProv}));
+     window.__testState.page='event';window.__testState.eventId=undefined;window.__errors=[];window.__rerender();},cache);
+   await page.waitForTimeout(400);
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('1.5');
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('TEST ONLY Wedding Fit');
+   await page.getByRole('button',{name:'Traditional Wedding',exact:true}).click();
+   await page.locator('#notes').fill("Fictional client brief: mixed-age wedding guests, ages 25–70. Familiar upbeat pop, funk, disco and 2000s party favorites. Build from approachable classics into a lively finish. No line dances, slow ballads, or hard EDM. Preserve every client request.");
+   await page.locator('textarea').filter({hasNot:page.locator('#notes')}).last().fill('Village People - YMCA\nDJ Casper - Cha Cha Slide\nCupid - Cupid Shuffle');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const upload=path.join(temp,'wedding.csv');fs.writeFileSync(upload,'Artist,Song\n"Earth, Wind & Fire",September\nMark Ronson feat. Bruno Mars,Uptown Funk\nWhitney Houston,I Wanna Dance With Somebody\nUsher feat. Lil Jon & Ludacris,Yeah!\nThe Killers,Mr. Brightside\nWalk The Moon,Shut Up and Dance\nDua Lipa,Levitating\nQueen,Don\'t Stop Me Now\nOutkast,Hey Ya!\nABBA,Dancing Queen\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);await page.waitForTimeout(400);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   expect(await page.locator('tbody tr').count()).toBe(10);
+   await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks'}).click();
+   expect(await page.locator('#fit-familiarity').inputValue()).toBe('');
+   expect(await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).getAttribute('aria-checked')).toBe('false');
+   await page.getByRole('button',{name:'Apply to additions',exact:true}).click();
+   expect(await page.locator('#fit-familiarity').inputValue()).toBe('familiar');
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   const find=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY Wedding Fit'&&(r.lists.warmUp.length+r.lists.transition.length+r.lists.peak.length)>10);
+   await expect.poll(()=>!!find(),{timeout:20000}).toBe(true);await page.waitForTimeout(1500);
+   const created=find();
+   expect(created.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});expect(created.inputs.buffer).toBe(1);
+   const all=['warmUp','transition','peak'].flatMap(k=>created.lists[k].map(r=>({...r,section:k})));
+   expect(all.filter(r=>r.fromUpload).length).toBe(10);
+   expect(all.some(r=>/YMCA|Cha Cha Slide|Cupid Shuffle/i.test(r.song))).toBe(false);
+   const additions=all.filter(r=>!r.fromUpload).map(r=>({section:r.section,artist:r.artist,song:r.song,why:r.rankWhy??null,energy:r.energy??null,danceability:r.danceability??null,popularity:r.popularity??null,prov:r.metaProv??null}));
+   fs.writeFileSync(path.join(diagnostics,'wedding-fit-batch.json'),JSON.stringify({conditions:'synthetic real-route batch in isolated Electron profile; AI suggestions + online details from tests/fit/realCacheRows.json; Last.fm similarity unavailable (fixture missingKey); built-in catalogue live; no owned library matches for additions',additions},null,1));
+   expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
+ });
  await check('section-local Transition issue targets Transition and exports only captured checked mapping',async()=>{
    await app.close();
    const transitionSong={artist:'Missing Transition',song:'Omitted Transition'};
