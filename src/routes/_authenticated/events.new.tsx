@@ -131,7 +131,7 @@ import { awaitReadyFeedback, BLOCK_ALL_ADDITIONS, expansionFeedback, GATE_MESSAG
 import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { songIdentity } from "@/lib/prep/knowledge";
 import { explainTop, rankPool, type SimilarArtistEvidence } from "@/lib/prep/recommend";
-import { expansionRankContext, rowCandidate, similarArtistEvidence } from "@/lib/prep/expansionRanking";
+import { expansionRankContext, rowCandidate, similarArtistEvidence, withFit } from "@/lib/prep/expansionRanking";
 import { usableForHardRule } from "@/lib/prep/metaConfidence";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
 import { libraryCandidate, requestFacts } from "@/lib/prep/requestFacts";

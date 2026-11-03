@@ -1,6 +1,7 @@
 import { songIdentity, type Feedback, type TrackNote } from "./knowledge";
 import { DEFAULT_REC_CONTROLS, recommend, distinctRequests, strongestSimilar, artistKey, type Candidate, type RecInput, type RecOutput, type Recommendation } from "./recommend";
 import type { SimilarTrackEvidence } from "./similarTracks";
+import type { FitFacts } from "./eventFit";
 import { QUALITY_LIMITS, ratingCounts, type QualityCandidate, type QualityRating, type QualitySample } from "./quality";
 
 /**
@@ -38,6 +39,7 @@ export function captureFromRanking(input: RecInput, items: readonly Recommendati
     const sa = simArtist.get(artistKey(r.artist)); if (sa) { c.similarTo = sa.similarTo.slice(0, QUALITY_LIMITS.text); c.similarMatch = sa.match; }
     const tags = r.trackId ? input.notes?.get(r.trackId)?.tags : undefined; if (tags?.length) c.tags = tags.slice(0, QUALITY_LIMITS.tags);
     if (favored.has(r.key)) c.favored = true;
+    const ff = r.fit; if (ff) for (const a of ["popularity", "energy", "danceability"] as const) { const v = ff[a], src = ff[`${a}Source` as const]; if (v !== undefined && src && src !== "unknown") { c[a] = v; c[`${a}Source` as const] = src as QualityCandidate["genreSource"]; } }
     if (r.trackId) c.tie = tieOrder.indexOf(r.trackId);
     return c;
   });
@@ -53,7 +55,7 @@ export function captureFromRanking(input: RecInput, items: readonly Recommendati
   const c = input.controls;
   return {
     name, requests, candidates, eventTags: (input.eventTags ?? []).slice(0, QUALITY_LIMITS.tags),
-    preferences: { genres: pref(input.preferences?.genres, 60), decades: pref(input.preferences?.decades, 20), artists: pref(input.preferences?.artists, QUALITY_LIMITS.text) },
+    preferences: { genres: pref(input.preferences?.genres, 60), decades: pref(input.preferences?.decades, 20), artists: pref(input.preferences?.artists, QUALITY_LIMITS.text), ...(input.preferences?.fit ? { fit: { ...input.preferences.fit } } : {}) },
     controls: { familiarity: c.familiarity, clientSimilarity: c.clientSimilarity, artistVariety: c.artistVariety, ownedOnly: c.ownedOnly },
     artistUse: [...use.values()],
     ...(truncated ? { truncated: true } : {}),
@@ -74,6 +76,7 @@ export function sampleInput(s: QualitySample): RecInput {
     return {
       artist: c.artist, song: c.song, origin: c.origin, trackId, playCount: c.playCount, ref: i,
       facts: { genre: c.genre, genreSource: c.genreSource, decade: c.decade, decadeSource: c.decadeSource, owned: c.owned },
+      ...(sampleFit(c) ? { fit: sampleFit(c) } : {}),
     };
   });
   const similar = s.candidates.flatMap(c => c.similarTo && c.similarMatch !== undefined ? [{ artist: c.artist, similarTo: c.similarTo, match: c.similarMatch }] : []);
@@ -138,4 +141,10 @@ export function describeComparison(c: Comparison, s: QualitySample): string[] {
   const a = c.captured.topK!, b = c.revision!.topK!;
   lines.push(`Good fits in the top ${a.k}: ${a.good} as saved, ${b.good} now (counting only rated tracks).`);
   return lines;
+}
+
+function sampleFit(c: QualityCandidate): FitFacts | undefined {
+  const f: FitFacts = {};
+  for (const a of ["popularity", "energy", "danceability"] as const) { const v = c[a], src = c[`${a}Source` as const]; if (v !== undefined && src) { f[a] = v; f[`${a}Source` as const] = src; } }
+  return Object.keys(f).length ? f : undefined;
 }
