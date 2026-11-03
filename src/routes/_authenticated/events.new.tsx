@@ -1276,7 +1276,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         };
         const allowedNow = (p: Pooled) => addedAllowed(p.row);
         const poolRows = () => [...pool.values()].map((p) => p.row);
-        const pooledFor = (k: SectionKey) => { let n = 0, open = 0; for (const p of pool.values()) if (allowedNow(p)) { if (p.prefer === k) n++; else if (!p.prefer) open++; } return n + Math.floor(open / sectionOrder.length); };
+        const pooledFor = (k: SectionKey) => { let n = 0, open = 0; for (const p of pool.values()) if (allowedNow(p)) { if (p.prefer === k) n++; else if (!p.prefer) open++; } // Unassigned owned candidates reduce AI requests only by the previous small library share, so the AI call
+          // budget is unchanged and weak library candidates can't stop stronger AI candidates from being considered.
+          return n + Math.min(Math.floor(open / sectionOrder.length), Math.max(1, Math.round(r.perSectionTarget * (simEvidence.length ? 0.3 : 0.15)))); };
         const remaining = (k: SectionKey) => sectionTargetFor(r, k) - r[k].length - pooledFor(k);
 
         // Owned library sources: Last.fm exact similar tracks, then musical neighbours (no raw-order cap; variety decides).
