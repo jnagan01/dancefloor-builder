@@ -179,6 +179,41 @@ describe('event-wide clean policy and terminal export counts', () => {
     expect(h.files).toEqual([]); expect(h.downloads).toEqual([]); expect(h.errors.at(-1)).toContain('changed'); h.unmount();
   });
 });
+describe('direct TXT verified confirmation', () => {
+  async function setup() {
+    const h = harness({ rows: { A: row({ requireCleanVersions: true }) } });
+    await h.flush(); h.library(vdj.buildLibrary(tracks)); await h.flush();
+    h.current.setVdjDirHandle({ name: 'Synthetic exports' }); await h.flush();
+    return h;
+  }
+  it('confirms only after verification and cancellation writes nothing', async () => {
+    const h = await setup(); const order: string[] = [];
+    h.testWindow.electronAvailability = { check: async () => { order.push('verified'); return { ok: true, availability: Object.fromEntries(tracks.map(t => [t.filePath, 'available'])) }; } };
+    h.testWindow.confirm = (message: string) => { order.push('confirm'); expect(message).toBe('1 track · left out: 2 clean-policy blocks. Reference files retain intended tracks. Continue?'); return false; };
+    const before = h.current.eventSnapshot(h.current.result, h.current.matches);
+    await h.current.exportSectionXmlToVdj('warmUp');
+    expect(order).toEqual(['verified', 'confirm']); expect(h.files).toEqual([]); expect(h.downloads).toEqual([]); expect(h.warnings).toEqual([]);
+    expect(h.current.eventSnapshot(h.current.result, h.current.matches)).toEqual(before); expect(h.requests).toEqual([]); h.unmount();
+  });
+  it.each(['failed', 'incomplete', 'unavailable'])('%s native check stops before confirmation or writes', async mode => {
+    const h = await setup(); const confirm = vi.fn(() => true); h.testWindow.confirm = confirm;
+    h.testWindow.electronAvailability = { check: async () => mode === 'failed' ? { ok: false, error: 'Synthetic check failure' } : { ok: true, availability: mode === 'incomplete' ? {} : Object.fromEntries(tracks.map(t => [t.filePath, 'unavailable'])) } };
+    await h.current.exportSectionXmlToVdj('warmUp'); expect(confirm).not.toHaveBeenCalled(); expect(h.errors).not.toEqual([]); expect(h.files).toEqual([]); expect(h.downloads).toEqual([]); h.unmount();
+  });
+  it('browser confirmation retains genuinely unknown availability without a native check', async () => {
+    const h = await setup(); const confirm = vi.fn(() => false); h.testWindow.confirm = confirm;
+    await h.current.exportSectionXmlToVdj('warmUp'); expect(confirm.mock.calls[0]?.[0]).toContain('1 file availability unknown'); expect(h.files).toEqual([]); h.unmount();
+  });
+  it('clean-policy changes during verification stop before confirmation and writes', async () => {
+    const h = await setup(); let release: (value: unknown) => void = () => {}; const gate = new Promise(r => { release = r; }); const confirm = vi.fn(() => true);
+    h.testWindow.confirm = confirm; h.testWindow.electronAvailability = { check: async () => gate };
+    const pending = h.current.exportSectionXmlToVdj('warmUp');
+    await vi.waitFor(() => expect(h.testWindow.electronAvailability).toBeDefined());
+    h.interact((n: any) => n.props?.['aria-label'] === 'Require clean versions', 'onCheckedChange', false);
+    release({ ok: true, availability: Object.fromEntries(tracks.map(t => [t.filePath, 'available'])) }); await pending;
+    expect(confirm).not.toHaveBeenCalled(); expect(h.errors.at(-1)).toContain('changed'); expect(h.files).toEqual([]); expect(h.downloads).toEqual([]); h.unmount();
+  });
+});
 describe('backup/recovery/offline compatibility without mutating legacy snapshots', () => {
   it('old 1.2.44 capability refuses activation but preserves legacy strict-type v1 backup/update input', () => {
     const old = { electronVirtualDJ: { isAvailable: true } };
