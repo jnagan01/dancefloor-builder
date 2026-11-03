@@ -98,6 +98,7 @@ describe('server pipeline end-to-end deadline (real runEnrichment)', () => {
     expect(results[1]).toMatchObject({ year: 1984, incomplete: true }); expect(results[1].energy).toBeUndefined();
     expect(results[1].prov).toMatchObject({ year: 'provider' });
     expect(status.timedOut).toEqual(expect.arrayContaining(['fetch']));
+    expect(results[1].source).not.toBe('AI');
     if (aiSignal) expect(aiSignal.aborted).toBe(true);
   });
 
@@ -196,7 +197,7 @@ describe('real event route + real pipeline: mixed cache hits, hung lookups, part
     const cache = { [key(A('Warm Alpha'), 'Warm Alpha')]: { ...cachedHit, bpm: 122, source: prov }, [key(A('Warm Beta'), 'Warm Beta')]: { ...cachedHit, bpm: 124, source: prov } };
     const d = deps(cache, { estimate: () => new Promise(() => {}), upsert: 'hang' });
     const seen: any[] = [];
-    const h = harness({ rows: { A: row({ eventFit: { avoidSlow: true, familiarity: 'familiar' } }) }, services: {
+    const h = harness({ rows: { A: row({ eventFit: { avoidSlow: true, familiarity: 'familiar' }, decades: ['1970s'], bpmRange: [118, 126] }) }, services: {
       enrich: (r: any) => { seen.push(r.data); return runEnrichment(r.data.songs, d as never, { needPopularity: r.data.needPopularity }); },
       recommend: async () => ({ suggestions: [sug('Warm Alpha'), sug('Hung Gamma'), sug('Warm Beta')] }),
     } });
@@ -204,7 +205,6 @@ describe('real event route + real pipeline: mixed cache hits, hung lookups, part
     const rows = all(h.current.result);
     expect(rows.filter((t: any) => t.fromUpload).map((t: any) => t.song)).toEqual(['Radio Ga Ga', 'Dancing Queen']);
     const alpha = rows.find((t: any) => t.song === 'Warm Alpha');
-    if (process.env.DBG) console.log(JSON.stringify(rows.map((t: any) => [t.song, t.energy, t.metaProv, t.rankWhy])), JSON.stringify(seen), h.infos, h.warnings);
     expect(alpha?.energy).toBe(7); expect(alpha?.metaProv).toMatchObject({ energy: 'provider' });
     expect(alpha?.rankWhy).not.toMatch(/no energy or danceability data/);
     const gamma = rows.find((t: any) => t.song === 'Hung Gamma');
