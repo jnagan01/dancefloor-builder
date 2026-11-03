@@ -380,5 +380,24 @@ try{
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections['warmUp:0:band|hit'].paths).toEqual([dirty,file,unknown]);
    await page.reload();await expect(toggle).toBeChecked();
  });
+ await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
+   await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';
+   const legacy=Object.fromEntries(Array.from({length:14},(_,i)=>{const id=i===0?'A':`Legacy${i}`;return [id,{id,name:`Legacy ${i}`,updated_at:'v1',inputs:{songs:[song],hours:'.25',buffer:2,...(i===1?{eventType:'school_dance'}:{})},lists:{warmUp:[song],transition:[],peak:[]}}];}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(legacy));fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));await launch();
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeDisabled();
+   await expect(page.getByRole('alert').filter({hasText:'Update the desktop app'})).toBeVisible();
+   expect(await page.evaluate(()=>window.electronOffline?.preparationPolicyVersion)).toBeUndefined();
+   const unsupported={format:'setarchitect-backup',version:2,account:'synthetic-owner',createdAt:new Date().toISOString(),events:[],sources:[],roots:{}};
+   expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),unsupported)).ok).toBe(false);
+   // Real preservation hook + native updater guard, only download/handoff destinations are synthetic.
+   expect(await page.evaluate(()=>window.testBackend.update())).toMatchObject({ok:true});
+   const saved=JSON.parse(await page.evaluate(async()=>(await window.electronBackups.latest('synthetic-owner')).raw));
+   expect(saved.version).toBe(1);expect(saved.events).toHaveLength(14);
+   for(const event of saved.events)expect(event.snapshot).toEqual({name:legacy[event.id].name,inputs:legacy[event.id].inputs,lists:legacy[event.id].lists});
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
+   expect(await page.locator('#update-preservation-lock').count()).toBe(1);
+   delete process.env.SETARCHITECT_TEST_OLD_SHELL;
+ });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
 }catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});console.error('EXPORT DIAGNOSTICS',JSON.stringify({ui:await page?.evaluate(()=>({errors:window.__errors,warnings:window.__warnings,success:window.__success})).catch(()=>null),checked:fs.existsSync(path.join(temp,'checked-paths.json'))?JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8')):null,outputs:fs.existsSync(path.join(temp,'exports'))?fs.readdirSync(path.join(temp,'exports')):[],profile:temp}));throw e;}finally{await app?.close().catch(()=>{});}
