@@ -404,20 +404,21 @@ export function matchSong(song: Song, lib: VdjLibrary): SongMatch {
   };
 }
 
-/** Artist- and title-aware search: ranks by the matcher (artist vs file artist,
- * title vs file title), then appends plain keyword/file-name hits. */
+/** Keyword/file-name search discovers candidates, but its relevance scores are
+ * never song identity confidence. Every result uses the same artist/title pair. */
 export function searchLibraryBySong(artist: string, title: string, lib: VdjLibrary, limit = 25): Array<{ i: number; s: number }> {
   const out: Array<{ i: number; s: number }> = [];
   const seen = new Set<number>();
+  const subject = makeSubject(artist, title || artist);
   if (title.trim() || artist.trim()) {
-    for (const r of rankLibrary(makeSubject(artist, title || artist), lib, limit)) {
+    for (const r of rankLibrary(subject, lib, limit)) {
       if (r.score <= 0.2) continue;
       out.push({ i: r.index, s: r.score }); seen.add(r.index);
     }
   }
   for (const r of searchLibraryScored(`${artist} ${title}`.trim(), lib, limit)) {
     if (out.length >= limit) break;
-    if (!seen.has(r.i)) { out.push({ i: r.i, s: scorePair(makeSubject(artist, title), lib.subjects[r.i]).score }); seen.add(r.i); }
+    if (!seen.has(r.i)) { out.push({ i: r.i, s: scorePair(subject, lib.subjects[r.i]).score }); seen.add(r.i); }
   }
   return out.sort((a, b) => b.s - a.s || a.i - b.i).slice(0, limit);
 }
