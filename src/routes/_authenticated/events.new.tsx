@@ -3702,10 +3702,10 @@ function SectionView(props: SectionViewProps) {
 
               {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-                {row.excluded ? <Badge variant="outline">Excluded from DJ export</Badge> : cleanBlock ? <Badge variant="outline" className="border-warning text-warning">Clean version needed</Badge> : library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
+                {row.excluded ? <Badge variant="outline">Excluded from DJ export</Badge> : cleanBlock ? <Badge variant="outline" className="border-warning text-warning">Clean version needed</Badge> : row.attention ? <Badge variant="outline" className="border-warning text-warning">{row.report.missing || row.unlinked ? "Track missing" : "Review needed"}</Badge> : library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
                 {cleanBlock && <p className="w-full text-xs text-warning">{cleanBlock}</p>}
                 {m && track && <span className="text-[11px] text-muted-foreground">{Math.round(m.confidence * 100)}% confidence</span>}
-                {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected · {row.eligibleTracks} eligible tracks</span>}
+                {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected · {row.eligibleTracks} eligible track{row.eligibleTracks === 1 ? "" : "s"}</span>}
                 <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
                 {library && inReview && m?.trackIndex != null && (
                   <Button size="sm" disabled={!!cleanBlock} title={cleanBlock || undefined} className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>

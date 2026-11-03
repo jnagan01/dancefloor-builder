@@ -435,7 +435,7 @@ try{
    tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
    const ss=tt.slice(0,6).map(t=>({artist:t.artist,song:t.title,fromUpload:true}));
    const kk=ss.map((t,i)=>`peak:${i}:display band|${t.song.toLowerCase().replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim()}`);
-   const selected=Object.fromEntries(kk.map((k,i)=>[k,{paths:[tt[i].filePath,...(i===3?[tt[6].filePath]:[])],confirmed:true,...(i===2?{excludedFromVdj:true}:{})}]));
+   const selected=Object.fromEntries(kk.map((k,i)=>[k,{paths:[tt[i].filePath,...(i===3?[tt[6].filePath]:[])],confirmed:true,...(i===2?{excluded:true}:{})}]));
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Display policy',updated_at:'v1',inputs:{songs:ss,eventName:'Display policy',hours:'.25',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss,selections:selected}}}));
    await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
@@ -446,7 +446,7 @@ try{
    await expect(page.getByRole('tab',{name:/Peak \(6/})).toContainText('4 need attention');
    await toolbar.getByRole('button',{name:/^Matched/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(1);
    await toolbar.getByRole('button',{name:/^Review/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(4);
-   await expect(page.locator('#song-peak-3')).toContainText('2 files selected · 1 eligible tracks');
+   await expect(page.locator('#song-peak-3')).toContainText('2 files selected · 1 eligible track');
    await toolbar.getByRole('button',{name:/^Excluded/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(1);
    await expect(page.locator('#song-peak-2')).toContainText('Excluded from DJ export');
    expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
