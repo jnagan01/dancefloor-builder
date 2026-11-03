@@ -1,4 +1,5 @@
 import { readFilter, type FilterContext, type FilterState } from "./filters";
+import { readQualitySamples, type QualitySample } from "./quality";
 
 /**
  * Account-scoped preparation knowledge. App-only: nothing here is written into
@@ -22,6 +23,8 @@ export interface Enrichment { key: string; source: "musicbrainz" | "lastfm"; lab
 export interface PrepKnowledge {
   version: 1; presets: FilterPreset[]; tracks: TrackNote[]; groups: TrackGroup[];
   feedback: Feedback[]; events: EventPrep[]; enrichment: Enrichment[];
+  /** Optional recommendation quality review samples; absent in older data and never added passively. */
+  quality?: QualitySample[];
 }
 export const emptyKnowledge = (): PrepKnowledge => ({ version: 1, presets: [], tracks: [], groups: [], feedback: [], events: [], enrichment: [] });
 
@@ -105,7 +108,8 @@ export function readKnowledge(v: unknown): PrepKnowledge | null {
       return out;
     });
     if (!presets || !tracks || !groups || !feedback || !events || !enrichment) return null;
-    return { version: 1, presets, tracks, groups, feedback, events, enrichment };
+    const quality = o.quality === undefined ? undefined : readQualitySamples(o.quality);
+    return { version: 1, presets, tracks, groups, feedback, events, enrichment, ...(quality ? { quality } : {}) };
   } catch { return null; }
 }
 
@@ -234,5 +238,11 @@ export function mergeKnowledgeAdditive(current: PrepKnowledge, incoming: PrepKno
     groups: add(current.groups, incoming.groups, g => g.id), feedback: add(current.feedback, incoming.feedback, f => f.key),
     events, enrichment: add(current.enrichment, incoming.enrichment, e => `${e.source}:${e.key}`),
   };
+  if (current.quality || incoming.quality) {
+    // Existing samples (and their ratings) win; only missing sample ids are added, within the sample limit.
+    const merged = add(current.quality ?? [], incoming.quality ?? [], q => q.id);
+    next.quality = merged.slice(0, 30);
+    added -= merged.length - next.quality.length;
+  }
   return { next, added };
 }
