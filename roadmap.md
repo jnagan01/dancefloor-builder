@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Authorized preparation policies
+- [ ] Diagnose clean-export failure with UI/IPC/artifacts; gate unsupported desktop policy activation before save and verify legacy backup/update.
 - [ ] Better expansion: compatible owned-only/seasonal controls, exact intended versions, honest gaps, all addition paths.
 - [ ] Event-wide clean requirement: preserved selections, fail-closed approval/export/readiness, offline capability gate.
 - [ ] Shared export count/reason wording, including extras and written outputs.
