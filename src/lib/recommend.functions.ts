@@ -100,7 +100,11 @@ const SuggestionSchema = z.object({
 });
 
 
-export type RecommendedSong = z.infer<typeof SuggestionSchema>["suggestions"][number];
+/**
+ * Every numeric/genre/decade field here is an AI estimate. When the model omits one it stays undefined (unknown);
+ * genre, decade and popularity are never invented as defaults.
+ */
+export type RecommendedSong = Omit<z.infer<typeof SuggestionSchema>["suggestions"][number], "genre" | "decade" | "popularity"> & { genre?: string; decade?: string; popularity?: number };
 
 export const recommendSongsForSection = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -156,11 +160,11 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
       if (parsed == null) return fallback;
       return Math.max(1, Math.min(10, Math.round(parsed)));
     };
-    const normalizeDecade = (value: unknown, year: number | undefined): string => {
+    const normalizeDecade = (value: unknown, year: number | undefined): string | undefined => {
       const raw = typeof value === "string" ? sanitize(value, 20) : "";
       if (/^\d{4}s$/.test(raw)) return raw;
       if (year && year >= 1900 && year <= 2099) return `${Math.floor(year / 10) * 10}s`;
-      return "2000s";
+      return undefined; // unknown, never a guessed default decade
     };
     const normalizeSuggestion = (item: unknown): RecommendedSong | null => {
       if (!item || Array.isArray(item) || typeof item !== "object") return null;
@@ -175,12 +179,12 @@ export const recommendSongsForSection = createServerFn({ method: "POST" })
       return {
         artist,
         song,
-        genre: typeof row.genre === "string" ? sanitize(row.genre, 60) || "Pop" : "Pop",
+        genre: typeof row.genre === "string" ? sanitize(row.genre, 60) || undefined : undefined,
         decade: normalizeDecade(row.decade, year),
         year,
         energy: clampScore(row.energy, data.section === "Peak" ? 9 : data.section === "Transition" ? 7 : background ? 4 : 5),
         danceability: clampScore(row.danceability, data.section === "Peak" ? 9 : background ? 4 : 8),
-        popularity: clampScore(row.popularity, 8),
+        popularity: toNumber(row.popularity) == null ? undefined : clampScore(row.popularity, 0),
         valence: clampScore(row.valence, 7),
         bpm: bpmValue && bpmValue > 0 ? Math.round(bpmValue) : undefined,
         camelot: typeof row.camelot === "string" ? sanitize(row.camelot, 10) || undefined : undefined,
@@ -437,7 +441,7 @@ Rules:
         );
       }
 
-      const filtered = enforceOnly(result.object.suggestions.filter((s) => (s.popularity ?? 0) >= 6));
+      const filtered = enforceOnly(result.object.suggestions.filter((s) => s.popularity == null || s.popularity >= 6));
       if (filtered.length !== result.object.suggestions.length) {
         console.warn(
           `[recommendSongsForSection] dropped ${result.object.suggestions.length - filtered.length} picks (popularity/artist filter) section=${data.section}`,
@@ -448,7 +452,7 @@ Rules:
       if (NoObjectGeneratedError.isInstance(error)) {
         const recovered = fallbackParseSuggestions(error.text ?? "");
         if (recovered) {
-          const filtered = enforceOnly(recovered.filter((s) => (s.popularity ?? 0) >= 6));
+          const filtered = enforceOnly(recovered.filter((s) => s.popularity == null || s.popularity >= 6));
           console.warn(
             `[recommendSongsForSection] recovered ${filtered.length}/${recovered.length} suggestions from nonconforming AI output section=${data.section} requested=${data.count}`,
           );
