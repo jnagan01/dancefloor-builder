@@ -20,6 +20,14 @@ const row=(selections:any={},extra:any={})=>({id:'A',name:'Test',updated_at:'v1'
 const storageKey=(account='owner',event='A')=>`setarchitect:recovery:${account}:${event}`;
 afterEach(()=>vi.useRealTimers());
 describe('native UI review: actual isolated route callers',()=>{
+ it('preferences without client tracks never implicitly enable expansion or save a generated list',async()=>{
+  const h=harness({eventId:null});await h.flush();h.chooseFresh();
+  h.interact((n:any)=>n.props?.steps&&n.props?.onSelect,'onSelect',1);
+  h.interact((n:any)=>n.props?.id==='artists','onChange',{target:{value:'Queen'}});
+  await h.current.generate();await h.flush();
+  expect(h.current.result).toBe(null);expect(h.requests).toHaveLength(0);
+  expect(h.errors.at(-1)).toContain('enable expansion');h.unmount();
+ });
  it('renamed tentative candidate is omitted by ZIP, M3U and direct DJ TXT while reference files retain intended title',async()=>{
   vi.useFakeTimers();const h=harness({eventId:null});await h.flush();h.chooseFresh();h.library(vdj.buildLibrary([{...track,artist:song.artist,title:song.song+' (Clean)'}]));await h.current.handleFiles([new File(['Test Artist - Test Song - Live'],'client.txt')]);await h.flush();await h.current.generate();await h.flush();
   const sec=h.nodes().find((n:any)=>n.props?.onRename);sec.props.onRename(0,{...song,song:'Test Song - Live - Edited'});h.render();await h.flush();

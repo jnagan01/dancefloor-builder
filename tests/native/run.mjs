@@ -645,6 +645,7 @@ try{
    const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Explicit dinner');
    await expect.poll(saved,{timeout:15000}).toBeTruthy();const original=saved();
    expect(original.inputs).toMatchObject({listType:'dinner',minutes:'15',decades:[],requireCleanVersions:false,ownedOnlyExpansion:false,expand:false});
+   expect([...original.lists.warmUp,...original.lists.transition,...original.lists.peak]).toHaveLength(1);
    await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},original.id);
    await expect(page.getByRole('heading',{name:'Explicit dinner',exact:true})).toBeVisible();
    await expect(page.getByText('Saved event needs review',{exact:false})).toHaveCount(0);
@@ -674,7 +675,9 @@ try{
      const all=[...r.lists.warmUp,...r.lists.transition,...r.lists.peak];expect(all.filter(t=>t.fromUpload)).toHaveLength(count);expect(r.inputs.songs).toEqual(client.slice(0,count));return {r,all};
    };
    await prepare(40,'Covered off');await expect(page.getByLabel('Client duration coverage')).toContainText('Baseline duration covered — no additional tracks needed');
+   await page.screenshot({path:path.join(diagnostics,'optional-covered-1x.png')});
    const covered=await generateAndRead('Covered off',40);expect(covered.all).toHaveLength(40);expect(covered.r.inputs).toMatchObject({buffer:1,expand:false});
+   await expect(page.getByLabel('Event duration coverage')).toContainText('160:00 approved usable unique length');
    await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},covered.r.id);await expect(page.getByRole('heading',{name:'Covered off',exact:true})).toBeVisible();expect(saved().find(r=>r.id===covered.r.id)).toEqual(covered.r);
    await prepare(5,'Short off');await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');const short=await generateAndRead('Short off',5);expect(short.all).toHaveLength(5);
    await prepare(5,'Short expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();const expanded=await generateAndRead('Short expansion',5);expect(expanded.all.length).toBeGreaterThan(5);expect(expanded.r.inputs).toMatchObject({buffer:1,expand:true});

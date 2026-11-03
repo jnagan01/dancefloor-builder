@@ -1,7 +1,7 @@
 # Workspace rebuild
 ## Optional expansion and 1× baseline
-- [ ] Default/reset to 1× with expansion off; distinguish duration coverage from optional preparation using known lengths and honest estimates.
-- [ ] Exercise enough/short uploads, voluntary expansion, 1× roundtrip/reset and unchanged legacy buffers in isolated route fixtures; run all local suites and retain macOS gate.
+- [x] Default/reset to 1× with expansion off; distinguish duration coverage from optional preparation using known lengths and honest estimates; no implicit background/preference-only filling.
+- [x] Isolated enough/short uploads, voluntary expansion, 1× roundtrip/reset and unchanged legacy buffers; full unit/native/prep/offline/race suites passed. External macOS gate remains unchanged and pending external execution.
 ## Entirely blank fresh events
 - [x] Central blank initializer/reset; removed profile event prefills, validated explicit required choices, preserved saved/recovery and app preferences.
 - [x] Synthetic checks: 608 units, 31 native event checks, 19 preparation checks, 16 offline flows, 4 race checks; automatic compilation passed. External macOS gate unchanged and awaits external execution.
