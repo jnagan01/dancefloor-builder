@@ -40,4 +40,4 @@
 - Keep saved keys unchanged; dedupe automatic additions by intended version/exact path and require explicit occurrence exclusions for repeated combined DJ export, because requests and legacy snapshots must stay intact.
 - Derive section coverage from export readiness's unique case-sensitive files, separate event/buffer minutes, and cap artist/title mismatches in search fallback scores, because repeated minutes and cross-field tokens are not evidence.
 - Gate automatic expansion on this owner's READY prep knowledge (await queued writes, never fall back); isolate each provider; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
-- Rank panel and automatic additions via shared prep `rankPool` after eligibility; quality samples stay optional bounded `prep.quality`, because explanations must match and ratings are not feedback.
+- Rank panel and automatic additions via shared prep `rankPool` after eligibility; quality samples stay optional bounded `prep.quality`, so explanations match; ratings are not feedback.
