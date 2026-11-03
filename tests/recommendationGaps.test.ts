@@ -237,13 +237,13 @@ describe('real event route: automatic expansion requires this account\'s READY p
 
   it('a Never write still in flight at the end of generation is awaited and honoured (real serialized store)', async () => {
     let release!: () => void; const gate = new Promise<void>(r => { release = r; });
-    let writes = 0;
+    let writes = 0, requested = false;
     const store = createPrepStore({ read: async () => undefined, write: async () => { writes++; await gate; } });
     await store.setAccount('owner');
     const h = harness({ rows: { A: row() }, prepStore: store, services: {
       recommend: async () => {
         // The user marks a suggested track Never; the write is still queued when generation finishes.
-        if (!writes) { void store.update(store.owner()!, (kk: PrepKnowledge) => setFeedback(kk, 'Late Act', 'Late Song', 'never')); setTimeout(release, 40); }
+        if (!requested) { requested = true; void store.update(store.owner()!, (kk: PrepKnowledge) => setFeedback(kk, 'Late Act', 'Late Song', 'never')); setTimeout(release, 40); }
         return { suggestions: [sug('Late Act', 'Late Song'), sug('Plain Act', 'Plain Song')] };
       },
     } });
