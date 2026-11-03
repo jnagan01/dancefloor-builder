@@ -201,14 +201,14 @@ describe('direct TXT verified confirmation', () => {
     await h.current.exportSectionXmlToVdj('warmUp'); expect(confirm).not.toHaveBeenCalled(); expect(h.errors).not.toEqual([]); expect(h.files).toEqual([]); expect(h.downloads).toEqual([]); h.unmount();
   });
   it('browser confirmation retains genuinely unknown availability without a native check', async () => {
-    const h = await setup(); const confirm = vi.fn(() => false); h.testWindow.confirm = confirm;
+    const h = await setup(); const confirm = vi.fn((_message: string) => false); h.testWindow.confirm = confirm;
     await h.current.exportSectionXmlToVdj('warmUp'); expect(confirm.mock.calls[0]?.[0]).toContain('1 file availability unknown'); expect(h.files).toEqual([]); h.unmount();
   });
   it('clean-policy changes during verification stop before confirmation and writes', async () => {
-    const h = await setup(); let release: (value: unknown) => void = () => {}; const gate = new Promise(r => { release = r; }); const confirm = vi.fn(() => true);
-    h.testWindow.confirm = confirm; h.testWindow.electronAvailability = { check: async () => gate };
+    const h = await setup(); let release: (value: unknown) => void = () => {}; const gate = new Promise(r => { release = r; }); const confirm = vi.fn(() => true); const check = vi.fn(async () => gate);
+    h.testWindow.confirm = confirm; h.testWindow.electronAvailability = { check };
     const pending = h.current.exportSectionXmlToVdj('warmUp');
-    await vi.waitFor(() => expect(h.testWindow.electronAvailability).toBeDefined());
+    await vi.waitFor(() => expect(check).toHaveBeenCalledOnce());
     h.interact((n: any) => n.props?.['aria-label'] === 'Require clean versions', 'onCheckedChange', false);
     release({ ok: true, availability: Object.fromEntries(tracks.map(t => [t.filePath, 'available'])) }); await pending;
     expect(confirm).not.toHaveBeenCalled(); expect(h.errors.at(-1)).toContain('changed'); expect(h.files).toEqual([]); expect(h.downloads).toEqual([]); h.unmount();
