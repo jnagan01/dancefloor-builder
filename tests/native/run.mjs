@@ -400,6 +400,22 @@ try{
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections['warmUp:0:band|hit'].paths).toEqual([dirty,file,unknown]);
    await page.reload();await expect(toggle).toBeChecked();
  });
+ await check('native per-section M3U/TXT success uses verified availability and exact clean omission counts',async()=>{
+   page.on('dialog',dialog=>dialog.accept());
+   for(const [button,ext] of [['Warm Up M3U → VirtualDJ','m3u'],['Warm Up .txt → VirtualDJ','txt']]){
+     await page.evaluate(()=>{window.__success.length=0;});
+     await page.getByRole('button',{name:button,exact:true}).click();
+     const fname=`clean-toggle-warm-up.${ext}`;
+     await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toBe(`Saved 1 track · left out: 2 clean-policy blocks to ${path.join(temp,'VirtualDJ','Playlists')} as ${fname}`);
+     const report=fs.readFileSync(path.join(temp,'exports','clean-toggle-warm-up-readiness.txt'),'utf8');
+     expect(report).toContain('Availability unknown: 0');expect(report).toContain('Clean-policy blocks: 2');
+     expect(report).toContain('Approved tracks (including extras, in playlist order): 1');
+     const written=fs.readFileSync(path.join(temp,'exports',fname),'utf8');
+     if(ext==='m3u'){expect(written).toContain(path.join(library,'Policy clean.mp3'));expect(written).not.toContain(path.join(library,'Policy dirty.mp3'));expect(written).not.toContain(path.join(library,'Policy unknown.mp3'));}
+     else expect(written).toBe('1. Band - Hit (Clean)\r\n');
+     expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual(['Policy dirty.mp3','Policy clean.mp3','Policy unknown.mp3'].map(n=>path.join(library,n)));
+   }
+ });
  await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
    await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';
    const legacy=Object.fromEntries(Array.from({length:14},(_,i)=>{const id=i===0?'A':`Legacy${i}`;return [id,{id,name:`Legacy ${i}`,updated_at:'v1',inputs:{songs:[song],hours:'.25',buffer:2,...(i===1?{eventType:'school_dance'}:{})},lists:{warmUp:[song],transition:[],peak:[]}}];}));
