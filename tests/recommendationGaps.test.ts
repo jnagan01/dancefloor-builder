@@ -126,13 +126,16 @@ describe('real enrichment pipeline records per-attribute provenance', () => {
     }, written, async s => s.map(() => ({ genre: 'AI Genre', year: 1999, bpm: 99 })));
     const { results } = await runEnrichment([
       { artist: 'Exact Act', song: 'Exact Song' }, { artist: 'Remix Act', song: 'Track (Club Remix)' },
-      { artist: 'Legacy Act', song: 'Legacy Song' }, { artist: 'V2 Act', song: 'V2 Song' },
+      { artist: 'Legacy Act', song: 'Legacy Song' }, { artist: 'V2 Act', song: 'V2 Song' }, { artist: 'Unknown Act', song: 'Nowhere Song' },
     ], deps);
-    const [exact, remix, legacy, v2] = results;
+    const [exact, remix, legacy, v2, nowhere] = results;
     expect(exact.prov).toMatchObject({ bpm: 'provider', energy: 'provider', year: 'provider', genre: 'provider' });
     expect(exact.bpm).toBe(124); expect(exact.year).toBe(1985);
-    // Different version: provider numbers kept only as estimates; AI fills the rest and is labelled AI.
-    expect(remix.prov).toMatchObject({ energy: 'estimate', genre: 'ai', year: 'ai', bpm: 'ai' });
+    // Different version: provider numbers kept only as estimates, never as verified; nothing is invented.
+    expect(remix.prov).toEqual({ energy: 'estimate', danceability: 'estimate', valence: 'estimate', popularity: 'estimate', camelot: 'estimate' });
+    expect(remix.year).toBeUndefined();
+    // No upstream data: AI fills gaps and every filled attribute is labelled AI.
+    expect(nowhere.prov).toEqual({ genre: 'ai', year: 'ai', bpm: 'ai' }); expect(nowhere.source).toBe('AI');
     expect(legacy.source).not.toBe('cache'); expect(legacy.prov).toMatchObject({ bpm: 'estimate', year: 'estimate' });
     expect(v2.prov).toMatchObject({ bpm: 'provider', year: 'provider' });
     expect(written.find(w => w.artist_key === normalizeKey('Exact Act'))!.source).toMatch(/^v2\|/);
@@ -240,8 +243,7 @@ describe('real event route: automatic expansion requires this account\'s READY p
     const h = harness({ rows: { A: row() }, prepStore: store, services: {
       recommend: async () => {
         // The user marks a suggested track Never; the write is still queued when generation finishes.
-        void store.update(store.owner()!, (kk: PrepKnowledge) => setFeedback(kk, 'Late Act', 'Late Song', 'never'));
-        setTimeout(release, 40);
+        if (!writes) { void store.update(store.owner()!, (kk: PrepKnowledge) => setFeedback(kk, 'Late Act', 'Late Song', 'never')); setTimeout(release, 40); }
         return { suggestions: [sug('Late Act', 'Late Song'), sug('Plain Act', 'Plain Song')] };
       },
     } });
