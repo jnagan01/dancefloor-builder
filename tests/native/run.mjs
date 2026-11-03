@@ -414,10 +414,11 @@ try{
  await check('native per-section M3U/TXT success uses verified availability and exact clean omission counts',async()=>{
    page.on('dialog',dialog=>dialog.accept());
    for(const [button,ext] of [['Warm Up M3U → VirtualDJ','m3u'],['Warm Up .txt → VirtualDJ','txt']]){
-     await page.evaluate(()=>{window.__success.length=0;});
+     await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;});
      await page.getByRole('button',{name:button,exact:true}).click();
      const fname=`clean-toggle-warm-up.${ext}`;
      await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toBe(`Saved 1 track · left out: 2 clean-policy blocks to ${path.join(temp,'VirtualDJ','Playlists')} as ${fname}`);
+     expect(await page.evaluate(()=>window.__warnings)).toEqual(['1 track · left out: 2 clean-policy blocks. Reference files retain intended tracks.']);
      const report=fs.readFileSync(path.join(temp,'exports','clean-toggle-warm-up-readiness.txt'),'utf8');
      expect(report).toContain('Availability unknown: 0');expect(report).toContain('Clean-policy blocks: 2');
      expect(report).toContain('Approved tracks (including extras, in playlist order): 1');
@@ -426,6 +427,39 @@ try{
      else expect(written).toBe('1. Band - Hit (Clean)\r\n');
      expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual(['Policy dirty.mp3','Policy clean.mp3','Policy unknown.mp3'].map(n=>path.join(library,n)));
    }
+ });
+ await check('policy-aware six-row counts, filters, exclusions and mixed extras update on toggle and reopen without replacing selections',async()=>{
+   await app.close();
+   const titles=['Ready (Clean)','Blocked (Dirty)','Excluded (Clean)','Mixed (Clean)','Unknown','Conflict Clean Dirty','Mixed (Dirty)'];
+   const tt=titles.map((title,i)=>({filePath:path.join(library,`display-${i}.mp3`),artist:'Display Band',title,songLength:180}));
+   tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
+   const ss=tt.slice(0,6).map(t=>({artist:t.artist,song:t.title,fromUpload:true}));
+   const kk=ss.map((t,i)=>`peak:${i}:display band|${t.song.toLowerCase().replace(/\([^)]*\)/g,'').replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim()}`);
+   const selected=Object.fromEntries(kk.map((k,i)=>[k,{paths:[tt[i].filePath,...(i===3?[tt[6].filePath]:[])],confirmed:true,...(i===2?{excluded:true}:{})}]));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Display policy',updated_at:'v1',inputs:{songs:ss,eventName:'Display policy',hours:'.25',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss,selections:selected}}}));
+   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   await page.getByRole('tab',{name:/Peak \(6/}).click();
+   const toolbar=page.locator('.panel-quiet').filter({hasText:'Track matcher options'});
+   await expect(toolbar).toContainText('1 / 6 matched rows · 2 eligible tracks');
+   await expect(page.getByRole('tab',{name:/Peak \(6/})).toContainText('4 need attention');
+   await toolbar.getByRole('button',{name:/^Matched/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(1);
+   await toolbar.getByRole('button',{name:/^Review/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(4);
+   await expect(page.locator('#song-peak-3')).toContainText('2 files selected · 1 eligible track');
+   await toolbar.getByRole('button',{name:/^Excluded/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(1);
+   await expect(page.locator('#song-peak-2')).toContainText('Excluded from DJ export');
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
+   await toolbar.getByRole('button',{name:/^All/}).click();
+   await page.getByRole('switch',{name:'Require clean versions',exact:true}).click();
+   await expect(toolbar).toContainText('5 / 6 matched rows · 6 eligible tracks');
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.requireCleanVersions,{timeout:15000}).toBe(false);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections).toEqual(selected);
+   await page.reload();await page.getByRole('tab',{name:/Peak \(6/}).click();await expect(toolbar).toContainText('5 / 6 matched rows · 6 eligible tracks');
+   await page.getByRole('switch',{name:'Require clean versions',exact:true}).click();await expect(toolbar).toContainText('1 / 6 matched rows · 2 eligible tracks');
+   await page.getByRole('button',{name:'Check export readiness',exact:true}).click();
+   const readiness=page.getByRole('region',{name:'Export readiness'});
+   await readiness.getByRole('button',{name:/Display Band — Blocked/}).click();await expect(page.locator('#song-peak-1')).toBeVisible();
  });
  await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
    await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';

@@ -29,6 +29,18 @@ export function exportReadiness(refs: ExportSongRef[], library: VdjLibrary, avai
 export function summaryText(report: ReturnType<typeof exportReadiness>) {
   return `${report.approved} track${report.approved === 1 ? "" : "s"}${omissionText(report) ? ` · left out: ${omissionText(report)}` : ""}${report.unknown ? ` · ${report.unknown} file availability unknown` : ""}`;
 }
+/** Display-only row units, derived from the same selected-file rules as export.
+ * Mixed rows retain eligible tracks but still need review; exclusions never need approval.
+ * Disk availability is intentionally not inferred by match displays.
+ */
+export function classifySelectedRow(ref: ExportSongRef, library: VdjLibrary) {
+  const report = exportReadiness([ref], library);
+  const excluded = !!ref.match?.excludedFromVdj;
+  const unlinked = !excluded && ref.match?.trackIndex == null;
+  const attention = !excluded && (report.unapproved > 0 || report.missing > 0 || report.cleanBlocked > 0);
+  return { report, excluded, unlinked, attention, review: attention && !unlinked,
+    matched: !excluded && !attention && report.approved > 0, eligibleTracks: report.approved };
+}
 export function readinessText(report: ReturnType<typeof exportReadiness>) {
   return ["SetArchitect — Export readiness", `Requested tracks: ${report.requested}`, `Approved tracks (including extras, in playlist order): ${report.approved}`, `Omitted event rows: ${report.omitted}`, `Explicitly excluded: ${report.excluded}`, `Unapproved/unresolved: ${report.unapproved}`, `Missing/unavailable files: ${report.missing}`, `Clean-policy blocks: ${report.cleanBlocked}`, `Availability unknown: ${report.unknown}`, "Reference files retain intended requests. Clean labels are metadata/filename evidence, not verified lyrics.", ...report.problems.map(p => `${p.index + 1}. ${p.title} — ${p.reason}`)].join("\n");
 }

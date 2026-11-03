@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Authorized preparation policies
+- [x] Align verified export warnings and policy-aware row displays; 581 unit tests, 25 native event checks and 18 preparation checks passed in isolated synthetic profiles; automatic compilation OK, external macOS acceptance pending.
 - [x] Per-section native M3U/TXT success summaries use captured verified availability and counts; 24 native checks and 580 unit tests passed using synthetic fixtures only.
 - [x] Review corrections: remove unsafe local refill, match requested holiday clean versions independently of expansion, align dashboard eligible extras with export.
 - [x] Diagnose clean-export failure with UI/IPC/artifacts; gate unsupported desktop policy activation before save and verify legacy backup/update.

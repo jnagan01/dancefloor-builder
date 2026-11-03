@@ -12,7 +12,7 @@ import * as isolation from '@/lib/workflowIsolation';
 import * as theory from '@/lib/musicTheory';
 import * as revisions from '@/lib/eventRevision';
 import { DEFAULTS, buildResolver, intended, seasonal, cleanEvidence, requiresClean } from '@/lib/preparationPolicy';
-import { exportReadiness, summaryText } from '@/lib/exportReadiness';
+import { classifySelectedRow, exportReadiness, summaryText } from '@/lib/exportReadiness';
 import { backupVersion, validateBackup, recoveryFromBackup } from '@/lib/backups';
 import { prepareOfflineAccess } from '@/lib/offlineAccess';
 import { planAddToSection } from '@/lib/prep/addToSection';
@@ -112,6 +112,18 @@ describe('owned-only expansion and conservative seasonal evidence', () => {
   });
 });
 describe('event-wide clean policy and terminal export counts', () => {
+  it('row units separate matched, review and exclusions while retaining eligible extras', () => {
+    const lib = vdj.buildLibrary(tracks);
+    const match: vdj.SongMatch = { status: 'Manually Matched', confidence: 1, trackIndex: 1, confirmed: true, alternatives: [] };
+    const classify = (patch: Partial<vdj.SongMatch>, requireClean = true) => classifySelectedRow({ song: request, match: { ...match, ...patch }, requireClean }, lib);
+    expect(classify({})).toMatchObject({ matched: true, attention: false, eligibleTracks: 1 });
+    expect(classify({ trackIndex: 0 })).toMatchObject({ matched: false, review: true, eligibleTracks: 0 });
+    expect(classify({ extraTrackIndices: [0, 1, 2] })).toMatchObject({ matched: false, review: true, eligibleTracks: 2 });
+    expect(classify({ excludedFromVdj: true })).toMatchObject({ matched: false, attention: false, excluded: true, eligibleTracks: 0 });
+    for (const trackIndex of [4, 5, 999]) expect(classify({ trackIndex })).toMatchObject({ matched: false, review: true, eligibleTracks: 0 });
+    expect(classify({ confirmed: false, status: 'Possible Match' })).toMatchObject({ matched: false, review: true, eligibleTracks: 0 });
+    expect(classify({ trackIndex: 0 }, false)).toMatchObject({ matched: true, attention: false, eligibleTracks: 1 });
+  });
   it.each([[0, 'dirty'], [1, 'clean'], [4, 'unknown'], [5, 'conflicting']])('clean evidence for file %i is %s', (index, expected) => expect(cleanEvidence(tracks[Number(index)])).toBe(expected));
   it('School/Corporate cannot weaken strict clean', () => {
     expect(requiresClean({ eventType: 'school_dance', requireCleanVersions: false })).toBe(true);

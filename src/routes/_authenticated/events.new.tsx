@@ -1,6 +1,6 @@
 import { DEFAULTS, buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
-import { exportReadiness, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
+import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -1974,7 +1974,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   function unmatchedCountForResult(source: GenerationResult, section: SectionKey): number {
     return getSectionRefsForResult(source, section).filter(
-      (r) => !exportApproved(r.match) || r.match?.trackIndex == null,
+      (r) => classifySelectedRow(r, mergedLibrary).attention,
     ).length;
   }
 
@@ -2014,7 +2014,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try { m3u = buildM3u(refs, files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
     let report: ReturnType<typeof exportReadiness>;
     try { report = await checkReadiness(refs, files); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
-    warnUnapproved(refs);
+    warnUnapproved(report);
     warnUnresolvedPaths(countUnresolvedPaths(refs, files.library, files.roots));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     downloadBlob(new Blob([readinessText(report)], { type: "text/plain" }), `${prefix}${sectionFile(section)}-readiness.txt`);
@@ -2026,15 +2026,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   // --- Direct-to-VirtualDJ folder exports ---
 
-  function warnUnapproved(refs: ExportSongRef[]) {
-    const report = exportReadiness(refs, mergedLibrary);
+  function warnUnapproved(report: ReturnType<typeof exportReadiness>) {
     if (report.omitted || report.cleanBlocked) toast.warning(summaryText(report) + ". Reference files retain intended tracks.");
   }
 
   function warnUnresolvedPaths(count: number) {
     if (count > 0) {
       toast.warning(
-        `${count} song${count === 1 ? "" : "s"} may not be found by VirtualDJ — set the full folder location in Settings › DJ software & folders.`,
+        `${count} track${count === 1 ? "" : "s"} may not be found by VirtualDJ — set the full folder location in Settings › DJ software & folders.`,
       );
     }
   }
@@ -2074,6 +2073,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     let report: ReturnType<typeof exportReadiness>;
     try { report = await checkReadiness(refs, files); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
+    warnUnapproved(report);
     const xml = buildTxtPlaylist(refs, files.library, { matchedOnly: true });
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.txt`;
@@ -2112,7 +2112,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try { m3u = buildM3u(refs, files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
     let report: ReturnType<typeof exportReadiness>;
     try { report = await checkReadiness(refs, files); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
-    warnUnapproved(refs);
+    warnUnapproved(report);
     warnUnresolvedPaths(countUnresolvedPaths(refs, files.library, files.roots));
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.m3u`;
@@ -2222,7 +2222,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (report.unavailable) { toast.error("Export stopped: approved music files are unavailable. References remain available in TXT/CSV."); return; }
     } catch (e) { toast.error((e as Error).message); return; }
     try { for (const section of sections) buildM3u(captured[section], files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
-    warnUnapproved((["warmUp", "transition", "peak"] as SectionKey[]).flatMap(sec => getSectionRefsForResult(exportResult, sec)));
+    warnUnapproved(report);
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
@@ -2266,21 +2266,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const summary = useMemo(() => {
     if (!result) return null;
     const sections: SectionKey[] = ["warmUp", "transition", "peak"];
-    let total = 0,
-      matched = 0,
-      possible = 0,
-      multiple = 0,
-      missing = 0,
-      excluded = 0;
+    let total = 0;
     const sourceCounts: Record<SectionKey, { uploads: number; ai: number; library: number }> = {
       warmUp: { uploads: 0, ai: 0, library: 0 },
       transition: { uploads: 0, ai: 0, library: 0 },
       peak: { uploads: 0, ai: 0, library: 0 },
     };
-    const perSection: Record<SectionKey, { total: number; matched: number; attention: number }> = {
-      warmUp: { total: 0, matched: 0, attention: 0 },
-      transition: { total: 0, matched: 0, attention: 0 },
-      peak: { total: 0, matched: 0, attention: 0 },
+    const perSection: Record<SectionKey, { total: number; matched: number; attention: number; excluded: number; eligibleTracks: number }> = {
+      warmUp: { total: 0, matched: 0, attention: 0, excluded: 0, eligibleTracks: 0 },
+      transition: { total: 0, matched: 0, attention: 0, excluded: 0, eligibleTracks: 0 },
+      peak: { total: 0, matched: 0, attention: 0, excluded: 0, eligibleTracks: 0 },
     };
     sections.forEach((sec) => {
       result[sec].forEach((s, i) => {
@@ -2295,35 +2290,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         }
         perSection[sec].total += 1;
         const m = matches[songKey(sec, i, s)];
-        if (!m) {
-          missing += 1;
-          perSection[sec].attention += 1;
-          return;
-        }
-        if (m.excludedFromVdj) excluded += 1;
-        switch (m.status) {
-          case "Matched":
-          case "Manually Matched":
-            matched += 1;
-            perSection[sec].matched += 1;
-            break;
-          case "Possible Match":
-            possible += 1;
-            perSection[sec].attention += 1;
-            break;
-          case "Multiple Matches":
-            multiple += 1;
-            perSection[sec].attention += 1;
-            break;
-          case "Missing From Library":
-            missing += 1;
-            perSection[sec].attention += 1;
-            break;
-        }
+        const row = classifySelectedRow({ song: s, match: m, requireClean: requiresClean(eventPolicy) }, mergedLibrary);
+        perSection[sec].matched += Number(row.matched);
+        perSection[sec].attention += Number(row.attention);
+        perSection[sec].excluded += Number(row.excluded);
+        perSection[sec].eligibleTracks += row.eligibleTracks;
       });
     });
-    return { total, matched, possible, multiple, missing, excluded, csvIncluded: total, sourceCounts, perSection };
-  }, [result, matches]);
+    return { total, csvIncluded: total, sourceCounts, perSection };
+  }, [result, matches, mergedLibrary, eventPolicy]);
 
   const searchResults = useMemo(() => {
     if (!searchOpen || !mergedLibrary || !searchQuery.trim()) return [];
@@ -3029,7 +3004,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           >
             <div className="space-y-4">
 
-              {summary && <div className="grid gap-4 sm:grid-cols-2"><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Match summary · {sectionName(activeSection)}</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.perSection[activeSection].matched} matched</span><span className="text-warning">{summary.perSection[activeSection].attention} need attention</span><span>{summary.perSection[activeSection].total} total</span></div></div><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Song sources</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.sourceCounts[activeSection].uploads} Upload</span><span>{summary.sourceCounts[activeSection].ai} AI</span><span>{summary.sourceCounts[activeSection].library} Library</span></div></div></div>}
+              {summary && <div className="grid gap-4 sm:grid-cols-2"><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Match summary · {sectionName(activeSection)}</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.perSection[activeSection].matched} matched rows · {summary.perSection[activeSection].eligibleTracks} eligible tracks</span><span className="text-warning">{summary.perSection[activeSection].attention} need attention</span><span>{summary.perSection[activeSection].excluded} excluded rows · {summary.perSection[activeSection].total} total rows</span></div></div><div className="border-y border-border py-3"><h3 className="text-xs font-semibold uppercase text-muted-foreground">Song sources</h3><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm"><span>{summary.sourceCounts[activeSection].uploads} Upload</span><span>{summary.sourceCounts[activeSection].ai} AI</span><span>{summary.sourceCounts[activeSection].library} Library</span></div></div></div>}
 
               <div className="flex flex-wrap items-center gap-3">
                 <Button onClick={exportAllZip}>
@@ -3128,7 +3103,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                           {ps && (
                             <span className="flex flex-wrap items-center gap-1 text-[10px] font-normal">
                               <span className="inline-flex items-center gap-0.5 rounded-full bg-success/15 px-1.5 py-0.5 text-success">
-                                <CheckCircle2 className="h-2.5 w-2.5" /> {ps.matched} matched
+                                <CheckCircle2 className="h-2.5 w-2.5" /> {ps.matched} matched rows
                               </span>
                               {ps.attention > 0 ? (
                                 <span className="inline-flex items-center gap-0.5 rounded-full bg-warning/15 px-1.5 py-0.5 text-warning">
@@ -3136,7 +3111,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                                 </span>
                               ) : (
                                 <span className="inline-flex items-center gap-0.5 rounded-full bg-success/15 px-1.5 py-0.5 text-success">
-                                  all matched
+                                  {ps.excluded ? `${ps.excluded} excluded rows` : "all matched"}
                                 </span>
                               )}
                             </span>
@@ -3562,15 +3537,14 @@ function SectionView(props: SectionViewProps) {
     : canWriteToVdj
       ? "Choose a folder, then write directly to it"
       : "Direct folder export requires a Chromium-based browser";
-  const statuses = songs.map((s, i) => matches[songKey(section, i, s)]?.status);
-  const matchedCount = statuses.filter((st) => st === "Matched" || st === "Manually Matched").length;
-  const reviewCount = statuses.filter((st) => st === "Possible Match" || st === "Multiple Matches").length;
-  const unmatchedCountLive = songs.filter((s, i) => matches[songKey(section, i, s)]?.trackIndex == null).length;
+  const rows = songs.map((s, i) => classifySelectedRow({ song: s, match: matches[songKey(section, i, s)], requireClean: !!props.requireClean }, library ?? buildLibrary([])));
+  const matchedCount = rows.filter(r => r.matched).length;
+  const reviewCount = rows.filter(r => r.review).length;
+  const excludedCount = rows.filter(r => r.excluded).length;
+  const eligibleCount = rows.reduce((n, r) => n + r.eligibleTracks, 0);
   const filterCounts: Record<string, number> = {
-    all: songs.length,
-    matched: matchedCount,
-    unmatched: unmatchedCountLive,
-    review: reviewCount,
+    all: songs.length, matched: matchedCount, unmatched: rows.filter(r => r.unlinked).length,
+    review: reviewCount, excluded: excludedCount,
   };
   return (
     <div className="space-y-5">
@@ -3613,11 +3587,11 @@ function SectionView(props: SectionViewProps) {
           <Button key={mode} size="sm" className="h-7 px-2 text-xs" variant={reviewMode===mode?"secondary":"outline"} onClick={()=>onReviewModeChange(mode)}>{label}</Button>
         ))}
         <span className="text-xs tabular-nums text-muted-foreground">
-          <strong className="text-foreground">{matchedCount}</strong> / {songs.length} matched
+          <strong className="text-foreground">{matchedCount}</strong> / {songs.length} matched rows · {eligibleCount} eligible tracks
           {reviewCount > 0 && <> · <span className="text-warning">{reviewCount} review</span></>}
         </span>
         <div className="ml-auto flex flex-wrap gap-1">
-          {[["all","All"],["matched","Matched"],["unmatched","Unmatched"],["review","Review"]].map(([value,label])=>{
+          {[["all","All"],["matched","Matched"],["unmatched","Unmatched"],["review","Review"],["excluded","Excluded"]].map(([value,label])=>{
             const n = filterCounts[value] ?? 0;
             const active = filter === value;
             return (
@@ -3639,15 +3613,15 @@ function SectionView(props: SectionViewProps) {
           const key = songKey(section, i, s);
           const m = matches[key];
           const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
-          const cleanBlock = !m?.excludedFromVdj && cleanReason(track, !!props.requireClean);
-          const isMatched = !cleanBlock && (m?.status === "Matched" || m?.status === "Manually Matched");
-          const inReview = !!cleanBlock || m?.status === "Possible Match" || m?.status === "Multiple Matches";
-          if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
+          const row = rows[i];
+          const cleanBlock = row.report.cleanBlocked ? row.report.problems.find(p => p.reason.startsWith("Clean version needed"))?.reason ?? "Clean version needed" : null;
+          const inReview = row.review;
+          if (filter === "matched" && !row.matched || filter === "unmatched" && !row.unlinked || filter === "review" && !row.review || filter === "excluded" && !row.excluded) return null;
           const meta = s as BadgeSong;
           const musicalTrack = musicalMatchApproved(m) ? track : undefined;
           const fileBpm = musicalTrack ? parseBpm(musicalTrack.bpm) : undefined;
           const estimatedBpm = typeof meta.bpm === "number" ? Math.round(meta.bpm) : null;
-          const needsAttention = !isMatched;
+          const needsAttention = row.attention;
           const selectedCount = (m?.trackIndex != null ? 1 : 0) + (m?.extraTrackIndices?.length ?? 0);
           return (
             <div id={`song-${section}-${i}`} key={key} className={`panel relative overflow-hidden ${m?.excludedFromVdj ? "opacity-60" : ""}`}>
@@ -3728,10 +3702,10 @@ function SectionView(props: SectionViewProps) {
 
               {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-                {cleanBlock ? <Badge variant="outline" className="border-warning text-warning">Clean version needed</Badge> : library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
+                {row.excluded ? <Badge variant="outline">Excluded from DJ export</Badge> : cleanBlock ? <Badge variant="outline" className="border-warning text-warning">Clean version needed</Badge> : row.attention ? <Badge variant="outline" className="border-warning text-warning">{row.report.missing || row.unlinked ? "Track missing" : "Review needed"}</Badge> : library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
                 {cleanBlock && <p className="w-full text-xs text-warning">{cleanBlock}</p>}
                 {m && track && <span className="text-[11px] text-muted-foreground">{Math.round(m.confidence * 100)}% confidence</span>}
-                {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected</span>}
+                {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected · {row.eligibleTracks} eligible track{row.eligibleTracks === 1 ? "" : "s"}</span>}
                 <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
                 {library && inReview && m?.trackIndex != null && (
                   <Button size="sm" disabled={!!cleanBlock} title={cleanBlock || undefined} className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
