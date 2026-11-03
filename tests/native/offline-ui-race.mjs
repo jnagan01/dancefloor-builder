@@ -30,7 +30,7 @@ try {
       load: async () => DATA,
       event: id => { const v = () => ({ ok: true, overlay: { ...overlays[id] }, availability: { "/m/a.mp3": "available", "/m/b.mp3": "available" } }); return b.delay.event.has(id) ? later("event", id, v) : Promise.resolve(v()); },
       choose: (id, change) => { const v = () => { overlays[id] = { ...overlays[id], [`${change.section}:${change.index}`]: { confirmed: true, paths: [change.path], song: { artist: "Same Artist", song: "Same Song" } } }; return { ok: true, overlay: { ...overlays[id] }, availability: { "/m/a.mp3": "available", "/m/b.mp3": "available" } }; }; return b.delay.choose ? later("choose", id, v) : Promise.resolve(v()); },
-      exportPlaylists: id => { const v = { ok: true, folder: "/x", written: [`${id}-report.txt`], summary: { requested: 1, approved: 1, localChoices: 0, omitted: 0, unavailable: 0 }, problems: [] }; return b.delay.export ? later("export", id, v) : Promise.resolve(v); },
+      exportPlaylists: id => { const v = { ok: true, exportedTracks: 1, folder: "/x", written: [`${id}-report.txt`], summary: { requested: 1, approved: 1, localChoices: 0, omitted: 0, unavailable: 0 }, problems: [] }; return b.delay.export ? later("export", id, v) : Promise.resolve(v); },
       reveal: async () => ({ ok: true }),
     };
   }, data);

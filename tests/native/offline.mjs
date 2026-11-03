@@ -297,6 +297,8 @@ try {
     fs.writeFileSync(path.join(temp, "export-dir"), exportDir);
     await w.getByRole("button", { name: "Export VirtualDJ playlists" }).click();
     await expect(w.locator(".report")).toContainText("Export complete");
+    await expect(w.locator(".report")).toContainText("3 tracks exported · 3 eligible tracks (3 unique files)");
+    await expect(w.locator("#status")).toContainText("4 output files · 3 tracks exported");
     const names = fs.readdirSync(exportDir).sort();
     expect(names).toEqual(["Synthetic _b_Wedding__b_ - 1 Warm Up.m3u", "Synthetic _b_Wedding__b_ - 2 Transition.m3u", "Synthetic _b_Wedding__b_ - 3 Peak.m3u", "Synthetic _b_Wedding__b_ - offline readiness.txt"]);
     const read = n => fs.readFileSync(path.join(exportDir, n), "utf8");
@@ -306,6 +308,8 @@ try {
     expect(pathsIn(names[2])).toEqual([path.join(lib, "b/Song.mp3")]);
     const report = read(names[3]);
     expect(report).toContain("Requested tracks: 6");
+    expect(report).toContain("Eligible tracks (including extras, in playlist order): 3");
+    expect(report).not.toContain("Exported offline:");
     expect(report).toContain("warmUp #3. New Artist — Replaced Song — Saved choice belongs to a different song at this position"); expect(report).toContain("Local offline choices used (not synced): 2");
     expect(report).toContain("warmUp #2. Gone Artist — Gone — File missing on this Mac");
     expect(report).toContain("transition #2. Lost Artist — Lost — Unknown music folder location");
@@ -314,11 +318,40 @@ try {
     for (const theme of ["dark", "light"]) { await w.locator("#theme").selectOption(theme); await w.screenshot({ path: path.join(diagnostics, `offline-theme-${theme}.png`) }); }
   });
 
+  await check("cancelled export clears earlier success and writes nothing", w, async () => {
+    const before = fs.readdirSync(exportDir).sort();
+    fs.writeFileSync(path.join(temp, "cancel-export"), "synthetic");
+    try {
+      await w.getByRole("button", { name: "Export VirtualDJ playlists" }).click();
+      await expect(w.locator("#status")).toHaveText("Export cancelled · 0 tracks exported.");
+      await expect(w.locator(".report")).toHaveCount(0);
+      expect(fs.readdirSync(exportDir).sort()).toEqual(before);
+    } finally { fs.unlinkSync(path.join(temp, "cancel-export")); }
+  });
+
+  await check("partial write with rollback leftovers reports zero exports and names remaining files", w, async () => {
+    const output = path.join(temp, "partial-exports"); fs.mkdirSync(output);
+    fs.writeFileSync(path.join(temp, "export-dir"), output);
+    fs.writeFileSync(path.join(temp, "partial-export-fault"), "synthetic");
+    try {
+      await w.getByRole("button", { name: "Export VirtualDJ playlists" }).click();
+      await expect(w.locator(".report")).toContainText("could not be removed");
+      await expect(w.locator(".report")).toContainText("0 tracks exported · 3 eligible tracks");
+      await expect(w.locator("#status")).toContainText("0 tracks exported");
+      await expect(w.locator(".report")).not.toContainText("Export complete");
+      expect(fs.readdirSync(output)).toEqual(["Synthetic _b_Wedding__b_ - 1 Warm Up.m3u"]);
+      expect(fs.readFileSync(path.join(output, fs.readdirSync(output)[0]), "utf8").split("\r\n").filter(l => l && !l.startsWith("#"))).toEqual([path.join(lib, "a/Song.mp3")]);
+    } finally { fs.unlinkSync(path.join(temp, "partial-export-fault")); }
+  });
+
   await check("failed export and failed choice writes keep last-good state and never report success", w, async () => {
     const blocked = path.join(temp, "not-a-folder"); fs.writeFileSync(blocked, "file");
     fs.writeFileSync(path.join(temp, "export-dir"), blocked);
     await w.getByRole("button", { name: "Export VirtualDJ playlists" }).click();
     await expect(w.locator(".report")).toContainText("The files this export started were removed");
+    await expect(w.locator(".report")).toContainText("0 tracks exported · 3 eligible tracks");
+    await expect(w.locator("#status")).toContainText("0 tracks exported");
+    expect(fs.readFileSync(blocked, "utf8")).toBe("file");
     const overlays = path.join(temp, "offline", "overlays"), [hash] = fs.readdirSync(overlays);
     const saved = fs.readFileSync(path.join(overlays, hash, fs.readdirSync(path.join(overlays, hash))[0]), "utf8");
     fs.renameSync(path.join(overlays, hash), path.join(overlays, "moved")); fs.writeFileSync(path.join(overlays, hash), "blocker");
@@ -444,6 +477,9 @@ try {
     const output=path.join(temp,'duplicate-exports');fs.mkdirSync(output);fs.writeFileSync(path.join(temp,'export-dir'),output);
     await ow.getByRole('button',{name:'Export VirtualDJ playlists'}).click();
     await expect(ow.locator('#status')).toContainText('Export stopped: repeated selected files');
+    await expect(ow.locator('.report')).toContainText('0 tracks exported · 3 eligible tracks (2 unique files)');
+    await expect(ow.locator('.report')).not.toContainText('3 exported tracks');
+    await expect(ow.locator('#status')).toContainText('0 tracks exported');
     expect(fs.readdirSync(output)).toEqual([]);
     await close();
   });

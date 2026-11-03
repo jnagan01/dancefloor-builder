@@ -11,7 +11,22 @@ if (process.type === "browser") {
     const i = options.buttons.indexOf("Open Offline Workspace");
     return { response: i >= 0 ? i : options.cancelId ?? 0 };
   };
-  dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [fs.readFileSync(path.join(p, "export-dir"), "utf8")] });
+  dialog.showOpenDialog = async () => fs.existsSync(path.join(p, "cancel-export")) ? { canceled: true, filePaths: [] } : { canceled: false, filePaths: [fs.readFileSync(path.join(p, "export-dir"), "utf8")] };
+  // Runtime-controlled faults apply only to a synthetic output subdirectory.
+  const realOpen = fs.promises.open, realUnlink = fs.promises.unlink;
+  const faultTarget = target => {
+    const relative = path.relative(path.join(p, "partial-exports"), String(target));
+    return relative && !relative.startsWith("..") && !path.isAbsolute(relative) && fs.existsSync(path.join(p, "partial-export-fault"));
+  };
+  fs.promises.open = async (...args) => {
+    const handle = await realOpen(...args);
+    if (!faultTarget(args[0]) || !String(args[0]).includes("2 Transition")) return handle;
+    return { writeFile: async text => { await handle.writeFile(text.slice(0, 5)); throw Object.assign(Error("ENOSPC"), { code: "ENOSPC" }); }, sync: () => handle.sync(), close: () => handle.close() };
+  };
+  fs.promises.unlink = async target => {
+    if (faultTarget(target) && String(target).includes("1 Warm Up")) throw Object.assign(Error("EACCES"), { code: "EACCES" });
+    return realUnlink(target);
+  };
 }
 
 // Early startup telemetry (synthetic profile only). Written synchronously from process start, before
