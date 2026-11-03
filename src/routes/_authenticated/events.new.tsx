@@ -136,6 +136,7 @@ import { usableForHardRule } from "@/lib/prep/metaConfidence";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
 import { libraryCandidate, requestFacts } from "@/lib/prep/requestFacts";
 import { normalizeEventFit, readEventFit, suggestFitFromNotes, type EventFit } from "@/lib/prep/eventFit";
+import { createFactsGatherer, factsKey, needsFacts, FACTS_BUDGET } from "@/lib/prep/factsGather";
 import { trackIdentity } from "@/lib/fileIdentity";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
