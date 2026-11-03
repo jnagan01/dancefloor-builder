@@ -160,7 +160,18 @@ try{
    expect(await page.getByRole('combobox',{name:'Event to restore'}).inputValue()).toBe('A');
    const raw=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);
    expect(JSON.parse(raw).events[0].snapshot).toEqual(snapshot);
-   await page.getByRole('button',{name:'Download backup',exact:true}).click();await expect.poll(()=>fs.readdirSync(path.join(temp,'exports')).some(n=>n.startsWith('setarchitect-backup-')),{timeout:15000}).toBe(true);const artifact=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('setarchitect-backup-')).sort().at(-1);expect(artifact).toBeTruthy();expect(JSON.parse(fs.readFileSync(path.join(temp,'exports',artifact),'utf8')).events[0].snapshot).toEqual(snapshot);
+   const existingArtifacts=new Set(fs.readdirSync(path.join(temp,'exports')));
+   await page.getByRole('button',{name:'Download backup',exact:true}).click();
+   let artifact;
+   await expect.poll(()=>{
+     const candidate=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('setarchitect-backup-')&&!existingArtifacts.has(n)).sort().at(-1);
+     if(!candidate)return undefined;
+     // Electron creates the destination before streaming finishes. Retry incomplete reads,
+     // and wait for the exact snapshot rather than filename existence or an arbitrary delay.
+     try { const parsed=JSON.parse(fs.readFileSync(path.join(temp,'exports',candidate),'utf8'));artifact=candidate;return parsed.events?.[0]?.snapshot; }
+     catch { return undefined; }
+   },{timeout:15000}).toEqual(snapshot);
+   expect(artifact).toBeTruthy();expect(JSON.parse(fs.readFileSync(path.join(temp,'exports',artifact),'utf8')).events[0].snapshot).toEqual(snapshot);
    const bad=JSON.parse(raw);bad.events[0].snapshot.inputs.access_token='synthetic credential';
    expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),bad)).ok).toBe(false);
    expect(await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw)).toBe(raw);
