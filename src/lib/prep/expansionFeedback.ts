@@ -34,3 +34,44 @@ export function recheckAdditions<T extends { artist: string; song: string; fromU
   const kept = list.filter(t => t.fromUpload || !fb.blocked(t.artist, t.song));
   return { kept, removed: list.length - kept.length };
 }
+
+/** Feedback that refuses every automatic addition; used when the knowledge it would need is not trustworthy. */
+export const BLOCK_ALL_ADDITIONS: ExpansionFeedback = { blocked: () => "never", favored: () => false };
+
+export interface FeedbackOwner { account: string; generation: number }
+export interface FeedbackStoreLike {
+  get(): { account: string | null; generation: number; status: "signedOut" | "loading" | "ready" | "blocked"; knowledge: PrepKnowledge };
+  subscribe(l: () => void): () => void;
+  settled(o: FeedbackOwner): Promise<PrepKnowledge>;
+}
+export type FeedbackGate = { ok: true; owner: FeedbackOwner } | { ok: false; message: string };
+
+const TAIL = "Expansion was stopped and nothing changed. Turn expansion off to work with requests only.";
+export const GATE_MESSAGES = {
+  blocked: `Saved preparation notes are unreadable, so your Never and dismiss choices can't be honoured. ${TAIL}`,
+  signedOut: `Preparation notes aren't loaded for this signed-in account, so your Never and dismiss choices can't be honoured. Sign in again, then retry. ${TAIL}`,
+  loading: `Preparation notes are still loading, so your Never and dismiss choices can't be honoured yet. Try Generate again in a moment. ${TAIL}`,
+};
+
+/**
+ * Automatic expansion requires READY knowledge owned by exactly this account. Loading (or a not-yet-started
+ * session) is awaited up to `timeoutMs`; blocked, wrong-owner or timed-out knowledge stops with an actionable
+ * message. Never falls back to another account's or an earlier session's knowledge.
+ */
+export function awaitReadyFeedback(store: FeedbackStoreLike, account: string | null | undefined, timeoutMs = 5000): Promise<FeedbackGate> {
+  return new Promise(resolve => {
+    let done = false, unsub: () => void = () => {}, timer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (g: FeedbackGate) => { if (done) return; done = true; unsub(); if (timer) clearTimeout(timer); resolve(g); };
+    const check = () => {
+      const s = store.get();
+      if (!account) return finish({ ok: false, message: GATE_MESSAGES.signedOut });
+      if (s.account === account && s.status === "ready") return finish({ ok: true, owner: { account, generation: s.generation } });
+      if (s.account === account && s.status === "blocked") return finish({ ok: false, message: GATE_MESSAGES.blocked });
+      if (s.account !== null && s.account !== account) return finish({ ok: false, message: GATE_MESSAGES.signedOut });
+      // loading for this account, or signed out while the session starts: wait (bounded).
+    };
+    unsub = store.subscribe(check);
+    check();
+    if (!done) timer = setTimeout(() => finish({ ok: false, message: store.get().status === "loading" ? GATE_MESSAGES.loading : GATE_MESSAGES.signedOut }), timeoutMs);
+  });
+}

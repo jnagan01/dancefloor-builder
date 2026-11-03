@@ -52,7 +52,9 @@ export function parseSimilarBody(body: unknown, perSeed = SIMILAR_LIMITS.perSeed
     if (code === 6) return { status: "notFound", similar: [] };
     return { status: "error", similar: [] };
   }
-  const raw = (o.similartracks as { track?: unknown } | undefined)?.track;
+  // Only a genuine Last.fm success envelope may mean "no similar tracks"; anything else is an outage, never cached.
+  if (!o.similartracks || typeof o.similartracks !== "object") return { status: "error", similar: [] };
+  const raw = (o.similartracks as { track?: unknown }).track;
   const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
   const similar: SimilarTrackRow[] = [];
   for (const t of list) {
@@ -145,7 +147,12 @@ export async function runSimilarTracks(key: string | undefined, rawSeeds: readon
         const url = new URL("https://ws.audioscrobbler.com/2.0/");
         for (const [k, v] of Object.entries({ method: "track.getsimilar", artist: seed.artist, track: seed.title, autocorrect: "0", limit: String(perSeed), api_key: key, format: "json" })) url.searchParams.set(k, v);
         const res = await fetchImpl(url.toString(), { headers: { "User-Agent": "DancefloorBuilder/1.0" }, signal: AbortSignal.timeout(SIMILAR_LIMITS.timeoutMs) });
-        body = res.status === 429 ? { error: 29 } : await res.json().catch(() => null);
+        if (res.status === 429) body = { error: 29 };
+        else {
+          const json = await res.json().catch(() => null);
+          // Non-2xx responses count only through an explicit Last.fm API error code; otherwise they are failures.
+          body = res.status >= 200 && res.status < 300 ? json : json && typeof json === "object" && (json as { error?: unknown }).error !== undefined ? json : null;
+        }
       } catch { body = null; }
       const parsed = parseSimilarBody(body, perSeed);
       if (parsed.status === "rateLimited") stop = true;

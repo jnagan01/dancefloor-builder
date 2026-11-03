@@ -22,17 +22,7 @@ const LABEL: Record<string, string> = {
 };
 export const sourceLabel = (src: MetaSource | undefined) => LABEL[src ?? "unknown"] ?? "unknown";
 
-/** Hard rules accept only verified evidence; AI-guessed explicit/clean/BPM/year never count as confirmed. */
-export const usableForHardRule = (src: MetaSource | undefined, hasValue: boolean) => tierOf(src, hasValue) === "verified" && src !== "catalogue";
-
-/** Source of an event row's attribute from its metaSource label (generation pipeline). */
-export function rowSource(metaSource: string | undefined): MetaSource {
-  switch (metaSource) {
-    case "VirtualDJ": return "virtualdj";
-    case "Online": return "provider";
-    case "Library": return "tags";
-    case "AI": return "ai";
-    case undefined: return "unknown";
-    default: return "estimate";
-  }
-}
+/** Hard rules accept only verified evidence; AI-guessed explicit/clean/BPM/year never count as confirmed.
+ * The curated catalogue counts for release year/genre only, never for clean/explicit or tempo. */
+export const usableForHardRule = (src: MetaSource | undefined, hasValue: boolean, attr?: string) =>
+  tierOf(src, hasValue) === "verified" && (src !== "catalogue" || attr === "year" || attr === "genre");

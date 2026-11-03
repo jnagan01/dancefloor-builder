@@ -124,8 +124,10 @@ import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
 import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
 import { planAddToSection } from "@/lib/prep/addToSection";
 import { prepStore } from "@/lib/prep/prepStore";
-import { expansionFeedback, favoredFirst, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
-import { aggregateSimilar, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
+import { attrSource, decodeCacheSource, mergeMeta, metaLabel, strictLimitFailure, withProv, type StrictLimits } from "@/lib/prep/provenance";
+import { sourceLabel } from "@/lib/prep/metaConfidence";
+import { awaitReadyFeedback, BLOCK_ALL_ADDITIONS, expansionFeedback, favoredFirst, GATE_MESSAGES, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
+import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { songIdentity } from "@/lib/prep/knowledge";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
@@ -946,18 +948,27 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const generationResolver = buildResolver(mergedLibrary.tracks, generationPolicy);
     // Account-fenced preparation knowledge: global Never, event-only dismissals and favourites apply to
     // automatic additions only (requests are never filtered). Read live so feedback changed mid-run is honoured.
-    const store = prepStore(), prepStart = store.get(), feedbackEvent = savedEventId, accountAtStart = accountRef.current;
-    if (prepStart.status === "blocked") toast.warning("Saved preparation notes are unreadable, so your Never/dismiss choices couldn't be applied to additions this run.");
+    const store = prepStore(), feedbackEvent = savedEventId, accountAtStart = accountRef.current;
+    // Automatic expansion needs this account's READY knowledge; requests-only generation does not.
+    let feedbackOwner: { account: string; generation: number } | null = null, feedbackLost = false;
+    if (fill) {
+      const gate = await awaitReadyFeedback(store, accountAtStart);
+      if (genTokenRef.current !== myToken) return;
+      if (!gate.ok) { toast.error(gate.message); return; }
+      feedbackOwner = gate.owner;
+    }
     let fbCache: { k: unknown; fb: ExpansionFeedback } | null = null;
     const liveFeedback = (): ExpansionFeedback => {
+      if (!fill) return expansionFeedback(null, feedbackEvent);
       const now = store.get();
-      const same = now.account === prepStart.account && now.generation === prepStart.generation && now.status === "ready";
-      const k = same ? now.knowledge : prepStart.status === "ready" ? prepStart.knowledge : null;
-      if (!fbCache || fbCache.k !== k) fbCache = { k, fb: expansionFeedback(k, feedbackEvent) };
+      // Never substitute older or other-account knowledge: if it is no longer this owner's ready copy, refuse additions.
+      if (!feedbackOwner || now.account !== feedbackOwner.account || now.generation !== feedbackOwner.generation || now.status !== "ready") { feedbackLost = true; return BLOCK_ALL_ADDITIONS; }
+      if (!fbCache || fbCache.k !== now.knowledge) fbCache = { k: now.knowledge, fb: expansionFeedback(now.knowledge, feedbackEvent) };
       return fbCache.fb;
     };
     const addedAllowed = (track: Song & { genre?: string }) => !liveFeedback().blocked(track.artist, track.song) && generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
     const localPrefs = { ...prefs, additionAllowed: addedAllowed };
+    const strictLimits: StrictLimits = { bpmRange: prefs.bpmRange, decades: prefs.decades };
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
     let r = generateLists({
@@ -987,18 +998,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // We only fetch metadata for songs actually used in a generation.
     const applyOnlineEnrichment = (s: ResultSong, e: EnrichedSong | undefined): ResultSong => {
       if (!e || e.source === "none") return s;
-      return {
-        ...s,
-        energy: s.energy ?? e.energy,
-        danceability: s.danceability ?? e.danceability,
-        popularity: s.popularity ?? e.popularity,
-        valence: s.valence ?? e.valence,
-        bpm: s.bpm ?? e.bpm,
-        camelot: s.camelot ?? e.camelot,
-        genre: s.genre ?? e.genre,
-        year: s.year ?? e.year,
-        metaSource: s.metaSource ?? "Online",
-      };
+      // Per-attribute: provider values replace AI/heuristic estimates; user edits and file tags are kept.
+      return mergeMeta(s, e, e.prov ?? decodeCacheSource(e.source, e).prov);
     };
     const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
@@ -1009,15 +1010,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const bpmNum = parseBpm(t.bpm);
       const cam = toCamelot(t.key);
       const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
-      return {
-        ...s,
-        // The music file's own BPM always beats online/AI estimates.
-        bpm: bpmNum ?? s.bpm,
-        camelot: s.camelot ?? cam,
-        genre: s.genre ?? t.genre,
-        year: s.year ?? yearNum,
-        metaSource: s.metaSource ?? "VirtualDJ",
-      };
+      // The approved music file's own tags beat online/AI values (user edits still win).
+      return mergeMeta(s, { bpm: bpmNum, camelot: cam, genre: t.genre, year: yearNum }, "tags");
     };
     // Small helper: fetch online enrichment for a flat list of songs and
     // return a map keyed by "artist||song" (raw values). Best-effort — a
@@ -1089,7 +1083,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           mood?: string;
           explicit?: boolean;
           reason: string;
-        }) => ({
+        }) => withProv({
           artist: sug.artist,
           song: sug.song,
           fromUpload: false,
@@ -1107,7 +1101,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           metaSource: "AI" as const,
           aiSuggestion: true,
           aiReason: sug.reason,
-        });
+        } as ResultSong & { aiSuggestion?: boolean; aiReason?: string }, "ai");
 
         // ---- MUSIC-MAP NEIGHBOR GRAPH -------------------------------------
         // Build a similarity cluster around the artists the client actually
@@ -1142,14 +1136,19 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             const trackSeeds = seedsFromRequests(uniqueSongs);
             const [simTrackRes, res, crowdRes] = await Promise.all([
               trackSeeds.length ? similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }).catch(() => null) : Promise.resolve(null),
+              // Each provider fails on its own: an AI neighbour outage must not discard valid Last.fm track evidence.
               neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
-              }),
+              }).catch((err) => { console.warn("AI neighbour map unavailable", err); return { clusters: [] as Array<{ artist: string; neighbors: string[] }> }; }),
               crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }).catch(
                 () => ({ available: false, artists: [] as ArtistCrowd[] }),
               ),
             ]);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
+            if (trackSeeds.length) {
+              const availability = simTrackRes?.availability ?? "unavailable";
+              if (availability !== "ok") toast.info(availabilityNote(availability, trackSeeds.length));
+            }
             const seedKeys = new Set(uniqueSeeds.map((a) => normalizeKey(a)));
             const seenNeighbor = new Set<string>();
             const ordered: Array<{ name: string; seed: string; score: number }> = [];
@@ -1230,14 +1229,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   const tg = (t.genre ?? "").toLowerCase();
                   if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) return null;
                 }
-                const vbpm = prefs.bpmRange ?? getVibe(prefs.vibe)?.bpm;
                 const tb = parseBpm(t.bpm);
-                if (vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) return null;
-                if (!have.tryAdd(t.artist, t.title)) return null;
-                return {
-                  artist: t.artist, song: t.title, fromUpload: false, bpm: parseBpm(t.bpm), camelot: toCamelot(t.key), genre: t.genre, year: yearNum,
+                const row = withProv({
+                  artist: t.artist, song: t.title, fromUpload: false, bpm: tb, camelot: toCamelot(t.key), genre: t.genre, year: yearNum,
                   explicit: detectExplicitFromTitle(t.title), metaSource: "Library", aiReason: reason,
-                } as ResultSong;
+                } as ResultSong, "tags");
+                // Strict user BPM limit needs the file's own tempo inside the range; the vibe's tempo stays a soft guide.
+                if (strictLimitFailure(row, strictLimits)) return null;
+                const vbpm = getVibe(prefs.vibe)?.bpm;
+                if (!prefs.bpmRange && vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) return null;
+                if (!have.tryAdd(t.artist, t.title)) return null;
+                return row;
               };
               // Last.fm track evidence first: only an owned file whose own artist/title is the exact similar track
               // (same artist is not the same version), resolved through the policy-aware resolver.
@@ -1423,7 +1425,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 for (const sug of favoredFirst(res.suggestions, liveFeedback())) {
                   if (r[key].length >= sectionTargetFor(r, key)) break;
                   if (!addedAllowed(sug) || !seen.tryAdd(sug.artist, sug.song)) continue;
-                  r[key].push({
+                  r[key].push(withProv({
                     artist: sug.artist,
                     song: sug.song,
                     fromUpload: false,
@@ -1443,7 +1445,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     metaSource: "AI",
                     aiSuggestion: true,
                     aiReason: sug.reason,
-                  } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string });
+                  } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string }, "ai"));
 
                   addedThisAttempt += 1;
                 }
@@ -1512,20 +1514,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             r[k] = r[k].map((s) => {
               if (s.metaSource !== "AI" && s.metaSource !== "Library") return s;
               const e = aiOnline.get(`${s.artist}||${s.song}`);
-              if (!e || e.source === "none") return enrichFromLibrary(s);
-              // For AI picks the model's numbers were guesses — prefer online.
-              return enrichFromLibrary({
-                ...s,
-                energy: e.energy ?? s.energy,
-                danceability: e.danceability ?? s.danceability,
-                popularity: e.popularity ?? s.popularity,
-                valence: e.valence ?? s.valence,
-                bpm: e.bpm ?? s.bpm,
-                camelot: e.camelot ?? s.camelot,
-                genre: e.genre ?? s.genre,
-                year: e.year ?? s.year,
-                metaSource: "Online",
-              });
+              // AI numbers are guesses: provider values replace them per attribute, file tags beat both.
+              return enrichFromLibrary(applyOnlineEnrichment(s, e));
             });
           });
         }
@@ -1572,33 +1562,41 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
           r[k] = r[k].map((s) => {
             if (s.energy != null && s.danceability != null) return s;
-            const e = extra.get(`${s.artist}||${s.song}`);
-            if (!e || e.source === "none") return s;
-            return {
-              ...s,
-              energy: s.energy ?? e.energy,
-              danceability: s.danceability ?? e.danceability,
-              valence: s.valence ?? e.valence,
-              popularity: s.popularity ?? e.popularity,
-              bpm: s.bpm ?? e.bpm,
-              camelot: s.camelot ?? e.camelot,
-              genre: s.genre ?? e.genre,
-              year: s.year ?? e.year,
-            };
+            return applyOnlineEnrichment(s, extra.get(`${s.artist}||${s.song}`));
           });
         });
       }
     }
 
 
+    // Strict BPM/decade limits: automatic additions need verified in-range evidence (never AI guesses or unknown).
+    // Requests are never removed. Row labels are derived from per-attribute provenance.
+    { let dropped = 0;
+      for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) {
+        r[section] = r[section].filter(t => t.fromUpload || !strictLimitFailure(t, strictLimits) || (dropped++, false)).map(t => (t.metaProv ? { ...t, metaSource: metaLabel(t) as ResultSong["metaSource"] } : t));
+      }
+      if (dropped) toast.info(`${dropped} added track${dropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`); }
+
     // A newer generate() (or a workflow reset) started while we were awaiting
     // AI/enrichment — drop this stale result instead of clobbering state.
     if (genTokenRef.current !== myToken) return;
     // Account/session fence: a sign-out or account switch during generation discards this result.
-    { const now = store.get(); if (accountRef.current !== accountAtStart || now.account !== prepStart.account || now.generation !== prepStart.generation) { toast.error("Account changed during generation; nothing was applied."); return; } }
-    // Late feedback re-check: additions that became Never/dismissed while generation ran are dropped; requests stay.
-    { let removed = 0; for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) { const c = recheckAdditions(r[section], liveFeedback()); removed += c.removed; r[section] = c.kept; }
-      if (removed) toast.info(`${removed} added track${removed === 1 ? " was" : "s were"} left out because of your Never or dismiss choices made during generation.`); }
+    if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
+    if (fill) {
+      // Wait for any queued Never/dismiss writes for this owner, then re-check against exactly that state.
+      let settled: Parameters<typeof expansionFeedback>[0];
+      try { settled = await store.settled(feedbackOwner!); } catch { settled = null; }
+      if (genTokenRef.current !== myToken) return;
+      const now = store.get();
+      if (!settled || feedbackLost || accountRef.current !== accountAtStart || now.account !== feedbackOwner!.account || now.generation !== feedbackOwner!.generation) {
+        toast.error(now.status === "blocked" ? GATE_MESSAGES.blocked : "Account changed during generation; nothing was applied.");
+        return;
+      }
+      // Late feedback re-check: additions that became Never/dismissed while generation ran are dropped; requests stay.
+      const fb = expansionFeedback(settled, feedbackEvent);
+      let removed = 0; for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) { const c = recheckAdditions(r[section], fb); removed += c.removed; r[section] = c.kept; }
+      if (removed) toast.info(`${removed} added track${removed === 1 ? " was" : "s were"} left out because of your Never or dismiss choices made during generation.`);
+    }
 
     // This explicit generation may remove added repeats, never requests or saved selections.
     r = preventAutomaticDuplicates(r, song => {
@@ -3429,7 +3427,7 @@ function MetricsDetail({ song, fileBpm }: { song: BadgeSong; fileBpm?: number })
     fileBpm != null
       ? { label: "BPM (from file)", value: String(Math.round(fileBpm)) }
       : typeof song.bpm === "number"
-        ? { label: "BPM (estimate)", value: Math.round(song.bpm).toString() }
+        ? { label: `BPM (${sourceLabel(attrSource(song, "bpm"))})`, value: Math.round(song.bpm).toString() }
         : null,
     song.camelot ? { label: "Key", value: song.camelot } : null,
     song.genre ? { label: "Genre", value: song.genre } : null,

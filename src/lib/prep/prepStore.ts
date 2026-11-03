@@ -83,6 +83,16 @@ export function createPrepStore(backend: PrepBackend = idbBackend()) {
     get: () => state, owner, subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; },
     setAccount, update,
     /**
+     * Knowledge after every write queued so far has finished, for exactly this owner. Loops until no newer
+     * write was queued meanwhile. Throws when stale or not ready, so callers never fall back to older data.
+     */
+    async settled(o: PrepOwner): Promise<PrepKnowledge> {
+      for (let seen: Promise<unknown> | null = null; seen !== queue;) { seen = queue; await queue.catch(() => undefined); }
+      if (!live(o)) throw Error(STALE);
+      if (state.status !== "ready") throw Error(state.error ?? "Preparation notes are still loading.");
+      return state.knowledge;
+    },
+    /**
      * Backup section for exactly this owner. Never switches accounts. Throws (blocking the backup
      * and any update that depends on it) when stale or unreadable; returns undefined only when the
      * account has no preparation data at all.

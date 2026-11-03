@@ -479,6 +479,10 @@ export interface ResultSong extends Song {
   explicit?: boolean;
   /** Where the audio-feature metadata came from. */
   metaSource?: "Online" | "VirtualDJ" | "AI" | "Library" | "Upload" | "Estimated";
+  /** Per-attribute provenance (absent on legacy rows, which read conservatively as estimates). */
+  metaProv?: import("./prep/provenance").MetaProv;
+  /** Curated built-in catalogue decade (no exact year is invented). */
+  catalogueDecade?: string;
   /** Set when the song's natural intensity band differs from the section it
    * was placed in — i.e. it was stretched to keep the ramp continuous. */
   stretched?: boolean;
@@ -759,6 +763,8 @@ function librarySongToResult(lib: LibrarySong, assignedSection: Section, reused 
     danceability: lib.danceability,
     genre: lib.genre,
     metaSource: "Library",
+    ...(lib.decade ? { catalogueDecade: lib.decade } : {}),
+    metaProv: { ...(typeof lib.energy === "number" ? { energy: "catalogue" as const } : {}), ...(typeof lib.danceability === "number" ? { danceability: "catalogue" as const } : {}), ...(lib.genre ? { genre: "catalogue" as const } : {}) },
     stretched: naturalSection !== assignedSection,
     naturalSection,
     reused,

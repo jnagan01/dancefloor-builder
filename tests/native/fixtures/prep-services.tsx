@@ -54,6 +54,7 @@ export async function getArtistCrowdData({ data }: any) {
 export async function getSimilarTracks({ data }: any) {
   w.__lookup.trackSeeds = data.seeds;
   if (w.__lookup.trackSimFail) return { availability: 'rateLimited', seeds: [] };
+  if (w.__lookup.trackSimThrow) throw Error('synthetic outage');
   const t = w.__lookup.similarTrack ?? { artist: 'Familiar Act', title: 'Classic' };
   return { availability: 'ok', seeds: data.seeds.map((seed: any) => ({ seed, status: 'ok', similar: [{ artist: t.artist, title: t.title, match: 0.6 }] })) };
 }
