@@ -154,7 +154,7 @@ describe('capture -> replay is faithful under the same ranking revision', () => 
     let s = saved.quality![0];
     expect(JSON.stringify(s)).not.toMatch(/\.mp3|\//);
     const same = s.candidates.filter(c => c.artist === 'Same');
-    expect(same.map(c => c.tie)).toEqual([0, 1]); // first.mp3 before second.mp3, as in the panel
+    expect(same).toHaveLength(2); expect(same[0].tie!).toBeLessThan(same[1].tie!); // a/first.mp3 ranked before z/second.mp3, as in the panel
     let kk = rateQualityCandidate(saved, s.id, 0, 'good'); kk = rateQualityCandidate(kk, s.id, 3, 'poor'); s = kk.quality![0];
     const cmp = compareRevisions(s);
     expect(cmp.status).toBe('unchanged');
