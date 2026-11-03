@@ -1361,7 +1361,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           return true;
         }).map(([, p]) => p).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         const room = sectionOrder.reduce((n, k) => n + Math.max(0, sectionTargetFor(r, k) - r[k].length), 0);
-        const rankStats: { hidden?: { slow?: number } } = {};
+        const rankStats: Parameters<typeof rankPool>[4] & object = {};
         const ranked = rankPool(eligible, (p) => {
           if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
           return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
