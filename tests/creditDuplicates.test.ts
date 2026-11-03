@@ -89,11 +89,11 @@ describe('real event route', () => {
     expect(uf).toEqual([expect.objectContaining({ artist: 'Mark Ronson feat. Bruno Mars', fromUpload: true })]);
   });
   it('AI aliases collapse in the pool before slots; remix kept; unrelated same title kept', async () => {
-    const rows = await run([{ artist: 'Queen', song: 'Radio Ga Ga', fromUpload: true }], [sug('Mark Ronson', 'Uptown Funk'), sug('Mark Ronson ft. Bruno Mars', 'Uptown Funk'), sug('Mark Ronson', 'Uptown Funk (Live)'), sug('Adele', 'Hello'), sug('Lionel Richie', 'Hello')]);
+    const rows = await run([{ artist: 'Queen', song: 'Radio Ga Ga', fromUpload: true }], [sug('Mark Ronson', 'Uptown Funk'), sug('Mark Ronson ft. Bruno Mars', 'Uptown Funk'), sug('Queen', 'Radio Ga Ga (Live Aid)'), sug('Queen & Guest', 'Radio Ga Ga'), sug('Adele', 'Hello'), sug('Lionel Richie', 'Hello')]);
     const added = rows.filter(r => !r.fromUpload).map(r => `${r.artist}|${r.song}`);
     expect(added.filter(a => /\|Uptown Funk$/.test(a))).toHaveLength(1);
-    console.log('ADDED', JSON.stringify(added));
-    expect(added).toContain('Mark Ronson|Uptown Funk (Live)');
+    expect(added).toContain('Queen|Radio Ga Ga (Live Aid)');
+    expect(added).not.toContain('Queen & Guest|Radio Ga Ga');
     expect(added).toEqual(expect.arrayContaining(['Adele|Hello', 'Lionel Richie|Hello']));
     expect(rows.filter(r => r.fromUpload)).toHaveLength(1);
   });
