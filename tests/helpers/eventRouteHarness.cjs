@@ -8,7 +8,11 @@ function createEventRouteHarness(actual) {
   source += '\nexport { SectionView };';
     const readiness = require(path.join(root, "node_modules/typescript"));
   const readinessModule = { exports: {} };
-  vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : actual.vdj});
+  const identityModule = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/fileIdentity.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:identityModule,exports:identityModule.exports});
+  const duplicateModule = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/preparationDuplicates.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:duplicateModule,exports:duplicateModule.exports,require:k=>k === "./fileIdentity" ? identityModule.exports : require(path.join(root,"desktop/offline/policy.cjs"))});
+  vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : k === "./fileIdentity" ? identityModule.exports : actual.vdj});
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
   function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }) } = {}) {
     let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false, tree;
@@ -41,6 +45,7 @@ function createEventRouteHarness(actual) {
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
       '@/lib/eventRevision':actual.revisions,
       '@/lib/preparationPolicy':require(path.join(root,'desktop/offline/policy.cjs')), '@/lib/exportReadiness':readinessModule.exports, '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
+      '@/lib/preparationDuplicates':duplicateModule.exports,
       '@/lib/preparationCapability': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/preparationCapability.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:()=>require(path.join(root,'desktop/offline/policy.cjs')),get window(){return testWindow;}});return m.exports; })(),
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},

@@ -2,6 +2,7 @@ import { DEFAULTS, buildResolver, intended, cleanReason, requiresClean, seasonal
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
 import { preventAutomaticDuplicates, sectionCoverage } from "@/lib/preparationDuplicates";
+import { makeSubject, scorePair } from "@/lib/matchCore";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -3911,6 +3912,7 @@ function InlineMatchSearch({
               const isExtra = extraSet.has(ti);
               const selected = isCurrent || isExtra;
               const pct = Math.round(score * 100);
+              const reason = scorePair(makeSubject(song.artist, song.song), makeSubject(t.artist, t.title)).reason;
               const mostPlayed = bestPlays > 0 && (t.playCount ?? 0) === bestPlays;
               return (
                  <li

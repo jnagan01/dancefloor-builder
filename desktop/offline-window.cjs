@@ -174,6 +174,7 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
       const overlay = await store.readOverlay(loaded.hash, event.id, event.version);
       const index = core.buildIndex(loaded.backup.sources.flatMap(s => s.tracks));
       const plan = core.exportPlan(event, overlay, index, loaded.backup.roots, await availability(chosenPaths(event, overlay, loaded.backup.roots)));
+      if (plan.summary.duplicateCount) return { ok: false, summary: plan.summary, problems: plan.problems, error: "Export stopped: repeated selected files. Exclude an occurrence online, then prepare a fresh offline copy. No files were written." };
       const name = core.safeFileName(event.name);
       const files = plan.sections.filter(s => s.entries.length).map((s, i) => ({ name: `${name} - ${i + 1} ${s.label}.m3u`, contents: core.m3u(s.entries) }));
       files.push({ name: `${name} - offline readiness.txt`, contents: core.readinessText(plan, { name: event.name, preparedAt: loaded.preparedAt, exportedAt: new Date().toISOString() }) });
