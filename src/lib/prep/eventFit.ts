@@ -1,7 +1,7 @@
 import { attrSource, type ProvRow } from "./provenance";
 import { sourceLabel, tierOf, type MetaSource } from "./metaConfidence";
-import { additionKeys } from "@/lib/additionIdentity";
-import { SONG_LIBRARY } from "@/lib/songLibrary";
+import { additionKeys } from "../additionIdentity";
+import { SONG_LIBRARY } from "../songLibrary";
 
 /**
  * Optional, event-scoped "event fit" choices for AUTOMATIC additions and the preparation panel.

@@ -17,10 +17,11 @@ function createEventRouteHarness(actual) {
   vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : k === "./fileIdentity" ? identityModule.exports : actual.vdj});
   // Real preparation-knowledge modules (no test seams): transpiled with relative requires resolved inside src/lib/prep.
   const prepModules = {};
+  let songLibMod; const songLibraryForPrep = () => { if (!songLibMod) { songLibMod = { exports: {} }; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/songLibrary.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:songLibMod,exports:songLibMod.exports,require}); } return songLibMod.exports; };
   const loadPrep = name => {
     if (prepModules[name]) return prepModules[name].exports;
     const m = { exports: {} }; prepModules[name] = m;
-    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/prep/${name}.ts`), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:m,exports:m.exports,setTimeout,clearTimeout,require:k=>k === '../additionIdentity' ? additionModule.exports : k.startsWith('./') ? loadPrep(k.slice(2)) : k === '@/lib/virtualDj' ? actual.vdj : k === '@/lib/fileIdentity' ? identityModule.exports : require(k)});
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/prep/${name}.ts`), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:m,exports:m.exports,setTimeout,clearTimeout,require:k=>k === '../additionIdentity' ? additionModule.exports : k === '../songLibrary' ? songLibraryForPrep() : k.startsWith('./') ? loadPrep(k.slice(2)) : k === '@/lib/virtualDj' ? actual.vdj : k === '@/lib/fileIdentity' ? identityModule.exports : require(k)});
     return m.exports;
   };
   // Real safe-save request contract (zod) so contract-checked harnesses run the server's own validation.
