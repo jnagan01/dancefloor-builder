@@ -229,3 +229,60 @@ describe('real event route + real pipeline: mixed cache hits, hung lookups, part
     h.unmount();
   });
 });
+
+describe('per-provider partial retention and provenance-priority merging (real runEnrichment)', () => {
+  const L = { totalMs: 400, cacheReadMs: 80, aiMs: 80, upsertMs: 60, requestMs: 300, assemblyMs: 10 };
+  /** ReccoBeats/MusicBrainz independently fast or hanging; `title` controls exact vs loose match. */
+  function stubSplit(o: { reco: 'fast' | 'hang'; mb: 'fast' | 'hang'; rbTitle?: string; energy?: number; pop?: number }) {
+    vi.stubGlobal('fetch', (url: string) => {
+      const u = new URL(url);
+      if (u.host === 'musicbrainz.org') return o.mb === 'hang' ? new Promise(() => {}) : Promise.resolve(json(200, { recordings: [{ title: 'Split Song', 'artist-credit': [{ name: 'TEST ONLY Split' }], 'first-release-date': '1983-01-01' }] }));
+      if (o.reco === 'hang') return new Promise(() => {});
+      if (u.pathname.endsWith('/search')) return Promise.resolve(json(200, { content: Number(u.searchParams.get('page')) === 0 ? [{ id: 'x', trackTitle: o.rbTitle ?? 'Split Song', artists: [{ name: 'TEST ONLY Split' }], popularity: o.pop ?? 80 }] : [] }));
+      const e = ((o.energy ?? 8) - 1) / 9;
+      return Promise.resolve(json(200, { energy: e, danceability: e, tempo: 120 }));
+    });
+  }
+  const song = [{ artist: 'TEST ONLY Split', song: 'Split Song' }];
+
+  it('ReccoBeats completes while MusicBrainz hangs: ReccoBeats fields kept, song flagged incomplete', async () => {
+    stubSplit({ reco: 'fast', mb: 'hang' });
+    const { results, status } = await runEnrichment(song, deps({}, { limits: L }));
+    expect(results[0]).toMatchObject({ energy: 8, danceability: 8, popularity: 8, incomplete: true });
+    expect(results[0].prov).toMatchObject({ energy: 'provider' }); expect(results[0].year).toBeUndefined();
+    expect(status.timedOut).toContain('fetch');
+  });
+
+  it('MusicBrainz completes while ReccoBeats hangs: MusicBrainz year kept, nothing invented for energy', async () => {
+    stubSplit({ reco: 'hang', mb: 'fast' });
+    const { results } = await runEnrichment(song, deps({}, { limits: L }));
+    expect(results[0]).toMatchObject({ year: 1983, incomplete: true }); expect(results[0].prov).toMatchObject({ year: 'provider' });
+    expect(results[0].energy).toBeUndefined();
+  });
+
+  it('a loose-match popularity upgrade adds estimate popularity but never downgrades cached provider energy/dance (response and cache)', async () => {
+    stubSplit({ reco: 'fast', mb: 'fast', rbTitle: 'Split Song (Club Remix)', energy: 2, pop: 50 });
+    const written: any[] = [];
+    const cache = { [key('TEST ONLY Split', 'Split Song')]: { energy: 8, danceability: 8, year: 1983, source: V2({ energy: 'provider', danceability: 'provider', year: 'provider' }) } };
+    const { results } = await runEnrichment(song, deps(cache, { limits: L, written }), { needPopularity: true });
+    expect(results[0]).toMatchObject({ energy: 8, danceability: 8, popularity: 5 });
+    expect(results[0].prov).toMatchObject({ energy: 'provider', danceability: 'provider', popularity: 'estimate', year: 'provider' });
+    expect(written).toHaveLength(1); expect(written[0]).toMatchObject({ energy: 8, danceability: 8, popularity: 5 });
+    const { decodeCacheSource } = await import('@/lib/prep/provenance');
+    expect(decodeCacheSource(written[0].source, written[0]).prov).toMatchObject({ energy: 'provider', danceability: 'provider', popularity: 'estimate' });
+  });
+
+  it('truly stronger evidence upgrades: an exact provider match replaces cached estimates', async () => {
+    stubSplit({ reco: 'fast', mb: 'fast', energy: 8 });
+    const cache = { [key('TEST ONLY Split', 'Split Song')]: { energy: 3, danceability: 3, source: V2({ energy: 'estimate', danceability: 'estimate' }) } };
+    const { results } = await runEnrichment(song, deps(cache, { limits: L }), { needPopularity: true });
+    expect(results[0]).toMatchObject({ energy: 8, danceability: 8 }); expect(results[0].prov).toMatchObject({ energy: 'provider', popularity: 'provider' });
+  });
+
+  it('the cache write is bounded by its own limit even when lots of total time remains', async () => {
+    stubSplit({ reco: 'fast', mb: 'fast' });
+    const t0 = Date.now();
+    const { status } = await runEnrichment(song, deps({}, { upsert: 'hang', limits: { ...L, totalMs: 5000, upsertMs: 60 } }));
+    expect(Date.now() - t0).toBeLessThan(500); expect(status.timedOut).toEqual(['upsert']);
+  });
+});

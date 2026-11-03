@@ -4,7 +4,7 @@
  */
 import { toCamelot } from "./musicTheory";
 import { normalizeKey } from "./danceFloor";
-import { decodeCacheSource, encodeCacheSource, type MetaProv } from "./prep/provenance";
+import { decodeCacheSource, encodeCacheSource, sourceRank, type MetaProv } from "./prep/provenance";
 import { ENRICH_SERVER_DEADLINE_MS } from "./prep/factsGather";
 
 export type EnrichSource =
@@ -477,46 +477,23 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const ctx: FetchCtx = { signal: fetchCtrl.signal, until: fetchUntil, requestMs: L.requestMs, now };
   let fetchClosed = false;
   let cursor = 0;
+  // Each provider's result is recorded the moment it completes (fenced by the phase deadline), so a hung response from
+  // one provider never discards the other's completed fields. Workers still await both, keeping the pool bounded.
+  const recoDone = new Map<string, ReccoBeatsFeatures | null>();
+  const mbDone = new Map<string, MusicBrainzInfo | null>();
+  const open = () => !fetchClosed && now() < fetchUntil;
+  const reusesMb = (prev: EnrichedSong | undefined) => !!(prev && (prev.genre || prev.year));
   const worker = async () => {
     for (;;) {
       const i = cursor++;
-      if (i >= missOrder.length || fetchClosed || now() >= fetchUntil) return;
+      if (i >= missOrder.length || !open()) return;
       const q = missOrder[i];
       const k = `${q.artistKey}\u0000${q.songKey}`;
       const prev = partial.get(k);
-      const [reco, mb] = await Promise.all([
-        fetchReccoBeats(q.original.artist, q.original.song, ctx),
-        prev && (prev.genre || prev.year)
-          ? Promise.resolve({ genre: prev.genre, year: prev.year } as MusicBrainzInfo)
-          : fetchMusicBrainz(q.original.artist, q.original.song, ctx),
+      await Promise.allSettled([
+        fetchReccoBeats(q.original.artist, q.original.song, ctx).then((r) => { if (open()) recoDone.set(k, r); }),
+        reusesMb(prev) ? Promise.resolve() : fetchMusicBrainz(q.original.artist, q.original.song, ctx).then((r) => { if (open()) mbDone.set(k, r); }),
       ]);
-      // Late or cut off by the phase deadline: never mutate; the song reads as unfinished (already-known values only).
-      if (fetchClosed || now() >= fetchUntil) return;
-      const rs = reco?.exact ? "provider" : "estimate";
-      const reusedMb = !!(prev && (prev.genre || prev.year));
-      const ms = reusedMb ? undefined : mb?.exact ? "provider" : "estimate";
-      const prov: MetaProv = {};
-      const take = <A extends keyof MetaProv>(a: A, freshV: unknown, src: MetaProv[A], old: unknown) => {
-        if (freshV != null) { prov[a] = src; return freshV; }
-        if (old != null) { prov[a] = prev?.prov?.[a] ?? "estimate"; return old; }
-        return undefined;
-      };
-      const gotNew = reco != null || (!reusedMb && mb != null);
-      fetched.set(k, {
-        artist: q.original.artist,
-        song: q.original.song,
-        energy: take("energy", reco?.energy, rs, prev?.energy) as number | undefined,
-        danceability: take("danceability", reco?.danceability, rs, prev?.danceability) as number | undefined,
-        valence: take("valence", reco?.valence, rs, prev?.valence) as number | undefined,
-        popularity: take("popularity", reco?.popularity, rs, prev?.popularity) as number | undefined,
-        bpm: take("bpm", reco?.bpm, rs, prev?.bpm) as number | undefined,
-        camelot: take("camelot", reco?.camelot, rs, prev?.camelot) as string | undefined,
-        genre: take("genre", reusedMb ? undefined : mb?.genre, ms, prev?.genre) as string | undefined,
-        year: take("year", reusedMb ? undefined : mb?.year, ms, prev?.year) as number | undefined,
-        source: popOnly.has(k) && reco?.energy == null ? prev!.source : pickSource(reco?.energy != null, !!(mb?.genre || mb?.year)),
-        prov,
-      });
-      if (gotNew) fresh.add(k);
     }
   };
   if (missOrder.length) {
@@ -526,15 +503,51 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     fetchCtrl.abort();
     if (got === LATE) timeout("fetch");
   }
-  // Unfinished lookups keep only what was already known (partial cache data), flagged incomplete.
+  // Assemble from whatever each provider completed. Per-field provenance priority: a fresh value replaces a known one
+  // only when its source ranks at least as high, so a loose-match estimate never downgrades cached provider facts.
   const unfinished = new Set<string>();
   for (const q of missOrder) {
     const k = `${q.artistKey}\u0000${q.songKey}`;
     if (fetched.has(k)) continue;
-    unfinished.add(k);
-    timeout("fetch");
     const prev = partial.get(k);
-    if (prev) fetched.set(k, { ...prev, artist: q.original.artist, song: q.original.song, source: prev.energy != null ? prev.source : "MusicBrainz" });
+    const reusedMb = reusesMb(prev);
+    const hasReco = recoDone.has(k), hasMb = reusedMb || mbDone.has(k);
+    if (!hasReco || !hasMb) { unfinished.add(k); timeout("fetch"); }
+    if (!hasReco && !(mbDone.has(k))) {
+      if (prev) fetched.set(k, { ...prev, artist: q.original.artist, song: q.original.song, source: prev.energy != null ? prev.source : "MusicBrainz" });
+      continue;
+    }
+    const reco = recoDone.get(k) ?? null;
+    const mb = reusedMb ? null : mbDone.get(k) ?? null;
+    const rs = reco?.exact ? "provider" : "estimate";
+    const ms = mb?.exact ? "provider" : "estimate";
+    const prov: MetaProv = {};
+    let gained = false;
+    const take = <A extends keyof MetaProv>(a: A, freshV: unknown, src: MetaProv[A], old: unknown) => {
+      const oldSrc = old != null ? prev?.prov?.[a] ?? "estimate" : undefined;
+      if (freshV != null && (old == null || sourceRank(src) >= sourceRank(oldSrc))) { prov[a] = src; gained = true; return freshV; }
+      if (old != null) { prov[a] = oldSrc; return old; }
+      return undefined;
+    };
+    const energy = take("energy", reco?.energy, rs, prev?.energy) as number | undefined;
+    const e: EnrichedSong = {
+      artist: q.original.artist,
+      song: q.original.song,
+      energy,
+      danceability: take("danceability", reco?.danceability, rs, prev?.danceability) as number | undefined,
+      valence: take("valence", reco?.valence, rs, prev?.valence) as number | undefined,
+      popularity: take("popularity", reco?.popularity, rs, prev?.popularity) as number | undefined,
+      bpm: take("bpm", reco?.bpm, rs, prev?.bpm) as number | undefined,
+      camelot: take("camelot", reco?.camelot, rs, prev?.camelot) as string | undefined,
+      genre: take("genre", mb?.genre, ms, prev?.genre) as string | undefined,
+      year: take("year", mb?.year, ms, prev?.year) as number | undefined,
+      source: "none",
+      prov,
+    };
+    const recoEnergy = reco?.energy != null && prov.energy === rs;
+    e.source = prev?.energy != null && !recoEnergy ? prev.source : pickSource(reco?.energy != null, !!(mb?.genre || mb?.year));
+    fetched.set(k, e);
+    if (gained) fresh.add(k);
   }
 
   // 3b) AI acoustic estimate for anything still missing energy/danceability — bounded and abortable; a late answer is ignored.
@@ -601,7 +614,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     });
   if (toUpsert.length) {
     try {
-      const got = await within(Promise.resolve().then(() => deps.upsert(toUpsert)), end, now);
+      const got = await within(Promise.resolve().then(() => deps.upsert(toUpsert)), Math.min(end, now() + L.upsertMs), now);
       if (got === LATE) timeout("upsert");
     } catch (err) {
       // Cache write failure is non-fatal — we still return the fresh data.
