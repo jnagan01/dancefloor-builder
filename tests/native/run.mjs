@@ -412,7 +412,7 @@ try{
    await page.reload();await expect(toggle).toBeChecked();
  });
  await check('native per-section M3U/TXT success uses verified availability and exact clean omission counts',async()=>{
-   page.on('dialog',dialog=>dialog.accept());
+   const accept=dialog=>dialog.accept();page.on('dialog',accept);
    for(const [button,ext] of [['Warm Up M3U → VirtualDJ','m3u'],['Warm Up .txt → VirtualDJ','txt']]){
      await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;});
      await page.getByRole('button',{name:button,exact:true}).click();
@@ -427,6 +427,53 @@ try{
      else expect(written).toBe('1. Band - Hit (Clean)\r\n');
      expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual(['Policy dirty.mp3','Policy clean.mp3','Policy unknown.mp3'].map(n=>path.join(library,n)));
    }
+   page.off('dialog',accept);
+ });
+ await check('native TXT confirms verified five tracks/one clean block; cancel and unavailable checks write nothing',async()=>{
+   await app.close();
+   const tt=Array.from({length:6},(_,i)=>({filePath:path.join(library,`txt-confirm-${i}.mp3`),artist:'TXT Band',title:`Track ${i} (${i===5?'Dirty':'Clean'})`}));
+   tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic TXT confirmation bytes'));
+   const ss=tt.map(t=>({artist:t.artist,song:t.title,fromUpload:true}));
+   const selections=Object.fromEntries(ss.map((s,i)=>[`peak:${i}:txt band|track ${i}`,{paths:[tt[i].filePath],confirmed:true}]));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'TXT confirm',updated_at:'v1',inputs:{songs:ss,eventName:'TXT confirm',hours:'.25',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss,selections}}}));
+   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   await page.getByRole('tab',{name:/Peak \(6/}).click();
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   const filesBefore=()=>Object.fromEntries(fs.readdirSync(path.join(temp,'exports')).map(n=>[n,fs.readFileSync(path.join(temp,'exports',n),'utf8')]));
+   const initialFiles=filesBefore(),initialIpc=fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8');
+   const messages=[];let verifiedAtDialog=false;
+   const answer=async accept=>{
+     fs.rmSync(path.join(temp,'checked-paths.json'),{force:true});
+     const handler=async dialog=>{messages.push(dialog.message());verifiedAtDialog=fs.existsSync(path.join(temp,'checked-paths.json'));await (accept?dialog.accept():dialog.dismiss());};
+     page.once('dialog',handler);
+     await page.getByRole('button',{name:'Peak .txt → VirtualDJ',exact:true}).click();
+     await expect.poll(()=>messages.length,{timeout:15000}).toBe(accept?2:1);
+     expect(verifiedAtDialog).toBe(true);
+     expect(messages.at(-1)).toBe('5 tracks · left out: 1 clean-policy block. Reference files retain intended tracks. Continue?');
+     expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual(tt.map(t=>t.filePath));
+   };
+   await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;});
+   await answer(false);expect(filesBefore()).toEqual(initialFiles);expect(fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8')).toBe(initialIpc);
+   expect(await page.evaluate(()=>({success:window.__success,warnings:window.__warnings}))).toEqual({success:[],warnings:[]});
+   await answer(true);
+   await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toBe(`Saved 5 tracks · left out: 1 clean-policy block to ${path.join(temp,'VirtualDJ','Playlists')} as txt-confirm-peak.txt`);
+   expect(await page.evaluate(()=>window.__warnings)).toEqual(['5 tracks · left out: 1 clean-policy block. Reference files retain intended tracks.']);
+   expect(fs.readFileSync(path.join(temp,'exports','txt-confirm-peak.txt'),'utf8')).toBe(tt.slice(0,5).map((t,i)=>`${i+1}. ${t.artist} - ${t.title}\r\n`).join(''));
+   const report=fs.readFileSync(path.join(temp,'exports','txt-confirm-peak-readiness.txt'),'utf8');
+   expect(report).toContain('Approved tracks (including extras, in playlist order): 5');expect(report).toContain('Clean-policy blocks: 1');expect(report).toContain('Availability unknown: 0');
+   await expect(page.getByRole('region',{name:'Export readiness'})).not.toContainText('file availability unknown');
+   const written=filesBefore(),ipc=fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8');
+   const unexpected=[];const reject=async dialog=>{unexpected.push(dialog.message());await dialog.dismiss();};page.on('dialog',reject);
+   await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;window.__errors.length=0;});
+   fs.unlinkSync(tt[0].filePath);
+   try {
+     await page.getByRole('button',{name:'Peak .txt → VirtualDJ',exact:true}).click();
+     await expect.poll(()=>page.evaluate(()=>window.__errors.at(-1)),{timeout:15000}).toBe('Export stopped: music files unavailable.');
+     expect(unexpected).toEqual([]);expect(filesBefore()).toEqual(written);expect(fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8')).toBe(ipc);
+     expect(await page.evaluate(()=>window.__success)).toEqual([]);
+   }finally{page.off('dialog',reject);fs.writeFileSync(tt[0].filePath,'synthetic TXT confirmation bytes');}
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
  });
  await check('policy-aware six-row counts, filters, exclusions and mixed extras update on toggle and reopen without replacing selections',async()=>{
    await app.close();
