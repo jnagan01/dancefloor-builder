@@ -72,7 +72,7 @@ describe("artist/title/version evidence", () => {
   it("keyword and filename fallback relevance never leaks into intended-track confidence", () => {
     const artist = "Silk City & Dua Lipa", title = "Electricity";
     const lib = buildLibrary([
-      {artist:"Jack Harlow",title:"Dua Lipa",filePath:"/m/Silk City Dua Lipa Electricity.mp3"},
+      {artist:"Jack Harlow",title:"Dua Lipa",filePath:"/m/Silk City and Dua Lipa Electricity.mp3"},
       {artist,title,filePath:"/m/original.mp3"},
       {artist,title:"Electricity (Extended)",filePath:"/m/extended.mp3"},
     ]);

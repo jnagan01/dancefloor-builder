@@ -550,7 +550,7 @@ try{
    const tt=[{artist:'Queen',title:'Radio Ga Ga (Clean)'},{artist:'Rammstein',title:'RADIO (Clean)'},{artist:'Silk City & Dua Lipa',title:'Electricity (Clean)'},{artist:'Jack Harlow',title:'Dua Lipa (Clean)'},{artist:'Silk City & Dua Lipa',title:'Electricity (Extended Clean)'}].map((t,i)=>({...t,filePath:path.join(library,`ranking-${i}.mp3`)}));
    // Force the broad filename fallback to discover the wrong recording;
    // keyword relevance must not become intended-track confidence in the UI.
-   tt[3].filePath=path.join(library,'Silk City Dua Lipa Electricity Clean.mp3');
+   tt[3].filePath=path.join(library,'Silk City and Dua Lipa Electricity Clean.mp3');
    tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic ranking bytes'));
    const ss=[{artist:'Queen',song:'Radio Ga Ga',fromUpload:true},{artist:'Silk City & Dua Lipa',song:'Electricity',fromUpload:true}];
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
