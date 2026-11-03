@@ -5,12 +5,13 @@ import type { QualitySample } from '@/lib/prep/quality';
  * Invented artists and invented ratings that encode the intended evidence ordering, so ranking revisions
  * can be compared deterministically. Passing these proves nothing about real-world recommendation accuracy.
  */
+const DEFAULT_CONTROLS = { familiarity: 0, clientSimilarity: 1, artistVariety: 0.5, ownedOnly: false };
 export const SYNTHETIC_NOTICE = 'synthetic fixture, not user judgments';
 
 export const syntheticEvidenceSample: QualitySample = {
   id: 'synthetic-evidence', name: `Evidence ladder (${SYNTHETIC_NOTICE})`, createdAt: 0,
   requests: [{ artist: 'Seed Act One', song: 'Seed One', genre: 'House', decade: '2010s' }, { artist: 'Seed Act Two', song: 'Seed Two', genre: 'House', decade: '2010s' }],
-  preferences: { genres: ['House'], decades: [], artists: [] }, eventTags: ['singalong'],
+  preferences: { genres: ['House'], decades: [], artists: [] }, eventTags: ['singalong'], controls: DEFAULT_CONTROLS, artistUse: [],
   // Deliberately listed weakest-first so the captured order is the worst possible order.
   candidates: [
     { artist: 'Nothing Act', song: 'No Evidence', origin: 'catalogue', rating: 'poor' },
@@ -25,7 +26,7 @@ export const syntheticEvidenceSample: QualitySample = {
 /** Same artist three times: variety should interleave other artists before the third copy. */
 export const syntheticVarietySample: QualitySample = {
   id: 'synthetic-variety', name: `Artist variety (${SYNTHETIC_NOTICE})`, createdAt: 0,
-  requests: [{ artist: 'Seed Act One', song: 'Seed One' }], preferences: { genres: [], decades: [], artists: [] }, eventTags: [],
+  requests: [{ artist: 'Seed Act One', song: 'Seed One' }], preferences: { genres: [], decades: [], artists: [] }, eventTags: [], controls: DEFAULT_CONTROLS, artistUse: [],
   candidates: [
     { artist: 'Repeat Act', song: 'A', origin: 'library', similarTo: 'Seed Act One', similarMatch: 0.9, rating: 'good' },
     { artist: 'Repeat Act', song: 'B', origin: 'library', similarTo: 'Seed Act One', similarMatch: 0.9, rating: 'maybe' },
