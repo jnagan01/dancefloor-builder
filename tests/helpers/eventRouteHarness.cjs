@@ -22,12 +22,15 @@ function createEventRouteHarness(actual) {
     return m.exports;
   };
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
-  function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }), services = {}, prep = null } = {}) {
+  function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }), services = {}, prep = null, prepStore: prepStoreOverride = null } = {}) {
     // Synthetic account-fenced preparation store state: { account, generation, status, knowledge }.
     let prepState = prep ?? { account, generation: 1, status: 'ready', knowledge: loadPrep('knowledge').emptyKnowledge(), error: null };
-    const prepFake = { get: () => prepState };
+    const prepListeners = new Set();
+    // Synthetic fake by default; `prepStore` passes the REAL account-fenced store (synthetic backend) instead.
+    const prepFake = prepStoreOverride ?? { get: () => prepState, subscribe: l => { prepListeners.add(l); return () => prepListeners.delete(l); },
+      settled: async o => { if (prepState.account !== o.account || prepState.generation !== o.generation) throw Error('stale'); if (prepState.status !== 'ready') throw Error(prepState.error || 'not ready'); return prepState.knowledge; } };
     let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false, tree;
-    const loads = [], requests = [], errors = [], navigations = [], downloads = [], files = [], warnings = []; let blocker;
+    const loads = [], requests = [], errors = [], navigations = [], downloads = [], files = [], warnings = [], infos = []; let blocker;
     let workspace = { sources: [], library: null, audioIndex: actual.audio.buildAudioIndex([]) };
     const storage = { getItem: k => memory.get(k) ?? null, setItem: (k,v) => memory.set(k,v), removeItem: k => memory.delete(k) };
     global.localStorage = storage;
@@ -50,7 +53,7 @@ function createEventRouteHarness(actual) {
       '@/hooks/useAuth': {useAuth:()=>({user:account?{id:account}:null})}, '@/hooks/useDebounce':{useDebounce:v=>v},
       '@/components/workspace/WorkspaceContext':{useWorkspace:()=>workspace},
       '@/integrations/supabase/client':{supabase:{auth:{getUser:async()=>({data:{user:null}})}}},
-      sonner:{toast:{error:e=>errors.push(e),success:no,warning:e=>warnings.push(e),info:no}},
+      sonner:{toast:{error:e=>errors.push(e),success:no,warning:e=>warnings.push(e),info:e=>infos.push(e)}},
       '@/lib/virtualDj':{...actual.vdj, supportsDirectoryWrite:()=>true, writeFileToDir:async(_dir,name,data)=>{files.push({name,data});}}, '@/lib/danceFloor':{...actual.dance,downloadBlob:(blob,name)=>downloads.push({blob,name})}, '@/lib/audioMatch':actual.audio,
       '@/lib/snapshotSafety':actual.snapshots, '@/lib/eventDrafts':actual.drafts, '@/lib/inputSafety':actual.input,
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
@@ -61,11 +64,11 @@ function createEventRouteHarness(actual) {
       '@/lib/preparationCapability': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/preparationCapability.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:()=>require(path.join(root,'desktop/offline/policy.cjs')),get window(){return testWindow;}});return m.exports; })(),
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/enrich.functions':{enrichSongs:services.enrich ?? (async()=>({results:[]}))},
-      '@/lib/neighbors.functions':{getArtistNeighbors:async()=>({clusters:[]})},
+      '@/lib/neighbors.functions':{getArtistNeighbors:services.neighbors ?? (async()=>({clusters:[]}))},
       '@/lib/recommend.functions':{recommendSongsForSection:services.recommend ?? (async()=>({suggestions:[]}))},
       '@/lib/lastfm.functions':{getArtistCrowdData:services.crowd ?? (async()=>({artists:[]})),getSimilarTracks:services.similarTracks ?? (async()=>({availability:'missingKey',seeds:[]}))},
       '@/lib/prep/prepStore':{prepStore:()=>prepFake},
-      '@/lib/prep/expansionFeedback':loadPrep('expansionFeedback'), '@/lib/prep/similarTracks':loadPrep('similarTracks'), '@/lib/prep/knowledge':loadPrep('knowledge'),
+      '@/lib/prep/expansionFeedback':loadPrep('expansionFeedback'), '@/lib/prep/similarTracks':loadPrep('similarTracks'), '@/lib/prep/knowledge':loadPrep('knowledge'), '@/lib/prep/provenance':loadPrep('provenance'), '@/lib/prep/metaConfidence':loadPrep('metaConfidence'),
       jszip:{default:class {file(name,data){files.push({name,data});return this;} async generateAsync(){return new Blob(['zip']);}}},
       '@/lib/desktopBridge':{getNativeFilePath:()=>null,isDesktopApp:()=>false},
     };
@@ -87,7 +90,7 @@ function createEventRouteHarness(actual) {
     function nodes(){return walk(tree);}
     function interact(predicate,handler='onClick',argument){const node=nodes().find(predicate);if(!node)throw Error('No matching rendered control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});node.props[handler]?.(argument);render();}
     function sectionClick(predicate){const child=nodes().find(n=>n.props?.onPreview&&n.props?.songs);if(!child)throw Error('No review section');const parentSlots=slots;slots=[];cursor=0;const sectionTree=module.exports.SectionView(child.props);const control=walk(sectionTree).find(predicate);if(!control)throw Error('No section control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});control.props.onClick?.();slots=parentSlots;render();}
-    return {testWindow,render,flush,memory,requests,loads,errors,navigations,downloads,files,warnings,nodes,interact,sectionClick,chooseFresh(){interact(n=>n.props?.role==='radio'&&/^Dance floor$/i.test(n.props?.children));interact(n=>n.props?.id==='hours','onChange',{target:{value:'3'}});interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',4);interact(n=>n.props?.id==='buffer','onChange',{target:{value:'2'}});},leave(){return blocker?.shouldBlockFn();}, async invoke(prop){const n=nodes().find(n=>typeof n.props?.[prop]==='function');if(!n)throw Error(prop); await n.props[prop]();render();}, get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, setPrep(next){prepState=typeof next==='function'?next(prepState):next;}, prepModule:loadPrep, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
+    return {testWindow,render,flush,memory,requests,loads,errors,navigations,downloads,files,warnings,infos,nodes,interact,sectionClick,chooseFresh(){interact(n=>n.props?.role==='radio'&&/^Dance floor$/i.test(n.props?.children));interact(n=>n.props?.id==='hours','onChange',{target:{value:'3'}});interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',4);interact(n=>n.props?.id==='buffer','onChange',{target:{value:'2'}});},leave(){return blocker?.shouldBlockFn();}, async invoke(prop){const n=nodes().find(n=>typeof n.props?.[prop]==='function');if(!n)throw Error(prop); await n.props[prop]();render();}, get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, setPrep(next){prepState=typeof next==='function'?next(prepState):next;prepListeners.forEach(l=>l());}, prepModule:loadPrep, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
   }
   return harness;
 }
