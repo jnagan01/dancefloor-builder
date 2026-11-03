@@ -113,8 +113,14 @@ export function EventPrepPanel(p: Props) {
   const requests = useMemo(() => p.sections.flatMap(s => s.songs.map((song, i) => ({ song, i, s }))).filter(x => x.song.fromUpload).map(({ song, i, s }) => {
     return requestFacts(song, p.matches[p.keyOf(s.key, i, song)], tracks);
   }), [p.sections, p.matches, p.keyOf, tracks, p.policies]); // eslint-disable-line react-hooks/exhaustive-deps
-  const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, similarTracks, controls, filter, limit: 40 }),
-    [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, similarTracks, controls, filter]);
+  // Track evidence is bound to the exact request seeds it was fetched for; changed seeds drop it immediately.
+  const seedKey = useMemo(() => JSON.stringify(seedsFromRequests(requests)), [requests]);
+  const seedKeyRef = useRef(seedKey); seedKeyRef.current = seedKey;
+  const [similarTracksFor, setSimilarTracksFor] = useState<string | null>(null);
+  useEffect(() => { trackSimGen.current++; setSimilarTracks([]); setSimilarTracksFor(null); setTrackSimState({ busy: false }); }, [seedKey]);
+  const liveSimilarTracks = similarTracksFor === seedKey ? similarTracks : NO_TRACK_EVIDENCE;
+  const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, similarTracks: liveSimilarTracks, controls, filter, limit: 40 }),
+    [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, liveSimilarTracks, controls, filter]);
   const loadSimilar = async () => {
     const artists = [...new Set(requests.map(r => r.artist).filter(Boolean))].slice(0, 20);
     if (!artists.length) { setSimState({ busy: false, note: "No client requests to compare with yet." }); return; }
@@ -132,17 +138,20 @@ export function EventPrepPanel(p: Props) {
 
   const loadSimilarTracks = async () => {
     // Only bounded artist/title seeds from distinct client requests are sent; nothing else about the event or library.
-    const seeds = seedsFromRequests(requests);
-    if (!seeds.length) { setTrackSimState({ busy: false, note: availabilityNote("noSeeds", 0) }); return; }
+    const seeds = seedsFromRequests(requests), startedSeeds = JSON.stringify(seeds);
+    if (!seeds.length) { setSimilarTracks([]); setSimilarTracksFor(null); setTrackSimState({ busy: false, note: availabilityNote("noSeeds", 0) }); return; }
     const gen = ++trackSimGen.current, started = { ...live.current };
-    const stillCurrent = () => gen === trackSimGen.current && live.current.account === started.account && live.current.generation === started.generation && live.current.eventId === started.eventId;
+    const stillCurrent = () => gen === trackSimGen.current && seedKeyRef.current === startedSeeds && live.current.account === started.account && live.current.generation === started.generation && live.current.eventId === started.eventId;
     setTrackSimState({ busy: true });
     try {
       const r = await similarTracksFn({ data: { seeds, perSeed: 20 } });
       if (!stillCurrent()) return;
-      setSimilarTracks(aggregateSimilar(r.seeds));
+      setSimilarTracks(aggregateSimilar(r.seeds)); setSimilarTracksFor(startedSeeds);
       setTrackSimState({ busy: false, note: availabilityNote(r.availability, seeds.length) });
-    } catch { if (stillCurrent()) setTrackSimState({ busy: false, note: availabilityNote("unavailable", seeds.length) }); }
+    } catch {
+      // A failed refresh never leaves earlier evidence looking current.
+      if (stillCurrent()) { setSimilarTracks([]); setSimilarTracksFor(null); setTrackSimState({ busy: false, note: availabilityNote("unavailable", seeds.length) }); }
+    }
   };
 
   // ---- shortlist ----
