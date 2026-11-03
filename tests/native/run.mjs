@@ -398,7 +398,9 @@ try{
    expect(saved.version).toBe(1);expect(saved.events).toHaveLength(14);
    for(const event of saved.events)expect(event.snapshot).toEqual({name:legacy[event.id].name,inputs:legacy[event.id].inputs,lists:legacy[event.id].lists});
    expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
-   expect(await page.locator('#update-preservation-lock').count()).toBe(1);
+   // runUpdate verifies the freeze before handoff, then explicitly releases it after the synthetic restart.
+   expect(fs.readFileSync(path.join(temp,'handoff'),'utf8')).toBe('staged and relaunched');
+   expect(await page.locator('#update-preservation-lock').count()).toBe(0);
    delete process.env.SETARCHITECT_TEST_OLD_SHELL;
  });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
