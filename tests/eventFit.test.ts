@@ -196,7 +196,7 @@ describe("saved-event evidence (Let It Be / Chasing Cars as actually stored)", (
   it("genre tags and BPM never classify slow; estimates/AI never exclude; uncertainty is reported", async () => {
     const { runComparison } = await import("./fit/fitComparison");
     const { after } = runComparison(true);
-    const all = [...after.top, ...(after as any).rest ?? []];
+    const { recommend } = await import("../src/lib/prep/recommend"); const { input, AFTER_FIT } = await import("./fit/fitComparison"); const all = recommend({ ...input(AFTER_FIT, true), limit: 999 } as any).items;
     const find = (s: string) => all.find((r: any) => r.song === s) as any;
     const cc = find("Chasing Cars"), lib = find("Let It Be");
     for (const r of [cc, lib].filter(Boolean)) {
