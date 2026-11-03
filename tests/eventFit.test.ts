@@ -33,12 +33,19 @@ describe("legacy / no-choice controls", () => {
 
 describe("familiar hits", () => {
   const fit = { familiarity: "familiar" as const };
-  it("track-level provider popularity beats artist-level similarity alone", () => {
-    const out = recommend(base([cand("Similar Artist", "Deep cut"), cand("Unrelated", "Big hit", pop(8))], fit));
-    expect(out.items[0].song).toBe("Big hit");
-    const deep = out.items.find(i => i.song === "Deep cut")!;
-    expect(deep.score).toBe(1); // 2 × match 1 halved
-    expect(deep.evidence[0].text).toMatch(/counted half/);
+  it("similarity without track familiarity evidence is halved", () => {
+    const out = recommend(base([cand("Similar Artist", "Deep cut")], fit));
+    expect(out.items[0].score).toBe(1); // 2 × match 1, halved
+    expect(out.items[0].evidence[0].text).toMatch(/no track-level familiarity evidence/);
+  });
+  it("popularity alone is not event fit: unlinked familiarity is halved", () => {
+    const out = recommend(base([cand("Unrelated", "Big hit", pop(8))], fit));
+    expect(out.items[0].score).toBe(1);
+    expect(out.items[0].evidence[0].text).toMatch(/no link to this event/);
+  });
+  it("a linked familiar track outranks an equally similar unknown track", () => {
+    const out = recommend(base([cand("Similar Artist", "Deep cut"), cand("Similar Artist", "Hit", pop(8))], { ...fit }));
+    expect(out.items[0].song).toBe("Hit");
   });
   it("similarity is not halved when the track itself has familiarity evidence", () => {
     const out = recommend(base([cand("Similar Artist", "Hit", pop(8))], fit));
