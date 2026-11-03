@@ -16,6 +16,6 @@ export const matrix: Candidate[] = [
 ];
 export function matrixInput(candidates = matrix): RecInput {
   return { candidates, requests: [{ artist: "TEST Request", song: "Keep (Live)" }], inEvent: [{ artist: "TEST Request", song: "Keep (Live)" }], feedback: [], dismissed: [],
-    similarTracks: candidates.map(c => ({ key: songIdentity(c.artist, c.song), bestMatch: c.song === "B" ? 0.5 : 1, seeds: c.song === "A" || c.song === "G" ? ["Seed 1", "Seed 2", "Seed 3", "Seed 4"] : ["Seed 1"] })),
+    similarTracks: candidates.map(c => ({ key: songIdentity(c.artist, c.song), artist: c.artist, song: c.song, bestMatch: c.song === "B" ? 0.5 : 1, seeds: c.song === "A" || c.song === "G" ? ["Seed 1", "Seed 2", "Seed 3", "Seed 4"] : ["Seed 1"] })),
     preferences: { fit: { familiarity: "familiar", avoidSlow: true } }, controls: { ...DEFAULT_REC_CONTROLS, artistVariety: 0 }, limit: 99 };
 }

@@ -185,6 +185,33 @@ try{
    expect(all.filter(r=>r.fromUpload).length).toBe(10);
    expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
  });
+ await check('held-out slow risk: exact similarity bounded, estimates retained, strong low both excluded, save/reopen preserves requests',async()=>{
+   const additions=[{artist:'TEST Native Risk',song:'A',energy:4,danceability:4,popularity:10,src:'ai'},
+     {artist:'TEST Native Supported',song:'B',energy:7,danceability:7,src:'provider'},
+     {artist:'TEST Native Strong',song:'C',energy:4,danceability:4,src:'provider'}];
+   await page.evaluate(additions=>{window.__fixture.aiSuggestions=additions.map(r=>({artist:r.artist,song:r.song}));
+     window.__fixture.enrichResults=additions.map(r=>({...r,year:1985,source:'AI',prov:{year:'provider',energy:r.src,danceability:r.src,popularity:'estimate'}}));
+     window.__fixture.similarTracks={availability:'ok',seeds:['One','Two','Three','Four'].map((song,i)=>({seed:{artist:'TEST Native Client',title:song},status:'ok',similar:additions.filter(r=>i===0||r.song==='A').map(r=>({artist:r.artist,title:r.song,match:r.song==='B'?0.5:1}))}))};
+     window.__testState.eventId=undefined;window.__testState.page='event';window.__errors=[];window.__rerender();},additions);
+   await page.waitForTimeout(400);await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('4');
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('TEST ONLY Native Slow Risk');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const file=path.join(temp,'held-out-risk.csv');fs.writeFileSync(file,'Artist,Song\nTEST Native Client,One\nTEST Native Client,Two\nTEST Native Client,Three\nTEST Native Client,Four\nTEST Native Request,Keep (Live)\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(file);await page.getByRole('button',{name:'Review songs',exact:false}).first().click();await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks'}).click();await page.locator('#fit-familiarity').selectOption('familiar');await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).click();
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   const find=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY Native Slow Risk');
+   await expect.poll(()=>find()?.lists?.warmUp?.length,{timeout:30000}).toBeGreaterThan(0);await page.waitForTimeout(1500);
+   const saved=find(), all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
+   expect(all.filter(r=>r.fromUpload).map(r=>r.song).sort()).toEqual(['One','Two','Three','Four','Keep (Live)'].sort());
+   const risk=all.find(r=>r.artist==='TEST Native Risk');expect(risk).toBeTruthy();expect(risk.rankWhy).toContain('ranked lower, not confirmed slow');expect(risk.rankWhy).toContain('similarity bounded');
+   expect(all.some(r=>r.artist==='TEST Native Supported')).toBe(true);expect(all.some(r=>r.artist==='TEST Native Strong')).toBe(false);
+   expect(saved.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});
+   await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},saved.id);await page.waitForTimeout(1200);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))[saved.id].lists).toEqual(saved.lists);
+   await page.getByRole('button',{name:/Track expansion/}).first().click();expect(await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).getAttribute('aria-checked')).toBe('true');
+   await page.evaluate(()=>{delete window.__fixture.similarTracks;window.__fixture.aiSuggestions=[];window.__fixture.enrichResults=[];});
+ });
  await check('section-local Transition issue targets Transition and exports only captured checked mapping',async()=>{
    await app.close();
    const transitionSong={artist:'Missing Transition',song:'Omitted Transition'};

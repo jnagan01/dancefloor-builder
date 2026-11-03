@@ -1,0 +1,40 @@
+import { it, expect, vi } from "vitest";
+import { createRequire } from "node:module";
+import * as vdj from "@/lib/virtualDj";
+import * as dance from "@/lib/danceFloor";
+import * as audio from "@/lib/audioMatch";
+import * as snapshots from "@/lib/snapshotSafety";
+import * as drafts from "@/lib/eventDrafts";
+import * as input from "@/lib/inputSafety";
+import * as autosave from "@/lib/eventAutosave";
+import * as vibes from "@/lib/vibes";
+import * as isolation from "@/lib/workflowIsolation";
+import * as theory from "@/lib/musicTheory";
+import * as revisions from "@/lib/eventRevision";
+import { REQUESTS } from "./fit/fitComparison";
+import { matrix } from "./fit/slowRiskMatrix";
+const harness = createRequire(import.meta.url)("./helpers/eventRouteHarness.cjs").createEventRouteHarness({vdj,dance,audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions});
+const id="10000000-0000-4000-8000-000000000001";
+const requests=REQUESTS.map(r=>({...r,fromUpload:true}));
+const extras=matrix.slice(0,3);
+const library=vdj.buildLibrary(extras.map(c=>({artist:c.artist,title:c.song,filePath:`/synthetic/${c.song}.mp3`,year:"1985",genre:"Pop"})) as vdj.VdjTrack[]);
+const inputBase={songs:requests,hours:"1.5",buffer:1,listType:"dance",expand:true,eventName:"TEST ONLY risk",artistsInput:"",genresInput:"",decades:["1970s","1980s","1990s","2000s","2010s","2020s"],notes:"",doNotPlayInput:""};
+const all=(r:any)=>[...r.warmUp,...r.transition,...r.peak];
+it("real owned route bounds exact similarity, retains requests, and saves/reopens advisory facts and explanations",async()=>{
+  const fit={familiarity:"familiar",avoidSlow:true};
+  const row={id,name:inputBase.eventName,updated_at:"2026-11-03T00:00:00Z",inputs:{...inputBase,eventFit:fit},lists:{warmUp:requests,transition:[],peak:[]}};
+  const services={recommend:async()=>({suggestions:[]}),similarTracks:async()=>({availability:"ok",seeds:REQUESTS.slice(0,4).map((s,i)=>({seed:{artist:s.artist,title:s.song},status:"ok",similar:extras.filter(c=>i===0||c.song==="A").map(c=>({artist:c.artist,title:c.song,match:c.song==="B"?0.5:1}))}))}),enrich:async({data}:any)=>({results:data.songs.flatMap((s:any)=>{const c=extras.find(c=>c.artist===s.artist&&c.song===s.song);return c?[{...s,energy:c.fit?.energy,danceability:c.fit?.danceability,popularity:c.fit?.popularity,source:"AI",prov:{energy:c.fit?.energySource,danceability:c.fit?.danceabilitySource,popularity:c.fit?.popularitySource}}]:[];})})};
+  vi.useFakeTimers();
+  try {
+    const h=harness({eventId:id,rows:{[id]:row},services,contract:true}); await h.flush();h.library(library);await h.flush();await h.current.generate();await h.flush();
+    const result=all(h.current.result);
+    expect(result.filter((r:any)=>r.fromUpload).map((r:any)=>`${r.artist}|${r.song}`).sort()).toEqual(REQUESTS.map(r=>`${r.artist}|${r.song}`).sort());
+    expect(result.find((r:any)=>r.artist==="TEST Strong")).toBeUndefined();
+    const risk=result.find((r:any)=>r.artist==="TEST Risk");expect(risk?.rankWhy).toMatch(/ranked lower, not confirmed slow/);
+    expect(result.find((r:any)=>r.artist==="TEST Supported")?.rankWhy).toMatch(/Last.fm/);
+    await vi.advanceTimersByTimeAsync(1500);await h.flush();
+    const saved=h.requests.at(-1);expect(h.errors).toEqual([]);expect(saved.inputs.eventFit).toEqual(fit);expect(saved.lists).toBeDefined();h.unmount();
+    const reopened=harness({eventId:id,rows:{[id]:{...row,inputs:saved.inputs,lists:saved.lists}},contract:true});await reopened.flush();
+    expect(all(reopened.current.result).find((r:any)=>r.artist==="TEST Risk")?.rankWhy).toBe(risk.rankWhy);expect(reopened.requests).toEqual([]);reopened.unmount();
+  } finally {vi.useRealTimers();}
+});
