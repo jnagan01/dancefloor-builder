@@ -115,6 +115,28 @@ try{
    const text=(await Promise.all(Object.values(zip.files).filter(f=>f.name.endsWith('.csv')).map(f=>f.async('string')))).join('\n');
    for(const title of ['Song One','Song Two','Song Three','Song Four','Song Five','Corrected Song'])expect(text).toContain(title);
  });
+ await check('fresh 1x six distinct requests: review shows no duplicate, generation save is confirmed by the real contract',async()=>{
+   await page.evaluate(()=>{window.__testState.page='event';window.__testState.eventId=undefined;window.__errors=[];window.__rerender();});await page.waitForTimeout(400);
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('1');
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('TEST ONLY 1x');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const upload=path.join(temp,'six-distinct.csv');fs.writeFileSync(upload,'Artist,Song\nMark Ronson feat. Bruno Mars,Uptown Funk\nMark Ronson,Valerie\nMark Ronson,Valerie (Live)\nAdele,Hello\nLionel Richie,Hello\n"Earth, Wind & Fire",September\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);await page.waitForTimeout(400);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   expect(await page.locator('tbody tr').count()).toBe(6);
+   expect(await page.getByRole('button',{name:/Remove \d+ duplicate/}).count()).toBe(0);
+   await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks'}).click();
+   expect(await page.locator('#buffer').inputValue()).toBe('1');
+   const before=Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')));
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   await expect.poll(()=>{const rows=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'));return Object.values(rows).filter(r=>!before.includes(r.id)&&r.inputs.eventName==='TEST ONLY 1x'&&(r.lists.warmUp.length+r.lists.transition.length+r.lists.peak.length)>=6).length;},{timeout:15000}).toBe(1);
+   const created=Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY 1x');
+   expect(created.inputs.buffer).toBe(1);expect(created.inputs.expand).toBe(true);
+   expect([...created.lists.warmUp,...created.lists.transition,...created.lists.peak].filter(r=>r.fromUpload).length).toBe(6);
+   expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
+   expect((await page.evaluate(()=>window.__errors)).filter(e=>/save/i.test(e))).toEqual([]);
+ });
  await check('section-local Transition issue targets Transition and exports only captured checked mapping',async()=>{
    await app.close();
    const transitionSong={artist:'Missing Transition',song:'Omitted Transition'};
