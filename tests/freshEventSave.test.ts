@@ -89,6 +89,7 @@ describe('import review duplicates use the conservative version-aware identity',
     const flat = (v: any): any[] => !v || typeof v !== 'object' ? [] : Array.isArray(v) ? v.flatMap(flat) : [v, ...flat(v.props?.children), ...flat(v.props?.actions)];
     const label = (n: any) => (Array.isArray(n.props?.children) ? n.props.children : [n.props?.children]).filter((c: any) => typeof c !== 'object').join('');
     const button = flat(h.tree).find((n: any) => n.props?.onClick && /^Remove \d+ duplicate/.test(label(n)));
+    if (!button) console.log('DBG', JSON.stringify(flat(h.tree).filter((n: any) => n.props?.onClick).map(label)).slice(0, 1500), String(h.current.songs?.length));
     expect(label(button)).toBe('Remove 1 duplicate');
     button.props.onClick(); await h.flush();
     expect(h.current.songs).toEqual(SIX);
