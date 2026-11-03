@@ -588,6 +588,8 @@ try{
      await expect(page.locator('[id^="split-"]')).toHaveCount(0);
    };
    await assertBlank();await expect.poll(()=>page.evaluate(()=>typeof window.__releaseProfile)).toBe('function');
+   await page.getByRole('radio',{name:'Dinner',exact:true}).click();await expect(page.locator('#minutes')).toHaveValue('');
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});await assertBlank();
    await page.evaluate(()=>window.__releaseProfile());await expect.poll(()=>page.evaluate(()=>window.__profileReturned)).toBe(true);await assertBlank();
    expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
    await page.reload();await page.waitForFunction(()=>!!window.__testState && typeof window.__rerender==='function');await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});await assertBlank();
@@ -605,6 +607,9 @@ try{
    expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('Choose a list type');
    await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
    await expect(page.locator('#hours')).toBeVisible();
+   await page.getByRole('radio',{name:'Dinner',exact:true}).click();await expect(page.locator('#minutes')).toHaveValue('');
+   await page.getByRole('button',{name:'Continue',exact:true}).click();
+   expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('positive list length');
    await page.getByRole('radio',{name:'Dance floor',exact:true}).click();
    await page.getByRole('button',{name:'Continue',exact:true}).click();
    expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('positive dance floor length');
@@ -628,6 +633,24 @@ try{
    for(const field of ['bpmRange','danceRange','split','eventType','homeKey','minutes'])expect(saved().inputs[field]).toBeUndefined();
    expect(saved().inputs.songs).toEqual([song]);
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Saved preferences');
+ });
+ await check('fresh background list requires chosen minutes, preserves empty event preferences, and reopens without timing repair',async()=>{
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+   await page.getByRole('radio',{name:'Dinner',exact:true}).click();await expect(page.locator('#minutes')).toHaveValue('');
+   await page.locator('#minutes').fill('15');await page.locator('#eventName').fill('Explicit dinner');
+   await page.getByRole('button',{name:'Continue',exact:true}).click();
+   const upload=path.join(temp,'dinner.csv');fs.writeFileSync(upload,'Artist,Song\nTest Artist,Test Song - Live\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   await page.getByRole('button',{name:'Generate dinner playlist',exact:true}).click();
+   await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Explicit dinner');
+   await expect.poll(saved,{timeout:15000}).toBeTruthy();const original=saved();
+   expect(original.inputs).toMatchObject({listType:'dinner',minutes:'15',decades:[],requireCleanVersions:false,ownedOnlyExpansion:false,expand:false});
+   await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},original.id);
+   await expect(page.getByRole('heading',{name:'Explicit dinner',exact:true})).toBeVisible();
+   await expect(page.getByText('Saved event needs review',{exact:false})).toHaveCount(0);
+   expect(saved()).toEqual(original);
  });
  await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
    await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';
