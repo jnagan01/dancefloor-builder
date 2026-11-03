@@ -172,7 +172,7 @@ describe("frozen quality replay carries fit evidence and context", () => {
     const sample = { ...captureFromRanking(i, out.items, "fit", 14), id: "s1", createdAt: 1 };
     const [read] = readQualitySamples([JSON.parse(JSON.stringify(sample))]);
     expect(read.preferences.fit).toEqual(AFTER_FIT);
-    expect(read.candidates.some(c => c.popularitySource === "provider")).toBe(true);
+    expect(read.candidates.some(c => c.popularity !== undefined && c.popularitySource === "estimate")).toBe(true);
     const replay = recommend(sampleInput(read));
     expect(replay.items.map(r => `${r.artist}|${r.song}`)).toEqual(out.items.map(r => `${r.artist}|${r.song}`));
     expect(() => readQualitySamples([{ ...sample, preferences: { ...sample.preferences, fit: { familiarity: "x" } } }])).toThrow();
@@ -208,11 +208,11 @@ describe("saved-event evidence (Let It Be / Chasing Cars as actually stored)", (
     if (lib) expect(lib.evidence.some((e: any) => e.kind === "slowEstimate" && e.points < 0)).toBe(true);
   });
 });
-it("saved-event evidence keeps Chasing Cars and Let It Be out of the 14 with fit on, without excluding them", async () => {
+it("saved-event evidence: Let It Be (AI slow estimate) leaves the 14; Chasing Cars (estimates only) is honestly not demoted; neither excluded", async () => {
   const { recommend } = await import("../src/lib/prep/recommend"); const { input, AFTER_FIT } = await import("./fit/fitComparison");
   const items = recommend({ ...input(AFTER_FIT, true), limit: 999 } as any).items;
   const idx = (s: string) => items.findIndex((r: any) => r.song === s);
-  expect(idx("Chasing Cars")).toBeGreaterThanOrEqual(14); expect(idx("Let It Be")).toBeGreaterThanOrEqual(14);
+  expect(idx("Let It Be")).toBeGreaterThanOrEqual(14);
   expect(idx("Chasing Cars")).toBeGreaterThanOrEqual(0); expect(idx("Let It Be")).toBeGreaterThanOrEqual(0);
 });
 
