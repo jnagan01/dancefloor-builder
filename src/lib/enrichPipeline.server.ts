@@ -490,7 +490,8 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
           ? Promise.resolve({ genre: prev.genre, year: prev.year } as MusicBrainzInfo)
           : fetchMusicBrainz(q.original.artist, q.original.song, ctx),
       ]);
-      if (fetchClosed) return; // late: phase already closed, never mutate
+      // Late or cut off by the phase deadline: never mutate; the song reads as unfinished (already-known values only).
+      if (fetchClosed || now() >= fetchUntil) return;
       const rs = reco?.exact ? "provider" : "estimate";
       const reusedMb = !!(prev && (prev.genre || prev.year));
       const ms = reusedMb ? undefined : mb?.exact ? "provider" : "estimate";

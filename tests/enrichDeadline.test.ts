@@ -204,6 +204,7 @@ describe('real event route + real pipeline: mixed cache hits, hung lookups, part
     const rows = all(h.current.result);
     expect(rows.filter((t: any) => t.fromUpload).map((t: any) => t.song)).toEqual(['Radio Ga Ga', 'Dancing Queen']);
     const alpha = rows.find((t: any) => t.song === 'Warm Alpha');
+    if (process.env.DBG) console.log(JSON.stringify(rows.map((t: any) => [t.song, t.energy, t.metaProv, t.rankWhy])), JSON.stringify(seen), h.infos, h.warnings);
     expect(alpha?.energy).toBe(7); expect(alpha?.metaProv).toMatchObject({ energy: 'provider' });
     expect(alpha?.rankWhy).not.toMatch(/no energy or danceability data/);
     const gamma = rows.find((t: any) => t.song === 'Hung Gamma');
