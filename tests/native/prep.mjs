@@ -236,6 +236,14 @@ try {
     await expect(region.locator('ul > li', { hasText: 'Familiar Act – Classic' })).toContainText('Last.fm lists this exact track as similar to');
     const sentSeeds = await page.evaluate(() => window.__lookup.trackSeeds);
     if (!sentSeeds.length || sentSeeds.some(s => Object.keys(s).sort().join() !== 'artist,title')) throw Error('Last.fm seeds must be artist/title only');
+    // A failed refresh clears earlier track evidence instead of leaving it looking current; a good refresh restores it.
+    await page.evaluate(() => { window.__lookup.trackSimThrow = true; });
+    await region.getByRole('button', { name: 'Add Last.fm similar tracks' }).click();
+    await expect(region.getByTestId('lastfm-track-note')).toContainText("Couldn't reach Last.fm");
+    await expect(region).not.toContainText('Last.fm lists this exact track as similar to');
+    await page.evaluate(() => { window.__lookup.trackSimThrow = false; });
+    await region.getByRole('button', { name: 'Add Last.fm similar tracks' }).click();
+    await expect(region.locator('ul > li', { hasText: 'Familiar Act – Classic' })).toContainText('Last.fm lists this exact track as similar to');
     // Dismiss here vs never
     const songB = region.locator('ul > li', { hasText: 'Queen – Song B' });
     await songB.getByRole('button', { name: 'Dismiss here' }).click();
