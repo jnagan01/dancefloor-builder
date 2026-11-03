@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { additionKeys } from "./additionIdentity";
+import { AdditionKeySet } from "./additionIdentity";
 import { boundedNumber, validateTiming, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "./inputSafety";
 import { allowedForEventType, getEventType, libraryAllowedForEventType } from "./eventTypes";
 import { getVibe } from "./vibes";
@@ -130,16 +130,18 @@ export function songKeys(artist: string, song: string): string[] {
 /** Duplicate detector tolerant of artist credit order / featured artists / "The". */
 export class SongKeySet {
   private keys = new Set<string>();
-  constructor(private versionAware = false) {}
-  private identities(artist: string, song: string) { return this.versionAware ? additionKeys(artist, song) : songKeys(artist, song); }
+  // Version-aware sets use the SAME AdditionKeySet semantics as the candidate pool and final pass.
+  private alias?: AdditionKeySet;
+  constructor(versionAware = false) { if (versionAware) this.alias = new AdditionKeySet(); }
   has(artist: string, song: string): boolean {
-    return this.identities(artist, song).some((k) => this.keys.has(k));
+    return this.alias ? this.alias.has(artist, song) : songKeys(artist, song).some((k) => this.keys.has(k));
   }
   add(artist: string, song: string): void {
-    for (const k of this.identities(artist, song)) this.keys.add(k);
+    if (this.alias) this.alias.add(artist, song); else for (const k of songKeys(artist, song)) this.keys.add(k);
   }
-  /** Adds and returns true if the song was new. */
+  /** Adds and returns true if the song was new (a version-aware duplicate is absorbed). */
   tryAdd(artist: string, song: string): boolean {
+    if (this.alias) return this.alias.tryAdd(artist, song);
     if (this.has(artist, song)) return false;
     this.add(artist, song);
     return true;

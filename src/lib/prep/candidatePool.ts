@@ -15,12 +15,14 @@ export interface PoolOptions<R extends PoolRow, S> {
   ownedRow: (idx: number, reason?: string) => R;
   merge: (a: R, b: R) => R;
   sectionRank: (k?: S) => number;
+  /** Optional backing map (the caller reads entries for enrichment/eligibility). */
+  map?: Map<string, PoolEntry<R, S>>;
 }
 
 const minReason = (a?: string, b?: string) => (!a ? b : !b ? a : a <= b ? a : b);
 
 export function createCandidatePool<R extends PoolRow, S>(o: PoolOptions<R, S>) {
-  const map = new Map<string, PoolEntry<R, S>>();
+  const map = o.map ?? new Map<string, PoolEntry<R, S>>();
   const alias = new AdditionKeySet();
   const owned = (idx: number, reason: string | undefined, ai: boolean | undefined) => ({ ...o.ownedRow(idx, reason), aiSuggestion: ai });
   function offer(row: R, prefer?: S): boolean {

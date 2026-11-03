@@ -2,7 +2,7 @@ import { buildResolver, intended, cleanReason, requiresClean, seasonal, type Pre
 import { freshEvent, validateEventChoices, clientPlanningCoverage } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
-import { AdditionKeySet } from "@/lib/additionIdentity";
+import { createCandidatePool } from "@/lib/prep/candidatePool";
 import { preventAutomaticDuplicates, sectionCoverage, durationLabel } from "@/lib/preparationDuplicates";
 import { makeSubject, scorePair } from "@/lib/matchCore";
 import { getNativeFilePath } from "@/lib/desktopBridge";
@@ -1249,7 +1249,6 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const sectionOrder = sectionMap.map((m) => m.key);
         const pool = new Map<string, Pooled>();
         const taken = new SongKeySet(true);
-        const poolAlias = new AdditionKeySet();
         for (const s of [...r.warmUp, ...r.transition, ...r.peak]) taken.add(s.artist, s.song);
         const catalogueKeys = new Set(SONG_LIBRARY.map((s) => songIdentity(s.artist, s.song)));
         const secIdx = (k?: SectionKey) => (k ? sectionOrder.indexOf(k) : 99);
@@ -1258,27 +1257,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
           return withProv({ artist: t.artist, song: t.title, fromUpload: false, bpm: parseBpm(t.bpm), camelot: toCamelot(t.key), genre: t.genre, year: yearNum, explicit: detectExplicitFromTitle(t.title), metaSource: "Library", aiReason: reason } as PRow, "tags");
         };
-        const offer = (row: PRow, prefer?: SectionKey) => {
-          if (!row.artist || !row.song || taken.has(row.artist, row.song)) return false;
-          // Credit-variant aliases (feat./&/reordered credits) collapse into one pool entry BEFORE ranking, so slots
-          // and artist variety are never spent on the same recording twice.
-          const key = poolAlias.match(row.artist, row.song) ?? songIdentity(row.artist, row.song);
-          const idx = generationResolver.resolve({ artist: row.artist, song: row.song });
-          const t = idx === undefined ? undefined : mergedLibrary.tracks[idx];
-          const exact = idx !== undefined && t && songIdentity(t.artist, t.title) === key;
-          const old = pool.get(key);
-          if (!old) {
-            if (pool.size >= POOL_CAP) return false;
-            pool.set(key, exact ? { row: { ...ownedRow(idx!, row.aiReason), aiSuggestion: row.aiSuggestion }, prefer, trackIdx: idx } : { row, prefer });
-            poolAlias.add(row.artist, row.song, key);
-            return true;
-          }
-          // Same song from another source: keep the best-sourced value per attribute (order independent).
-          if (old.trackIdx === undefined) old.row = mergeMeta(old.row, row, row.metaProv ?? "estimate");
-          if (secIdx(prefer) < secIdx(old.prefer)) old.prefer = prefer;
-          if (!old.row.aiReason && row.aiReason) old.row = { ...old.row, aiReason: row.aiReason };
-          return false;
-        };
+        // Credit aliases collapse into one pool entry BEFORE ranking (shared pure helper; arrival-order independent).
+        const { offer } = createCandidatePool<PRow, SectionKey>({
+          cap: POOL_CAP, taken: (a, so) => taken.has(a, so), identity: songIdentity, ownedRow, sectionRank: secIdx,
+          merge: (a, b) => mergeMeta(a, b, b.metaProv ?? "estimate"), map: pool,
+          exactOwned: (row) => {
+            const idx = generationResolver.resolve({ artist: row.artist, song: row.song });
+            const t = idx === undefined ? undefined : mergedLibrary.tracks[idx];
+            return t && songIdentity(t.artist, t.title) === songIdentity(row.artist, row.song) ? idx : undefined;
+          },
+        });
         const allowedNow = (p: Pooled) => addedAllowed(p.row);
         const poolRows = () => [...pool.values()].map((p) => p.row);
         const pooledFor = (k: SectionKey) => { let n = 0, open = 0; for (const p of pool.values()) if (allowedNow(p)) { if (p.prefer === k) n++; else if (!p.prefer) open++; } // Unassigned owned candidates reduce AI requests only by the previous small library share, so the AI call
@@ -1368,7 +1356,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           // The vibe's tempo window applies only to a verified tempo; estimates never exclude.
           if (!prefs.bpmRange && vbpm && bpm && usableForHardRule(attrSource(p.row, "bpm"), true, "bpm") && (bpm < vbpm[0] - 15 || bpm > vbpm[1] + 15)) return false;
           return true;
-        }).sort(([a], [b]) => a.localeCompare(b)).map(([, p]) => p);
+        }).map(([, p]) => p).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         const room = sectionOrder.reduce((n, k) => n + Math.max(0, sectionTargetFor(r, k) - r[k].length), 0);
         const ranked = rankPool(eligible, (p) => {
           if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return libraryCandidate(t, trackIdentity(t.filePath, rankRoots)); }
