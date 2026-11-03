@@ -34,7 +34,7 @@ const V = { energy: 'provider', danceability: 'provider', popularity: 'provider'
 export const SYNTHETIC_VERIFIED = [
   ...Array.from({ length: 10 }, (_, i) => ({ artist: `TEST ONLY Popular ${i + 1}`, song: `Synthetic Hit ${i + 1}`, popularity: 9, energy: 7, danceability: 8, year: 1985 + i, metaProv: V, kind: 'popular' })),
   ...Array.from({ length: 10 }, (_, i) => ({ artist: `TEST ONLY Obscure ${i + 1}`, song: `Synthetic Deep Cut ${i + 1}`, popularity: 2, energy: 7, danceability: 8, year: 1985 + i, metaProv: V, kind: 'obscure' })),
-  ...Array.from({ length: 4 }, (_, i) => ({ artist: `TEST ONLY Slow ${i + 1}`, song: `Synthetic Ballad ${i + 1}`, popularity: 9, energy: 2, danceability: 2, year: 1990 + i, metaProv: V, kind: 'slow' })),
+  ...Array.from({ length: 4 }, (_, i) => ({ artist: `TEST ONLY Slow ${i + 1}`, song: `Synthetic Anthem Ballad ${i + 1}`, popularity: 9, energy: 2, danceability: 2, year: 1990 + i, metaProv: V, kind: 'slow' })),
 ];
 const enrich = async (req: any) => ({ results: (req.data.songs as any[]).flatMap(s => { const r = (cache as any[]).find(c => c.artist === s.artist && c.song === s.song); return r ? [{ artist: r.artist, song: r.song, energy: r.energy, danceability: r.danceability, ...(r.popularity !== undefined ? { popularity: r.popularity } : {}), ...(r.year !== undefined ? { year: r.year } : {}), source: String(r.rawCacheSource ?? '').startsWith('ReccoBeats') ? 'ReccoBeats' : 'AI', prov: r.metaProv }] : []; }) });
 
