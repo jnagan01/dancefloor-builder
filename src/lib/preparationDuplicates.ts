@@ -17,7 +17,7 @@ export function preventAutomaticDuplicates(result: GenerationResult, resolve: (s
   for (const section of sections) next[section] = result[section].filter(song => {
     if (song.fromUpload) return true;
     const path = resolve(song);
-    if (intended.has(song.artist, song.song) || (path && files.has(trackIdentity(path, roots)))) { removed++; return false; }
+    if (intended.has(song.artist, song.song) || (path && files.has(trackIdentity(path, roots)))) { intended.absorb(song.artist, song.song); removed++; return false; }
     remember(song); return true;
   });
   return { ...next, duplicatesRemoved: result.duplicatesRemoved + removed };
