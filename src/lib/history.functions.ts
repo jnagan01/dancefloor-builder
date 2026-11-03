@@ -17,6 +17,8 @@ const songSchema = z.object({
   stretched: z.boolean().optional(), naturalSection: z.string().optional(), reused: z.boolean().optional(),
   waveRole: z.string().optional(), placementReason: z.string().optional(), aiSuggestion: z.boolean().optional(),
   aiReason: z.string().optional(), fromLibrary: z.boolean().optional(),
+  // Optional plain-language ranking reasons for automatic additions; older snapshots omit it.
+  rankWhy: z.string().max(1000).optional(),
 }).passthrough();
 
 export const inputsSchema = z.object({

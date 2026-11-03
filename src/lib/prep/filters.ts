@@ -5,6 +5,8 @@ export type UnknownMode = "include" | "exclude" | "only";
 export type FilterContext = "library" | "recommendation";
 export type CleanValue = "clean" | "explicit";
 export type FieldSource = "tags" | "virtualdj" | "filename" | "estimate" | "catalogue";
+/** Ranking-fact provenance: file/catalogue fields plus per-attribute row provenance (provider, your edit, measured, AI). */
+export type FactSource = FieldSource | "ai" | "provider" | "user" | "measured";
 
 export interface FilterState {
   genres: string[]; genreUnknown: UnknownMode;
@@ -26,7 +28,7 @@ export interface FilterFacts {
   genre?: string; decade?: string; bpm?: number; durationSec?: number; energy?: number;
   clean?: CleanValue; cleanSource?: FieldSource; owned?: boolean;
   /** Where genre/decade came from; absent means unknown provenance (treated as an estimate for ranking). */
-  genreSource?: FieldSource | "ai"; decadeSource?: FieldSource | "ai";
+  genreSource?: FactSource; decadeSource?: FactSource;
 }
 
 const CLEAN_RE = /(?:^|[\s([_-])(clean(?:\s+(?:edit|version))?|radio\s+clean)(?=$|[\s)\]_.-])/i;
