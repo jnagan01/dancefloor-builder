@@ -1421,7 +1421,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     {
       const missing: ResultSong[] = [];
       (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
-        for (const s of r[k]) if (s.energy == null || s.danceability == null) missing.push(s);
+        // Client requests only: automatic additions already received their facts before ranking, so post-selection
+        // enrichment never changes an addition's evidence behind its rankWhy (known-attempted keys are never re-requested).
+        for (const s of r[k]) if (s.fromUpload && (s.energy == null || s.danceability == null)) missing.push(s);
       });
       if (missing.length) {
         const extra = await enrichBatch(missing);
