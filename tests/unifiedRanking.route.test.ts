@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import * as vdj from '@/lib/virtualDj';
 import * as dance from '@/lib/danceFloor';
@@ -88,7 +88,10 @@ describe('real event route: one ranking over all available candidates', () => {
 
   it('rankWhy survives autosave and reload; old snapshots stay without it', async () => {
     const h = harness({ rows: { A: row() }, services: { recommend: async () => ({ suggestions: [sug('Queen', 'Strong Synthetic')] }) } });
-    await h.flush(); await h.current.generate(); await h.flush(); await h.flush();
+    vi.useFakeTimers();
+    await h.flush(); await h.current.generate(); await h.flush();
+    await vi.advanceTimersByTimeAsync(1500); await h.flush();
+    vi.useRealTimers();
     const saved = [...h.requests].reverse().find((r: { lists?: unknown }) => r.lists) as { lists: { warmUp: Row[]; transition: Row[]; peak: Row[] }; inputs: unknown };
     expect(saved).toBeTruthy();
     const parsed = listsSchema.parse(saved.lists) as unknown as { warmUp: Row[]; transition: Row[]; peak: Row[] };
