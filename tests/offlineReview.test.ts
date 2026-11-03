@@ -133,7 +133,11 @@ describe("finding 4: portable exclusive all-or-nothing export publication", () =
     const s2 = JSON.parse(raw()); s2.sources[0].tracks.push({ filePath: "/abs/a.mp3", artist: "Test Artist", title: "Song" });
     await createOfflineStore(dir).invalidate(); const st = createOfflineStore(dir);
     await (await seen(st, A)).prepare(JSON.stringify({ ...s2, events: JSON.parse(raw(A, { warmUp: songs, transition: songs, peak: [], selections: { [core.songKey("warmUp", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true }, [core.songKey("transition", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true } } })).events }), A);
-    const statFs = { ...fs, promises: { ...fs.promises, stat: async (p: string) => p === "/abs/a.mp3" ? { isFile: () => true } : fs.promises.stat(p), access: async (p: string, m?: number) => p === "/abs/a.mp3" ? undefined : fs.promises.access(p, m) } };
+    // Portability/rollback fixtures need two distinct recordings now that repeats block combined export.
+    const snapshot=JSON.parse(JSON.stringify({ ...s2, events: JSON.parse(raw(A, { warmUp: songs, transition: songs, peak: [], selections: { [core.songKey("warmUp", 0, songs[0])]: { paths: ["/abs/a.mp3"], confirmed: true }, [core.songKey("transition", 0, songs[0])]: { paths: ["/abs/b.mp3"], confirmed: true } } })).events }));
+    snapshot.sources[0].tracks.push({filePath:"/abs/b.mp3",artist:"Test Artist",title:"Song (Extended)"});
+    await st.prepare(JSON.stringify(snapshot),A);
+    const statFs = { ...fs, promises: { ...fs.promises, stat: async (p: string) => ["/abs/a.mp3","/abs/b.mp3"].includes(p) ? { isFile: () => true } : fs.promises.stat(p), access: async (p: string, m?: number) => ["/abs/a.mp3","/abs/b.mp3"].includes(p) ? undefined : fs.promises.access(p, m) } };
     const fe = fakeElectron(out), ws = createOfflineWorkspace({ electron: fe.electron, store: st, fs: patch(statFs as typeof fs) }); ws.register(); ws.open();
     await fe.call("offline:load");
     return { res: await fe.call("offline:export", "E1"), out };

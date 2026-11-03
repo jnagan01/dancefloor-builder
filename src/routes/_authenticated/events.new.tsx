@@ -1,6 +1,8 @@
 import { DEFAULTS, buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
+import { preventAutomaticDuplicates, sectionCoverage } from "@/lib/preparationDuplicates";
+import { makeSubject, scorePair } from "@/lib/matchCore";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -927,7 +929,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const myToken = ++genTokenRef.current;
     setIsGenerating(true);
     try {
-    const uniqueSongs = dedupeSongs(songs);
+    const uniqueSongs = songs.slice();
     const prefs = buildCurrentPrefs();
     const generationPolicy = { ...policies, eventType };
     const generationResolver = buildResolver(mergedLibrary.tracks, generationPolicy);
@@ -937,6 +939,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // with the built-in library as a fallback if AI is unavailable.
     let r = generateLists({
       uploaded: uniqueSongs,
+      preserveRequestedRows: true,
       hours: background ? 24 : hoursNum,
       expand: false,
       buffer: background ? 1 : buffer,
@@ -1181,7 +1184,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
             // ---- YOUR CRATES FIRST ----------------------------------------
             if (mergedLibrary?.tracks.length && ordered.length) {
-              const have = new SongKeySet();
+              const have = new SongKeySet(true);
               for (const s of [...r.warmUp, ...r.transition, ...r.peak]) have.add(s.artist, s.song);
               const perArtistCap = 2;
               const crateFinds: ResultSong[] = [];
@@ -1295,7 +1298,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     },
                   });
                   if (!res.suggestions.length) break;
-                  const seen = new SongKeySet();
+                  const seen = new SongKeySet(true);
                   for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                   let added = 0;
                   for (const sug of res.suggestions) {
@@ -1376,7 +1379,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   break;
                 }
                 gotAny = true;
-                const seen = new SongKeySet();
+                const seen = new SongKeySet(true);
                 for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                 let addedThisAttempt = 0;
                 for (const sug of res.suggestions) {
@@ -1430,6 +1433,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         if (stillShort.length) {
           const fallback = generateLists({
             uploaded: uniqueSongs,
+            preserveRequestedRows: true,
             hours: hoursNum,
             expand: true,
             buffer,
@@ -1438,7 +1442,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           });
           // Track keys across ALL sections so a library song can't be added
           // to two different lists during the fallback pass.
-          const globalHave = new SongKeySet();
+          const globalHave = new SongKeySet(true);
           for (const s of [...r.warmUp, ...r.transition, ...r.peak]) globalHave.add(s.artist, s.song);
           for (const { key } of stillShort) {
             const pool = background ? [...fallback.warmUp, ...fallback.transition, ...fallback.peak] : fallback[key];
@@ -1552,15 +1556,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // AI/enrichment — drop this stale result instead of clobbering state.
     if (genTokenRef.current !== myToken) return;
 
-    // Final safety net: one copy of each song across the whole event. Uploads
-    // win over fillers because they come first in each section.
-    {
-      const finalSeen = new SongKeySet();
-      for (const s of [...r.warmUp, ...r.transition, ...r.peak]) if (s.fromUpload) finalSeen.add(s.artist, s.song);
-      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
-        r[k] = r[k].filter((s) => s.fromUpload || finalSeen.tryAdd(s.artist, s.song));
-      });
-    }
+    // This explicit generation may remove added repeats, never requests or saved selections.
+    r = preventAutomaticDuplicates(r, song => {
+      const index = generationResolver.resolve(song);
+      return index === undefined ? undefined : mergedLibrary.tracks[index]?.filePath;
+    }, getFolderRoots());
 
     resultBoundary.current={eventId:openedEventId};
     userEdited.current = true;
@@ -1979,7 +1979,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   function confirmUnmatched(report: ReturnType<typeof exportReadiness>): boolean {
-    if (!report.omitted && !report.cleanBlocked) return true;
+    if (!report.omitted && !report.cleanBlocked && !report.duplicateCount) return true;
     return window.confirm(`${summaryText(report)}. Reference files retain intended tracks. Continue?`);
   }
 
@@ -2026,7 +2026,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // --- Direct-to-VirtualDJ folder exports ---
 
   function warnUnapproved(report: ReturnType<typeof exportReadiness>) {
-    if (report.omitted || report.cleanBlocked) toast.warning(summaryText(report) + ". Reference files retain intended tracks.");
+    if (report.omitted || report.cleanBlocked || report.duplicateCount) toast.warning(summaryText(report) + ". Reference files retain intended tracks.");
   }
 
   function warnUnresolvedPaths(count: number) {
@@ -2145,6 +2145,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       for (const section of sections) buildM3u(captured[section], files.library, files.roots);
       report = await checkReadiness(sections.flatMap(section => captured[section]), files);
       setReadiness(report);
+      if (report.duplicateCount) { toast.error("Export stopped: repeated selected files. Choose which occurrence to exclude in Repeated files; requests and selections remain saved."); return; }
       if (report.unavailable) { toast.error("Export stopped: approved music files are unavailable. References remain available in TXT/CSV."); return; }
     } catch (e) { toast.error((e as Error).message); return; }
     if (!files.library.tracks.length) {
@@ -2220,6 +2221,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       for (const section of sections) buildM3u(captured[section], files.library, files.roots);
       report = await checkReadiness(sections.flatMap(section => captured[section]), files);
       setReadiness(report);
+      if (report.duplicateCount) { toast.error("Export stopped: repeated selected files. Choose which occurrence to exclude in Repeated files; requests and selections remain saved."); return; }
       if (report.unavailable) { toast.error("Export stopped: approved music files are unavailable. References remain available in TXT/CSV."); return; }
     } catch (e) { toast.error((e as Error).message); return; }
     try { for (const section of sections) buildM3u(captured[section], files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
@@ -2263,6 +2265,21 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // --- Summary ---
   // Display-only gap from current lists + targets; never marks the event dirty.
   const liveShortfall = useMemo(() => result ? currentShortfall(result, background ? ["warmUp"] : ["warmUp", "transition", "peak"]) : null, [result, background]);
+  const coverage = useMemo(() => {
+    const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
+    const refs: ExportSongRef[] = [];
+    const bySection: Partial<Record<SectionKey, { text: string; unknown: number; repeats: number }>> = {};
+    let known = 0, unknown = 0, repeats = 0;
+    const times = activeSplit ?? equalSplit(hoursNum);
+    for (const section of sections) {
+      if (!result) break;
+      refs.push(...result[section].map((song, index) => ({ song, match: matches[songKey(section, index, song)], requireClean: cleanRequired, identity: { section, index, key: songKey(section, index, song) } })));
+      const report = exportReadiness(refs, mergedLibrary, {}, getFolderRoots());
+      bySection[section] = { text: sectionCoverage(report.knownSec - known, background ? minutesNum : times[section], background ? 1 : buffer).text, unknown: report.unknownLength - unknown, repeats: report.duplicateCount - repeats };
+      known = report.knownSec; unknown = report.unknownLength; repeats = report.duplicateCount;
+    }
+    return { bySection, report: exportReadiness(refs, mergedLibrary, {}, getFolderRoots()) };
+  }, [result, matches, mergedLibrary, background, activeSplit, hoursNum, minutesNum, buffer, cleanRequired]);
 
   const summary = useMemo(() => {
     if (!result) return null;
@@ -3071,6 +3088,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 {readiness && <><p className="text-sm">{readiness.requested} requested tracks · {summaryText(readiness)}</p>
                 <div className="max-h-40 overflow-auto">{readiness.problems.map((problem, i) => <Button key={i} variant="ghost" size="sm" className="block h-auto max-w-full whitespace-normal text-left" onClick={() => { const identity = problem.identity; if (!identity) return; const song = result[identity.section]?.[identity.index]; if (!song || songKey(identity.section, identity.index, song) !== identity.key) { setReadiness(null); return; } setActiveSection(identity.section); setTimeout(() => document.getElementById(`song-${identity.section}-${identity.index}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }}>{problem.title} — {problem.reason}</Button>)}</div></>}
               </section>
+              {coverage.report.duplicateCount > 0 && <section aria-label="Repeated files" className="space-y-2 border-y border-warning py-3">
+                <h3 className="text-sm font-semibold text-warning">{coverage.report.duplicateCount} repeated selected file{coverage.report.duplicateCount === 1 ? "" : "s"} · {coverage.report.uniqueTracks} unique eligible tracks</h3>
+                <p className="text-xs text-muted-foreground">Combined DJ exports are blocked until you choose which occurrence remains. Excluding an occurrence keeps its request, selected paths and approval. Single-section exports retain repeats only after confirmation.</p>
+                {coverage.report.duplicates.map((duplicate, index) => <div key={`${duplicate.path}-${index}`} className="flex flex-wrap gap-2 text-xs">
+                  {[duplicate.first, duplicate.repeat].map((occurrence, n) => { const identity = occurrence.identity; if (!identity) return null; return <div key={n} className="flex flex-wrap items-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setShowVibe(false); setActiveSection(identity.section); setTimeout(() => document.getElementById(`song-${identity.section}-${identity.index}`)?.scrollIntoView({ block: "center" }), 50); }}>{sectionName(identity.section)} #{identity.index + 1} · {occurrence.title}</Button>
+                    <Button variant="outline" size="sm" aria-label={`Exclude duplicate ${identity.section} ${identity.index + 1}`} onClick={() => { const song = result[identity.section]?.[identity.index]; if (song && songKey(identity.section, identity.index, song) === identity.key) toggleExclude(identity.key); }}>Exclude this occurrence</Button>
+                  </div>; })}
+                </div>)}
+              </section>}
               <EventEnergyRamp
                 targets={targets}
                 homeKey={homeKey || undefined}
@@ -3117,6 +3144,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                               )}
                             </span>
                           )}
+                          {coverage.bySection[sec] && <span className="max-w-72 text-[11px] font-normal" aria-label={`${label} duration`}>{coverage.bySection[sec]?.text}{coverage.bySection[sec]?.unknown ? ` · ${coverage.bySection[sec]?.unknown} unknown length` : ""}{coverage.bySection[sec]?.repeats ? ` · ${coverage.bySection[sec]?.repeats} repeated file (not counted)` : ""}</span>}
                         </span>
                       </TabsTrigger>
                     );
@@ -3886,6 +3914,7 @@ function InlineMatchSearch({
               const isExtra = extraSet.has(ti);
               const selected = isCurrent || isExtra;
               const pct = Math.round(score * 100);
+              const reason = scorePair(makeSubject(song.artist, song.song), makeSubject(t.artist, t.title)).reason;
               const mostPlayed = bestPlays > 0 && (t.playCount ?? 0) === bestPlays;
               return (
                  <li
@@ -3911,6 +3940,7 @@ function InlineMatchSearch({
                    )}
                    <div className="min-w-0">
                      <p className="break-words font-medium">{t.title} — {t.artist}</p>
+                      {reason && <p className="text-[11px] text-warning">{reason}</p>}
                       <p className="break-all text-[11px] text-muted-foreground">{resolveExportPath(t.filePath) ?? t.filePath}</p>
                    </div>
                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-muted-foreground">

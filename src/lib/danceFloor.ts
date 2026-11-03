@@ -1,4 +1,5 @@
 import Papa from "papaparse";
+import { intendedKey } from "../../desktop/offline/policy.cjs";
 import { boundedNumber, validateTiming, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "./inputSafety";
 import { allowedForEventType, getEventType, libraryAllowedForEventType } from "./eventTypes";
 import { getVibe } from "./vibes";
@@ -129,11 +130,13 @@ export function songKeys(artist: string, song: string): string[] {
 /** Duplicate detector tolerant of artist credit order / featured artists / "The". */
 export class SongKeySet {
   private keys = new Set<string>();
+  constructor(private versionAware = false) {}
+  private identities(artist: string, song: string) { return this.versionAware ? [intendedKey({ artist, song })] : songKeys(artist, song); }
   has(artist: string, song: string): boolean {
-    return songKeys(artist, song).some((k) => this.keys.has(k));
+    return this.identities(artist, song).some((k) => this.keys.has(k));
   }
   add(artist: string, song: string): void {
-    for (const k of songKeys(artist, song)) this.keys.add(k);
+    for (const k of this.identities(artist, song)) this.keys.add(k);
   }
   /** Adds and returns true if the song was new. */
   tryAdd(artist: string, song: string): boolean {
@@ -443,6 +446,8 @@ function bestSection(scores: SectionScores): Section {
 
 export interface GenerationInput {
   uploaded: Song[];
+  /** Event preparation retains every client row; older utility callers may dedupe imports. */
+  preserveRequestedRows?: boolean;
   prefs: Preferences;
   hours: number;
   expand: boolean;
@@ -786,7 +791,7 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
     transition: result.transition.map((s) => ({ ...s })),
     peak: result.peak.map((s) => ({ ...s })),
   };
-  const allSeen = new SongKeySet();
+  const allSeen = new SongKeySet(true);
   for (const s of [...next.warmUp, ...next.transition, ...next.peak]) allSeen.add(s.artist, s.song);
   const evType = getEventType(prefs.eventType);
   const unblockedLibrary = SONG_LIBRARY.filter(
@@ -854,7 +859,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
       artist: (s.artist ?? "").trim() || "Unknown Artist",
       song: (s.song ?? "").trim() || (s.artist ?? "").trim(),
     }));
-  const dedupedUploaded = dedupeSongs(validUploaded);
+  const dedupedUploaded = input.preserveRequestedRows ? validUploaded : dedupeSongs(validUploaded);
   const cleanUploaded = dedupedUploaded.filter((s) => !isBlocked(s.artist, s.song, prefs.doNotPlay));
 
   const duplicatesRemoved = validUploaded.length - dedupedUploaded.length;
@@ -1028,10 +1033,11 @@ export function applyVarietyReranker(
   // Step 2: drop near-identical duplicates (same normalized artist + title).
   // Previously duplicates were pushed to overflow and re-appended at the end,
   // which caused the same song to appear twice inside the same section.
-  const seenKeys = new SongKeySet();
+  const seenKeys = new SongKeySet(true);
   const unique: ResultSong[] = [];
   for (const s of allowed) {
-    if (!seenKeys.tryAdd(s.artist, s.song)) continue;
+    if (!s.fromUpload && !seenKeys.tryAdd(s.artist, s.song)) continue;
+    if (s.fromUpload) seenKeys.add(s.artist, s.song);
     unique.push(s);
   }
 
@@ -1176,14 +1182,15 @@ export function reorderForEnergyProgression(
   // the first occurrence before we re-bucket by intensity.
   // Uploads claim their identity first so an AI/library copy of the same
   // song is the one dropped, never the client's own pick.
-  const seenAcross = new SongKeySet();
+  const seenAcross = new SongKeySet(true);
   const deduped: ResultSong[] = [];
   const ordered = [...all.filter((s) => s.fromUpload), ...all.filter((s) => !s.fromUpload)];
   for (const s of ordered) {
     // Event type rules (e.g. clean-only, modern-only) apply to added songs;
     // the client's own uploads always stay.
     if (!s.fromUpload && !allowedForEventType(s, evType)) continue;
-    if (!normalizeKey(s.song) || !seenAcross.tryAdd(s.artist, s.song)) continue;
+    if (!normalizeKey(s.song) || (!s.fromUpload && !seenAcross.tryAdd(s.artist, s.song))) continue;
+    if (s.fromUpload) seenAcross.add(s.artist, s.song);
     deduped.push(s);
   }
   // Bucket by *effective* intensity so pre-1990 songs bias into Warm Up and

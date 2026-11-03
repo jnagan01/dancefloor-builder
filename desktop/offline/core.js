@@ -156,7 +156,7 @@
     const sections = [];
     const problems = [];
     const recordings = new Set();
-    let requested = 0, omitted = 0, unavailable = 0, localChoices = 0, approved = 0, excluded = 0, unapproved = 0, missing = 0, cleanBlocked = 0;
+    let requested = 0, omitted = 0, unavailable = 0, localChoices = 0, approved = 0, excluded = 0, unapproved = 0, missing = 0, cleanBlocked = 0, duplicateCount = 0, knownSec = 0, unknownLength = 0;
     for (const [section, label] of SECTIONS) {
       const songs = (event.lists[section] || []);
       if (!songs.length) continue;
@@ -184,7 +184,9 @@
           if (!full) { missing++; problems.push({ ...at, title, reason: unsafePath(p) ? "Unsafe file path" : "Unknown music folder location" }); continue; }
           if (availability && availability[full] !== "available") { unavailable++; missing++; problems.push({ ...at, title, reason: "File missing on this Mac" }); continue; }
           entries.push({ track: index.tracks[ti], path: full, at });
-          recordings.add(full);
+          const identity = full.replace(/\\/g, "/").replace(/\/\.\//g, "/");
+          if (recordings.has(identity)) { duplicateCount++; problems.push({ ...at, title, reason: "Repeated selected file — resolve occurrences before combined DJ export" }); }
+          else { recordings.add(identity); const seconds = Number(index.tracks[ti].songLength); if (Number.isFinite(seconds) && seconds > 0) knownSec += seconds; else unknownLength++; }
           wrote++;
           approved++;
         }
@@ -192,7 +194,7 @@
       });
       sections.push({ section, label: sectionLabel(event, section, label), entries });
     }
-    return { sections, problems, summary: { requested, approved, omitted, unavailable, localChoices, excluded, unapproved, missing, cleanBlocked } };
+    return { sections, problems, summary: { requested, approved, uniqueTracks: recordings.size, duplicateCount, knownSec, unknownLength, omitted, unavailable, localChoices, excluded, unapproved, missing, cleanBlocked } };
   }
 
   const single = v => String(v == null ? "" : v).replace(/[\r\n]+/g, " ").trim();
@@ -220,6 +222,9 @@
       `Exported offline: ${single(meta.exportedAt)}`,
       `Requested tracks: ${s.requested}`,
       `Approved tracks (including extras, in playlist order): ${s.approved}`,
+      `Unique eligible files: ${s.uniqueTracks}`,
+      `Repeated selected files: ${s.duplicateCount}`,
+      `Known unique length (seconds): ${s.knownSec}`,
       `Local offline choices used (not synced): ${s.localChoices}`,
       `Omitted event rows: ${s.omitted}`,
       `Explicitly excluded: ${s.excluded}`,
