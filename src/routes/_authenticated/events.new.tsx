@@ -668,6 +668,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   const doNotPlayEntries = useMemo(() => parseDoNotPlay(doNotPlayInput), [doNotPlayInput]);
 
+  const prepPreferences = useMemo(() => ({ artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean), genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean), decades }), [artistsInput, genresInput, decades]);
   function buildCurrentPrefs(): Preferences {
     return {
       artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean),
@@ -3169,6 +3170,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 onJump={(sec, idx) => { setShowVibe(false); setActiveSection(sec); setTimeout(() => document.getElementById(`song-${sec}-${idx}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }}
                 onAddToSection={addSongToSection}
                 onDetails={setDetail}
+                preferences={prepPreferences}
               />
 
               <Tabs value={showVibe && targets ? "vibe" : activeSection} onValueChange={v=>{ if (v === "vibe") setShowVibe(true); else { setShowVibe(false); setActiveSection(v as SectionKey); } }}>

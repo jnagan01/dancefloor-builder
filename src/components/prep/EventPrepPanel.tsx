@@ -15,7 +15,9 @@ import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrac
 import { libraryCandidate, requestFacts, selectedTrackIds } from "@/lib/prep/requestFacts";
 import { EMPTY_FILTER, facetOptions, fmtDur, trackFacts, type FilterFacts, type FilterState } from "@/lib/prep/filters";
 import { buildDashboard, type DrillItem } from "@/lib/prep/dashboard";
-import { recommend, type Candidate, type RecControls, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
+import { recommend, explainTop, DEFAULT_REC_CONTROLS, distinctRequests, type Candidate, type EventPreferences, type RecControls, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
+import { addQualitySample, deleteQualitySample, rateQualityCandidate, ratingCounts, QUALITY_RATINGS, type QualityCandidate } from "@/lib/prep/quality";
+import { compareRevisions, describeEvaluation } from "@/lib/prep/qualityEval";
 import {
   addShortlist, copyGroupToEvent, createGroup, deleteGroup, dismissForEvent, eventPrep, itemIdentity, linkShortlistFile, removeFromGroup,
   removeShortlist, renameGroup, setEventTags, setFeedback, songIdentity, undoDismiss, updateShortlist, addToGroup, DISMISS_REASONS, type ShortStatus,
@@ -38,6 +40,8 @@ interface Props {
   /** Uses the event's own add mutation; the new row is never auto-approved. Returns an error message or null. */
   onAddToSection: (section: PrepSectionKey, song: { artist: string; song: string; trackId?: string }) => string | null;
   onDetails: (s: DetailSubject) => void;
+  /** The event's explicit genre/decade/favourite-artist choices; ranked the same way as automatic expansion. */
+  preferences?: EventPreferences;
 }
 
 const NO_TRACK_EVIDENCE: SimilarTrackEvidence[] = [];
@@ -81,7 +85,7 @@ export function EventPrepPanel(p: Props) {
   ), [p.sections, p.matches, p.keyOf, tracks, p.policies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- recommendations ----
-  const [controls, setControls] = useState<RecControls>({ familiarity: 0, clientSimilarity: 1, artistVariety: 0.5, ownedOnly: false });
+  const [controls, setControls] = useState<RecControls>(DEFAULT_REC_CONTROLS);
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
   const [similar, setSimilar] = useState<SimilarArtistEvidence[]>([]);
   const [simState, setSimState] = useState<{ busy: boolean; note?: string }>({ busy: false });
@@ -120,8 +124,8 @@ export function EventPrepPanel(p: Props) {
   const [similarTracksFor, setSimilarTracksFor] = useState<string | null>(null);
   useEffect(() => { trackSimGen.current++; setSimilarTracks([]); setSimilarTracksFor(null); setTrackSimState({ busy: false }); }, [seedKey]);
   const liveSimilarTracks = similarTracksFor === seedKey ? similarTracks : NO_TRACK_EVIDENCE;
-  const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, similarTracks: liveSimilarTracks, controls, filter, limit: 40 }),
-    [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, liveSimilarTracks, controls, filter]);
+  const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, similarTracks: liveSimilarTracks, preferences: p.preferences, controls, filter, limit: 40 }),
+    [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, liveSimilarTracks, p.preferences, controls, filter]);
   const loadSimilar = async () => {
     const artists = [...new Set(requests.map(r => r.artist).filter(Boolean))].slice(0, 20);
     if (!artists.length) { setSimState({ busy: false, note: "No client requests to compare with yet." }); return; }
@@ -167,6 +171,35 @@ export function EventPrepPanel(p: Props) {
   const trackById = useMemo(() => new Map(tracks.map(t => [trackIdentity(t.filePath, roots), t])), [tracks, roots]);
   const addRec = async (r: Recommendation) => { if (!p.eventId) return; const ev = p.eventId; const res = await mutate(k => addShortlist(k, ev, { artist: r.artist, song: r.song, trackId: r.trackId }).next); return res; };
 
+  // ---- recommendation quality review (separate from events; ratings never change feedback or event rows) ----
+  const [sampleName, setSampleName] = useState("");
+  const [qualityNote, setQualityNote] = useState<string | null>(null);
+  const samples = knowledge.quality ?? [];
+  const captureSample = async () => {
+    const simByKey = new Map(liveSimilarTracks.map(e => [e.key, e]));
+    const simArtist = new Map(similar.map(x => [x.artist.toLowerCase(), x]));
+    const favored = new Set(knowledge.feedback.filter(f => f.kind === "favor").map(f => f.key));
+    const candidates: QualityCandidate[] = rec.items.slice(0, 10).map(r => {
+      const st = simByKey.get(r.key), sa = simArtist.get(r.artist.toLowerCase()), tags = r.trackId ? notesMap.get(r.trackId)?.tags : undefined;
+      const f = r.facts, c: QualityCandidate = { artist: r.artist, song: r.song, origin: r.origin };
+      if (f.genre) { c.genre = f.genre.slice(0, 60); if (f.genreSource) c.genreSource = f.genreSource; }
+      if (f.decade && /^\d{4}s$/.test(f.decade)) { c.decade = f.decade; if (f.decadeSource) c.decadeSource = f.decadeSource; }
+      if (f.owned !== undefined) c.owned = f.owned;
+      if (r.playCount !== undefined && Number.isInteger(r.playCount) && r.playCount >= 0) c.playCount = r.playCount;
+      if (st) { c.lastfmSeeds = st.seeds.slice(0, 5); c.lastfmMatch = st.bestMatch; }
+      if (sa) { c.similarTo = sa.similarTo; c.similarMatch = sa.match; }
+      if (tags?.length) c.tags = tags;
+      if (favored.has(r.key)) c.favored = true;
+      return c;
+    });
+    const reqs = distinctRequests(requests).slice(0, 60).map(r => ({ artist: r.artist, song: r.song, ...(r.genre ? { genre: r.genre.slice(0, 60) } : {}), ...(r.decade && /^\d{4}s$/.test(r.decade) ? { decade: r.decade } : {}) }));
+    const prefs = { genres: (p.preferences?.genres ?? []).slice(0, 30), decades: (p.preferences?.decades ?? []).slice(0, 30), artists: (p.preferences?.artists ?? []).slice(0, 30) };
+    try {
+      await mutate(k => addQualitySample(k, { name: sampleName, requests: reqs, preferences: prefs, eventTags, candidates }));
+      setSampleName(""); setQualityNote(`Saved ${candidates.length} tracks for review. All start unrated.`);
+    } catch (e) { setQualityNote((e as Error).message); }
+  };
+
   // ---- groups ----
   const [groupName, setGroupName] = useState("");
   const [renamingGroup, setRenamingGroup] = useState<{ id: string; name: string } | null>(null);
@@ -177,7 +210,7 @@ export function EventPrepPanel(p: Props) {
     <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Preparation</h2>
       {state.status === "blocked" && <span className="text-xs text-destructive">{state.error}</span>}</div>
     <Tabs defaultValue="overview">
-      <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="recs">Recommendations</TabsTrigger><TabsTrigger value="shortlist">Shortlist ({ep.shortlist.length})</TabsTrigger><TabsTrigger value="groups">Groups ({knowledge.groups.length})</TabsTrigger></TabsList>
+      <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="recs">Recommendations</TabsTrigger><TabsTrigger value="shortlist">Shortlist ({ep.shortlist.length})</TabsTrigger><TabsTrigger value="groups">Groups ({knowledge.groups.length})</TabsTrigger><TabsTrigger value="quality">Review quality ({samples.length})</TabsTrigger></TabsList>
 
       <TabsContent value="overview" className="space-y-3">
         <p className="text-xs text-muted-foreground">{dash.totals.songs} track rows · {dash.totals.confirmed} unique eligible tracks · approved length {fmtDur(dash.totals.knownSec)}. Repeated files do not add coverage. File presence on disk is checked by "Check export readiness".</p>
@@ -220,7 +253,7 @@ export function EventPrepPanel(p: Props) {
         <ul className="space-y-1.5">{rec.items.map(r => <li key={`${r.key}|${r.trackId ?? ""}`} className="rounded border border-border p-2">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0"><p className="text-sm font-medium">{r.artist} – {r.song} <span className={`ml-1 rounded px-1 text-[10px] ${r.origin === "library" ? "bg-success/15 text-success" : "bg-muted text-muted-foreground"}`}>{r.origin === "library" ? "Your file" : "Not owned"}</span></p>
-              <ul className="text-[11px] text-muted-foreground">{r.evidence.length ? r.evidence.map((e, i) => <li key={i}>{e.points > 0 ? "+" : ""}{e.points} · {e.text}</li>) : <li>No specific evidence; shown because it passes your filters.</li>}</ul></div>
+              <p className="text-[11px]">Why: {explainTop(r)}</p><ul className="text-[11px] text-muted-foreground">{r.evidence.length ? r.evidence.map((e, i) => <li key={i}>{e.points > 0 ? "+" : ""}{e.points} · {e.text}</li>) : <li>No specific evidence; shown because it passes your filters.</li>}</ul></div>
             <div className="flex flex-wrap gap-1">
               <Button size="sm" variant="ghost" aria-label={`Details for ${r.artist} – ${r.song}`} onClick={() => p.onDetails({ artist: r.artist, song: r.song, track: r.trackId ? trackById.get(r.trackId) : undefined, evidence: r.evidence, origin: r.origin })}><Info size={14} /></Button>
               <Button size="sm" variant="outline" disabled={!canEvent || ep.shortlist.some(s => itemIdentity(s) === itemIdentity({ artist: r.artist, song: r.song, trackId: r.trackId }))} onClick={() => void addRec(r)}><Plus size={14} className="mr-1" />Shortlist</Button>
@@ -233,6 +266,26 @@ export function EventPrepPanel(p: Props) {
             <div><p className="font-medium">Dismissed for this event</p>{ep.dismissed.map(d => <p key={d.key} className="flex items-center justify-between">{d.label}{d.reason ? ` · ${DISMISS_REASONS.find(x => x.value === d.reason)?.label}` : ""}<Button size="sm" variant="ghost" className="h-6" onClick={() => void mutate(k => undoDismiss(k, p.eventId!, d.key))}><Undo2 size={12} className="mr-1" />Undo</Button></p>)}</div>
             <div><p className="font-medium">Never recommend (all events)</p>{knowledge.feedback.filter(f => f.kind === "never").map(f => { return <p key={f.key} className="flex items-center justify-between">{f.label}<Button size="sm" variant="ghost" className="h-6" onClick={() => void mutate(k => ({ ...k, feedback: k.feedback.filter(x => x.key !== f.key) }))}><Undo2 size={12} className="mr-1" />Allow</Button></p>; })}</div>
           </div></details>}
+      </TabsContent>
+
+      <TabsContent value="quality" className="space-y-3">
+        <div><h3 className="text-sm font-semibold">Review recommendation quality</h3>
+          <p className="text-xs text-muted-foreground">Save a small snapshot of the current recommendations, then rate each track. Samples stay on this device for your account, separate from your events and music; ratings never hide, favour or add tracks.</p></div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input className="h-8 max-w-xs" placeholder="Sample name (optional)" aria-label="Review sample name" maxLength={120} value={sampleName} onChange={e => setSampleName(e.target.value)} />
+          <Button size="sm" variant="outline" disabled={!ready || !rec.items.length} onClick={() => void captureSample()}>Save current top {Math.min(10, rec.items.length)} for review</Button>
+          {qualityNote && <span className="text-xs text-muted-foreground" data-testid="quality-note">{qualityNote}</span>}
+        </div>
+        {!samples.length && <p className="text-xs text-muted-foreground">No review samples yet.</p>}
+        {samples.map(s => { const c = ratingCounts(s), cmp = compareRevisions(s); return <details key={s.id} className="rounded border border-border p-2" data-testid="quality-sample">
+          <summary className="cursor-pointer text-sm"><span className="font-medium">{s.name}</span> <span className="text-xs text-muted-foreground">· {new Date(s.createdAt).toLocaleDateString()} · {c.reviewed} reviewed · {c.unrated} unrated</span></summary>
+          <p className="mt-1 text-[11px] text-muted-foreground">Saved order — {describeEvaluation(cmp.captured)}<br />Current ranking — {describeEvaluation(cmp.revision)}</p>
+          <ol className="mt-2 space-y-1">{s.candidates.map((x, i) => <li key={i} className="flex flex-wrap items-center justify-between gap-1 text-xs">
+            <span>{i + 1}. {x.artist} – {x.song}{x.rating ? "" : <span className="text-muted-foreground"> · unrated</span>}</span>
+            <span className="flex flex-wrap gap-1">{QUALITY_RATINGS.map(r => <Button key={r.value} size="sm" className="h-6" variant={x.rating === r.value ? "default" : "ghost"} aria-pressed={x.rating === r.value} aria-label={`${r.label}: ${x.artist} – ${x.song}`} disabled={!ready} onClick={() => void mutate(k => rateQualityCandidate(k, s.id, i, r.value))}>{r.label}</Button>)}
+              <Button size="sm" className="h-6" variant="ghost" aria-label={`Clear rating: ${x.artist} – ${x.song}`} disabled={!ready || !x.rating} onClick={() => void mutate(k => rateQualityCandidate(k, s.id, i, null))}><Undo2 size={12} className="mr-1" />Clear</Button></span></li>)}</ol>
+          <Button size="sm" variant="ghost" className="mt-1" disabled={!ready} onClick={() => void mutate(k => deleteQualitySample(k, s.id))}><X size={12} className="mr-1" />Delete sample</Button>
+        </details>; })}
       </TabsContent>
 
       <TabsContent value="shortlist" className="space-y-3">
