@@ -54,6 +54,7 @@ async function run(applyFit: boolean) {
     }
     await h.current.generate(); await h.flush();
     await vi.advanceTimersByTimeAsync(3000); await h.flush();
+    if (process.env.DBG) console.log('DBG', JSON.stringify({ e: h.errors, w: h.warnings, i: h.infos }));
     return { saved: h.requests.filter((r: any) => r.lists?.warmUp).at(-1), h };
   } finally { vi.useRealTimers(); h.unmount(); }
 }
