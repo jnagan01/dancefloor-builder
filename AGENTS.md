@@ -1,7 +1,7 @@
 # Project architecture
 - Subdirectories have their own `AGENTS.md`; read them before changing files there.
 - Keep the event builder under `/events/new` and the authenticated workspace shell under `_authenticated/route.tsx`, because Home must be the default landing page without resetting event state on unrelated pages.
-- Keep selected music source indexes in account-scoped IndexedDB; browser file access requires reconnecting folders and server storage must not hold local audio files.
+- Keep music source indexes in account-scoped IndexedDB; browsers must reconnect folders and the server never holds local audio.
 - Keep event autosave in the owner-scoped `workflow_history` JSON snapshot, because old snapshots must stay readable.
 - Use shared CSS tokens and one local-file waveform player for consistent visuals/playback.
 - Keep app-only prep knowledge in the account-fenced `src/lib/prep` store, never in snapshots/audio, backed up as optional `prep`, because events must stay readable.
