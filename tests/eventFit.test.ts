@@ -172,7 +172,7 @@ describe("frozen quality replay carries fit evidence and context", () => {
     const sample = { ...captureFromRanking(i, out.items, "fit", 14), id: "s1", createdAt: 1 };
     const [read] = readQualitySamples([JSON.parse(JSON.stringify(sample))]);
     expect(read.preferences.fit).toEqual(AFTER_FIT);
-    expect(read.candidates.some(c => c.popularitySource === "provider")).toBe(true);
+    expect(read.candidates.some(c => c.popularity !== undefined && c.popularitySource === "estimate")).toBe(true);
     const replay = recommend(sampleInput(read));
     expect(replay.items.map(r => `${r.artist}|${r.song}`)).toEqual(out.items.map(r => `${r.artist}|${r.song}`));
     expect(() => readQualitySamples([{ ...sample, preferences: { ...sample.preferences, fit: { familiarity: "x" } } }])).toThrow();
@@ -208,10 +208,50 @@ describe("saved-event evidence (Let It Be / Chasing Cars as actually stored)", (
     if (lib) expect(lib.evidence.some((e: any) => e.kind === "slowEstimate" && e.points < 0)).toBe(true);
   });
 });
-it("saved-event evidence keeps Chasing Cars and Let It Be out of the 14 with fit on, without excluding them", async () => {
+it("saved-event evidence: Let It Be (AI slow estimate) leaves the 14; Chasing Cars (estimates only) is honestly not demoted; neither excluded", async () => {
   const { recommend } = await import("../src/lib/prep/recommend"); const { input, AFTER_FIT } = await import("./fit/fitComparison");
   const items = recommend({ ...input(AFTER_FIT, true), limit: 999 } as any).items;
   const idx = (s: string) => items.findIndex((r: any) => r.song === s);
-  expect(idx("Chasing Cars")).toBeGreaterThanOrEqual(14); expect(idx("Let It Be")).toBeGreaterThanOrEqual(14);
+  expect(idx("Let It Be")).toBeGreaterThanOrEqual(14);
   expect(idx("Chasing Cars")).toBeGreaterThanOrEqual(0); expect(idx("Let It Be")).toBeGreaterThanOrEqual(0);
+});
+
+describe("review fixes: popularity provenance, catalogue membership, panel parity, caveats", () => {
+  it("only verified provider popularity counts as guest familiarity; personal/local sources are unknown", async () => {
+    const { evaluateFit } = await import("../src/lib/prep/eventFit");
+    const ev = (src: any) => evaluateFit({ familiarity: "familiar" }, { origin: "library", fit: { popularity: 9, popularitySource: src } });
+    expect(ev("provider").familiarEvidence).toBe(true);
+    for (const s of ["user", "tags", "virtualdj", "measured"]) { const r = ev(s); expect(r.familiarEvidence).toBe(false); expect(r.lines).toEqual([]); expect(r.uncertain?.join()).toMatch(/not audience data/); }
+    const est = ev("estimate"); expect(est.familiarEvidence).toBe(false); expect(est.lines[0].points).toBe(0.35);
+    const low = evaluateFit({ familiarity: "familiar" }, { origin: "library", fit: { popularity: 1, popularitySource: "user" } });
+    expect(low.lines).toEqual([]); // a personal low rating is not evidence a song is unknown to guests
+  });
+  it("catalogue membership is source-independent and version-aware", async () => {
+    const { evaluateFit, inCrowdCatalogue } = await import("../src/lib/prep/eventFit");
+    const { SONG_LIBRARY } = await import("../src/lib/songLibrary");
+    const s = SONG_LIBRARY[0];
+    for (const origin of ["library", "catalogue", "ai"] as const) expect(evaluateFit({ familiarity: "familiar" }, { origin, artist: s.artist, song: s.song }).familiarEvidence).toBe(true);
+    expect(inCrowdCatalogue(s.artist, `${s.song} (Clean)`)).toBe(true);
+    for (const v of ["Live", "Remix", "Acoustic", "Extended Mix"]) expect(inCrowdCatalogue(s.artist, `${s.song} (${v})`)).toBe(false);
+    expect(inCrowdCatalogue("Nobody Real", s.song)).toBe(false);
+  });
+  it("panel catalogue fit facts equal the automatic route's provenance-derived facts; library files stay unknown", async () => {
+    const { catalogueFitFacts, fitFactsFromRow } = await import("../src/lib/prep/eventFit");
+    const { withProv } = await import("../src/lib/prep/provenance");
+    const { SONG_LIBRARY } = await import("../src/lib/songLibrary");
+    const { libraryCandidate } = await import("../src/lib/prep/requestFacts");
+    for (const s of SONG_LIBRARY.slice(0, 25)) {
+      const row = withProv({ artist: s.artist, song: s.song, energy: s.energy, danceability: s.danceability } as any, "catalogue");
+      expect(catalogueFitFacts(s)).toEqual(fitFactsFromRow(row));
+    }
+    const lib = libraryCandidate({ artist: "A", title: "B", filePath: "/x/a.mp3" } as any, "id") as any;
+    expect(lib.fit).toBeUndefined(); expect(lib.facts.energy).toBeUndefined();
+  });
+  it("slow estimate and fit caveats stay visible when positive reasons fill the explanation", async () => {
+    const { explainTop } = await import("../src/lib/prep/recommend");
+    const long = "x".repeat(400);
+    const out = explainTop({ evidence: [{ kind: "lastfm", text: long, points: 3 }, { kind: "decade", text: long, points: 2 }, { kind: "genre", text: long, points: 1 }, { kind: "slowEstimate", text: "Energy 4/10 and danceability 4/10 suggest a slow song (estimate, advisory)", points: -1 }] as any, uncertain: ["Guest familiarity unknown: no track popularity data"] }, 3);
+    expect(out.length).toBeLessThanOrEqual(900);
+    expect(out).toMatch(/suggest a slow song/); expect(out).toMatch(/Guest familiarity unknown/);
+  });
 });

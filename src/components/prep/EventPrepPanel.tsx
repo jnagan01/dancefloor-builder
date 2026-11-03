@@ -13,6 +13,7 @@ import { SONG_LIBRARY } from "@/lib/songLibrary";
 import { getArtistCrowdData, getSimilarTracks } from "@/lib/lastfm.functions";
 import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { libraryCandidate, requestFacts, selectedTrackIds } from "@/lib/prep/requestFacts";
+import { catalogueFitFacts } from "@/lib/prep/eventFit";
 import { EMPTY_FILTER, facetOptions, fmtDur, trackFacts, type FilterFacts, type FilterState } from "@/lib/prep/filters";
 import { buildDashboard, type DrillItem } from "@/lib/prep/dashboard";
 import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Candidate, type EventPreferences, type RecControls, type RecInput, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
@@ -106,7 +107,8 @@ export function EventPrepPanel(p: Props) {
     const cat: Candidate[] = SONG_LIBRARY.map(s => {
       const owned = ownedKeys.has(songIdentity(s.artist, s.song));
       const facts: FilterFacts = { genre: s.genre || undefined, decade: s.decade || undefined, energy: s.energy, owned, genreSource: s.genre ? "catalogue" : undefined, decadeSource: s.decade ? "catalogue" : undefined };
-      return { artist: s.artist, song: s.song, facts, origin: "catalogue" as const };
+      const fit = catalogueFitFacts(s);
+      return { artist: s.artist, song: s.song, facts, origin: "catalogue" as const, ...(fit ? { fit } : {}) };
     }).filter(c => !c.facts.owned && resolver.allowed(c) && !requiresClean(p.policies)); // owned catalogue songs already appear as library files
     return [...lib, ...cat];
   }, [tracks, roots, ownedKeys, resolver, p.policies]);

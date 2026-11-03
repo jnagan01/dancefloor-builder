@@ -1,5 +1,7 @@
 import { attrSource, type ProvRow } from "./provenance";
 import { sourceLabel, tierOf, type MetaSource } from "./metaConfidence";
+import { additionKeys } from "../additionIdentity";
+import { SONG_LIBRARY } from "../songLibrary";
 
 /**
  * Optional, event-scoped "event fit" choices for AUTOMATIC additions and the preparation panel.
@@ -7,7 +9,7 @@ import { sourceLabel, tierOf, type MetaSource } from "./metaConfidence";
  * Client requests are never candidates, so these choices can never remove or rewrite a request.
  *
  * Evidence rules (no fabricated metadata; unknown stays unknown and earns nothing):
- * - Guest familiarity uses only track-level, audience-wide evidence: a music-data-provider popularity value for the
+ * - Guest familiarity uses only track-level, audience-wide evidence: a VERIFIED (exact-match) provider popularity for the
  *   track, or membership in the app's curated built-in crowd-standards catalogue (labelled as curation, not charts).
  *   File ownership, artist popularity, artist similarity and your personal play counts are NOT guest familiarity.
  * - Slow/ballad avoidance needs BOTH low energy and low danceability. Verified values (provider/measured/your edit/
@@ -54,12 +56,37 @@ export function fitFactsFromRow(row: ProvRow): FitFacts | undefined {
 }
 
 const STRONG = new Set<MetaSource>(["provider", "measured", "user", "tags", "virtualdj"]);
+/** Guest (audience-wide) popularity: ONLY a verified music-data-provider metric. User ratings, file tags, VirtualDJ
+ *  and "measured" values are personal/local, never crowd data, so they are treated as unknown for familiarity. */
+const POP_STRONG = new Set<MetaSource>(["provider"]);
+const POP_ADVISORY = new Set<MetaSource>(["estimate", "ai", "catalogue"]);
 /** Track-level strength: catalogue feel values are curated estimates, not measurements. */
-const strength = (src: MetaSource | undefined, has: boolean): "strong" | "estimate" | "unknown" => {
+const strength = (src: MetaSource | undefined, has: boolean, strong: Set<MetaSource> = STRONG): "strong" | "estimate" | "unknown" => {
   const t = tierOf(src, has);
   if (t === "unknown") return "unknown";
-  return src && STRONG.has(src) ? "strong" : "estimate";
+  return src && strong.has(src) ? "strong" : "estimate";
 };
+const popStrength = (src: MetaSource | undefined, has: boolean) => {
+  const s = strength(src, has, POP_STRONG);
+  return s === "estimate" && !(src && POP_ADVISORY.has(src)) ? "unknown" : s;
+};
+
+let catKeys: Set<string> | undefined;
+/** Exact, version-aware membership in the built-in crowd-standards catalogue, independent of where the candidate came
+ *  from (owned file, catalogue, AI). Live/remix/acoustic/extended descriptors are kept, so they never match the
+ *  original; only clean/dirty/radio-edit labels and featured-credit brackets are ignored. */
+export function inCrowdCatalogue(artist: string, song: string): boolean {
+  catKeys ??= new Set(SONG_LIBRARY.flatMap(s => additionKeys(s.artist, s.song)));
+  return additionKeys(artist, song).some(k => catKeys!.has(k));
+}
+/** Fit facts for a built-in catalogue entry: curated feel values, always labelled "catalogue" (advisory estimate). */
+export function catalogueFitFacts(s: { energy?: number; danceability?: number }): FitFacts | undefined {
+  const f: FitFacts = {};
+  const e = num10(s.energy), d = num10(s.danceability);
+  if (e !== undefined) { f.energy = e; f.energySource = "catalogue"; }
+  if (d !== undefined) { f.danceability = d; f.danceabilitySource = "catalogue"; }
+  return Object.keys(f).length ? f : undefined;
+}
 
 export interface FitResult {
   /** Reason the candidate is excluded (strong evidence only), else undefined. */ exclude?: string;
@@ -68,11 +95,11 @@ export interface FitResult {
   /** Plain statements of what an active choice could NOT verify for this track (shown, never scored). */ uncertain?: string[];
 }
 
-export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | "catalogue" | "ai"; fit?: FitFacts }): FitResult {
+export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | "catalogue" | "ai"; artist?: string; song?: string; fit?: FitFacts }): FitResult {
   const r: FitResult = { lines: [], familiarEvidence: false };
   if (!fit) return r;
   const f = c.fit ?? {};
-  const pop = f.popularity, ps = strength(f.popularitySource, pop !== undefined);
+  const pop = f.popularity, ps = popStrength(f.popularitySource, pop !== undefined);
   const popText = (p: number, s: MetaSource | undefined) => `Track popularity ${Math.round(p)}/10 (${sourceLabel(s)}, audience-wide)`;
   if (fit.familiarity === "familiar") {
     if (pop !== undefined && ps === "strong") {
@@ -83,7 +110,7 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
       // Advisory only: small bonus, never treated as familiarity evidence that lifts similarity.
       r.lines.push({ kind: "familiarTrack", text: `${popText(pop, f.popularitySource)} (advisory estimate)`, points: 0.35 });
     }
-    if (c.origin === "catalogue") { r.lines.push({ kind: "familiarTrack", text: "In the built-in crowd-standards catalogue (app curation, not chart data)", points: 1 }); r.familiarEvidence = true; }
+    if (c.origin === "catalogue" || (c.artist && c.song && inCrowdCatalogue(c.artist, c.song))) { r.lines.push({ kind: "familiarTrack", text: "In the built-in crowd-standards catalogue (app curation, not chart data)", points: 1 }); r.familiarEvidence = true; }
   } else if (fit.familiarity === "discovery" && pop !== undefined && ps === "strong") {
     if (pop <= 5) r.lines.push({ kind: "discoveryTrack", text: `${popText(pop, f.popularitySource)}: less-common pick (discovery)`, points: 0.75 });
     else if (pop >= 8) r.lines.push({ kind: "discoveryTrack", text: `${popText(pop, f.popularitySource)}: very familiar, less of a discovery`, points: -0.75 });
@@ -96,7 +123,7 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
     else if (lowE && lowD) r.lines.push({ kind: "slowEstimate", text: `Energy ${e}/10 and danceability ${d}/10 suggest a slow song (estimate, advisory)`, points: -1 });
     if (!r.exclude && (es !== "strong" || ds !== "strong")) (r.uncertain ??= []).push(e === undefined && d === undefined ? "Slow/ballad status unknown: no energy or danceability data" : "Slow/ballad status unverified: energy/danceability are estimates or incomplete");
   }
-  if (fit.familiarity === "familiar" && !r.familiarEvidence) (r.uncertain ??= []).push(pop === undefined ? "Guest familiarity unknown: no track popularity data" : `Guest familiarity unverified: popularity ${Math.round(pop)}/10 is ${ps === "estimate" ? "an estimate" : "not supportive"}`);
+  if (fit.familiarity === "familiar" && !r.familiarEvidence) (r.uncertain ??= []).push(pop === undefined || ps === "unknown" ? `Guest familiarity unknown: ${pop === undefined ? "no track popularity data" : `popularity ${Math.round(pop)}/10 is ${sourceLabel(f.popularitySource)}, not audience data`}` : `Guest familiarity unverified: popularity ${Math.round(pop)}/10 is ${ps === "estimate" ? "an estimate" : "not supportive"}`);
   return r;
 }
 

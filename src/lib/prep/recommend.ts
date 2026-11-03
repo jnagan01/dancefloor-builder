@@ -180,7 +180,9 @@ export function recommend(input: RecInput): RecOutput {
 export function explainTop(r: { evidence: Evidence[]; uncertain?: string[] }, n = 3): string {
   const top = r.evidence.filter(e => e.points > 0).slice().sort((a, b) => b.points - a.points).slice(0, n);
   const base = top.length ? top.map(e => e.text).join(" · ") : "No specific evidence beyond your event rules.";
-  return (r.uncertain?.length ? `${base} · ${r.uncertain.join(" · ")}` : base).slice(0, 900);
+  // Fit caveats (negative slow/unfamiliar evidence and unverified choices) always stay visible, even when positives fill the limit.
+  const caveats = [...r.evidence.filter(e => e.points < 0 && (e.kind === "slowEstimate" || e.kind === "unfamiliarTrack")).map(e => e.text), ...(r.uncertain ?? [])].join(" · ").slice(0, 600);
+  return caveats ? `${base.slice(0, 897 - caveats.length)} · ${caveats}` : base.slice(0, 900);
 }
 
 export type RankContext = Omit<RecInput, "candidates" | "limit" | "filter" | "controls"> & { controls?: RecControls };

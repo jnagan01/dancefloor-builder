@@ -1,0 +1,1021 @@
+{
+ "fitAfter": {
+  "familiarity": "familiar",
+  "avoidSlow": true
+ },
+ "selectedPerRun": 14,
+ "limitations": [
+  "Not a replay of the saved baseline run: its original full candidate pool was not captured.",
+  "Similarity entries are synthetic artist-level links, identical in both runs; real Last.fm evidence may differ.",
+  "Cache rows have only legacy row-level source labels, so popularity/energy/danceability/year decode as estimates; no candidate here has verified provider popularity.",
+  "Familiarity evidence available here is therefore mostly the built-in catalogue (curation, not chart data); unknown stays unknown.",
+  "Strict decade policy is unchanged; built-in catalogue songs can still be excluded by strict decade checks in the live route (known limitation, not fixed here).",
+  "Ratings are the user's event-specific ratings for the 14 saved additions, attached for reporting only and never used as ranking input."
+ ],
+ "cache": {
+  "evidence": "cache snapshot only",
+  "before": [
+   {
+    "rank": 1,
+    "track": "ABBA – Honey Honey",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 2.51,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” · 1970s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 2,
+    "track": "Whitney Houston – How Will I Know",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 2.51,
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 3,
+    "track": "Big Boi – All Night (Dirty)",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 2.06,
+    "reasons": "Last.fm lists Big Boi as similar to Outkast (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 4,
+    "track": "American Authors – Best Day Of My Life",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.96,
+    "reasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 5,
+    "track": "Grouplove – Tongue Tied",
+    "set": "baseline",
+    "ratingReportOnly": "Fair",
+    "score": 1.86,
+    "reasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 6,
+    "track": "Mariah Carey – A No No",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.86,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 7,
+    "track": "ABBA – Mamma Mia",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.76,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” · 1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 8,
+    "track": "Whitney Houston – I'm Every Woman",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.76,
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” · 1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 9,
+    "track": "Ava Max – Freaking Me Out",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.76,
+    "reasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 10,
+    "track": "Zara Larsson – Don't Let Me Be Yours",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.66,
+    "reasons": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 11,
+    "track": "Toni Braxton – Another Sad Love Song",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.46,
+    "reasons": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) · 1990s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 12,
+    "track": "The Beatles – Here Comes the Sun",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.36,
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) · 2020s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 13,
+    "track": "KISS – I Was Made For Lovin' You",
+    "set": "baseline",
+    "ratingReportOnly": "Fair",
+    "score": 1.26,
+    "reasons": "Last.fm lists KISS as similar to Queen (artist-level) · 1970s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 14,
+    "track": "The Pussycat Dolls – Buttons",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.26,
+    "reasons": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) · 2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 15,
+    "track": "Snow Patrol – Chasing Cars",
+    "set": "baseline",
+    "ratingReportOnly": "Poor",
+    "score": 1.2,
+    "reasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level)"
+   },
+   {
+    "rank": 16,
+    "track": "Mariah Carey – Fantasy",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.11,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) · 2000s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 17,
+    "track": "ABBA – Take a Chance on Me",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.01,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 18,
+    "track": "Tones and I – Dance Monkey",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.8,
+    "reasons": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level)"
+   },
+   {
+    "rank": 19,
+    "track": "Bill Withers – Lovely Day",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 0.75,
+    "reasons": "1970s (built-in catalogue) is a preferred decade for this event"
+   },
+   {
+    "rank": 20,
+    "track": "Journey – Don't Stop Believin'",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 0.75,
+    "reasons": "1980s (built-in catalogue) is a preferred decade for this event"
+   },
+   {
+    "rank": 21,
+    "track": "The Beatles – Let It Be",
+    "set": "baseline",
+    "ratingReportOnly": "Poor",
+    "score": 0.61,
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) · 1970s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 22,
+    "track": "Kool & The Gang – Celebration",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 0.26,
+    "reasons": "2000s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 23,
+    "track": "T.I. – Live Your Life",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 24,
+    "track": "The O'Jays – Love Train",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 25,
+    "track": "Tracy Chapman – Fast Car",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 26,
+    "track": "Zach Bryan – Revival",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2020s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 27,
+    "track": "Mariah Carey – 8th Grade",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.1,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level)"
+   },
+   {
+    "rank": 28,
+    "track": "Van Morrison – Brown Eyed Girl",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0,
+    "reasons": "No specific evidence beyond your event rules."
+   },
+   {
+    "rank": 29,
+    "track": "Kool & The Gang – Get Down On It",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -0.49,
+    "reasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 30,
+    "track": "Journey – Faithfully",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -0.75,
+    "reasons": "No specific evidence beyond your event rules."
+   },
+   {
+    "rank": 31,
+    "track": "Kool & The Gang – Cherish",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -1.5,
+    "reasons": "No specific evidence beyond your event rules."
+   }
+  ],
+  "after": [
+   {
+    "rank": 1,
+    "track": "Bill Withers – Lovely Day",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.75,
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1970s (built-in catalogue) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "rank": 2,
+    "track": "Journey – Don't Stop Believin'",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.75,
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "rank": 3,
+    "track": "ABBA – Take a Chance on Me",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.36,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 4,
+    "track": "Whitney Houston – How Will I Know",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.36,
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 5,
+    "track": "Big Boi – All Night (Dirty)",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.16,
+    "reasons": "Last.fm lists Big Boi as similar to Outkast (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 6,
+    "track": "American Authors – Best Day Of My Life",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.11,
+    "reasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 7,
+    "track": "The Pussycat Dolls – Buttons",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.11,
+    "reasons": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 8,
+    "track": "Grouplove – Tongue Tied",
+    "set": "baseline",
+    "ratingReportOnly": "Fair",
+    "score": 1.06,
+    "reasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 9,
+    "track": "Mariah Carey – A No No",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.06,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 10,
+    "track": "Ava Max – Freaking Me Out",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.01,
+    "reasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 11,
+    "track": "Zara Larsson – Don't Let Me Be Yours",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 0.96,
+    "reasons": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 12,
+    "track": "Snow Patrol – Chasing Cars",
+    "set": "baseline",
+    "ratingReportOnly": "Poor",
+    "score": 0.95,
+    "reasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence · Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "rank": 13,
+    "track": "Toni Braxton – Another Sad Love Song",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 0.86,
+    "reasons": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 1990s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 14,
+    "track": "The Beatles – Here Comes the Sun",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.81,
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 2020s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 15,
+    "track": "KISS – I Was Made For Lovin' You",
+    "set": "baseline",
+    "ratingReportOnly": "Fair",
+    "score": 0.76,
+    "reasons": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 1970s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 16,
+    "track": "Tones and I – Dance Monkey",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.75,
+    "reasons": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 17,
+    "track": "Van Morrison – Brown Eyed Girl",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.68,
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 8/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "rank": 18,
+    "track": "Kool & The Gang – Get Down On It",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.61,
+    "reasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 19,
+    "track": "Tracy Chapman – Fast Car",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.61,
+    "reasons": "Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "rank": 20,
+    "track": "Zach Bryan – Revival",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.61,
+    "reasons": "Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · 2020s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "rank": 21,
+    "track": "Mariah Carey – Fantasy",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.31,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 22,
+    "track": "ABBA – Honey Honey",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1970s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "rank": 23,
+    "track": "Whitney Houston – I'm Every Woman",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "rank": 24,
+    "track": "T.I. – Live Your Life",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 1/10 is an estimate"
+   },
+   {
+    "rank": 25,
+    "track": "The O'Jays – Love Train",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "rank": 26,
+    "track": "ABBA – Mamma Mia",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": -0.49,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 27,
+    "track": "Kool & The Gang – Celebration",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": -0.49,
+    "reasons": "2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 28,
+    "track": "Mariah Carey – 8th Grade",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -0.7,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 3/10 is an estimate"
+   },
+   {
+    "rank": 29,
+    "track": "Journey – Faithfully",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -0.75,
+    "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate"
+   },
+   {
+    "rank": 30,
+    "track": "The Beatles – Let It Be",
+    "set": "baseline",
+    "ratingReportOnly": "Poor",
+    "score": -0.94,
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 1970s (AI estimate) is a preferred decade for this event · Energy 4/10 and danceability 4/10 suggest a slow song (estimate, advisory) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 31,
+    "track": "Kool & The Gang – Cherish",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -1.5,
+    "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate"
+   }
+  ]
+ },
+ "saved": {
+  "evidence": "cache snapshot + saved-event metadata for Let It Be / Chasing Cars",
+  "before": [
+   {
+    "rank": 1,
+    "track": "ABBA – Honey Honey",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 2.51,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” · 1970s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 2,
+    "track": "Whitney Houston – How Will I Know",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 2.51,
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 3,
+    "track": "Big Boi – All Night (Dirty)",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 2.06,
+    "reasons": "Last.fm lists Big Boi as similar to Outkast (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 4,
+    "track": "American Authors – Best Day Of My Life",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.96,
+    "reasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 5,
+    "track": "Grouplove – Tongue Tied",
+    "set": "baseline",
+    "ratingReportOnly": "Fair",
+    "score": 1.86,
+    "reasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 6,
+    "track": "Mariah Carey – A No No",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.86,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 7,
+    "track": "ABBA – Mamma Mia",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.76,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” · 1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 8,
+    "track": "Whitney Houston – I'm Every Woman",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.76,
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” · 1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 9,
+    "track": "Ava Max – Freaking Me Out",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.76,
+    "reasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 10,
+    "track": "Zara Larsson – Don't Let Me Be Yours",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.66,
+    "reasons": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 11,
+    "track": "Toni Braxton – Another Sad Love Song",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.46,
+    "reasons": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) · 1990s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 12,
+    "track": "The Beatles – Here Comes the Sun",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.36,
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) · 2020s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 13,
+    "track": "KISS – I Was Made For Lovin' You",
+    "set": "baseline",
+    "ratingReportOnly": "Fair",
+    "score": 1.26,
+    "reasons": "Last.fm lists KISS as similar to Queen (artist-level) · 1970s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 14,
+    "track": "The Pussycat Dolls – Buttons",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.26,
+    "reasons": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) · 2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 15,
+    "track": "Snow Patrol – Chasing Cars",
+    "set": "baseline",
+    "ratingReportOnly": "Poor",
+    "score": 1.2,
+    "reasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level)"
+   },
+   {
+    "rank": 16,
+    "track": "Mariah Carey – Fantasy",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.11,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) · 2000s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 17,
+    "track": "ABBA – Take a Chance on Me",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.01,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 18,
+    "track": "Tones and I – Dance Monkey",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.8,
+    "reasons": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level)"
+   },
+   {
+    "rank": 19,
+    "track": "Bill Withers – Lovely Day",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 0.75,
+    "reasons": "1970s (built-in catalogue) is a preferred decade for this event"
+   },
+   {
+    "rank": 20,
+    "track": "Journey – Don't Stop Believin'",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 0.75,
+    "reasons": "1980s (built-in catalogue) is a preferred decade for this event"
+   },
+   {
+    "rank": 21,
+    "track": "The Beatles – Let It Be",
+    "set": "baseline",
+    "ratingReportOnly": "Poor",
+    "score": 0.35,
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level)"
+   },
+   {
+    "rank": 22,
+    "track": "Kool & The Gang – Celebration",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 0.26,
+    "reasons": "2000s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 23,
+    "track": "T.I. – Live Your Life",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 24,
+    "track": "The O'Jays – Love Train",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 25,
+    "track": "Tracy Chapman – Fast Car",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 26,
+    "track": "Zach Bryan – Revival",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2020s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 27,
+    "track": "Mariah Carey – 8th Grade",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.1,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level)"
+   },
+   {
+    "rank": 28,
+    "track": "Van Morrison – Brown Eyed Girl",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0,
+    "reasons": "No specific evidence beyond your event rules."
+   },
+   {
+    "rank": 29,
+    "track": "Kool & The Gang – Get Down On It",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -0.49,
+    "reasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "rank": 30,
+    "track": "Journey – Faithfully",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -0.75,
+    "reasons": "No specific evidence beyond your event rules."
+   },
+   {
+    "rank": 31,
+    "track": "Kool & The Gang – Cherish",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -1.5,
+    "reasons": "No specific evidence beyond your event rules."
+   }
+  ],
+  "after": [
+   {
+    "rank": 1,
+    "track": "Bill Withers – Lovely Day",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.75,
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1970s (built-in catalogue) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "rank": 2,
+    "track": "Journey – Don't Stop Believin'",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.75,
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "rank": 3,
+    "track": "ABBA – Take a Chance on Me",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.36,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 4,
+    "track": "Whitney Houston – How Will I Know",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.36,
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 5,
+    "track": "Big Boi – All Night (Dirty)",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.16,
+    "reasons": "Last.fm lists Big Boi as similar to Outkast (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 6,
+    "track": "American Authors – Best Day Of My Life",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": 1.11,
+    "reasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 7,
+    "track": "The Pussycat Dolls – Buttons",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 1.11,
+    "reasons": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 8,
+    "track": "Grouplove – Tongue Tied",
+    "set": "baseline",
+    "ratingReportOnly": "Fair",
+    "score": 1.06,
+    "reasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 9,
+    "track": "Mariah Carey – A No No",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.06,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 10,
+    "track": "Ava Max – Freaking Me Out",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 1.01,
+    "reasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 11,
+    "track": "Zara Larsson – Don't Let Me Be Yours",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 0.96,
+    "reasons": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 12,
+    "track": "Snow Patrol – Chasing Cars",
+    "set": "baseline",
+    "ratingReportOnly": "Poor",
+    "score": 0.95,
+    "reasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence · Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "rank": 13,
+    "track": "Toni Braxton – Another Sad Love Song",
+    "set": "baseline",
+    "ratingReportOnly": "Unfamiliar",
+    "score": 0.86,
+    "reasons": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 1990s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 14,
+    "track": "The Beatles – Here Comes the Sun",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.81,
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 2020s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 15,
+    "track": "KISS – I Was Made For Lovin' You",
+    "set": "baseline",
+    "ratingReportOnly": "Fair",
+    "score": 0.76,
+    "reasons": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 1970s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 16,
+    "track": "Tones and I – Dance Monkey",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.75,
+    "reasons": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 17,
+    "track": "Van Morrison – Brown Eyed Girl",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.68,
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 8/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "rank": 18,
+    "track": "Kool & The Gang – Get Down On It",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.61,
+    "reasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "rank": 19,
+    "track": "Tracy Chapman – Fast Car",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.61,
+    "reasons": "Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "rank": 20,
+    "track": "Zach Bryan – Revival",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.61,
+    "reasons": "Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · 2020s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "rank": 21,
+    "track": "Mariah Carey – Fantasy",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.31,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 22,
+    "track": "ABBA – Honey Honey",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1970s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "rank": 23,
+    "track": "Whitney Houston – I'm Every Woman",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "rank": 24,
+    "track": "T.I. – Live Your Life",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 1/10 is an estimate"
+   },
+   {
+    "rank": 25,
+    "track": "The O'Jays – Love Train",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": 0.26,
+    "reasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "rank": 26,
+    "track": "ABBA – Mamma Mia",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": -0.49,
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 27,
+    "track": "Kool & The Gang – Celebration",
+    "set": "baseline",
+    "ratingReportOnly": "Good",
+    "score": -0.49,
+    "reasons": "2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 28,
+    "track": "Mariah Carey – 8th Grade",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -0.7,
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 3/10 is an estimate"
+   },
+   {
+    "rank": 29,
+    "track": "Journey – Faithfully",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -0.75,
+    "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate"
+   },
+   {
+    "rank": 30,
+    "track": "The Beatles – Let It Be",
+    "set": "baseline",
+    "ratingReportOnly": "Poor",
+    "score": -1.2,
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · Energy 4/10 and danceability 4/10 suggest a slow song (estimate, advisory) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "rank": 31,
+    "track": "Kool & The Gang – Cherish",
+    "set": "held-out",
+    "ratingReportOnly": null,
+    "score": -1.5,
+    "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate"
+   }
+  ]
+ }
+}
