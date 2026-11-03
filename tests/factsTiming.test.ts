@@ -76,7 +76,7 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
   });
 
   it('provider failure leaves owned facts unknown (no fabrication) and still ranks honestly', async () => {
-    const h = harness({ rows: { A: row({ eventFit: { avoidSlow: true } }) }, services: { crowd, recommend: async () => ({ suggestions: [] }), enrich: async () => { throw new Error('timeout'); } } });
+    const h = harness({ rows: { A: row({ eventFit: { avoidSlow: true } }) }, services: { crowd, recommend: async () => ({ suggestions: [] }), enrich: async () => { throw new Error('service unavailable'); } } });
     await h.flush(); h.library(lib); await h.flush();
     await h.current.generate(); await h.flush();
     const owned = all(h.current.result).filter((t: any) => t.artist.startsWith(OWNED));
