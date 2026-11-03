@@ -23,7 +23,7 @@ try{
  await check('explicit bulk most selects relevant recording, never unrelated most-played',async()=>{await page.getByRole('button',{name:'Select most played',exact:true}).first().click();await page.waitForTimeout(2200);const rows=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'));const selection=Object.values(rows.A.lists.selections)[0];expect(selection.confirmed).toBe(true);expect(selection.paths).toContain(tracks[2].filePath);expect(selection.paths).not.toContain(tracks[0].filePath);});
  await check('direct exported artifacts and readiness report',async()=>{await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();await page.waitForTimeout(500);const names=fs.readdirSync(path.join(temp,'exports'));const m3u=names.filter(n=>n.endsWith('.m3u')).map(n=>fs.readFileSync(path.join(temp,'exports',n),'utf8')).join('');expect(m3u).toContain(tracks[2].filePath);expect(m3u).not.toContain(tracks[0].filePath);expect(names.some(n=>n.endsWith('readiness.txt'))).toBe(true);});
  await check('approval reload and quarter-hour 2x targets',async()=>{await page.reload();await page.waitForTimeout(600);expect(await page.getByText('Target 12 songs',{exact:false}).count()).toBeGreaterThan(0);});
- await check('offline real Electron storage survives process restart and reconnect',async()=>{fs.writeFileSync(path.join(temp,'fault'),'offline');await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Offline retained');await page.waitForTimeout(1200);expect(await page.getByText('Event not saved',{exact:false}).count()).toBeGreaterThan(0);await page.waitForTimeout(500);process.kill(app.process().pid,'SIGKILL');await new Promise(resolve=>setTimeout(resolve,800));fs.unlinkSync(path.join(temp,'fault'));await launch();expect(await page.getByText('Unsaved recovery copy',{exact:false}).count()).toBeGreaterThan(0);await page.getByRole('button',{name:'Restore recovery copy',exact:true}).click();await page.waitForTimeout(2200);expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Offline retained');expect(Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')))).toEqual(['A']);});
+ await check('offline real Electron storage survives process restart and reconnect',async()=>{fs.writeFileSync(path.join(temp,'fault'),'offline');await page.getByRole('button',{name:/Dance floor/i}).first().click();await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Offline retained');await page.waitForTimeout(1200);expect(await page.getByText('Event not saved',{exact:false}).count()).toBeGreaterThan(0);await page.waitForTimeout(500);process.kill(app.process().pid,'SIGKILL');await new Promise(resolve=>setTimeout(resolve,800));fs.unlinkSync(path.join(temp,'fault'));await launch();expect(await page.getByText('Unsaved recovery copy',{exact:false}).count()).toBeGreaterThan(0);await page.getByRole('button',{name:'Restore recovery copy',exact:true}).click();await page.waitForTimeout(2200);expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Offline retained');expect(Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')))).toEqual(['A']);});
  await check('disk-full backup refusal, last good preserved',async()=>{const b={format:'setarchitect-backup',version:1,account:'synthetic-owner',createdAt:new Date().toISOString(),events:[],sources:[],roots:{}};expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),b)).ok).toBe(true);const last=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);fs.writeFileSync(path.join(temp,'fault'),'ENOSPC');expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),b)).ok).toBe(false);expect(await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw)).toBe(last);fs.unlinkSync(path.join(temp,'fault'));});
  await check('write-denied export never reports success',async()=>{fs.writeFileSync(path.join(temp,'fault'),'EACCES');const before=await page.evaluate(()=>window.__success.length);await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();await page.waitForTimeout(400);expect(await page.evaluate(()=>window.__success.length)).toBe(before);expect(await page.evaluate(()=>window.__errors.some(e=>e.includes('could not be written')))).toBe(true);fs.unlinkSync(path.join(temp,'fault'));});
 
@@ -35,7 +35,7 @@ try{
    fs.unlinkSync(path.join(temp,'fault'));
  });
  await check('late-save navigation away/back reconciles exact recovery',async()=>{
-   await page.evaluate(()=>window.testBackend.lateWrite('arm','A'));await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
+   await page.evaluate(()=>window.testBackend.lateWrite('arm','A'));await page.getByRole('button',{name:/Dance floor/i}).first().click();
    await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Late native save');
    await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName,{timeout:15000}).toBe('Late native save');
    const held=await page.evaluate(()=>window.testBackend.lateWrite('status','A'));
@@ -98,7 +98,7 @@ try{
  });
  await check('Electron six-row upload blocks missing title then corrects and generates all intended rows',async()=>{
    await page.evaluate(()=>{window.__testState.page='event';window.__testState.eventId=undefined;window.__rerender();});await page.waitForTimeout(400);
-   await page.getByRole('radio',{name:'Dance floor',exact:true}).click();await page.locator('#hours').fill('3');
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('3');
    await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
    const upload=path.join(temp,'six.csv');fs.writeFileSync(upload,'Artist,Song\nOne,Song One\nTwo,Song Two\nThree,Song Three\nFour,Song Four\nFive,Song Five\nArtist Only,\n');
    await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);await page.waitForTimeout(400);
@@ -184,10 +184,10 @@ try{
  });
  await check('automatic updater download latch captures latest editor draft before any Squirrel stage',async()=>{
    await page.evaluate(()=>{window.__testState.eventId='A';window.__testState.page='event';window.__rerender();});
-   await expect(page.getByRole('button',{name:'Dance floor',exact:false}).first()).toBeVisible({timeout:15000});
+   await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible({timeout:15000});
    await expect(page.getByText('Secret Session',{exact:true}).first()).toBeVisible({timeout:15000});
    const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.count()){await archive.click();await expect(archive).toHaveCount(0);}
-   await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
+   await page.getByRole('button',{name:/Dance floor/i}).first().click();
    const name=page.getByPlaceholder('e.g. Smith Johnson Wedding');await expect(name).toHaveValue('Secret Session',{timeout:15000});
    await page.evaluate(()=>window.testBackend.autoUpdate('start'));await expect.poll(()=>fs.existsSync(path.join(temp,'download-started'))).toBe(true);
    expect((await page.evaluate(()=>window.testBackend.autoUpdate('quit'))).blocked).toBe(true);
@@ -349,7 +349,7 @@ try{
    await expect(page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true})).not.toBeChecked();await page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true}).click();
    await expect(page.getByRole('switch',{name:'Include seasonal/holiday tracks',exact:true})).not.toBeChecked();
    await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).not.toBeChecked();await page.getByRole('switch',{name:'Require clean versions',exact:true}).click();
-   await page.getByRole('radio',{name:'Dance floor',exact:true}).click();await page.locator('#hours').fill('3');
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('3');
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Policy synthetic');
    await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
@@ -595,12 +595,12 @@ try{
    await page.reload();await page.waitForFunction(()=>!!window.__testState && typeof window.__rerender==='function');await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});await assertBlank();
    await page.evaluate(()=>{window.__testState.eventId='A';window.__rerender();});
    await expect(page.getByRole('heading',{name:'Saved preferences',exact:true})).toBeVisible();
-   await page.getByRole('button',{name:'Dance floor',exact:false}).first().click();
+   await page.getByRole('button',{name:/Dance floor/i}).first().click();
    await expect(page.locator('#hours')).toHaveValue('1');await expect(page.locator('#artists')).toHaveValue('Saved Artist');
    await expect(page.locator('#split-warmUp')).toHaveValue('10');
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(preserved);
  });
- await check('fresh required choices: no bypass, explicit buffer, disabled ranges inert, valid generation persists only chosen preferences',async()=>{
+ await check('fresh required choices: no bypass, 1× baseline, disabled ranges inert, valid generation persists only chosen preferences',async()=>{
    await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
    const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
    await page.getByRole('button',{name:'Continue',exact:true}).click();
@@ -610,7 +610,7 @@ try{
    await page.getByRole('radio',{name:'Dinner',exact:true}).click();await expect(page.locator('#minutes')).toHaveValue('');
    await page.getByRole('button',{name:'Continue',exact:true}).click();
    expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('positive list length');
-   await page.getByRole('radio',{name:'Dance floor',exact:true}).click();
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();
    await page.getByRole('button',{name:'Continue',exact:true}).click();
    expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('positive dance floor length');
    await page.locator('#hours').fill('0');await page.getByRole('button',{name:'Continue',exact:true}).click();
@@ -621,15 +621,13 @@ try{
    await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
    await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
    await expect(page.locator('tbody tr')).toHaveCount(1);await page.getByRole('button',{name:'Continue',exact:true}).click();
-   await expect(page.locator('#buffer')).toHaveValue('');await expect(page.getByRole('switch',{name:'Expand event with additional tracks',exact:true})).not.toBeChecked();
-   await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();
-   expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('Choose a preparation buffer');
+   await expect(page.locator('#buffer')).toHaveValue('1');await expect(page.getByRole('switch',{name:'Expand event with additional tracks',exact:true})).not.toBeChecked();
    expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
-   await page.locator('#buffer').selectOption('2');await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();
+   await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();
    await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
    const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Explicit fresh choices');
    await expect.poll(saved,{timeout:15000}).toBeTruthy();
-   expect(saved().inputs).toMatchObject({hours:'1',buffer:2,listType:'dance',decades:[],artistsInput:'',genresInput:'',notes:'',doNotPlayInput:'',expand:false,ownedOnlyExpansion:false,includeSeasonalTracks:false,requireCleanVersions:false});
+   expect(saved().inputs).toMatchObject({hours:'1',buffer:1,listType:'dance',decades:[],artistsInput:'',genresInput:'',notes:'',doNotPlayInput:'',expand:false,ownedOnlyExpansion:false,includeSeasonalTracks:false,requireCleanVersions:false});
    for(const field of ['bpmRange','danceRange','split','eventType','homeKey','minutes'])expect(saved().inputs[field]).toBeUndefined();
    expect(saved().inputs.songs).toEqual([song]);
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Saved preferences');
@@ -651,6 +649,38 @@ try{
    await expect(page.getByRole('heading',{name:'Explicit dinner',exact:true})).toBeVisible();
    await expect(page.getByText('Saved event needs review',{exact:false})).toHaveCount(0);
    expect(saved()).toEqual(original);
+ });
+ await check('optional expansion: 40/5 client tracks, actual lengths, voluntary higher target, 1× roundtrip/reset and legacy 2× unchanged',async()=>{
+   await app.close();
+   const client=Array.from({length:40},(_,i)=>({artist:`Client ${i}`,song:`Normal track ${i}`}));
+   const local=client.map((song,i)=>({artist:song.artist,title:song.song,filePath:path.join(library,`client-${i}.mp3`),songLength:'240'}));
+   local.forEach(t=>fs.writeFileSync(t.filePath,'synthetic audio fixture'));
+   const legacy={id:'A',name:'Legacy 2×',updated_at:'v1',inputs:{songs:[song],hours:'1',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[]}};
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:local}));fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:legacy}));await launch();
+   const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')));
+   const prepare=async(count,name)=>{
+     await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+     await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('1');await page.locator('#eventName').fill(name);
+     await page.getByRole('button',{name:'Continue',exact:true}).click();
+     const upload=path.join(temp,'optional.csv');fs.writeFileSync(upload,'Artist,Song\n'+client.slice(0,count).map(t=>`${t.artist},${t.song}`).join('\n'));
+     await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
+     await page.getByRole('button',{name:'Review songs',exact:false}).first().click();await page.getByRole('button',{name:'Continue',exact:true}).click();
+     await expect(page.locator('#buffer')).toHaveValue('1');await expect(page.getByRole('switch',{name:'Expand event with additional tracks',exact:true})).not.toBeChecked();
+     await expect(page.getByText('60:00 event baseline · 1× preparation 60:00 · expansion off',{exact:true}).first()).toBeVisible();
+   };
+   const generateAndRead=async(name,count)=>{
+     await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+     await expect.poll(()=>saved().find(r=>r.name===name),{timeout:15000}).toBeTruthy();const r=saved().find(r=>r.name===name);
+     const all=[...r.lists.warmUp,...r.lists.transition,...r.lists.peak];expect(all.filter(t=>t.fromUpload)).toHaveLength(count);expect(r.inputs.songs).toEqual(client.slice(0,count));return {r,all};
+   };
+   await prepare(40,'Covered off');await expect(page.getByLabel('Client duration coverage')).toContainText('Baseline duration covered — no additional tracks needed');
+   const covered=await generateAndRead('Covered off',40);expect(covered.all).toHaveLength(40);expect(covered.r.inputs).toMatchObject({buffer:1,expand:false});
+   await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},covered.r.id);await expect(page.getByRole('heading',{name:'Covered off',exact:true})).toBeVisible();expect(saved().find(r=>r.id===covered.r.id)).toEqual(covered.r);
+   await prepare(5,'Short off');await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');const short=await generateAndRead('Short off',5);expect(short.all).toHaveLength(5);
+   await prepare(5,'Short expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();const expanded=await generateAndRead('Short expansion',5);expect(expanded.all.length).toBeGreaterThan(5);expect(expanded.r.inputs).toMatchObject({buffer:1,expand:true});
+   await prepare(40,'Covered expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();await expect(page.getByLabel('Client duration coverage')).toContainText('Choose a higher multiplier');await page.locator('#buffer').selectOption('4');await expect(page.getByLabel('Client duration coverage')).toContainText('80:00 additional time');const extras=await generateAndRead('Covered expansion',40);expect(extras.all.length).toBeGreaterThan(40);expect(extras.r.inputs).toMatchObject({buffer:4,expand:true});
+   await prepare(5,'Reset baseline');expect(saved().find(r=>r.id==='A')).toEqual(legacy);
+   await page.evaluate(()=>{window.__testState.eventId='A';window.__rerender();});await expect(page.getByRole('heading',{name:'Legacy 2×',exact:true})).toBeVisible();expect(saved().find(r=>r.id==='A')).toEqual(legacy);
  });
  await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
    await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';
