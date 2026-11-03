@@ -37,7 +37,7 @@ describe('recommendation quality samples (account-local prep notes)', () => {
     const legacy = JSON.parse(JSON.stringify(emptyKnowledge()));
     expect(readKnowledge(legacy)).toEqual(legacy);
     expect(readKnowledge(legacy)).not.toHaveProperty('quality');
-    const k = rateQualityCandidate(withSample(), withSample().quality![0].id, 0, 'good');
+    const k0 = withSample(), k = rateQualityCandidate(k0, k0.quality![0].id, 0, 'good');
     const saved = JSON.parse(JSON.stringify(k));
     expect(readKnowledge(saved)).toEqual(saved);
   });
@@ -67,7 +67,7 @@ describe('recommendation quality samples (account-local prep notes)', () => {
   });
 
   it('backups with quality samples validate identically in browser and native validators', () => {
-    const prep = rateQualityCandidate(withSample(), withSample().quality![0].id, 0, 'good');
+    const p0 = withSample(), prep = rateQualityCandidate(p0, p0.quality![0].id, 0, 'good');
     const b = { format: 'setarchitect-backup', version: 1, account: 'synthetic', createdAt: '2026-11-03T00:00:00Z', events: [], sources: [], roots: {}, prep };
     const raw = JSON.stringify(b);
     expect(validateBackup(raw, 'synthetic')).toEqual(JSON.parse(raw));

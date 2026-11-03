@@ -25,7 +25,7 @@ describe('shared ranking engine', () => {
     const panel = recommend({ ...ctx, controls: DEFAULT_REC_CONTROLS, candidates: cands, limit: 10 });
     const pooled = rankPool(cands, c => c, ctx);
     expect(pooled.map(x => [x.rec.key, x.rec.score, x.rec.evidence])).toEqual(panel.items.map(r => [r.key, r.score, r.evidence]));
-    expect(panel.items.map(r => r.artist)).toEqual(['Double', 'Single', 'Neighbour', 'Plain']);
+    expect(panel.items.map(r => r.artist)).toEqual(['Double', 'Single', 'Plain', 'Neighbour']); // tag + preferred genre (2) > artist-level Last.fm 0.9 (1.8)
   });
 
   it('origin does not earn points: AI claims cannot fabricate evidence and AI genre is weaker than verified', () => {
