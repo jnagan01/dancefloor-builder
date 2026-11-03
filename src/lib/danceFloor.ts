@@ -1046,9 +1046,10 @@ export function applyVarietyReranker(
   // which caused the same song to appear twice inside the same section.
   const seenKeys = new SongKeySet(true);
   const unique: ResultSong[] = [];
+  // Requests claim identity first, wherever they appear, so only automatic copies are dropped.
+  for (const s of allowed) if (s.fromUpload) seenKeys.add(s.artist, s.song);
   for (const s of allowed) {
     if (!s.fromUpload && !seenKeys.tryAdd(s.artist, s.song)) continue;
-    if (s.fromUpload) seenKeys.add(s.artist, s.song);
     unique.push(s);
   }
 
