@@ -21,9 +21,9 @@ const requests = [{ artist: 'Queen', song: 'Radio Ga Ga', fromUpload: true }, { 
 const row = (inputs: Record<string, unknown> = {}) => ({ id: 'A', name: 'Synthetic', updated_at: 'v1', inputs: { songs: requests, hours: '1', buffer: 1, listType: 'dance', expand: true, ...inputs }, lists: { warmUp: [...requests], transition: [], peak: [] } });
 const OWNED = 'TEST ONLY Owned Act';
 const lib = vdj.buildLibrary([
-  { filePath: '/synthetic/owned/est-slow.mp3', artist: OWNED, title: 'Estimated Slow', year: '1985', genre: 'Pop' },
-  { filePath: '/synthetic/owned/ver-slow.mp3', artist: OWNED, title: 'Verified Slow', year: '1986', genre: 'Pop' },
-  { filePath: '/synthetic/owned/upbeat.mp3', artist: OWNED, title: 'Upbeat', year: '1972', genre: 'Funk' },
+  { filePath: '/synthetic/owned/est-slow.mp3', artist: `${OWNED} One`, title: 'Estimated Slow', year: '1985', genre: 'Pop' },
+  { filePath: '/synthetic/owned/ver-slow.mp3', artist: `${OWNED} Two`, title: 'Verified Slow', year: '1986', genre: 'Pop' },
+  { filePath: '/synthetic/owned/upbeat.mp3', artist: `${OWNED} Three`, title: 'Upbeat', year: '1972', genre: 'Funk' },
 ] as vdj.VdjTrack[]);
 const P = (v: string) => ({ energy: v, danceability: v, popularity: v, year: v });
 const PROVIDER: Record<string, any> = {
@@ -31,14 +31,14 @@ const PROVIDER: Record<string, any> = {
   'Verified Slow': { energy: 2, danceability: 2, popularity: 8, prov: P('provider'), source: 'ReccoBeats' },
   'Upbeat': { energy: 8, danceability: 8, year: 1999, prov: P('provider'), source: 'ReccoBeats' }, // year must NOT beat the file tag
 };
-const crowd = async () => ({ available: true, artists: [{ name: 'Queen', listeners: 1, tags: [], similar: [{ name: OWNED, match: 0.6 }] }] });
-const answer = (songs: any[]) => ({ results: songs.flatMap(s => PROVIDER[s.song] && s.artist === OWNED ? [{ artist: s.artist, song: s.song, ...PROVIDER[s.song] }] : []) });
+const crowd = async () => ({ available: true, artists: [{ name: 'Queen', listeners: 1, tags: [], similar: ['One', 'Two', 'Three'].map(n => ({ name: `${OWNED} ${n}`, match: 0.6 })) }] });
+const answer = (songs: any[]) => ({ results: songs.flatMap(s => PROVIDER[s.song] && s.artist.startsWith(OWNED) ? [{ artist: s.artist, song: s.song, ...PROVIDER[s.song] }] : []) });
 const all = (r: any) => [...r.warmUp, ...r.transition, ...r.peak];
 
 function deferredEnrich() {
   const calls: any[][] = []; const pending: Array<() => void> = [];
   // Only lookups containing owned candidates are held; request lookups answer immediately.
-  const enrich = (req: any) => { calls.push(req.data.songs); if (!req.data.songs.some((s: any) => s.artist === OWNED)) return Promise.resolve(answer(req.data.songs)); return new Promise(res => pending.push(() => res(answer(req.data.songs)))); };
+  const enrich = (req: any) => { calls.push(req.data.songs); if (!req.data.songs.some((s: any) => s.artist.startsWith(OWNED))) return Promise.resolve(answer(req.data.songs)); return new Promise(res => pending.push(() => res(answer(req.data.songs)))); };
   return { calls, enrich, releaseAll: () => { while (pending.length) pending.shift()!(); } };
 }
 async function settle(h: any, d: ReturnType<typeof deferredEnrich>, gen: Promise<unknown>) {
@@ -54,9 +54,9 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     const gen = h.current.generate();
     for (let i = 0; i < 10; i++) await h.flush();
     // Old timing: owned rows were never in the pre-rank lookup, so no call contained them before ranking finished.
-    const ownedCall = d.calls.find(c => c.some((s: any) => s.artist === OWNED));
+    const ownedCall = d.calls.find(c => c.some((s: any) => s.artist.startsWith(OWNED)));
     expect(ownedCall, 'owned candidates must be looked up before ranking').toBeTruthy();
-    expect(all(h.current.result ?? { warmUp: [], transition: [], peak: [] }).some((t: any) => t.artist === OWNED)).toBe(false); // nothing ranked/placed yet
+    expect(all(h.current.result ?? { warmUp: [], transition: [], peak: [] }).some((t: any) => t.artist.startsWith(OWNED))).toBe(false); // nothing ranked/placed yet
     await settle(h, d, gen);
     const rows = all(h.current.result);
     expect(rows.filter((t: any) => t.fromUpload).map((t: any) => t.song)).toEqual(['Radio Ga Ga', 'Dancing Queen']);
@@ -70,7 +70,7 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     expect(up.energy).toBe(8); expect(up.year).toBe(1972); // verified file tag beats provider year
     // Each owned key was requested exactly once (final pass never re-requests attempted additions).
     const flat = d.calls.flat().map(factsKey);
-    for (const s of ['Estimated Slow', 'Verified Slow', 'Upbeat']) expect(flat.filter(k => k === `${OWNED}||${s}`)).toHaveLength(1);
+    for (const [n, s] of [['One', 'Estimated Slow'], ['Two', 'Verified Slow'], ['Three', 'Upbeat']]) expect(flat.filter(k => k === `${OWNED} ${n}||${s}`)).toHaveLength(1);
     expect(listsSchema.safeParse(h.current.result).success).toBe(true);
     h.unmount();
   });
@@ -79,8 +79,8 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     const h = harness({ rows: { A: row({ eventFit: { avoidSlow: true } }) }, services: { crowd, recommend: async () => ({ suggestions: [] }), enrich: async () => { throw new Error('timeout'); } } });
     await h.flush(); h.library(lib); await h.flush();
     await h.current.generate(); await h.flush();
-    const owned = all(h.current.result).filter((t: any) => t.artist === OWNED);
-    expect(owned.length).toBeGreaterThan(0); // unknown never excludes
+    const owned = all(h.current.result).filter((t: any) => t.artist.startsWith(OWNED));
+    expect(owned.length).toBe(3); // unknown never excludes
     for (const t of owned) { expect(t.energy).toBeUndefined(); expect(t.rankWhy).toMatch(/no energy or danceability data/); }
     expect(h.warnings.some((w: string) => /Couldn't reach the online music data service/.test(w))).toBe(true);
     h.unmount();
@@ -94,7 +94,7 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     for (let i = 0; i < 10; i++) await h.flush();
     h.switchTo('other', 'A'); await h.flush(); // account switch while the lookup is held
     await settle(h, d, first);
-    expect(all(h.current.result ?? { warmUp: [], transition: [], peak: [] }).some((t: any) => t.artist === OWNED)).toBe(false);
+    expect(all(h.current.result ?? { warmUp: [], transition: [], peak: [] }).some((t: any) => t.artist.startsWith(OWNED))).toBe(false);
     h.unmount();
   });
 
