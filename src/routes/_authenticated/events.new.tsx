@@ -2,6 +2,7 @@ import { buildResolver, intended, cleanReason, requiresClean, seasonal, type Pre
 import { freshEvent, validateEventChoices, clientPlanningCoverage } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
+import { AdditionKeySet } from "@/lib/additionIdentity";
 import { preventAutomaticDuplicates, sectionCoverage, durationLabel } from "@/lib/preparationDuplicates";
 import { makeSubject, scorePair } from "@/lib/matchCore";
 import { getNativeFilePath } from "@/lib/desktopBridge";
@@ -1248,6 +1249,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const sectionOrder = sectionMap.map((m) => m.key);
         const pool = new Map<string, Pooled>();
         const taken = new SongKeySet(true);
+        const poolAlias = new AdditionKeySet();
         for (const s of [...r.warmUp, ...r.transition, ...r.peak]) taken.add(s.artist, s.song);
         const catalogueKeys = new Set(SONG_LIBRARY.map((s) => songIdentity(s.artist, s.song)));
         const secIdx = (k?: SectionKey) => (k ? sectionOrder.indexOf(k) : 99);
@@ -1258,7 +1260,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         };
         const offer = (row: PRow, prefer?: SectionKey) => {
           if (!row.artist || !row.song || taken.has(row.artist, row.song)) return false;
-          const key = songIdentity(row.artist, row.song);
+          // Credit-variant aliases (feat./&/reordered credits) collapse into one pool entry BEFORE ranking, so slots
+          // and artist variety are never spent on the same recording twice.
+          const key = poolAlias.match(row.artist, row.song) ?? songIdentity(row.artist, row.song);
           const idx = generationResolver.resolve({ artist: row.artist, song: row.song });
           const t = idx === undefined ? undefined : mergedLibrary.tracks[idx];
           const exact = idx !== undefined && t && songIdentity(t.artist, t.title) === key;
@@ -1266,6 +1270,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           if (!old) {
             if (pool.size >= POOL_CAP) return false;
             pool.set(key, exact ? { row: { ...ownedRow(idx!, row.aiReason), aiSuggestion: row.aiSuggestion }, prefer, trackIdx: idx } : { row, prefer });
+            poolAlias.add(row.artist, row.song, key);
             return true;
           }
           // Same song from another source: keep the best-sourced value per attribute (order independent).

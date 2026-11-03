@@ -1,4 +1,4 @@
-import { intendedKey } from "../../desktop/offline/policy.cjs";
+import { AdditionKeySet } from "./additionIdentity";
 import { trackIdentity } from "./fileIdentity";
 import type { GenerationResult, ResultSong, SectionKey } from "./danceFloor";
 
@@ -6,9 +6,9 @@ import type { GenerationResult, ResultSong, SectionKey } from "./danceFloor";
  * Saved selection keys/legacy dedupeKey are deliberately unchanged. */
 export function preventAutomaticDuplicates(result: GenerationResult, resolve: (song: ResultSong) => string | undefined, roots: Record<string, string> = {}) {
   const sections: SectionKey[] = ["warmUp", "transition", "peak"];
-  const intended = new Set<string>(), files = new Set<string>();
+  const intended = new AdditionKeySet(), files = new Set<string>();
   const remember = (song: ResultSong) => {
-    intended.add(intendedKey(song));
+    intended.add(song.artist, song.song);
     const path = resolve(song); if (path) files.add(trackIdentity(path, roots));
   };
   for (const section of sections) for (const song of result[section]) if (song.fromUpload) remember(song);
@@ -17,7 +17,7 @@ export function preventAutomaticDuplicates(result: GenerationResult, resolve: (s
   for (const section of sections) next[section] = result[section].filter(song => {
     if (song.fromUpload) return true;
     const path = resolve(song);
-    if (intended.has(intendedKey(song)) || (path && files.has(trackIdentity(path, roots)))) { removed++; return false; }
+    if (intended.has(song.artist, song.song) || (path && files.has(trackIdentity(path, roots)))) { removed++; return false; }
     remember(song); return true;
   });
   return { ...next, duplicatesRemoved: result.duplicatesRemoved + removed };
