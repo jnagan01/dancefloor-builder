@@ -63,10 +63,11 @@
  "limitations": [
   "Controlled complete-evidence scoring fixture, not exact live/native replay; original full pool and real similarity were not captured.",
   "Both sides receive identical post-timeout evidence; BEFORE is captured current 543920d scoring, not stale pre-timeout timing.",
-  "Original 31-row archived cache and saved input fixtures remain unchanged. Profile-overlay variant replaces only captured exact versions and adds six exact-version rows absent from the archived pool.",
+  "Original 31-row archived cache and saved input fixtures remain unchanged. Profile-overlay variant replaces only captured exact versions and adds seven exact-version rows absent from the archived pool.",
   "Strict decade eligibility is unchanged; these are rank-stage comparisons, not invented confirmed-year route outputs. Unknown/estimated years may leave real generation shortfalls.",
   "Ratings are reporting-only, never scorer inputs. Clean/remix/intro versions have exact profile ratings, no rating transfer between versions.",
-  "Chasing Cars 6/6 estimates do not identify a ballad; removing its advisory popularity boost is not slow classification. Mixed rating changes are not proof of overall improvement."
+  "Chasing Cars 6/6 estimates do not identify a ballad; removing its advisory popularity boost is not slow classification. Mixed rating changes are not proof of overall improvement.",
+  "Tradeoff: genuine low-energy grooves with high danceability remain unpenalised, but uncertain popularity supplies no points under conflicting feel. A legitimate 4/4 estimate can be demoted; it remains selectable. Held-out tests confirm boundaries, not guest response."
  ],
  "noFitUnchanged": true,
  "archived31": {
