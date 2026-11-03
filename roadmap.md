@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Recommendation accuracy (items 1–3)
+- [x] Review gaps: real per-attribute provenance through enrichment/cache/route with strict BPM/decade limits; READY-knowledge gate with awaited feedback writes; isolated providers, outage-safe Last.fm cache, expansion availability and stale panel evidence.
 - [x] Last.fm track.getSimilar evidence from distinct requested tracks (bounded, cached, truthful availability), in recommendations and automatic expansion with exact owned identity.
 - [x] Automatic expansion honours account-fenced Never/favour/event dismissals (optional reasons), late feedback re-check and account fence; requests always kept.
 - [x] Source-aware metadata confidence in ranking; no invented Pop/2000s/popularity defaults; AI estimates never hard-rule evidence.
