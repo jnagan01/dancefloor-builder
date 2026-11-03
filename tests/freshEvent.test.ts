@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { freshEvent, validateEventChoices, preparationCoverage } from '../src/lib/freshEvent';
+import { freshEvent, validateEventChoices, preparationCoverage, clientPlanningCoverage } from '../src/lib/freshEvent';
 import { requiresClean } from '../src/lib/preparationPolicy';
 import { generateLists } from '../src/lib/danceFloor';
 
@@ -55,5 +55,17 @@ describe('explicit fresh event choices', () => {
   it('reset always returns 1× independently of a saved or edited preparation buffer', () => {
     const edited=freshEvent();edited.buffer=4;edited.expand=true;
     expect(freshEvent()).toMatchObject({buffer:1,expand:false});
+  });
+  it('planning excludes DNP and missing titles without changing the original requests', () => {
+    const songs=Array.from({length:40},(_,i)=>({artist:i<35?'Blocked':'Allowed',song:`Track ${i}`}));
+    songs.push({artist:'Allowed',song:''}); const before=structuredClone(songs);
+    const coverage=clientPlanningCoverage(songs,[{artist:'Blocked'}],s=>({filePath:`/Music/${s.song}.mp3`,songLength:'240'}),60,1);
+    expect(coverage).toMatchObject({usable:5,excluded:36,knownSeconds:1200,baselineShortSeconds:2400,preparationShortSeconds:2400});
+    expect(songs).toEqual(before);
+  });
+  it('planning counts repeated intended or exact files once but preserves distinct versions and case-sensitive files', () => {
+    const songs=[{artist:'Artist',song:"Signed, Sealed (I'm Yours)"},{artist:'Artist',song:"Signed Sealed I'm Yours"},{artist:'Alias',song:'Other title'},{artist:'Artist',song:'Signed Sealed Im Yours (Extended)'},{artist:'Another',song:'Another'}];
+    const coverage=clientPlanningCoverage(songs,[],s=>({filePath:s.artist==='Alias'?'/Music/Clean.mp3':s.song.includes('Extended')?'/Music/Extended.mp3':s.artist==='Another'?'/Music/clean.mp3':'/Music/Clean.mp3',songLength:'240'}),60,1);
+    expect(coverage).toMatchObject({usable:3,repeats:2,knownSeconds:720,baselineShortSeconds:2880});
   });
 });

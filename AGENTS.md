@@ -6,7 +6,7 @@
 - Use shared semantic CSS tokens and one local-file waveform player for library/event review, for consistent visuals and playback.
 - Keep app-only prep knowledge in the account-fenced `src/lib/prep` store, never in snapshots/audio, backed up as optional `prep`, because events must stay readable.
 - Read and write song metadata tags only inside the Mac app (desktop/tags.cjs via node-taglib-sharp, cached by size+mtime in userData), because browsers cannot modify local files and edits must land in the music files themselves.
-- Use `freshEvent`, never profile/legacy defaults. Expansion-off never pads/truncates requests; label length estimates separately from unique export coverage.
+- Use `freshEvent`, never profile defaults. Expansion-off never pads/truncates. Planning excludes DNP/missing titles/repeated identities, because estimates and allocation slots are not unique approved coverage.
 - Route every same-row event writer through owner/id plus the reserved inputs revision marker compare-and-set; initialize missing legacy markers atomically with the observed timestamp, use fresh UUIDs per logical edit stable through retry/reload, and never put full JSON in URL filters, because timestamps and payload ABA are insufficient.
 - Treat native scans as atomic source replacements and retain saved tracks on failed, partial or unexpectedly empty rescans, because inaccessible folders must not erase library indexes.
 - Use the shared case-sensitive file-identity index for playback, picked-file selection and metadata carry-forward; selected paths never fall through to another basename or scored song, because duplicate filenames may refer to different audio.

@@ -1,5 +1,8 @@
 import type { PreparationInputs } from './preparationPolicy';
 import { boundedNumber, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from './inputSafety';
+import { isBlocked, type Song, type DoNotPlayEntry } from './danceFloor';
+import { intendedKey } from '../../desktop/offline/policy.cjs';
+import { trackIdentity } from './fileIdentity';
 
 /** Fresh event content only. Legacy restore and app-level preferences never use this initializer. */
 export function freshEvent() {
@@ -38,4 +41,20 @@ export function preparationCoverage(lengths: Array<number | undefined>, eventMin
     averageSeconds: lengths.length ? estimatedSeconds / lengths.length : 240,
     baselineShortSeconds: Math.max(0, baselineSeconds - estimatedSeconds),
     preparationShortSeconds: Math.max(0, targetSeconds - estimatedSeconds) };
+}
+
+/** Unique usable intended requests, not approved export evidence. Never alters source rows. */
+export function clientPlanningCoverage(songs: Song[], blocked: DoNotPlayEntry[], resolve: (song: Song) => { filePath: string; songLength?: string | number } | undefined, eventMinutes: number, buffer: number, roots: Record<string, string> = {}) {
+  const intended = new Set<string>(), files = new Set<string>();
+  const lengths: Array<number | undefined> = [];
+  let excluded = 0, repeats = 0;
+  for (const song of songs) {
+    if (!song.song.trim() || isBlocked(song.artist, song.song, blocked)) { excluded++; continue; }
+    const key = intendedKey(song), track = resolve(song);
+    const file = track ? trackIdentity(track.filePath, roots) : undefined;
+    if (intended.has(key) || (file !== undefined && files.has(file))) { repeats++; continue; }
+    intended.add(key); if (file !== undefined) files.add(file);
+    lengths.push(track ? Number(track.songLength) : undefined);
+  }
+  return { ...preparationCoverage(lengths, eventMinutes, buffer), excluded, repeats, usable: lengths.length };
 }
