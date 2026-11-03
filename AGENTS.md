@@ -29,7 +29,7 @@
 
 - Apply appearance before first paint and share semantic theme tokens through a single provider; System alone follows OS changes, because SSR and every workspace surface must agree.
 - Read sidebar installed versions from the bridged Electron app identity (or explicit currentVersion), never updater status.version; label browser versions separately because available updates are not installed versions.
-- Compare web builds only by `__APP_BUILD_ID__` via no-store `/api/public/version`, never HTML meta/semver/time, because only the deployed worker knows the live build.
+- Compare web builds only by `__APP_BUILD_ID__` via no-store `/api/public/version`, never HTML meta/semver/time, since only the worker knows the live build.
 - Parse VirtualDJ database.xml strictly first; on malformed XML or any DOCTYPE recover per Song block (strict block, then tolerant attributes decoding only predefined/numeric references) and skip/report unsafe paths, because one damaged entry must not discard every track's metadata nor invent file identities.
 
 - Share preparation policy evidence and intended-version resolution through desktop/offline/policy.cjs; optional inputs preserve legacy passive loads and policy-bearing backups use format v2, because old offline shells must reject rather than ignore clean restrictions.
@@ -40,5 +40,5 @@
 - Keep saved keys unchanged; dedupe automatic additions with one AdditionKeySet (whole primary + full credit set) everywhere, promoting exact owned files order-independently and require explicit occurrence exclusions for repeated combined DJ export, because requests and legacy snapshots must stay intact.
 - Derive section coverage from export readiness's unique case-sensitive files, separate event/buffer minutes, and cap artist/title mismatches in search fallback scores, because repeated minutes and cross-field tokens are not evidence.
 - Gate automatic expansion on this owner's READY prep knowledge (await queued writes); isolate providers; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
-- Rank pooled candidates once via `rankPool`; optional `inputs.eventFit` (none=no-op) uses only provenance-tagged track evidence; quality samples freeze context.
-- Gather facts via `factsGather` before rankPool so rankWhy matches shown facts.
+- Rank candidates once via `rankPool`; optional `inputs.eventFit` (none=no-op) uses only provenance-tagged evidence; quality samples freeze context.
+- Gather facts via `factsGather` before rankPool; server enrich ends before the client cutoff (else hits are lost).

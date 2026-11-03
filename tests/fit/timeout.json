@@ -1,0 +1,532 @@
+{
+ "limitations": [
+  "Controlled fixture with deterministic fake delays, not an exact replay of the saved run and not live native/Mac generation; the original full candidate pool was not captured.",
+  "Same 31 archived candidates/evidence as timing.json; which rows hang is decided by fixture index (every third), never by title or rating.",
+  "Cached values keep the fixture's own legacy provenance (estimate/ai); nothing is upgraded to provider and hung rows stay unknown.",
+  "Similarity links are synthetic and identical in every run. Ratings are reporting-only and never ranking input."
+ ],
+ "gather": {
+  "before": {
+   "requested": 31,
+   "found": 0,
+   "failedSongs": 31,
+   "timedOutSongs": 31,
+   "skippedAfterTimeout": 0,
+   "skippedByBudget": 0,
+   "alreadyAttempted": 0,
+   "incompleteSongs": 0
+  },
+  "after": {
+   "requested": 31,
+   "found": 31,
+   "failedSongs": 0,
+   "timedOutSongs": 0,
+   "skippedAfterTimeout": 0,
+   "skippedByBudget": 0,
+   "alreadyAttempted": 0,
+   "incompleteSongs": 10
+  }
+ },
+ "coverage": {
+  "before": {
+   "energyAndDanceability": 0,
+   "popularity": 0,
+   "of": 31,
+   "completedCacheFactsAvailable": 21
+  },
+  "after": {
+   "energyAndDanceability": 21,
+   "popularity": 11,
+   "of": 31,
+   "completedCacheFactsAvailable": 21
+  }
+ },
+ "noFit": {
+  "beforeTop14": [
+   "ABBA|Honey Honey",
+   "Whitney Houston|How Will I Know",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "ABBA|Mamma Mia",
+   "Whitney Houston|I'm Every Woman",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun",
+   "KISS|I Was Made For Lovin' You",
+   "The Pussycat Dolls|Buttons"
+  ],
+  "afterTop14": [
+   "ABBA|Honey Honey",
+   "Whitney Houston|How Will I Know",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "ABBA|Mamma Mia",
+   "Whitney Houston|I'm Every Woman",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun",
+   "KISS|I Was Made For Lovin' You",
+   "The Pussycat Dolls|Buttons"
+  ],
+  "overlapWithSavedBaseline14": {
+   "before": 9,
+   "after": 9
+  },
+  "ratingsTop14ReportOnly": {
+   "before": {
+    "Good": 2,
+    "Fair": 2,
+    "Poor": 0,
+    "Unfamiliar": 5,
+    "Unrated": 5
+   },
+   "after": {
+    "Good": 2,
+    "Fair": 2,
+    "Poor": 0,
+    "Unfamiliar": 5,
+    "Unrated": 5
+   }
+  },
+  "ranks": [
+   {
+    "track": "ABBA|Honey Honey",
+    "beforeRank": 1,
+    "afterRank": 1,
+    "rating": null
+   },
+   {
+    "track": "Whitney Houston|How Will I Know",
+    "beforeRank": 2,
+    "afterRank": 2,
+    "rating": null
+   },
+   {
+    "track": "Big Boi|All Night (Dirty)",
+    "beforeRank": 3,
+    "afterRank": 3,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "American Authors|Best Day Of My Life",
+    "beforeRank": 4,
+    "afterRank": 4,
+    "rating": "Good"
+   },
+   {
+    "track": "Grouplove|Tongue Tied",
+    "beforeRank": 5,
+    "afterRank": 5,
+    "rating": "Fair"
+   },
+   {
+    "track": "Mariah Carey|A No No",
+    "beforeRank": 6,
+    "afterRank": 6,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "ABBA|Mamma Mia",
+    "beforeRank": 7,
+    "afterRank": 7,
+    "rating": "Good"
+   },
+   {
+    "track": "Whitney Houston|I'm Every Woman",
+    "beforeRank": 8,
+    "afterRank": 8,
+    "rating": null
+   },
+   {
+    "track": "Ava Max|Freaking Me Out",
+    "beforeRank": 9,
+    "afterRank": 9,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "Zara Larsson|Don't Let Me Be Yours",
+    "beforeRank": 10,
+    "afterRank": 10,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "Toni Braxton|Another Sad Love Song",
+    "beforeRank": 11,
+    "afterRank": 11,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "The Beatles|Here Comes the Sun",
+    "beforeRank": 12,
+    "afterRank": 12,
+    "rating": null
+   },
+   {
+    "track": "KISS|I Was Made For Lovin' You",
+    "beforeRank": 13,
+    "afterRank": 13,
+    "rating": "Fair"
+   },
+   {
+    "track": "The Pussycat Dolls|Buttons",
+    "beforeRank": 14,
+    "afterRank": 14,
+    "rating": null
+   },
+   {
+    "track": "Snow Patrol|Chasing Cars",
+    "beforeRank": 15,
+    "afterRank": 15,
+    "rating": "Poor"
+   },
+   {
+    "track": "Mariah Carey|Fantasy",
+    "beforeRank": 16,
+    "afterRank": 16,
+    "rating": null
+   },
+   {
+    "track": "ABBA|Take a Chance on Me",
+    "beforeRank": 17,
+    "afterRank": 17,
+    "rating": null
+   },
+   {
+    "track": "Tones and I|Dance Monkey",
+    "beforeRank": 18,
+    "afterRank": 18,
+    "rating": null
+   },
+   {
+    "track": "The Beatles|Let It Be",
+    "beforeRank": 19,
+    "afterRank": 19,
+    "rating": "Poor"
+   },
+   {
+    "track": "Bill Withers|Lovely Day",
+    "beforeRank": 20,
+    "afterRank": 20,
+    "rating": "Good"
+   },
+   {
+    "track": "Journey|Don't Stop Believin'",
+    "beforeRank": 21,
+    "afterRank": 21,
+    "rating": "Good"
+   },
+   {
+    "track": "Kool & The Gang|Celebration",
+    "beforeRank": 22,
+    "afterRank": 22,
+    "rating": "Good"
+   },
+   {
+    "track": "T.I.|Live Your Life",
+    "beforeRank": 23,
+    "afterRank": 23,
+    "rating": null
+   },
+   {
+    "track": "The O'Jays|Love Train",
+    "beforeRank": 24,
+    "afterRank": 24,
+    "rating": null
+   },
+   {
+    "track": "Tracy Chapman|Fast Car",
+    "beforeRank": 25,
+    "afterRank": 25,
+    "rating": null
+   },
+   {
+    "track": "Van Morrison|Brown Eyed Girl",
+    "beforeRank": 26,
+    "afterRank": 26,
+    "rating": null
+   },
+   {
+    "track": "Zach Bryan|Revival",
+    "beforeRank": 27,
+    "afterRank": 27,
+    "rating": null
+   },
+   {
+    "track": "Mariah Carey|8th Grade",
+    "beforeRank": 28,
+    "afterRank": 28,
+    "rating": null
+   },
+   {
+    "track": "Kool & The Gang|Get Down On It",
+    "beforeRank": 29,
+    "afterRank": 29,
+    "rating": null
+   },
+   {
+    "track": "Journey|Faithfully",
+    "beforeRank": 30,
+    "afterRank": 30,
+    "rating": null
+   },
+   {
+    "track": "Kool & The Gang|Cherish",
+    "beforeRank": 31,
+    "afterRank": 31,
+    "rating": null
+   }
+  ]
+ },
+ "fit": {
+  "choices": {
+   "familiarity": "familiar",
+   "avoidSlow": true
+  },
+  "beforeTop14": [
+   "Bill Withers|Lovely Day",
+   "Journey|Don't Stop Believin'",
+   "Van Morrison|Brown Eyed Girl",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "ABBA|Honey Honey",
+   "Whitney Houston|How Will I Know",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun",
+   "KISS|I Was Made For Lovin' You"
+  ],
+  "afterTop14": [
+   "Van Morrison|Brown Eyed Girl",
+   "ABBA|Take a Chance on Me",
+   "Whitney Houston|How Will I Know",
+   "Bill Withers|Lovely Day",
+   "Journey|Don't Stop Believin'",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Snow Patrol|Chasing Cars",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun"
+  ],
+  "overlapWithSavedBaseline14": {
+   "before": 10,
+   "after": 10
+  },
+  "ratingsTop14ReportOnly": {
+   "before": {
+    "Good": 3,
+    "Fair": 2,
+    "Poor": 0,
+    "Unfamiliar": 5,
+    "Unrated": 4
+   },
+   "after": {
+    "Good": 3,
+    "Fair": 1,
+    "Poor": 1,
+    "Unfamiliar": 5,
+    "Unrated": 4
+   }
+  },
+  "ranks": [
+   {
+    "track": "Van Morrison|Brown Eyed Girl",
+    "beforeRank": 3,
+    "afterRank": 1,
+    "rating": null
+   },
+   {
+    "track": "ABBA|Take a Chance on Me",
+    "beforeRank": 27,
+    "afterRank": 2,
+    "rating": null
+   },
+   {
+    "track": "Whitney Houston|How Will I Know",
+    "beforeRank": 9,
+    "afterRank": 3,
+    "rating": null
+   },
+   {
+    "track": "Bill Withers|Lovely Day",
+    "beforeRank": 1,
+    "afterRank": 4,
+    "rating": "Good"
+   },
+   {
+    "track": "Journey|Don't Stop Believin'",
+    "beforeRank": 2,
+    "afterRank": 5,
+    "rating": "Good"
+   },
+   {
+    "track": "Big Boi|All Night (Dirty)",
+    "beforeRank": 4,
+    "afterRank": 6,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "American Authors|Best Day Of My Life",
+    "beforeRank": 5,
+    "afterRank": 7,
+    "rating": "Good"
+   },
+   {
+    "track": "Grouplove|Tongue Tied",
+    "beforeRank": 6,
+    "afterRank": 8,
+    "rating": "Fair"
+   },
+   {
+    "track": "Mariah Carey|A No No",
+    "beforeRank": 7,
+    "afterRank": 9,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "Ava Max|Freaking Me Out",
+    "beforeRank": 10,
+    "afterRank": 10,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "Zara Larsson|Don't Let Me Be Yours",
+    "beforeRank": 11,
+    "afterRank": 11,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "Snow Patrol|Chasing Cars",
+    "beforeRank": 16,
+    "afterRank": 12,
+    "rating": "Poor"
+   },
+   {
+    "track": "Toni Braxton|Another Sad Love Song",
+    "beforeRank": 12,
+    "afterRank": 13,
+    "rating": "Unfamiliar"
+   },
+   {
+    "track": "The Beatles|Here Comes the Sun",
+    "beforeRank": 13,
+    "afterRank": 14,
+    "rating": null
+   },
+   {
+    "track": "KISS|I Was Made For Lovin' You",
+    "beforeRank": 14,
+    "afterRank": 15,
+    "rating": "Fair"
+   },
+   {
+    "track": "The Pussycat Dolls|Buttons",
+    "beforeRank": 15,
+    "afterRank": 16,
+    "rating": null
+   },
+   {
+    "track": "Tones and I|Dance Monkey",
+    "beforeRank": 17,
+    "afterRank": 17,
+    "rating": null
+   },
+   {
+    "track": "Tracy Chapman|Fast Car",
+    "beforeRank": 24,
+    "afterRank": 18,
+    "rating": null
+   },
+   {
+    "track": "Zach Bryan|Revival",
+    "beforeRank": 25,
+    "afterRank": 19,
+    "rating": null
+   },
+   {
+    "track": "Mariah Carey|Fantasy",
+    "beforeRank": 18,
+    "afterRank": 20,
+    "rating": null
+   },
+   {
+    "track": "ABBA|Honey Honey",
+    "beforeRank": 8,
+    "afterRank": 21,
+    "rating": null
+   },
+   {
+    "track": "Whitney Houston|I'm Every Woman",
+    "beforeRank": 20,
+    "afterRank": 22,
+    "rating": null
+   },
+   {
+    "track": "Kool & The Gang|Celebration",
+    "beforeRank": 21,
+    "afterRank": 23,
+    "rating": "Good"
+   },
+   {
+    "track": "T.I.|Live Your Life",
+    "beforeRank": 22,
+    "afterRank": 24,
+    "rating": null
+   },
+   {
+    "track": "The O'Jays|Love Train",
+    "beforeRank": 23,
+    "afterRank": 25,
+    "rating": null
+   },
+   {
+    "track": "ABBA|Mamma Mia",
+    "beforeRank": 19,
+    "afterRank": 26,
+    "rating": "Good"
+   },
+   {
+    "track": "Kool & The Gang|Get Down On It",
+    "beforeRank": 28,
+    "afterRank": 27,
+    "rating": null
+   },
+   {
+    "track": "Mariah Carey|8th Grade",
+    "beforeRank": 29,
+    "afterRank": 28,
+    "rating": null
+   },
+   {
+    "track": "Journey|Faithfully",
+    "beforeRank": 30,
+    "afterRank": 29,
+    "rating": null
+   },
+   {
+    "track": "The Beatles|Let It Be",
+    "beforeRank": 26,
+    "afterRank": 30,
+    "rating": "Poor"
+   },
+   {
+    "track": "Kool & The Gang|Cherish",
+    "beforeRank": 31,
+    "afterRank": 31,
+    "rating": null
+   }
+  ]
+ }
+}
