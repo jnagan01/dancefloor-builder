@@ -115,3 +115,46 @@ export function availabilityNote(a: SimilarAvailability, seedCount: number): str
 
 /** Points for track-level evidence: always stronger than the artist-only Last.fm neighbour (max 2). */
 export const similarTrackPoints = (e: SimilarTrackEvidence) => 2.5 + 1 * Math.min(3, e.seeds.length - 1) + e.bestMatch;
+
+export type SimilarCache = Map<string, { at: number; value: SeedResult }>;
+type FetchLike = (url: string, init: { headers: Record<string, string>; signal: AbortSignal }) => Promise<{ status: number; json(): Promise<unknown> }>;
+const CACHE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Server-side worker for track.getSimilar (testable with a fake fetch). Bounded concurrency and per-call timeout;
+ * successful/not-found answers are cached, failures never are. A rate limit stops further calls this run.
+ */
+export async function runSimilarTracks(key: string | undefined, rawSeeds: readonly TrackSeed[], perSeed: number, fetchImpl: FetchLike, cache: SimilarCache, now = () => Date.now()): Promise<SimilarTracksResponse> {
+  const seeds = seedsFromRequests(rawSeeds);
+  if (!seeds.length) return { availability: "noSeeds", seeds: [] };
+  if (!key) return { availability: "missingKey", seeds: [] };
+  const statuses: Array<SeedStatus | "rateLimited" | "badKey"> = [];
+  const results: SeedResult[] = [];
+  const queue = [...seeds];
+  let stop = false;
+  const worker = async () => {
+    for (;;) {
+      const seed = queue.shift();
+      if (!seed) return;
+      if (stop) { statuses.push("rateLimited"); results.push({ seed, status: "error", similar: [] }); continue; }
+      const ck = `${songIdentity(seed.artist, seed.title)}|${perSeed}`;
+      const hit = cache.get(ck);
+      if (hit && now() - hit.at < CACHE_MS) { statuses.push(hit.value.status); results.push(hit.value); continue; }
+      let body: unknown = null;
+      try {
+        const url = new URL("https://ws.audioscrobbler.com/2.0/");
+        for (const [k, v] of Object.entries({ method: "track.getsimilar", artist: seed.artist, track: seed.title, autocorrect: "0", limit: String(perSeed), api_key: key, format: "json" })) url.searchParams.set(k, v);
+        const res = await fetchImpl(url.toString(), { headers: { "User-Agent": "DancefloorBuilder/1.0" }, signal: AbortSignal.timeout(SIMILAR_LIMITS.timeoutMs) });
+        body = res.status === 429 ? { error: 29 } : await res.json().catch(() => null);
+      } catch { body = null; }
+      const parsed = parseSimilarBody(body, perSeed);
+      if (parsed.status === "rateLimited") stop = true;
+      statuses.push(parsed.status);
+      const value: SeedResult = { seed, status: parsed.status === "ok" || parsed.status === "notFound" ? parsed.status : "error", similar: parsed.similar };
+      if (parsed.status === "ok" || parsed.status === "notFound") cache.set(ck, { at: now(), value });
+      results.push(value);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SIMILAR_LIMITS.concurrency, queue.length) }, worker));
+  return { availability: overallAvailability(statuses), seeds: results };
+}

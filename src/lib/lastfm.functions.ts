@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { SIMILAR_LIMITS, overallAvailability, parseSimilarBody, seedsFromRequests, type SeedResult, type SeedStatus, type SimilarTracksResponse } from "@/lib/prep/similarTracks";
+import { SIMILAR_LIMITS, runSimilarTracks, type SimilarCache, type SimilarTracksResponse } from "@/lib/prep/similarTracks";
 
 /**
  * Last.fm crowd data.
@@ -164,49 +164,10 @@ const TrackSeedsSchema = z.object({
   seeds: z.array(z.object({ artist: z.string().max(150), title: z.string().max(150) })).max(SIMILAR_LIMITS.seeds),
   perSeed: z.number().int().min(1).max(SIMILAR_LIMITS.perSeed).default(20),
 });
-const trackCache = new Map<string, { at: number; value: SeedResult }>();
+const trackCache: SimilarCache = new Map();
 
-/**
- * Real Last.fm track.getSimilar for specific requested tracks. Only artist/title seeds are sent.
- * Bounded concurrency, per-call timeout, 6h cache of successful/not-found answers (failures are not cached).
- * The API key stays on the server; availability is reported truthfully (missing key, rate limit, partial).
- */
 export const getSimilarTracks = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => TrackSeedsSchema.parse(data))
-  .handler(async ({ data }): Promise<SimilarTracksResponse> => {
-    const seeds = seedsFromRequests(data.seeds);
-    if (!seeds.length) return { availability: "noSeeds", seeds: [] };
-    const key = process.env["LASTFM_API_KEY"];
-    if (!key) return { availability: "missingKey", seeds: [] };
-    const statuses: Array<SeedStatus | "rateLimited" | "badKey"> = [];
-    const results: SeedResult[] = [];
-    const queue = [...seeds];
-    let stop = false;
-    const workers = Array.from({ length: Math.min(SIMILAR_LIMITS.concurrency, queue.length) }, async () => {
-      for (;;) {
-        const seed = queue.shift();
-        if (!seed) return;
-        if (stop) { statuses.push("rateLimited"); results.push({ seed, status: "error", similar: [] }); continue; }
-        const ck = `${seed.artist.toLowerCase()}|${seed.title.toLowerCase()}|${data.perSeed}`;
-        const hit = trackCache.get(ck);
-        if (hit && Date.now() - hit.at < CACHE_MS) { statuses.push(hit.value.status); results.push(hit.value); continue; }
-        let body: unknown = null;
-        try {
-          const url = new URL(API);
-          for (const [k, v] of Object.entries({ method: "track.getsimilar", artist: seed.artist, track: seed.title, autocorrect: "0", limit: String(data.perSeed), api_key: key, format: "json" })) url.searchParams.set(k, v);
-          const res = await fetch(url.toString(), { headers: { "User-Agent": "DancefloorBuilder/1.0" }, signal: AbortSignal.timeout(SIMILAR_LIMITS.timeoutMs) });
-          if (res.status === 429) body = { error: 29 };
-          else body = await res.json().catch(() => null);
-        } catch { body = null; }
-        const parsed = parseSimilarBody(body, data.perSeed);
-        if (parsed.status === "rateLimited") stop = true;
-        statuses.push(parsed.status);
-        const value: SeedResult = { seed, status: parsed.status === "ok" || parsed.status === "notFound" ? parsed.status : "error", similar: parsed.similar };
-        if (parsed.status === "ok" || parsed.status === "notFound") trackCache.set(ck, { at: Date.now(), value });
-        results.push(value);
-      }
-    });
-    await Promise.all(workers);
-    return { availability: overallAvailability(statuses), seeds: results };
-  });
+  .handler(async ({ data }): Promise<SimilarTracksResponse> =>
+    runSimilarTracks(process.env["LASTFM_API_KEY"], data.seeds, data.perSeed, (u, init) => fetch(u, init), trackCache));
