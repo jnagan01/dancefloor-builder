@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Authorized preparation policies
+- [ ] Review corrections: remove unsafe local refill, match requested holiday clean versions independently of expansion, align dashboard eligible extras with export.
 - [ ] Diagnose clean-export failure with UI/IPC/artifacts; gate unsupported desktop policy activation before save and verify legacy backup/update.
 - [ ] Better expansion: compatible owned-only/seasonal controls, exact intended versions, honest gaps, all addition paths.
 - [ ] Event-wide clean requirement: preserved selections, fail-closed approval/export/readiness, offline capability gate.

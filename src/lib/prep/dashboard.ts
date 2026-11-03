@@ -24,7 +24,7 @@ const decadeFromYear = (y?: number) => y && y > 1000 ? `${String(y).slice(0, 3)}
 
 /**
  * Planning summary using the same approval rule as export readiness (`exportApproved`, primary +
- * explicitly selected extra tracks). Categories are exclusive per row:
+ * explicitly selected extra tracks). Rows can have both eligible files and policy-blocked files:
  *   excluded → not linked → linked track missing from the library index → waiting for approval → confirmed.
  * File presence on disk is not checked here (export readiness does that).
  * Lengths add every approved track (including extras); unknown lengths are listed and any estimate
@@ -48,11 +48,17 @@ export function buildDashboard(sections: DashSection[], matches: Record<string, 
       else if (!ids.length) d.notLinked.push({ ...item, detail: s.fromUpload ? "Client request — no track linked" : "No track linked" });
       else if (missing) d.linkedMissing.push({ ...item, detail: missing === ids.length ? "Linked track is no longer in your library index" : `${missing} of ${ids.length} selected tracks are no longer in your library index` });
       else if (!exportApproved(m)) { d.pending.push({ ...item, detail: m!.status }); if (m!.alternatives.length) d.alternates.push({ ...item, detail: `${m!.alternatives.length + 1} candidate tracks` }); }
-      else if (facts.some(f => f?.cleanReason)) d.pending.push({ ...item, detail: facts.find(f => f?.cleanReason)?.cleanReason ?? "Clean version needed" });
-      else { d.confirmed++; approvedTracks = facts as DashTrack[]; }
+      else {
+        if (facts.some(f => f?.cleanReason)) d.pending.push({ ...item, detail: facts.find(f => f?.cleanReason)?.cleanReason ?? "Clean version needed" });
+        approvedTracks = facts.filter((f): f is DashTrack => !!f && !f.cleanReason);
+        d.confirmed += approvedTracks.length;
+      }
       const lens = approvedTracks.map(t => t.durationSec);
-      if (approvedTracks.length && lens.every(l => l && l > 0)) { const sum = (lens as number[]).reduce((a, b) => a + b, 0); d.knownSec += sum; allKnown.push(...(lens as number[])); }
-      else if (!m?.excludedFromVdj) d.unknownDuration.push({ ...item, detail: approvedTracks.length ? "Approved track has no length in your VirtualDJ data" : "No approved track yet" });
+      const known = lens.filter((l): l is number => typeof l === "number" && Number.isFinite(l) && l > 0);
+      d.knownSec += known.reduce((a, b) => a + b, 0); allKnown.push(...known);
+      if (approvedTracks.length) {
+        for (let n = known.length; n < lens.length; n++) d.unknownDuration.push({ ...item, detail: "Approved track has no length in your VirtualDJ data" });
+      } else if (!m?.excludedFromVdj) d.unknownDuration.push({ ...item, detail: "No approved track yet" });
       const a = s.artist.toLowerCase().replace(/^the\s+/, "").trim();
       if (a) { const e = artists.get(a) ?? { artist: s.artist, where: [] }; e.where.push(item); artists.set(a, e); }
       const tagGenre = approvedTracks.find(t => t.genre)?.genre, tagDecade = approvedTracks.find(t => t.decade)?.decade;
