@@ -434,7 +434,7 @@ try{
    const tt=titles.map((title,i)=>({filePath:path.join(library,`display-${i}.mp3`),artist:'Display Band',title,songLength:180}));
    tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
    const ss=tt.slice(0,6).map(t=>({artist:t.artist,song:t.title,fromUpload:true}));
-   const kk=ss.map((t,i)=>`peak:${i}:display band|${t.song.toLowerCase().replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim()}`);
+   const kk=ss.map((t,i)=>`peak:${i}:display band|${t.song.toLowerCase().replace(/\([^)]*\)/g,'').replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim()}`);
    const selected=Object.fromEntries(kk.map((k,i)=>[k,{paths:[tt[i].filePath,...(i===3?[tt[6].filePath]:[])],confirmed:true,...(i===2?{excluded:true}:{})}]));
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Display policy',updated_at:'v1',inputs:{songs:ss,eventName:'Display policy',hours:'.25',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss,selections:selected}}}));
