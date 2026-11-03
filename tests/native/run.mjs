@@ -357,6 +357,8 @@ try{
    expect(all.some(t=>t.song==='Ordinary (Clean)')).toBe(false);
    await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
    expect(Object.values(saved.lists.selections).flatMap(v=>v.paths)).not.toContain(small[0].filePath);
+   const holidaySelection=Object.entries(saved.lists.selections).find(([k])=>k.includes('wham')&&k.includes('last christmas'))?.[1];
+   expect(holidaySelection).toMatchObject({confirmed:true,paths:[small[6].filePath]});
    await page.reload();await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
  });
  await check('clean policy toggle retains chosen dirty/extras; actual exported paths and omission reasons agree; save/reopen persists',async()=>{
