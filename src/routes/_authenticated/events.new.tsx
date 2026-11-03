@@ -124,7 +124,7 @@ import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
 import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
 import { planAddToSection } from "@/lib/prep/addToSection";
 import { prepStore } from "@/lib/prep/prepStore";
-import { expansionFeedback, favoredFirst, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
+import { awaitReadyFeedback, BLOCK_ALL_ADDITIONS, expansionFeedback, favoredFirst, GATE_MESSAGES, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
 import { aggregateSimilar, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { songIdentity } from "@/lib/prep/knowledge";
 import { createEventAutosave } from "@/lib/eventAutosave";
@@ -946,14 +946,22 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const generationResolver = buildResolver(mergedLibrary.tracks, generationPolicy);
     // Account-fenced preparation knowledge: global Never, event-only dismissals and favourites apply to
     // automatic additions only (requests are never filtered). Read live so feedback changed mid-run is honoured.
-    const store = prepStore(), prepStart = store.get(), feedbackEvent = savedEventId, accountAtStart = accountRef.current;
-    if (prepStart.status === "blocked") toast.warning("Saved preparation notes are unreadable, so your Never/dismiss choices couldn't be applied to additions this run.");
+    const store = prepStore(), feedbackEvent = savedEventId, accountAtStart = accountRef.current;
+    // Automatic expansion needs this account's READY knowledge; requests-only generation does not.
+    let feedbackOwner: { account: string; generation: number } | null = null, feedbackLost = false;
+    if (fill) {
+      const gate = await awaitReadyFeedback(store, accountAtStart);
+      if (genTokenRef.current !== myToken) return;
+      if (!gate.ok) { toast.error(gate.message); return; }
+      feedbackOwner = gate.owner;
+    }
     let fbCache: { k: unknown; fb: ExpansionFeedback } | null = null;
     const liveFeedback = (): ExpansionFeedback => {
+      if (!fill) return expansionFeedback(null, feedbackEvent);
       const now = store.get();
-      const same = now.account === prepStart.account && now.generation === prepStart.generation && now.status === "ready";
-      const k = same ? now.knowledge : prepStart.status === "ready" ? prepStart.knowledge : null;
-      if (!fbCache || fbCache.k !== k) fbCache = { k, fb: expansionFeedback(k, feedbackEvent) };
+      // Never substitute older or other-account knowledge: if it is no longer this owner's ready copy, refuse additions.
+      if (!feedbackOwner || now.account !== feedbackOwner.account || now.generation !== feedbackOwner.generation || now.status !== "ready") { feedbackLost = true; return BLOCK_ALL_ADDITIONS; }
+      if (!fbCache || fbCache.k !== now.knowledge) fbCache = { k: now.knowledge, fb: expansionFeedback(now.knowledge, feedbackEvent) };
       return fbCache.fb;
     };
     const addedAllowed = (track: Song & { genre?: string }) => !liveFeedback().blocked(track.artist, track.song) && generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
@@ -1595,10 +1603,22 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // AI/enrichment — drop this stale result instead of clobbering state.
     if (genTokenRef.current !== myToken) return;
     // Account/session fence: a sign-out or account switch during generation discards this result.
-    { const now = store.get(); if (accountRef.current !== accountAtStart || now.account !== prepStart.account || now.generation !== prepStart.generation) { toast.error("Account changed during generation; nothing was applied."); return; } }
-    // Late feedback re-check: additions that became Never/dismissed while generation ran are dropped; requests stay.
-    { let removed = 0; for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) { const c = recheckAdditions(r[section], liveFeedback()); removed += c.removed; r[section] = c.kept; }
-      if (removed) toast.info(`${removed} added track${removed === 1 ? " was" : "s were"} left out because of your Never or dismiss choices made during generation.`); }
+    if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
+    if (fill) {
+      // Wait for any queued Never/dismiss writes for this owner, then re-check against exactly that state.
+      let settled: Parameters<typeof expansionFeedback>[0];
+      try { settled = await store.settled(feedbackOwner!); } catch { settled = null; }
+      if (genTokenRef.current !== myToken) return;
+      const now = store.get();
+      if (!settled || feedbackLost || accountRef.current !== accountAtStart || now.account !== feedbackOwner!.account || now.generation !== feedbackOwner!.generation) {
+        toast.error(now.status === "blocked" ? GATE_MESSAGES.blocked : "Account changed during generation; nothing was applied.");
+        return;
+      }
+      // Late feedback re-check: additions that became Never/dismissed while generation ran are dropped; requests stay.
+      const fb = expansionFeedback(settled, feedbackEvent);
+      let removed = 0; for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) { const c = recheckAdditions(r[section], fb); removed += c.removed; r[section] = c.kept; }
+      if (removed) toast.info(`${removed} added track${removed === 1 ? " was" : "s were"} left out because of your Never or dismiss choices made during generation.`);
+    }
 
     // This explicit generation may remove added repeats, never requests or saved selections.
     r = preventAutomaticDuplicates(r, song => {
