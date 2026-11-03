@@ -2041,7 +2041,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
 
 
-  /** Direct-to-VirtualDJ set list: matched songs only, so VirtualDJ only sees playable files. */
+  /** Direct-to-VirtualDJ set list: approved tracks only, so VirtualDJ only sees playable files. */
   function assertExportCurrent(files: ReturnType<typeof captureExportFiles>) {
     if (files.generation !== readinessEpoch.current.generation) throw Error("Event or clean policy changed during export. Export stopped; files already written may remain.");
   }
@@ -2080,7 +2080,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try {
       await guardedWrite(files, dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
       await guardedWrite(files, dir, fname, xml);
-      toast.success(matchedSummary(refs, fname));
+      toast.success(matchedSummary(report, fname));
     } catch {
       if (files.generation !== readinessEpoch.current.generation) { toast.error("Event or clean policy changed during export. Export stopped; earlier files may remain."); return; }
       toast.error("Could not write to VirtualDJ folder, downloading instead");
@@ -2119,7 +2119,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try {
       await guardedWrite(files, dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
       await guardedWrite(files, dir, fname, m3u);
-      toast.success(matchedSummary(refs, fname));
+      toast.success(matchedSummary(report, fname));
     } catch {
       if (files.generation !== readinessEpoch.current.generation) { toast.error("Event or clean policy changed during export. Export stopped; earlier files may remain."); return; }
       toast.error("Could not write to VirtualDJ folder, downloading instead");
@@ -2127,9 +2127,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
   }
 
-  /** "Saved X matched songs … (N unmatched songs left out)" message for DJ-software exports. */
-  function matchedSummary(refs: ReturnType<typeof getSectionRefsForResult>, fname: string): string {
-    return `Saved ${summaryText(exportReadiness(refs, mergedLibrary))} to ${vdjDirName ?? "VirtualDJ folder"} as ${fname}`;
+  /** Describe the captured, verified report that produced this output, never live state. */
+  function matchedSummary(report: ReturnType<typeof exportReadiness>, fname: string): string {
+    return `Saved ${summaryText(report)} to ${vdjDirName ?? "VirtualDJ folder"} as ${fname}`;
   }
 
   async function exportAllToVdj() {

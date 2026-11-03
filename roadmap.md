@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Authorized preparation policies
+- [ ] Per-section native M3U/TXT success summaries use captured verified availability and counts; synthetic regression only.
 - [x] Review corrections: remove unsafe local refill, match requested holiday clean versions independently of expansion, align dashboard eligible extras with export.
 - [x] Diagnose clean-export failure with UI/IPC/artifacts; gate unsupported desktop policy activation before save and verify legacy backup/update.
 - [x] Better expansion: compatible owned-only/seasonal controls, exact intended versions, honest gaps, all addition paths.
