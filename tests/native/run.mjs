@@ -171,8 +171,8 @@ try{
    const created=find();
    expect(created.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});expect(created.inputs.buffer).toBe(1);
    const all=['warmUp','transition','peak'].flatMap(k=>created.lists[k].map(r=>({...r,section:k})));
-   const key=r=>`${r.artist}|${r.song}`;
-   expect(all.filter(r=>r.fromUpload).map(key).sort()).toEqual(['Earth, Wind & Fire|September','Mark Ronson feat. Bruno Mars|Uptown Funk','Whitney Houston|I Wanna Dance With Somebody','Usher feat. Lil Jon & Ludacris|Yeah!','The Killers|Mr. Brightside','Walk The Moon|Shut Up and Dance','Dua Lipa|Levitating','Queen|Don\'t Stop Me Now','Outkast|Hey Ya!','ABBA|Dancing Queen'].sort());
+   const rk=r=>`${r.artist}|${r.song}`;
+   expect(all.filter(r=>r.fromUpload).map(rk).sort()).toEqual(['Earth, Wind & Fire|September','Mark Ronson feat. Bruno Mars|Uptown Funk','Whitney Houston|I Wanna Dance With Somebody','Usher feat. Lil Jon & Ludacris|Yeah!','The Killers|Mr. Brightside','Walk The Moon|Shut Up and Dance','Dua Lipa|Levitating','Queen|Don\'t Stop Me Now','Outkast|Hey Ya!','ABBA|Dancing Queen'].sort());
    expect(all.filter(r=>!r.fromUpload)).toEqual([]); // zero additions: honest gap, nothing invented
    expect(all.some(r=>/YMCA|Cha Cha Slide|Cupid Shuffle/i.test(r.song))).toBe(false);
    expect(await page.getByText('Estimated track-count gap',{exact:false}).count()).toBeGreaterThan(0);
