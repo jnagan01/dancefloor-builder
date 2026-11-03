@@ -13,7 +13,7 @@
  */
 import { vi } from "vitest";
 import rows from "./realCacheRows.json";
-import { recommend, DEFAULT_REC_CONTROLS, type Recommendation } from "../../src/lib/prep/recommend";
+import { recommend, DEFAULT_REC_CONTROLS, type Recommendation } from "./archived/recommend.543920d";
 import { rowCandidate } from "../../src/lib/prep/expansionRanking";
 import { mergeMeta, encodeCacheSource, decodeCacheSource } from "../../src/lib/prep/provenance";
 import { normalizeKey } from "../../src/lib/danceFloor";

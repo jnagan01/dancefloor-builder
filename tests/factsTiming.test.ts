@@ -65,7 +65,7 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     expect(rows.find((t: any) => t.song === 'Verified Slow')).toBeUndefined();
     expect(est, 'estimates never exclude').toBeTruthy();
     expect(est.energy).toBe(2); expect(est.danceability).toBe(2);
-    expect(est.rankWhy).toMatch(/Energy 2\/10 and danceability 2\/10 suggest a slow song \(estimate, advisory\)/);
+    expect(est.rankWhy).toMatch(/Energy 2\/10 .*danceability 2\/10 .*low-both slow risk/);
     expect(est.rankWhy).not.toMatch(/no energy or danceability data/);
     expect(up.energy).toBe(8); expect(up.year).toBe(1972); // verified file tag beats provider year
     // Each owned key was requested exactly once (final pass never re-requests attempted additions).

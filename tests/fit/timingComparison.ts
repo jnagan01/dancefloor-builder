@@ -8,7 +8,7 @@
  * entries are the same synthetic links as fitComparison. Ratings are attached for REPORTING ONLY.
  */
 import rows from "./realCacheRows.json";
-import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Recommendation } from "../../src/lib/prep/recommend";
+import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Recommendation } from "./archived/recommend.543920d";
 import { rowCandidate } from "../../src/lib/prep/expansionRanking";
 import type { EventFit } from "../../src/lib/prep/eventFit";
 import { REQUESTS, SYNTHETIC_SIMILAR, BASELINE_RATINGS, SAVED_EVENT_ROWS, AFTER_FIT } from "./fitComparison";

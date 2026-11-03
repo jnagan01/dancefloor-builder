@@ -129,6 +129,14 @@ export function recommend(input: RecInput): RecOutput {
       const sim = req || st ? undefined : similar.get(norm(cand.artist));
       if (sim) push("lastfm", `Last.fm lists ${cand.artist} as similar to ${sim.similarTo} (artist-level)${dampNote}`, 2 * sim.match * c.clientSimilarity * damp);
     }
+    if (fitR.similarityCap !== undefined) {
+      const kinds = new Set<EvidenceKind>(["artist", "genre", "decade", "lastfm", "lastfmTrack"]);
+      const total = ev.filter(e => kinds.has(e.kind) && e.points > 0).reduce((n, e) => n + e.points, 0);
+      if (total > fitR.similarityCap) for (const e of ev) if (kinds.has(e.kind) && e.points > 0) {
+        e.points = round(e.points * fitR.similarityCap / total);
+        e.text += " — similarity bounded by advisory low-both slow risk";
+      }
+    }
     const pa = prefArtists.get(norm(cand.artist));
     if (pa) push("prefArtist", `${pa} is a favourite artist for this event`, 1.5);
     const pg = cand.facts.genre && gt !== "unknown" ? genreHit(cand.facts.genre, prefGenres) : undefined;
@@ -181,7 +189,7 @@ export function explainTop(r: { evidence: Evidence[]; uncertain?: string[] }, n 
   const top = r.evidence.filter(e => e.points > 0).slice().sort((a, b) => b.points - a.points).slice(0, n);
   const base = top.length ? top.map(e => e.text).join(" · ") : "No specific evidence beyond your event rules.";
   // Fit caveats (negative slow/unfamiliar evidence and unverified choices) always stay visible, even when positives fill the limit.
-  const caveats = [...r.evidence.filter(e => e.points < 0 && (e.kind === "slowEstimate" || e.kind === "unfamiliarTrack")).map(e => e.text), ...(r.uncertain ?? [])].join(" · ").slice(0, 600);
+  const caveats = [...r.evidence.filter(e => e.points < 0 && (e.kind === "slowEstimate" || e.kind === "unfamiliarTrack")).map(e => e.text), ...(r.uncertain ?? [])].join(" · ").slice(0, 750);
   return caveats ? `${base.slice(0, 897 - caveats.length)} · ${caveats}` : base.slice(0, 900);
 }
 

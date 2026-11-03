@@ -77,7 +77,8 @@ let catKeys: Set<string> | undefined;
  *  original; only clean/dirty/radio-edit labels and featured-credit brackets are ignored. */
 export function inCrowdCatalogue(artist: string, song: string): boolean {
   catKeys ??= new Set(SONG_LIBRARY.flatMap(s => additionKeys(s.artist, s.song)));
-  return additionKeys(artist, song).some(k => catKeys!.has(k));
+  const keys = catKeys;
+  return additionKeys(artist, song).some(k => keys.has(k));
 }
 /** Fit facts for a built-in catalogue entry: curated feel values, always labelled "catalogue" (advisory estimate). */
 export function catalogueFitFacts(s: { energy?: number; danceability?: number }): FitFacts | undefined {
@@ -93,6 +94,7 @@ export interface FitResult {
   /** Evidence lines to add (points may be negative). */ lines: { kind: "familiarTrack" | "unfamiliarTrack" | "slowEstimate" | "discoveryTrack"; text: string; points: number }[];
   /** True when there is positive track-level guest-familiarity evidence (used to keep similarity from dominating). */ familiarEvidence: boolean;
   /** Plain statements of what an active choice could NOT verify for this track (shown, never scored). */ uncertain?: string[];
+  /** Active advisory low-both risk bounds ALL similarity points together, never excludes. */ similarityCap?: number;
 }
 
 export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | "catalogue" | "ai"; artist?: string; song?: string; fit?: FitFacts }): FitResult {
@@ -120,7 +122,20 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
     const es = strength(f.energySource, e !== undefined), ds = strength(f.danceabilitySource, d !== undefined);
     const lowE = e !== undefined && e <= 4, lowD = d !== undefined && d <= 4;
     if (lowE && lowD && es === "strong" && ds === "strong") r.exclude = `Low energy ${e}/10 and danceability ${d}/10 (${sourceLabel(f.energySource)}) — slow/ballad additions avoided for this event`;
-    else if (lowE && lowD) r.lines.push({ kind: "slowEstimate", text: `Energy ${e}/10 and danceability ${d}/10 suggest a slow song (estimate, advisory)`, points: -1 });
+    else if (lowE && lowD && es !== "unknown" && ds !== "unknown") {
+      r.lines.push({ kind: "slowEstimate", text: `Energy ${e}/10 (${sourceLabel(f.energySource)}) and danceability ${d}/10 (${sourceLabel(f.danceabilitySource)}) suggest low-both slow risk — ranked lower, not confirmed slow (advisory)`, points: -3 });
+      r.similarityCap = 1;
+    }
+    const conflict = e !== undefined && d !== undefined && ((e <= 4 && d >= 7) || (d <= 4 && e >= 7));
+    if (conflict) (r.uncertain ??= []).push(`Energy ${e}/10 (${sourceLabel(f.energySource)}) and danceability ${d}/10 (${sourceLabel(f.danceabilitySource)}) conflict for slow avoidance: a groove is possible; not classified slow or penalised`);
+    // Positive estimates cannot rescue questionable/unknown fit. Verified popularity still describes recognition,
+    // not dance suitability; retain half of its familiarity points when upbeat support is absent.
+    const supported = e !== undefined && d !== undefined && es !== "unknown" && ds !== "unknown" && e >= 5 && d >= 5 && (e >= 7 || d >= 7);
+    for (const l of r.lines) if (l.kind === "familiarTrack" && l.points > 0 && /Track popularity/.test(l.text) && !supported) {
+      if (ps === "estimate") { l.points = 0; (r.uncertain ??= []).push("Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported"); }
+      else { l.points /= 2; l.text += " — counted half: recognition does not prove upbeat dance fit"; }
+    }
+    if (pop !== undefined && ps === "strong") (r.uncertain ??= []).push("Verified popularity supports recognition, not slow/ballad or dance suitability");
     if (!r.exclude && (es !== "strong" || ds !== "strong")) (r.uncertain ??= []).push(e === undefined && d === undefined ? "Slow/ballad status unknown: no energy or danceability data" : "Slow/ballad status unverified: energy/danceability are estimates or incomplete");
   }
   if (fit.familiarity === "familiar" && !r.familiarEvidence) (r.uncertain ??= []).push(pop === undefined || ps === "unknown" ? `Guest familiarity unknown: ${pop === undefined ? "no track popularity data" : `popularity ${Math.round(pop)}/10 is ${sourceLabel(f.popularitySource)}, not audience data`}` : `Guest familiarity unverified: popularity ${Math.round(pop)}/10 is ${ps === "estimate" ? "an estimate" : "not supportive"}`);

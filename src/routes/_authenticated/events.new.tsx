@@ -3932,7 +3932,7 @@ function EventFitChoices({ value, notes, onChange }: { value: EventFit | undefin
         <Switch aria-label="Avoid slow or ballad additions" checked={!!value?.avoidSlow} onCheckedChange={(v) => onChange({ ...value, avoidSlow: v })} />
         Avoid slow / ballad additions
       </label>
-      <p className="text-xs text-muted-foreground">Familiar hits uses track popularity from a music data provider or the built-in crowd-standards list — not your play counts, file ownership or artist popularity. Songs without evidence get no bonus. Avoiding slow songs needs both low energy and low danceability; only provider or measured values remove a song, estimates just rank lower. Tempo alone is never used.</p>
+      <p className="text-xs text-muted-foreground">Familiar hits uses track-level provider popularity or the built-in crowd-standards list, not personal play counts or ownership. With slow avoidance on, low energy and low danceability together rank estimates materially lower and limit similarity; only strong evidence excludes additions. Estimated popularity adds no points without supported upbeat feel; verified popularity is recognition, not dance fit. Conflicting or missing feel remains uncertain, and tempo alone never identifies a slow song. Client requests stay unchanged.</p>
       {pending && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-muted-foreground">Your notes mention {[pending.familiarity === "familiar" && "familiar hits", pending.avoidSlow && "no slow songs/ballads"].filter(Boolean).join(" and ")}.</span>
