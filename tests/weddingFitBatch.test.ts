@@ -37,14 +37,21 @@ async function run(applyFit: boolean) {
     await h.flush();
     h.interact((n: any) => n.props?.role === 'radio' && /^Dance floor$/i.test(n.props?.children));
     h.interact((n: any) => n.props?.id === 'hours', 'onChange', { target: { value: '1.5' } });
-    if (process.env.DBG) console.log(JSON.stringify(h.nodes().filter((n: any) => n.props?.title || n.props?.id).map((n: any) => [typeof n.type === 'string' ? n.type : n.type?.name, n.props.title ?? n.props.id])));
-    h.interact((n: any) => n.props?.title?.startsWith('Multi-generational: classics early'), 'onClick');
+    // The shallow harness does not render the event-type buttons; select the same decades the Traditional Wedding type sets.
+    for (const d of ['1970s', '1980s', '1990s', '2000s', '2010s', '2020s']) { const label = h.nodes().find((n: any) => n.type === 'label' && n.key === d); label.props.children[0].props.onCheckedChange(true); await h.flush(); }
     h.interact((n: any) => n.props?.id === 'notes', 'onChange', { target: { value: NOTES } });
-    h.current.setEventName('TEST ONLY Wedding Fit'); h.current.setSongs(REQUESTS); h.current.setDoNotPlayInput(DNP); await h.flush();
+    h.current.setEventName('TEST ONLY Wedding Fit'); h.current.setSongs(REQUESTS); await h.flush();
+    h.interact((n: any) => n.props?.id === 'donotplay', 'onChange', { target: { value: DNP } });
     h.interact((n: any) => n.props?.steps && n.props?.onSelect, 'onSelect', 4);
     h.interact((n: any) => n.props?.['aria-label'] === 'Expand event with additional tracks', 'onCheckedChange', true);
     await h.flush();
-    if (applyFit) { h.interact((n: any) => n.type?.name === 'Button' || n.props?.children === 'Apply to additions' ? n.props?.children === 'Apply to additions' : false, 'onClick'); await h.flush(); }
+    if (applyFit) {
+      // The fit panel's own onChange with its own notes suggestion (what "Apply to additions" sends).
+      const panel = h.nodes().find((n: any) => n.props && 'notes' in n.props && typeof n.props.onChange === 'function' && 'value' in n.props);
+      expect(panel.props.value).toBeUndefined();
+      const { suggestFitFromNotes } = await import('@/lib/prep/eventFit');
+      panel.props.onChange({ ...panel.props.value, ...suggestFitFromNotes(panel.props.notes) }); await h.flush();
+    }
     await h.current.generate(); await h.flush();
     await vi.advanceTimersByTimeAsync(3000); await h.flush();
     return { saved: h.requests.filter((r: any) => r.lists?.warmUp).at(-1), h };
