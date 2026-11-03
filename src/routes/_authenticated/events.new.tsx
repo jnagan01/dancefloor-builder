@@ -1042,10 +1042,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     let enrichFailed = false, budgetWarned = false, timeoutWarned = false;
     // One per-generation gatherer: chunks of ≤200 (server limit), bounded concurrency, a total request budget, and each
     // exact artist||song attempted once (misses and failures included) so later passes never re-request them.
+    // With an active familiarity choice the server also upgrades warm cache rows lacking track popularity (bounded).
+    const needPopularity = !!normalizeEventFit(eventFit)?.familiarity;
+    let incompleteWarned = false;
     const facts = createFactsGatherer<EnrichedSong>(
-      async (songs) => (await enrichFn({ data: { songs } })).results,
+      async (songs) => (await enrichFn({ data: { songs, needPopularity } })).results,
       (e) => factsKey(e),
-      { budget: FACTS_BUDGET + r.warmUp.length + r.transition.length + r.peak.length },
+      { budget: FACTS_BUDGET + r.warmUp.length + r.transition.length + r.peak.length, isIncomplete: (e) => !!e.incomplete },
     );
     const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
       const map = new Map<string, EnrichedSong>();
@@ -1063,6 +1066,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (rep.skippedAfterTimeout && !timeoutWarned) {
         timeoutWarned = true;
         toast.info(`The online music data service stopped responding, so ${rep.skippedAfterTimeout} more track${rep.skippedAfterTimeout === 1 ? " wasn't" : "s weren't"} looked up. Any details they already had are kept; nothing was added for them.`);
+      }
+      if (rep.incompleteSongs && !incompleteWarned) {
+        incompleteWarned = true;
+        toast.info(`The online music data lookup ran out of time for ${rep.incompleteSongs} track${rep.incompleteSongs === 1 ? "" : "s"}. Details that were already known or finished in time are kept; nothing was guessed for the rest.`);
       }
       for (const s of list) { const e = facts.get(s); if (e) map.set(factsKey(s), e); }
       return map;
