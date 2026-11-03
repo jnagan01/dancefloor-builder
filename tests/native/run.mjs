@@ -179,7 +179,7 @@ try{
    fs.writeFileSync(path.join(diagnostics,'wedding-fit-batch.json'),JSON.stringify({conditions:'synthetic real-route batch in isolated Electron profile; AI suggestions + online details from tests/fit/realCacheRows.json (legacy cache labels decode as estimates); strict decades unchanged; Last.fm unavailable; built-in catalogue live; no owned library',additions:[]},null,1));
    // Reopen the saved event through the route: the fit choices must restore from the persisted snapshot.
    await page.evaluate(id=>{window.__testState.page='event';window.__testState.eventId=id;window.__rerender();},created.id);await page.waitForTimeout(1500);
-   await page.screenshot({path:path.join(diagnostics,'wedding-reopen.png')});fs.writeFileSync(path.join(diagnostics,'wedding-reopen-buttons.txt'),(await page.getByRole('button').allInnerTexts()).join('\n'));
+   await page.getByRole('button',{name:/Track expansion/}).first().click();await page.waitForTimeout(300);
    expect(await page.locator('#fit-familiarity').inputValue()).toBe('familiar');
    expect(await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).getAttribute('aria-checked')).toBe('true');
    expect(all.filter(r=>r.fromUpload).length).toBe(10);
