@@ -27,7 +27,7 @@ const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarne
 const NOTES = 'Fictional client brief: mixed-age wedding guests, ages 25–70. Familiar upbeat pop, funk, disco and 2000s party favorites. Build from approachable classics into a lively finish. No line dances, slow ballads, or hard EDM. Preserve every client request.';
 const DNP = 'Village People - YMCA\nDJ Casper - Cha Cha Slide\nCupid - Cupid Shuffle';
 const suggestions = (cache as any[]).map(r => ({ artist: r.artist, song: r.song, reason: 'synthetic fixture suggestion' }));
-const enrich = async (req: any) => ({ results: (req.data.songs as any[]).flatMap(s => { const r = (cache as any[]).find(c => c.artist === s.artist && c.song === s.song); return r ? [{ artist: r.artist, song: r.song, energy: r.energy, danceability: r.danceability, ...(r.popularity !== undefined ? { popularity: r.popularity } : {}), source: r.metaProv.energy === 'provider' ? 'ReccoBeats' : 'AI', prov: r.metaProv }] : []; }) });
+const enrich = async (req: any) => ({ results: (req.data.songs as any[]).flatMap(s => { const r = (cache as any[]).find(c => c.artist === s.artist && c.song === s.song); return r ? [{ artist: r.artist, song: r.song, energy: r.energy, danceability: r.danceability, ...(r.popularity !== undefined ? { popularity: r.popularity } : {}), ...(r.year !== undefined ? { year: r.year } : {}), source: r.metaProv.energy === 'provider' ? 'ReccoBeats' : 'AI', prov: r.metaProv }] : []; }) });
 
 async function run(applyFit: boolean) {
   const writes: any[] = [];

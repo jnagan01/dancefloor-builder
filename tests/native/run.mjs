@@ -142,7 +142,7 @@ try{
    // tests/fit/realCacheRows.json (read-only metadata-cache snapshot). Not live native generation, not the original candidate pool.
    const cache=JSON.parse(fs.readFileSync(path.join(root,'tests/fit/realCacheRows.json'),'utf8'));
    await page.evaluate(cache=>{window.__fixture.aiSuggestions=cache.map(r=>({artist:r.artist,song:r.song,reason:'synthetic fixture suggestion'}));
-     window.__fixture.enrichResults=cache.map(r=>({artist:r.artist,song:r.song,energy:r.energy,danceability:r.danceability,...(r.popularity!==undefined?{popularity:r.popularity}:{}),source:r.metaProv.energy==='provider'?'ReccoBeats':'AI',prov:r.metaProv}));
+     window.__fixture.enrichResults=cache.map(r=>({artist:r.artist,song:r.song,energy:r.energy,danceability:r.danceability,...(r.popularity!==undefined?{popularity:r.popularity}:{}),...(r.year!==undefined?{year:r.year}:{}),source:r.metaProv.energy==='provider'?'ReccoBeats':'AI',prov:r.metaProv}));
      window.__testState.page='event';window.__testState.eventId=undefined;window.__errors=[];window.__rerender();},cache);
    await page.waitForTimeout(400);
    await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('1.5');

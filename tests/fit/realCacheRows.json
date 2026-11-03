@@ -6,9 +6,11 @@
   "danceability": 8,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 1999
  },
  {
   "artist": "Toni Braxton",
@@ -17,9 +19,11 @@
   "danceability": 7,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 1993
  },
  {
   "artist": "Journey",
@@ -28,9 +32,11 @@
   "danceability": 5,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 2009
  },
  {
   "artist": "KISS",
@@ -39,9 +45,11 @@
   "danceability": 8,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 1979
  },
  {
   "artist": "The Beatles",
@@ -50,9 +58,11 @@
   "danceability": 4,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 1970
  },
  {
   "artist": "Mariah Carey",
@@ -61,9 +71,11 @@
   "danceability": 8,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 2018
  },
  {
   "artist": "Ava Max",
@@ -72,9 +84,11 @@
   "danceability": 7,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 2019
  },
  {
   "artist": "Snow Patrol",
@@ -96,9 +110,11 @@
   "danceability": 7,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 2013
  },
  {
   "artist": "Kool & The Gang",
@@ -107,9 +123,11 @@
   "danceability": 9,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 2001
  },
  {
   "artist": "Grouplove",
@@ -118,9 +136,11 @@
   "danceability": 6,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "estimate"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 2013
  },
  {
   "artist": "Zara Larsson",
@@ -129,9 +149,11 @@
   "danceability": 6,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 2017
  },
  {
   "artist": "ABBA",
@@ -140,9 +162,11 @@
   "danceability": 8,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "provider"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 1990
  },
  {
   "artist": "Big Boi",
@@ -151,9 +175,11 @@
   "danceability": 9,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": false
+  "heldOut": false,
+  "year": 2017
  },
  {
   "artist": "ABBA",
@@ -163,10 +189,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 6,
-  "heldOut": true
+  "heldOut": true,
+  "year": 1976
  },
  {
   "artist": "ABBA",
@@ -176,10 +204,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 7,
-  "heldOut": true
+  "heldOut": true,
+  "year": 2018
  },
  {
   "artist": "Journey",
@@ -202,10 +232,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 7,
-  "heldOut": true
+  "heldOut": true,
+  "year": 2002
  },
  {
   "artist": "Kool & The Gang",
@@ -240,9 +272,11 @@
   "danceability": 6,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": true
+  "heldOut": true,
+  "year": 2023
  },
  {
   "artist": "Mariah Carey",
@@ -251,9 +285,11 @@
   "danceability": 7,
   "metaProv": {
    "energy": "ai",
-   "danceability": "ai"
+   "danceability": "ai",
+   "year": "ai"
   },
-  "heldOut": true
+  "heldOut": true,
+  "year": 2007
  },
  {
   "artist": "The O'Jays",
@@ -263,10 +299,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 6,
-  "heldOut": true
+  "heldOut": true,
+  "year": 2000
  },
  {
   "artist": "The Pussycat Dolls",
@@ -276,10 +314,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 7,
-  "heldOut": true
+  "heldOut": true,
+  "year": 2006
  },
  {
   "artist": "Van Morrison",
@@ -289,10 +329,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 8,
-  "heldOut": true
+  "heldOut": true,
+  "year": 1996
  },
  {
   "artist": "Whitney Houston",
@@ -302,10 +344,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 7,
-  "heldOut": true
+  "heldOut": true,
+  "year": 2016
  },
  {
   "artist": "Whitney Houston",
@@ -315,10 +359,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 6,
-  "heldOut": true
+  "heldOut": true,
+  "year": 1993
  },
  {
   "artist": "Tracy Chapman",
@@ -328,10 +374,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 8,
-  "heldOut": true
+  "heldOut": true,
+  "year": 1995
  },
  {
   "artist": "Tones and I",
@@ -354,10 +402,12 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 1,
-  "heldOut": true
+  "heldOut": true,
+  "year": 2008
  },
  {
   "artist": "Zach Bryan",
@@ -367,9 +417,11 @@
   "metaProv": {
    "energy": "provider",
    "danceability": "provider",
-   "popularity": "provider"
+   "popularity": "provider",
+   "year": "provider"
   },
   "popularity": 8,
-  "heldOut": true
+  "heldOut": true,
+  "year": 2022
  }
 ]
