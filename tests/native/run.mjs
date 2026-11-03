@@ -369,6 +369,7 @@ try{
    await page.evaluate(root=>localStorage.setItem('dancefloor:vdjRoot',root),path.join(temp,'VirtualDJ'));await page.reload();
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    const toggle=page.getByRole('switch',{name:'Require clean versions',exact:true});await expect(toggle).not.toBeChecked();await toggle.click();
+   console.log('POLICY SAVE STATE',await page.locator('header').innerText());
    await expect(page.getByText('Clean version needed',{exact:true}).first()).toBeVisible();
    await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();
    await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toContain('clean-policy blocks');
