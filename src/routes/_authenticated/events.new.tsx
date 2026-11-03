@@ -126,9 +126,13 @@ import { planAddToSection } from "@/lib/prep/addToSection";
 import { prepStore } from "@/lib/prep/prepStore";
 import { attrSource, decodeCacheSource, mergeMeta, metaLabel, strictLimitFailure, withProv, type StrictLimits } from "@/lib/prep/provenance";
 import { sourceLabel } from "@/lib/prep/metaConfidence";
-import { awaitReadyFeedback, BLOCK_ALL_ADDITIONS, expansionFeedback, favoredFirst, GATE_MESSAGES, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
+import { awaitReadyFeedback, BLOCK_ALL_ADDITIONS, expansionFeedback, GATE_MESSAGES, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
 import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { songIdentity } from "@/lib/prep/knowledge";
+import { explainTop, rankPool, type SimilarArtistEvidence } from "@/lib/prep/recommend";
+import { aiCandidate, catalogueCandidate, expansionRankContext, placeRanked, similarArtistEvidence } from "@/lib/prep/expansionRanking";
+import { libraryCandidate, requestFacts } from "@/lib/prep/requestFacts";
+import { trackIdentity } from "@/lib/fileIdentity";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -969,6 +973,18 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const addedAllowed = (track: Song & { genre?: string }) => !liveFeedback().blocked(track.artist, track.song) && generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
     const localPrefs = { ...prefs, additionAllowed: addedAllowed };
     const strictLimits: StrictLimits = { bpmRange: prefs.bpmRange, decades: prefs.decades };
+    // One shared ranking engine (the same one the preparation panel uses) orders every automatic addition source.
+    // Request facts: the event's own fields, then only an approved linked file of this workflow's current rows.
+    const approvedFor = (s: Song) => { const id = `:${dedupeKey(s.artist, s.song)}`; for (const [k, m] of Object.entries(matchesRef.current)) if (k.endsWith(id)) return m; return undefined; };
+    const rankRequests = uniqueSongs.map((s) => requestFacts(s, approvedFor(s), mergedLibrary.tracks));
+    let rankSimilar: SimilarArtistEvidence[] = [];
+    let rankSimilarTracks: SimilarTrackEvidence[] = [];
+    const rankRoots = getFolderRoots();
+    const rankCtx = (rows: readonly { artist: string; song: string }[]) => {
+      const now = store.get();
+      const know = fill && feedbackOwner && now.account === feedbackOwner.account && now.generation === feedbackOwner.generation && now.status === "ready" ? now.knowledge : null;
+      return expansionRankContext({ knowledge: know, eventId: feedbackEvent, requests: rankRequests, rows, similar: rankSimilar, similarTracks: rankSimilarTracks, preferences: { genres: prefs.genres, decades: prefs.decades, artists: prefs.artists } });
+    };
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
     let r = generateLists({
@@ -1145,6 +1161,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               ),
             ]);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
+            rankSimilarTracks = simEvidence;
+            rankSimilar = similarArtistEvidence(crowdRes.artists, uniqueSongs.filter((s) => s.fromUpload !== false).map((s) => s.artist));
             if (trackSeeds.length) {
               const availability = simTrackRes?.availability ?? "unavailable";
               if (availability !== "ok") toast.info(availabilityNote(availability, trackSeeds.length));
@@ -1215,8 +1233,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               const have = new SongKeySet(true);
               for (const s of [...r.warmUp, ...r.transition, ...r.peak]) have.add(s.artist, s.song);
               const perArtistCap = 2;
-              const crateFinds: ResultSong[] = [];
-              const trackFinds: ResultSong[] = [];
+              const finds: { row: ResultSong; idx: number }[] = [];
               // Shared musical-fit gate for every library addition: policy/feedback, decades, genres, BPM.
               const crateTrack = (idx: number, reason: string): ResultSong | null => {
                 const t = mergedLibrary.tracks[idx];
@@ -1250,7 +1267,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 const pick = crateTrack(idx, ev.seeds.length > 1
                   ? `In your library — Last.fm lists this track as similar to ${ev.seeds.length} requested tracks (${ev.seeds.slice(0, 2).join("; ")}${ev.seeds.length > 2 ? "…" : ""}).`
                   : `In your library — Last.fm lists this track as similar to requested ${ev.seeds[0]}.`);
-                if (pick) trackFinds.push(pick);
+                if (pick) finds.push({ row: pick, idx });
               }
               for (const { name, seed } of ordered) {
                 let taken = 0;
@@ -1260,33 +1277,19 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   if (!t || normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
                   const pick = crateTrack(idx, `In your library — close musical neighbour of ${seed} (artist-level evidence).`);
                   if (!pick) continue;
-                  crateFinds.push(pick);
+                  finds.push({ row: pick, idx });
                   taken += 1;
                 }
               }
-              const finds = [...favoredFirst(trackFinds, liveFeedback()), ...favoredFirst(crateFinds, liveFeedback())];
-              crateFinds.length = 0; crateFinds.push(...finds);
-              if (crateFinds.length) {
-                // Spread them across the sections that still have room; the
-                // energy re-bucketing later puts each one where it belongs.
-                // Small quota: library picks are a tiebreaker, not a forced share.
-                // Track-level Last.fm evidence earns a slightly larger share than artist neighbours.
-                const quota = Math.max(1, Math.round(r.perSectionTarget * (trackFinds.length ? 0.3 : 0.15)));
-                let cursor = 0;
-                for (const { key } of sectionMap) {
-                  let placed = 0;
-                  while (
-                    cursor < crateFinds.length &&
-                    placed < quota &&
-                    r[key].length < sectionTargetFor(r, key)
-                  ) {
-                    const pick = crateFinds[cursor++];
-                    if (!pick) break;
-                    r[key].push(pick as (typeof r)[typeof key][number]);
-                    placed += 1;
-                  }
-                }
-              }
+              // Rank every owned find with the shared engine. Evidence-backed picks are placed in rank order;
+              // picks whose only support is an AI neighbour claim earn no points and keep a small tiebreaker share.
+              const ranked = rankPool(finds, (f) => libraryCandidate(mergedLibrary.tracks[f.idx], trackIdentity(mergedLibrary.tracks[f.idx].filePath, rankRoots)), rankCtx([...r.warmUp, ...r.transition, ...r.peak]));
+              const keys = sectionMap.map((m) => m.key);
+              const put = (key: SectionKey, x: (typeof ranked)[number]) => { r[key].push({ ...x.item.row, rankWhy: explainTop(x.rec) } as (typeof r)[typeof key][number]); };
+              placeRanked(ranked.filter((x) => x.rec.score > 0), keys, (k) => r[k].length < sectionTargetFor(r, k), put);
+              const quota = Math.max(1, Math.round(r.perSectionTarget * 0.15));
+              const used = new Map<SectionKey, number>();
+              placeRanked(ranked.filter((x) => x.rec.score <= 0), keys, (k) => r[k].length < sectionTargetFor(r, k) && (used.get(k) ?? 0) < quota, (k, x) => { used.set(k, (used.get(k) ?? 0) + 1); put(k, x); });
             }
           }
         } catch (err) {
@@ -1341,7 +1344,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   const seen = new SongKeySet(true);
                   for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                   let added = 0;
-                  for (const sug of favoredFirst(res.suggestions, liveFeedback())) {
+                  for (const { item: sug, rec } of rankPool(res.suggestions, aiCandidate, rankCtx([...r.warmUp, ...r.transition, ...r.peak]))) {
                     if (r[key].length >= sectionTargetFor(r, key)) break;
                     if (seen.has(sug.artist, sug.song) || !addedAllowed(sug)) continue;
                     // Enforce the per-list cap client-side too.
@@ -1350,7 +1353,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     if ((counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
                     counts.set(owner, (counts.get(owner) ?? 0) + 1);
                     seen.add(sug.artist, sug.song);
-                    r[key].push(toAiSong(sug) as (typeof r)[typeof key][number]);
+                    r[key].push({ ...toAiSong(sug), rankWhy: explainTop(rec) } as (typeof r)[typeof key][number]);
                     added += 1;
                   }
                   if (added === 0) break;
@@ -1422,7 +1425,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 const seen = new SongKeySet(true);
                 for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                 let addedThisAttempt = 0;
-                for (const sug of favoredFirst(res.suggestions, liveFeedback())) {
+                for (const { item: sug, rec } of rankPool(res.suggestions, aiCandidate, rankCtx([...r.warmUp, ...r.transition, ...r.peak]))) {
                   if (r[key].length >= sectionTargetFor(r, key)) break;
                   if (!addedAllowed(sug) || !seen.tryAdd(sug.artist, sug.song)) continue;
                   r[key].push(withProv({
@@ -1445,6 +1448,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     metaSource: "AI",
                     aiSuggestion: true,
                     aiReason: sug.reason,
+                    rankWhy: explainTop(rec),
                   } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string }, "ai"));
 
                   addedThisAttempt += 1;
@@ -1487,10 +1491,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           for (const s of [...r.warmUp, ...r.transition, ...r.peak]) globalHave.add(s.artist, s.song);
           for (const { key } of stillShort) {
             const pool = background ? [...fallback.warmUp, ...fallback.transition, ...fallback.peak] : fallback[key];
-            for (const s of favoredFirst(pool, liveFeedback())) {
+            for (const { item: s, rec } of rankPool(pool.filter((x) => !x.fromUpload), catalogueCandidate, rankCtx([...r.warmUp, ...r.transition, ...r.peak]))) {
               if (r[key].length >= sectionTargetFor(r, key)) break;
               if (!addedAllowed(s) || !globalHave.tryAdd(s.artist, s.song)) continue;
-              r[key].push({ ...s, metaSource: "Library" });
+              r[key].push({ ...s, metaSource: "Library", rankWhy: explainTop(rec) });
             }
           }
           if (failed.length) {
@@ -3383,6 +3387,7 @@ type BadgeSong = Song & {
   aiSuggestion?: boolean;
   aiReason?: string;
   placementReason?: string;
+  rankWhy?: string;
   waveRole?: "lift" | "breather";
   stretched?: boolean;
   naturalSection?: "Warm Up" | "Transition" | "Peak";
@@ -3444,7 +3449,8 @@ function MetricsDetail({ song, fileBpm }: { song: BadgeSong; fileBpm?: number })
                 : song.metaSource,
         }
       : null,
-    song.aiReason ? { label: "AI reasoning", value: song.aiReason } : null,
+    song.rankWhy ? { label: "Why recommended", value: song.rankWhy } : null,
+    song.aiReason ? { label: song.aiSuggestion ? "AI note (not evidence)" : "Found via", value: song.aiReason } : null,
     song.placementReason ? { label: "Why here", value: song.placementReason } : null,
   ].filter(Boolean) as { label: string; value: string }[];
   return (

@@ -495,6 +495,8 @@ export interface ResultSong extends Song {
   waveRole?: "lift" | "breather";
   /** Human-readable explanation of why the song landed in this slot. */
   placementReason?: string;
+  /** Plain-language top ranking reasons for an automatic addition (optional; older events omit it). */
+  rankWhy?: string;
 }
 
 /**
