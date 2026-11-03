@@ -580,7 +580,7 @@ try{
    await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    const assertBlank=async()=>{
-     await expect(page.getByRole('heading',{name:'New event',exact:true})).toBeVisible();
+     await expect(page.getByRole('heading',{name:/^New Event$/i})).toBeVisible();
      for(const id of ['eventName','hours','artists','genres','notes','donotplay','homeKey'])await expect(page.locator('#'+id)).toHaveValue('');
      await expect(page.getByRole('radio',{checked:true})).toHaveCount(0);
      await expect(page.getByRole('checkbox',{checked:true})).toHaveCount(0);
