@@ -28,12 +28,13 @@ describe('actual export route snapshot integration',()=>{
    h.current.applyReviewMode('none','transition');await h.flush();expect(h.current.readiness).toBe(null);h.unmount();
  });
  it('mapping and library changes during availability cannot emit unchecked paths',async()=>{
-   const h=harness({rows:{A:row()}});await h.flush();h.library(vdj.buildLibrary([{filePath:'Synthetic/song.mp3',artist:'A',title:'Song'}]));await h.flush();vdj.setFolderRoot('Synthetic','/synthetic/original');
+   const source=row();source.lists.selections['transition:0:a|song']={paths:['Synthetic/song.mp3'],confirmed:true,excluded:true} as any;
+   const h=harness({rows:{A:source}});await h.flush();h.library(vdj.buildLibrary([{filePath:'Synthetic/song.mp3',artist:'A',title:'Song'}]));await h.flush();vdj.setFolderRoot('Synthetic','/synthetic/original');
    let finish:(v:unknown)=>void=()=>{};const checks:string[][]=[];
    h.testWindow.electronAvailability={check:(paths:string[])=>{checks.push(paths);return new Promise(resolve=>{finish=resolve;});}};
    const p=h.current.exportAllZip();vdj.setFolderRoot('Synthetic','/synthetic/unchecked');finish({ok:true,availability:{'/synthetic/original/song.mp3':'available'}});await p;
    expect(checks).toEqual([['/synthetic/original/song.mp3']]);const m3u=h.files.filter((f:any)=>f.name.endsWith('.m3u')).map((f:any)=>f.data).join('');expect(m3u).toContain('/synthetic/original/song.mp3');expect(m3u).not.toContain('/synthetic/unchecked');
-   const p2=h.current.exportAllZip();h.library(vdj.buildLibrary([{filePath:'/synthetic/changed.mp3',artist:'A',title:'Song'}]));await h.flush();finish({ok:true,availability:{'/synthetic/unchecked/song.mp3':'available'}});await p2;expect(h.errors.at(-1)).toContain('Event changed');expect(h.files.filter((f:any)=>f.name.endsWith('.m3u'))).toHaveLength(2);h.unmount();
+   const p2=h.current.exportAllZip();h.library(vdj.buildLibrary([{filePath:'/synthetic/changed.mp3',artist:'A',title:'Song'}]));await h.flush();finish({ok:true,availability:{'/synthetic/unchecked/song.mp3':'available'}});await p2;expect(h.errors.at(-1)).toContain('Event changed');expect(h.files.filter((f:any)=>f.name.endsWith('.m3u'))).toHaveLength(1);h.unmount();
  });
  it('missing native availability result stops export',async()=>{const h=harness({rows:{A:row()}});await h.flush();h.library(vdj.buildLibrary([{filePath:'Synthetic/song.mp3',artist:'A',title:'Song'}]));await h.flush();h.testWindow.electronAvailability={check:async()=>({ok:true,availability:{}})};await h.current.exportAllZip();expect(h.errors.at(-1)).toContain('could not be verified');expect(h.files).toHaveLength(0);h.unmount();});
 });

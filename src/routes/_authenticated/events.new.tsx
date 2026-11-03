@@ -3938,6 +3938,7 @@ function InlineMatchSearch({
                    )}
                    <div className="min-w-0">
                      <p className="break-words font-medium">{t.title} — {t.artist}</p>
+                      {reason && <p className="text-[11px] text-warning">{reason}</p>}
                       <p className="break-all text-[11px] text-muted-foreground">{resolveExportPath(t.filePath) ?? t.filePath}</p>
                    </div>
                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
