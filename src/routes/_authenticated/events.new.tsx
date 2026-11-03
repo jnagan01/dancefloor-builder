@@ -11,7 +11,6 @@ import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "r
 import { useDebounce } from "@/hooks/useDebounce";
 import {
   parseFile,
-  dedupeSongs,
   dedupeKey,
   SongKeySet,
   generateLists,
@@ -106,6 +105,7 @@ import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktopBridge";
 import { getWorkflow, saveWorkflowSafely } from "@/lib/history.functions";
 import { SAVE_REJECTED_PREFIX } from "@/lib/eventSchemas";
+import { repeatedRequestRows } from "@/lib/additionIdentity";
 import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
