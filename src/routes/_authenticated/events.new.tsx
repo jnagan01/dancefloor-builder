@@ -1039,7 +1039,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Small helper: fetch online enrichment for a flat list of songs and
     // return a map keyed by "artist||song" (raw values). Best-effort — a
     // network failure returns an empty map so generation continues.
-    let enrichFailed = false, budgetWarned = false;
+    let enrichFailed = false, budgetWarned = false, timeoutWarned = false;
     // One per-generation gatherer: chunks of ≤200 (server limit), bounded concurrency, a total request budget, and each
     // exact artist||song attempted once (misses and failures included) so later passes never re-request them.
     const facts = createFactsGatherer<EnrichedSong>(
@@ -1058,7 +1058,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       }
       if (rep.skippedByBudget && !budgetWarned) {
         budgetWarned = true;
-        toast.info(`${rep.skippedByBudget} candidate track${rep.skippedByBudget === 1 ? "" : "s"} weren't looked up online (per-run limit of ${FACTS_BUDGET} lookups); their details stay unknown and earn no fit bonus.`);
+        toast.info(`${rep.skippedByBudget} candidate track${rep.skippedByBudget === 1 ? "" : "s"} weren't looked up online (per-run limit of ${FACTS_BUDGET} lookups). Any details they already had are kept; the skipped lookup adds no extra evidence.`);
+      }
+      if (rep.skippedAfterTimeout && !timeoutWarned) {
+        timeoutWarned = true;
+        toast.info(`The online music data service stopped responding, so ${rep.skippedAfterTimeout} more track${rep.skippedAfterTimeout === 1 ? " wasn't" : "s weren't"} looked up. Any details they already had are kept; nothing was added for them.`);
       }
       for (const s of list) { const e = facts.get(s); if (e) map.set(factsKey(s), e); }
       return map;
