@@ -517,7 +517,11 @@ try{
    const selections={'warmUp:0:stevie wonder|signed sealed delivered im yours':{paths:[tt[0].filePath],confirmed:true},'transition:0:stevie wonder|signed sealed delivered':{paths:[tt[0].filePath,tt[1].filePath],confirmed:true}};
    const original={id:'A',name:'Duplicate trial',updated_at:'v1',inputs:{songs:[a,b],eventName:'Duplicate trial',hours:'1',buffer:2,listType:'dance',split:{warmUp:10,transition:20,peak:30},splitOn:true,requireCleanVersions:true},lists:{warmUp:[a],transition:[b],peak:[],selections}};
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:original}));fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
-   await launch();await expect(page.getByRole('region',{name:'Repeated files'})).toContainText('1 repeated selected file');
+   await launch();
+   // Earlier failure/recovery scenarios deliberately leave an owned local draft in this profile.
+   const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});
+   if(await archive.isVisible())await archive.click();
+   await expect(page.getByRole('region',{name:'Repeated files'})).toContainText('1 repeated selected file');
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(original);
    await expect(page.getByRole('tab',{name:/Warm Up/})).toContainText('3:20 usable unique');
    await expect(page.getByRole('tab',{name:/Transition/})).toContainText('5:00 usable unique');
