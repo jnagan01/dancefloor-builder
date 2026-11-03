@@ -191,3 +191,19 @@ describe("deterministic BEFORE/AFTER fixture", () => {
     if (process.env.WRITE_FIT_REPORT) writeFileSync(process.env.WRITE_FIT_REPORT, report());
   });
 });
+
+describe("saved-event evidence (Let It Be / Chasing Cars as actually stored)", () => {
+  it("genre tags and BPM never classify slow; estimates/AI never exclude; uncertainty is reported", async () => {
+    const { runComparison } = await import("./fit/fitComparison");
+    const { after } = runComparison(true);
+    const all = [...after.top, ...(after as any).rest ?? []];
+    const find = (s: string) => all.find((r: any) => r.song === s) as any;
+    const cc = find("Chasing Cars"), lib = find("Let It Be");
+    for (const r of [cc, lib].filter(Boolean)) {
+      expect(r.evidence.some((e: any) => e.kind === "slowStrong")).toBe(false);
+      expect(r.evidence.some((e: any) => e.kind === "familiarTrack")).toBe(false);
+      expect(r.uncertain?.join(" ")).toMatch(/unverified|unknown/);
+    }
+    if (lib) expect(lib.evidence.some((e: any) => e.kind === "slowEstimate" && e.points < 0)).toBe(true);
+  });
+});
