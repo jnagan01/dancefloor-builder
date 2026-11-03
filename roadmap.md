@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Narrow offline export outcome wording
+- [ ] Separate eligible occurrences from completed exports; blocked/cancelled/failed/partial exports must not claim planned writes.
+- [ ] Verify real isolated offline renderer success, duplicate block, cancellation and write failures; run required local regression suites.
+- [ ] Report revision and local counts; external macOS acceptance remains required, no user data or publication.
 ## Trial duplicate, ranking and section coverage improvements
 - [x] Prevent automatic duplicates, expose explicit saved-occurrence resolution and block repeated combined DJ exports.
 - [x] Rank intended artist/title/version agreement without cross-field false confidence.

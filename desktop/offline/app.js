@@ -115,14 +115,19 @@
   async function doExport() {
     if (state.busy || !state.event) return; state.busy = true; renderEvents();
     const id = state.event.id, gen = state.gen;
+    state.report = null; renderDetail();
     try {
       status("Choose a folder for the playlists…");
       const res = await api.exportPlaylists(id);
       if (!current(id, gen)) return;
-      if (res.canceled) { status("Export cancelled."); return; }
+      if (res.canceled) { status("Export cancelled · 0 tracks exported."); return; }
       state.report = res;
-      status(res.ok ? `Exported ${res.written.length} output files · ${res.summary.approved} tracks${P.omissionText(res.summary) ? ` · left out: ${P.omissionText(res.summary)}` : ""}.` : (res.error || "Export failed."), res.ok ? "ok" : "error");
+      status(res.ok ? `Exported ${res.written.length} output files · ${C.exportedTrackCount(res)} tracks exported${P.omissionText(res.summary) ? ` · left out: ${P.omissionText(res.summary)}` : ""}.` : `${res.error || "Export failed."} · 0 tracks exported.`, res.ok ? "ok" : "error");
       renderDetail();
+    } catch (e) {
+      if (!current(id, gen)) return;
+      state.report = { ok: false, exportedTracks: 0, error: e.message || "Export failed." };
+      status(`${state.report.error} · 0 tracks exported.`, "error"); renderDetail();
     } finally { state.busy = false; if (state.data) renderEvents(); }
   }
 
@@ -132,7 +137,7 @@
     return el("div", { class: "report", "aria-label": "Export readiness" },
       el("h3", { text: r.ok ? "Export complete" : "Export problem" }),
       r.error ? el("p", { class: "error", text: r.error }) : null,
-      s ? el("p", { text: `Requested ${s.requested} tracks · ${s.approved} exported tracks · ${s.localChoices} offline choices${P.omissionText(s) ? ` · left out: ${P.omissionText(s)}` : ""}` }) : null,
+      el("p", { text: `${C.exportedTrackCount(r)} tracks exported${s ? ` · ${s.approved} eligible tracks${Number.isSafeInteger(s.uniqueTracks) ? ` (${s.uniqueTracks} unique files)` : ""} · Requested ${s.requested} tracks · ${s.localChoices} offline choices${P.omissionText(s) ? ` · left out: ${P.omissionText(s)}` : ""}` : ""}` }),
       r.written && r.written.length ? el("p", { text: `Written to ${r.folder}: ${r.written.join(", ")}` }) : null,
       r.problems && r.problems.length ? el("ul", {}, ...r.problems.slice(0, 200).map(p => el("li", {}, el("button", { type: "button", text: `${p.section} #${p.index + 1}`, on: { click: () => focusSong(`song-${p.section}-${p.index}`) } }), ` ${p.title} — ${p.reason}`))) : null);
   }

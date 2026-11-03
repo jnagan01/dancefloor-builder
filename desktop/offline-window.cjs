@@ -167,20 +167,20 @@ function createOfflineWorkspace({ electron, store, fs = require("node:fs"), asse
     handle("offline:export", async (fence, id) => {
       await activeOrThrow(fence);
       const pick = await dialog.showOpenDialog(win, { title: "Choose a folder for VirtualDJ playlists", buttonLabel: "Export here", properties: ["openDirectory", "createDirectory"] });
-      if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true };
+      if (pick.canceled || !pick.filePaths[0]) return { ok: false, canceled: true, exportedTracks: 0 };
       const dir = pick.filePaths[0];
       const loaded = await activeOrThrow(fence); // re-check after the dialog await
       const raw = findEvent(loaded.backup, id), event = view(raw);
       const overlay = await store.readOverlay(loaded.hash, event.id, event.version);
       const index = core.buildIndex(loaded.backup.sources.flatMap(s => s.tracks));
       const plan = core.exportPlan(event, overlay, index, loaded.backup.roots, await availability(chosenPaths(event, overlay, loaded.backup.roots)));
-      if (plan.summary.duplicateCount) return { ok: false, summary: plan.summary, problems: plan.problems, error: "Export stopped: repeated selected files. Exclude an occurrence online, then prepare a fresh offline copy. No files were written." };
+      if (plan.summary.duplicateCount) return { ok: false, exportedTracks: 0, summary: plan.summary, problems: plan.problems, error: "Export stopped: repeated selected files. Exclude an occurrence online, then prepare a fresh offline copy. No files were written." };
       const name = core.safeFileName(event.name);
       const files = plan.sections.filter(s => s.entries.length).map((s, i) => ({ name: `${name} - ${i + 1} ${s.label}.m3u`, contents: core.m3u(s.entries) }));
       files.push({ name: `${name} - offline readiness.txt`, contents: core.readinessText(plan, { name: event.name, preparedAt: loaded.preparedAt, exportedAt: new Date().toISOString() }) });
       fence();
       const result = await writeExport(dir, files, fence);
-      return { ok: result.failed.length === 0, folder: dir, written: result.written, failed: result.failed, leftover: result.leftover, summary: plan.summary, problems: plan.problems, error: result.error };
+      return { ok: result.failed.length === 0, exportedTracks: result.failed.length === 0 ? plan.summary.approved : 0, folder: dir, written: result.written, failed: result.failed, leftover: result.leftover, summary: plan.summary, problems: plan.problems, error: result.error };
     });
     handle("offline:reveal", async (_fence, folder) => { if (typeof folder === "string" && path.isAbsolute(folder)) shell.showItemInFolder(folder); return { ok: true }; });
   }
