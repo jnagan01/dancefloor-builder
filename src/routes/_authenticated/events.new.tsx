@@ -1430,9 +1430,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           const fallback = generateLists({
             uploaded: uniqueSongs,
             preserveRequestedRows: true,
-            hours: hoursNum,
+            hours: background ? minutesNum / 60 : hoursNum,
             expand: true,
-            buffer,
+            buffer: background ? 1 : buffer,
             split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined,
             prefs: localPrefs,
           });
