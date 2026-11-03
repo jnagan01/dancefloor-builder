@@ -2,6 +2,7 @@ import { songIdentity, type Feedback, type Dismissal, type TrackNote } from "./k
 import { matchesFilter, type FilterFacts, type FilterState } from "./filters";
 import { similarTrackPoints, type SimilarTrackEvidence } from "./similarTracks";
 import { TIER_WEIGHT, sourceLabel, tierOf } from "./metaConfidence";
+import { evaluateFit, type EventFit, type FitFacts } from "./eventFit";
 
 /**
  * Shared deterministic ranking engine for the preparation panel AND every automatic expansion source
@@ -11,6 +12,8 @@ import { TIER_WEIGHT, sourceLabel, tierOf } from "./metaConfidence";
 export interface Candidate {
   artist: string; song: string; facts: FilterFacts; trackId?: string; playCount?: number;
   origin: "library" | "catalogue" | "ai";
+  /** Optional track-level fit evidence (popularity/energy/danceability with provenance). Absent = unknown. */
+  fit?: FitFacts;
   /** Caller's opaque position, carried through so pooled sources can map results back. */
   ref?: number;
 }
@@ -25,8 +28,8 @@ export interface RecControls {
 /** The panel's starting controls are also the controls automatic expansion uses, so both rank alike. */
 export const DEFAULT_REC_CONTROLS: RecControls = { familiarity: 0, clientSimilarity: 1, artistVariety: 0.5, ownedOnly: false };
 /** Explicit choices from the event's own form (not inferred). */
-export interface EventPreferences { genres?: string[]; decades?: string[]; artists?: string[] }
-export type EvidenceKind = "artist" | "genre" | "decade" | "lastfm" | "lastfmTrack" | "familiar" | "discovery" | "favor" | "tag" | "variety" | "prefGenre" | "prefDecade" | "prefArtist";
+export interface EventPreferences { genres?: string[]; decades?: string[]; artists?: string[]; /** Optional event-scoped fit choices; absent = no-op. */ fit?: EventFit }
+export type EvidenceKind = "artist" | "genre" | "decade" | "lastfm" | "lastfmTrack" | "familiar" | "discovery" | "favor" | "tag" | "variety" | "prefGenre" | "prefDecade" | "prefArtist" | "familiarTrack" | "unfamiliarTrack" | "slowEstimate" | "discoveryTrack";
 export interface Evidence { kind: EvidenceKind; text: string; points: number }
 export interface Recommendation extends Candidate { key: string; score: number; evidence: Evidence[] }
 export interface RecInput {
@@ -41,7 +44,7 @@ export interface RecInput {
   artistUse?: readonly { artist: string; count: number }[];
   controls: RecControls; filter?: FilterState; limit?: number;
 }
-export interface RecOutput { items: Recommendation[]; hidden: { dismissed: number; never: number; inEvent: number; filtered: number; notOwned: number } }
+export interface RecOutput { items: Recommendation[]; hidden: { dismissed: number; never: number; inEvent: number; filtered: number; notOwned: number; /** Excluded by the event's avoid-slow choice on strong evidence. */ slow?: number } }
 
 const norm = (s: string) => s.toLowerCase().replace(/^the\s+/, "").replace(/\s+/g, " ").trim();
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -88,7 +91,9 @@ export function recommend(input: RecInput): RecOutput {
   const prefDecades = new Set((input.preferences?.decades ?? []).filter(Boolean));
   const prefArtists = new Map((input.preferences?.artists ?? []).filter(Boolean).map(a => [norm(a), a]));
   const reqCount = Math.max(1, requests.length);
-  const hidden = { dismissed: 0, never: 0, inEvent: 0, filtered: 0, notOwned: 0 };
+  const hidden: RecOutput["hidden"] = { dismissed: 0, never: 0, inEvent: 0, filtered: 0, notOwned: 0 };
+  const fitChoice = input.preferences?.fit;
+  if (fitChoice?.avoidSlow) hidden.slow = 0;
   const scored: Recommendation[] = [];
   const seen = new Set<string>();
   for (const cand of input.candidates) {
@@ -98,15 +103,21 @@ export function recommend(input: RecInput): RecOutput {
     if (dismissed.has(key)) { hidden.dismissed++; continue; }
     if (input.controls.ownedOnly && !cand.facts.owned) { hidden.notOwned++; continue; }
     if (input.filter && !matchesFilter(cand.facts, input.filter, "recommendation")) { hidden.filtered++; continue; }
+    // Known exclusions beat similarity: strong slow evidence removes an automatic candidate before any scoring.
+    const fitR = evaluateFit(fitChoice, cand);
+    if (fitR.exclude) { hidden.slow = (hidden.slow ?? 0) + 1; continue; }
     const dedupe = cand.trackId ? `f:${cand.trackId}` : `s:${key}`;
     if (seen.has(dedupe)) continue; seen.add(dedupe);
     const ev: Evidence[] = [];
     const push = (kind: EvidenceKind, text: string, points: number) => { if (points > 0.001 || points < -0.001) ev.push({ kind, text, points: round(points) }); };
     const gt = tierOf(cand.facts.genreSource ?? "estimate", !!cand.facts.genre);
     const dt = tierOf(cand.facts.decadeSource ?? "estimate", !!cand.facts.decade);
+    // Familiar-hits intent: artist-level similarity alone must not dominate; without track-level familiarity evidence it counts half.
+    const damp = fitChoice?.familiarity === "familiar" && !fitR.familiarEvidence ? 0.5 : 1;
+    const dampNote = damp < 1 ? " — counted half: no track-level familiarity evidence" : "";
     if (c.clientSimilarity > 0) {
       const req = reqArtists.get(norm(cand.artist));
-      if (req) push("artist", `Same artist as client request “${req.artist} – ${req.song}”`, 3 * c.clientSimilarity);
+      if (req) push("artist", `Same artist as client request “${req.artist} – ${req.song}”${dampNote}`, 3 * c.clientSimilarity * damp);
       const g = cand.facts.genre?.toLowerCase(), gn = g ? genreCount.get(g) ?? 0 : 0;
       if (gn && gt !== "unknown") push("genre", `Genre “${cand.facts.genre}” (${sourceLabel(cand.facts.genreSource ?? "estimate")}) matches ${gn} of ${requests.length} client requests`, 2 * (gn / reqCount) * c.clientSimilarity * TIER_WEIGHT[gt]);
       const dn = cand.facts.decade ? decadeCount.get(cand.facts.decade) ?? 0 : 0;
@@ -116,7 +127,7 @@ export function recommend(input: RecInput): RecOutput {
         ? `Last.fm lists this exact track as similar to ${st.seeds.length} requested tracks: ${st.seeds.slice(0, 3).map(x => `“${x}”`).join(", ")}${st.seeds.length > 3 ? "…" : ""}`
         : `Last.fm lists this exact track as similar to requested “${st.seeds[0]}”`, similarTrackPoints(st) * c.clientSimilarity);
       const sim = req || st ? undefined : similar.get(norm(cand.artist));
-      if (sim) push("lastfm", `Last.fm lists ${cand.artist} as similar to ${sim.similarTo} (artist-level)`, 2 * sim.match * c.clientSimilarity);
+      if (sim) push("lastfm", `Last.fm lists ${cand.artist} as similar to ${sim.similarTo} (artist-level)${dampNote}`, 2 * sim.match * c.clientSimilarity * damp);
     }
     const pa = prefArtists.get(norm(cand.artist));
     if (pa) push("prefArtist", `${pa} is a favourite artist for this event`, 1.5);
@@ -127,6 +138,12 @@ export function recommend(input: RecInput): RecOutput {
       const plays = cand.playCount ?? 0;
       if (c.familiarity > 0 && plays > 0) push("familiar", `You've played it ${plays} time${plays === 1 ? "" : "s"} in VirtualDJ (your familiarity, not crowd data)`, c.familiarity * Math.min(2, Math.log10(plays + 1)));
       if (c.familiarity < 0 && plays === 0 && cand.playCount !== undefined) push("discovery", "Never played in your VirtualDJ history (discovery)", -c.familiarity * 1);
+    }
+    // Popularity alone is not event fit: without any link to this event's requests/preferences, positive familiarity counts half.
+    const linked = ev.some(e => e.points > 0 && e.kind !== "familiar" && e.kind !== "discovery");
+    for (const l of fitR.lines) {
+      const half = l.points > 0 && l.kind === "familiarTrack" && !linked;
+      push(l.kind, half ? `${l.text} — counted half: no link to this event's requests or preferences` : l.text, half ? l.points / 2 : l.points);
     }
     if (favor.has(key)) push("favor", "You marked this as a favourite to recommend", 1.5);
     const note = cand.trackId ? input.notes?.get(cand.trackId) : undefined;
@@ -172,9 +189,10 @@ export type RankContext = Omit<RecInput, "candidates" | "limit" | "filter" | "co
  * (policy, strict limits, feedback) must already be checked by the caller and is re-applied here for feedback.
  * Returns items in rank order with their recommendation (score + evidence). Never pads.
  */
-export function rankPool<T>(items: readonly T[], toCandidate: (t: T) => Omit<Candidate, "ref">, ctx: RankContext, limit = items.length): { item: T; rec: Recommendation }[] {
+export function rankPool<T>(items: readonly T[], toCandidate: (t: T) => Omit<Candidate, "ref">, ctx: RankContext, limit = items.length, stats?: { hidden?: RecOutput["hidden"] }): { item: T; rec: Recommendation }[] {
   if (!items.length || limit <= 0) return [];
   const candidates = items.map((t, i) => ({ ...toCandidate(t), ref: i }));
   const out = recommend({ ...ctx, controls: ctx.controls ?? DEFAULT_REC_CONTROLS, candidates, limit });
+  if (stats) stats.hidden = out.hidden;
   return out.items.map(rec => ({ item: items[rec.ref!], rec }));
 }

@@ -35,6 +35,8 @@ export const inputsSchema = z.object({
   // Same bounds as validateTiming: 1× (no extra preparation) is a valid, default choice for new events.
   buffer: z.number().int().min(1).max(MAX_BUFFER).optional(),
   eventName: z.string().max(200),
+  // Optional event-fit choices for automatic additions; absent on legacy/fresh events (no-op).
+  eventFit: z.object({ familiarity: z.enum(["familiar", "discovery"]).optional(), avoidSlow: z.boolean().optional() }).strict().optional(),
   listType: z.enum(["dance", "cocktail", "dinner"]).optional(),
   minutes: z.string().max(10).optional(),
   eventType: z.string().max(40).optional(), homeKey: z.string().max(10).optional(),

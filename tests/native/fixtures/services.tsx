@@ -23,7 +23,7 @@ export const saveMusicLibrary=async(sources:any,account:string)=>{await w.testBa
 export const validSavedLibrary=(v:any)=>v?.version===1&&Array.isArray(v.sources)&&v.sources.every((s:any)=>typeof s.label==='string'&&Array.isArray(s.tracks)&&s.tracks.every((t:any)=>typeof t.filePath==='string'&&typeof t.artist==='string'&&typeof t.title==='string'));
 
 export const toast={error:(text:any)=>w.__errors.push(String(text)),warning:(text:any)=>w.__warnings.push(String(text)),success:(text:any)=>w.__success.push(String(text)),info:()=>{}};
-export const recommendSongsForSection=async()=>({suggestions:w.__fixture.aiSuggestions??[]}),getArtistNeighbors=async()=>({clusters:[]}),getArtistCrowdData=async()=>({artists:[]}),getSimilarTracks=async()=>({availability:'missingKey',seeds:[]}),enrichSongs=async()=>({results:[]}),importSpotifyPlaylist=async()=>({songs:[]});
+export const recommendSongsForSection=async()=>({suggestions:w.__fixture.aiSuggestions??[]}),getArtistNeighbors=async()=>({clusters:[]}),getArtistCrowdData=async()=>({artists:[]}),getSimilarTracks=async()=>({availability:'missingKey',seeds:[]}),enrichSongs=async()=>({results:w.__fixture.enrichResults??[]}),importSpotifyPlaylist=async()=>({songs:[]});
 export const lookupMusicBrainz=async()=>({ok:false,error:'Lookups are disabled in the isolated fixture.',retryable:false}),lookupLastfmTrack=async()=>({ok:true,cached:false,items:{available:false,tags:[],similar:[],url:null}});
 export function useDebounce(v:any){return v;}
 export function useProfileSettings(){return {settings:null};}

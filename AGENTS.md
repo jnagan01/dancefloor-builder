@@ -25,7 +25,7 @@
 
 - Fence backup/restore after every asynchronous boundary using account-session generation and captured sources/roots; compute conflict previews with identity maps and bounded samples, because late operations must not mix account data or stall large libraries.
 - Check both durable new-event recovery slots before backup restore, and capture section/song identity plus library/root mappings for export readiness and output, because native-only drafts and asynchronous path changes must never bypass preservation or availability checks.
-- Reuse the read-only macOS regression workflow as a required release dependency; web-only changes trigger checks but not installer publication, because every release must pass the same synthetic gates.
+- Reuse the read-only macOS regression workflow as a required release dependency; web-only changes trigger checks but not installer publication, because every release must pass the same gates.
 
 - Apply appearance before first paint and share semantic theme tokens through a single provider; System alone follows OS changes, because SSR and every workspace surface must agree.
 - Read sidebar installed versions from the bridged Electron app identity (or explicit currentVersion), never updater status.version; label browser versions separately because available updates are not installed versions.
@@ -40,4 +40,4 @@
 - Keep saved keys unchanged; dedupe automatic additions with one AdditionKeySet (whole primary + full credit set) everywhere, promoting exact owned files order-independently and require explicit occurrence exclusions for repeated combined DJ export, because requests and legacy snapshots must stay intact.
 - Derive section coverage from export readiness's unique case-sensitive files, separate event/buffer minutes, and cap artist/title mismatches in search fallback scores, because repeated minutes and cross-field tokens are not evidence.
 - Gate automatic expansion on this owner's READY prep knowledge (await queued writes, never fall back); isolate each provider; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
-- Pool expansion sources, filter eligibility, rank once via shared `rankPool`; quality samples freeze ranking context in optional `prep.quality`, so replays are exact.
+- Rank pooled eligible candidates once via `rankPool`; optional `inputs.eventFit` (none=no-op) uses only provenance-tagged track evidence; quality samples freeze context, so replays are exact.

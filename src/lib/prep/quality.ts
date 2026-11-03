@@ -4,6 +4,7 @@
  * Stored only inside the account-scoped preparation notes (optional `quality` field; absent in older data).
  * No file paths or file identities are stored. Ratings never change Never/favourite feedback or event rows.
  */
+import { readEventFit, type EventFit } from "./eventFit";
 export type QualityRating = "good" | "maybe" | "poor";
 export const QUALITY_RATINGS: { value: QualityRating; label: string }[] = [{ value: "good", label: "Good fit" }, { value: "maybe", label: "Maybe" }, { value: "poor", label: "Poor fit" }];
 type Src = "tags" | "virtualdj" | "filename" | "estimate" | "catalogue" | "ai" | "provider" | "user" | "measured";
@@ -15,6 +16,8 @@ export interface QualityCandidate {
   lastfmSeeds?: string[]; lastfmMatch?: number;
   /** Artist-level Last.fm similarity at capture time. */ similarTo?: string; similarMatch?: number;
   tags?: string[]; favored?: boolean;
+  /** Track-level fit evidence at capture (optional; absent in older samples). */
+  popularity?: number; popularitySource?: Src; energy?: number; energySource?: Src; danceability?: number; danceabilitySource?: Src;
   /** Deterministic tie order among captured files with equal score/artist/title (an ordinal, never a path). */
   tie?: number;
   /** Score when captured, to detect a genuine ranking change on replay. */
@@ -25,7 +28,7 @@ export interface QualityControls { familiarity: number; clientSimilarity: number
 export interface QualityRequest { artist: string; song: string; genre?: string; decade?: string }
 export interface QualitySample {
   id: string; name: string; createdAt: number;
-  requests: QualityRequest[]; preferences: { genres: string[]; decades: string[]; artists: string[] }; eventTags: string[];
+  requests: QualityRequest[]; preferences: { genres: string[]; decades: string[]; artists: string[]; fit?: EventFit }; eventTags: string[];
   candidates: QualityCandidate[];
   /** Ranking controls active at capture. Absent on samples saved before full context was recorded. */
   controls?: QualityControls;
@@ -60,6 +63,7 @@ function readCandidate(v: unknown): QualityCandidate {
   opt(o, "similarMatch", x => finite(x, 0, 1), out);
   if (o.tags !== undefined) out.tags = strs(o.tags, QUALITY_LIMITS.tags, 60);
   opt(o, "favored", x => typeof x === "boolean", out);
+  for (const a of ["popularity", "energy", "danceability"]) { opt(o, a, x => finite(x, 0, 10), out); opt(o, `${a}Source`, x => SOURCES.includes(x as Src), out); }
   opt(o, "tie", x => finite(x, 0, 1000) && Number.isInteger(x), out);
   opt(o, "score", x => finite(x, -1000, 1000), out);
   opt(o, "rating", x => QUALITY_RATINGS.some(r => r.value === x), out);
@@ -86,7 +90,7 @@ export function readQualitySamples(v: unknown): QualitySample[] {
     });
     const p = o.preferences as Record<string, unknown> | undefined;
     if (!p || typeof p !== "object") throw 0;
-    const preferences = { genres: strs(p.genres, QUALITY_LIMITS.prefs, 60), decades: strs(p.decades, QUALITY_LIMITS.prefs, 20), artists: strs(p.artists, QUALITY_LIMITS.prefs, QUALITY_LIMITS.text) };
+    const preferences = { genres: strs(p.genres, QUALITY_LIMITS.prefs, 60), decades: strs(p.decades, QUALITY_LIMITS.prefs, 20), artists: strs(p.artists, QUALITY_LIMITS.prefs, QUALITY_LIMITS.text), ...(p.fit !== undefined ? { fit: fitOrThrow(p.fit) } : {}) };
     const eventTags = strs(o.eventTags, QUALITY_LIMITS.tags, 60);
     if (!Array.isArray(o.candidates) || o.candidates.length < 1 || o.candidates.length > QUALITY_LIMITS.candidates) throw 0;
     const out: QualitySample = { id, name, createdAt: o.createdAt as number, requests, preferences, eventTags, candidates: o.candidates.map(readCandidate) };
@@ -135,3 +139,5 @@ export const ratingCounts = (s: QualitySample) => {
   for (const x of s.candidates) c[x.rating ?? "unrated"]++;
   return { ...c, reviewed: c.good + c.maybe + c.poor, total: s.candidates.length };
 };
+
+function fitOrThrow(v: unknown): EventFit | undefined { try { return readEventFit(v); } catch { throw 0; } }
