@@ -142,7 +142,7 @@ try{
    // tests/fit/realCacheRows.json (read-only metadata-cache snapshot). Not live native generation, not the original candidate pool.
    const cache=JSON.parse(fs.readFileSync(path.join(root,'tests/fit/realCacheRows.json'),'utf8'));
    await page.evaluate(cache=>{window.__fixture.aiSuggestions=cache.map(r=>({artist:r.artist,song:r.song,reason:'synthetic fixture suggestion'}));
-     window.__fixture.enrichResults=cache.map(r=>({artist:r.artist,song:r.song,energy:r.energy,danceability:r.danceability,...(r.popularity!==undefined?{popularity:r.popularity}:{}),...(r.year!==undefined?{year:r.year}:{}),source:r.metaProv.energy==='provider'?'ReccoBeats':'AI',prov:r.metaProv}));
+     window.__fixture.enrichResults=cache.map(r=>({artist:r.artist,song:r.song,energy:r.energy,danceability:r.danceability,...(r.popularity!==undefined?{popularity:r.popularity}:{}),...(r.year!==undefined?{year:r.year}:{}),source:String(r.rawCacheSource??'').startsWith('ReccoBeats')?'ReccoBeats':'AI',prov:r.metaProv}));
      window.__testState.page='event';window.__testState.eventId=undefined;window.__errors=[];window.__rerender();},cache);
    await page.waitForTimeout(400);
    await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('1.5');
@@ -163,14 +163,26 @@ try{
    expect(await page.locator('#fit-familiarity').inputValue()).toBe('familiar');
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    const find=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY Wedding Fit');
-   await expect.poll(()=>{const r=find();return r?r.lists.warmUp.length+r.lists.transition.length+r.lists.peak.length:-1;},{timeout:30000}).toBeGreaterThan(10).catch(e=>{fs.writeFileSync(path.join(diagnostics,'wedding-row.json'),JSON.stringify({row:find(),ui:null},null,1));throw e;});await page.waitForTimeout(1500);
+   // Honest legacy provenance: cache years decode as estimates, so the unchanged strict decade policy leaves zero eligible
+   // additions. Wait for the saved generation (lists present + fit persisted), not for a row count above the requests.
+   await expect.poll(()=>{const r=find();return r&&r.lists&&r.inputs.eventFit?'saved':'pending';},{timeout:30000}).toBe('saved').catch(e=>{fs.writeFileSync(path.join(diagnostics,'wedding-row.json'),JSON.stringify({row:find()},null,1));throw e;});
+   await expect.poll(async()=>await page.getByText('Estimated track-count gap',{exact:false}).count(),{timeout:15000}).toBeGreaterThan(0).catch(async e=>{await page.screenshot({path:path.join(diagnostics,'wedding-gap.png')});throw e;});
+   await page.waitForTimeout(1500);
    const created=find();
    expect(created.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});expect(created.inputs.buffer).toBe(1);
    const all=['warmUp','transition','peak'].flatMap(k=>created.lists[k].map(r=>({...r,section:k})));
-   expect(all.filter(r=>r.fromUpload).length).toBe(10);
+   const rk=r=>`${r.artist}|${r.song}`;
+   expect(all.filter(r=>r.fromUpload).map(rk).sort()).toEqual(['Earth, Wind & Fire|September','Mark Ronson feat. Bruno Mars|Uptown Funk','Whitney Houston|I Wanna Dance With Somebody','Usher feat. Lil Jon & Ludacris|Yeah!','The Killers|Mr. Brightside','Walk The Moon|Shut Up and Dance','Dua Lipa|Levitating','Queen|Don\'t Stop Me Now','Outkast|Hey Ya!','ABBA|Dancing Queen'].sort());
+   expect(all.filter(r=>!r.fromUpload)).toEqual([]); // zero additions: honest gap, nothing invented
    expect(all.some(r=>/YMCA|Cha Cha Slide|Cupid Shuffle/i.test(r.song))).toBe(false);
-   const additions=all.filter(r=>!r.fromUpload).map(r=>({section:r.section,artist:r.artist,song:r.song,why:r.rankWhy??null,energy:r.energy??null,danceability:r.danceability??null,popularity:r.popularity??null,prov:r.metaProv??null}));
-   fs.writeFileSync(path.join(diagnostics,'wedding-fit-batch.json'),JSON.stringify({conditions:'synthetic real-route batch in isolated Electron profile; AI suggestions + online details from tests/fit/realCacheRows.json; Last.fm similarity unavailable (fixture missingKey); built-in catalogue live; no owned library matches for additions',additions},null,1));
+   expect(await page.getByText('Estimated track-count gap',{exact:false}).count()).toBeGreaterThan(0);
+   fs.writeFileSync(path.join(diagnostics,'wedding-fit-batch.json'),JSON.stringify({conditions:'synthetic real-route batch in isolated Electron profile; AI suggestions + online details from tests/fit/realCacheRows.json (legacy cache labels decode as estimates); strict decades unchanged; Last.fm unavailable; built-in catalogue live; no owned library',additions:[]},null,1));
+   // Reopen the saved event through the route: the fit choices must restore from the persisted snapshot.
+   await page.evaluate(id=>{window.__testState.page='event';window.__testState.eventId=id;window.__rerender();},created.id);await page.waitForTimeout(1500);
+   await page.getByRole('button',{name:/Track expansion/}).first().click();await page.waitForTimeout(300);
+   expect(await page.locator('#fit-familiarity').inputValue()).toBe('familiar');
+   expect(await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).getAttribute('aria-checked')).toBe('true');
+   expect(all.filter(r=>r.fromUpload).length).toBe(10);
    expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
  });
  await check('section-local Transition issue targets Transition and exports only captured checked mapping',async()=>{

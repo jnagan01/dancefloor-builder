@@ -12,6 +12,8 @@
 
 ## Variant A: cache comparison — evidence: cache snapshot only
 
+Top-14 ratings (report only; mixed result, not an exact baseline replay): BEFORE Good 2, Fair 2, Poor 0, Unfamiliar 5, Unrated 5 → AFTER Good 3, Fair 1, Poor 1, Unfamiliar 5, Unrated 4.
+
 ### BEFORE (no fit choices)
 | # | Track | Set | Rating (report only) | Score | Reasons |
 |---|---|---|---|---|---|
@@ -83,6 +85,8 @@
 | 31 | Kool & The Gang – Cherish | held-out | — | -1.5 | No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate |
 
 ## Variant B: saved-metadata comparison — evidence: cache snapshot + saved-event metadata for Let It Be / Chasing Cars
+
+Top-14 ratings (report only; mixed result, not an exact baseline replay): BEFORE Good 2, Fair 2, Poor 0, Unfamiliar 5, Unrated 5 → AFTER Good 3, Fair 1, Poor 1, Unfamiliar 5, Unrated 4.
 
 ### BEFORE (no fit choices)
 | # | Track | Set | Rating (report only) | Score | Reasons |
