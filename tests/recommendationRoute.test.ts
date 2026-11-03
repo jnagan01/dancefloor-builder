@@ -44,9 +44,12 @@ describe('real event route: Last.fm track evidence and preparation feedback in a
         { seed: { artist: 'Queen', title: 'Radio Ga Ga' }, status: 'ok', similar: [{ artist: 'Elton John', title: "I'm Still Standing", match: 0.4 }, { artist: 'Elton John', title: 'Rocket Man (Live)', match: 0.9 }] },
         { seed: { artist: 'ABBA', title: 'Dancing Queen' }, status: 'ok', similar: [{ artist: 'Elton John', title: "I'm Still Standing", match: 0.5 }] },
       ] }; },
+      enrich: async (r: { data: { songs: { song: string }[] } }) => {
+        // Feedback changes after AI additions while enrichment is in flight: the late Never must be honoured before commit.
+        if (r.data.songs.some(x => x.song === 'Late Song')) h.setPrep((s: { knowledge: unknown }) => ({ ...s, knowledge: h.prepModule('knowledge').setFeedback(s.knowledge, 'Late Act', 'Late Song', 'never') }));
+        return { results: [] };
+      },
       recommend: async () => {
-        // Feedback changes while generation is in flight: the late Never must be honoured before commit.
-        h.setPrep((s: { knowledge: unknown }) => ({ ...s, knowledge: h.prepModule('knowledge').setFeedback(s.knowledge, 'Late Act', 'Late Song', 'never') }));
         return { suggestions: [sug('Bad Act', 'Never Track'), sug('Slow Act', 'Dismissed Track'), sug('Plain Act', 'Plain Song'), sug('Late Act', 'Late Song'), sug('Fav Act', 'Fav Song')] };
       },
     };

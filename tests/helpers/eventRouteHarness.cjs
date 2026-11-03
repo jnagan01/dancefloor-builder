@@ -60,7 +60,7 @@ function createEventRouteHarness(actual) {
       '@/lib/freshEvent': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/freshEvent.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:k=>k === './inputSafety' ? actual.input : k === './danceFloor' ? actual.dance : k === './fileIdentity' ? identityModule.exports : require(path.join(root,'desktop/offline/policy.cjs'))});return m.exports; })(),
       '@/lib/preparationCapability': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/preparationCapability.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:()=>require(path.join(root,'desktop/offline/policy.cjs')),get window(){return testWindow;}});return m.exports; })(),
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
-      '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},
+      '@/lib/enrich.functions':{enrichSongs:services.enrich ?? (async()=>({results:[]}))},
       '@/lib/neighbors.functions':{getArtistNeighbors:async()=>({clusters:[]})},
       '@/lib/recommend.functions':{recommendSongsForSection:services.recommend ?? (async()=>({suggestions:[]}))},
       '@/lib/lastfm.functions':{getArtistCrowdData:services.crowd ?? (async()=>({artists:[]})),getSimilarTracks:services.similarTracks ?? (async()=>({availability:'missingKey',seeds:[]}))},
