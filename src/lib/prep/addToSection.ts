@@ -25,8 +25,8 @@ export function planAddToSection<R extends Lists>(
   const added = { artist, song };
   if (policies?.includeSeasonalTracks === false && seasonal(added)) return { error: "Seasonal/holiday additions are excluded. Existing client requests are retained." };
   const eligible = buildResolver(library.tracks, policies).resolve(added);
-  if (policies?.ownedOnlyExpansion && eligible === undefined) return { error: "No confidently matching intended track/version in your library." };
   if (requiresClean(policies) && eligible === undefined) return { error: "Clean version needed — choose a labelled clean file or explicitly change this event’s policy." };
+  if (policies?.ownedOnlyExpansion && eligible === undefined) return { error: "No confidently matching intended track/version in your library." };
   const list = [...(result[section] ?? []), added];
   const key = keyOf(section, list.length - 1, added);
   let match: SongMatch;

@@ -1,4 +1,4 @@
-import { needsPolicyConsumer } from "./preparationPolicy";
+import { needsPolicyConsumer, requiresClean } from "./preparationPolicy";
 // Native offline access bridge (Mac app only). The web page can only hand the
 // Mac app a validated backup for the signed-in account, ask its status, or revoke it.
 import type { Backup } from "./backups";
@@ -21,7 +21,7 @@ export async function prepareOfflineAccess(owner: { account: string; check: () =
   const backup = await collect();
   owner.check();
   if (backup.account !== owner.account) throw Error("Account changed; offline access was not prepared.");
-  const needsPolicySupport = backup.events.some(e => needsPolicyConsumer(e.snapshot.inputs));
+  const needsPolicySupport = backup.events.some(e => needsPolicyConsumer(e.snapshot.inputs) || requiresClean(e.snapshot.inputs));
   if (needsPolicySupport && bridge.preparationPolicyVersion !== 1) {
     // Older shells ignore optional inputs. Revoke their old copy before refusing a downgrade.
     await bridge.signedOut(); owner.check();

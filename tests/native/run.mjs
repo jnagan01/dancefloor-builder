@@ -15,7 +15,7 @@ const key='warmUp:0:test artist|test song live';
 fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));
 fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Test',updated_at:'2026-10-31T01:59:00Z',inputs:{eventName:'Test',songs:[song],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[],selections:{[key]:{paths:[tracks[0].filePath],confirmed:false}}}}}));
 let app,page,count=0;const diagnostics=path.join(root,'test-results/native');fs.mkdirSync(diagnostics,{recursive:true});
-async function launch(){app=await electron.launch({executablePath:process.env.ELECTRON_BIN||path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));await page.locator('[role="status"], #backups').first().waitFor();await page.waitForTimeout(800);}
+async function launch(){app=await electron.launch({executablePath:process.env.ELECTRON_BIN||path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text().slice(0,2000));});await page.locator('[role="status"], #backups').first().waitFor();await page.waitForTimeout(800);}
 async function check(name,f){await f();count++;await page.screenshot({path:path.join(diagnostics,`check-${count}.png`)});console.log(`PASS ${name}`);}
 try{
  await launch();
@@ -363,19 +363,45 @@ try{
    await app.close();const file=path.join(library,'Policy clean.mp3'),dirty=path.join(library,'Policy dirty.mp3'),unknown=path.join(library,'Policy unknown.mp3');
    const tt=[{filePath:dirty,artist:'Band',title:'Hit (Dirty)'},{filePath:file,artist:'Band',title:'Hit (Clean)'},{filePath:unknown,artist:'Band',title:'Hit'}];tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));const req={artist:'Band',song:'Hit',fromUpload:true};
-   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Clean toggle',updated_at:'v1',inputs:{songs:[req],eventName:'Clean toggle',hours:'.25',buffer:2},lists:{warmUp:[req],transition:[],peak:[],selections:{'warmUp:0:band|hit':{paths:[dirty,file,unknown],confirmed:true}}}}}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Clean toggle',updated_at:'v1',inputs:{songs:[req],eventName:'Clean toggle',hours:'.25',buffer:2,listType:'dance'},lists:{warmUp:[req],transition:[],peak:[],selections:{'warmUp:0:band|hit':{paths:[dirty,file,unknown],confirmed:true}}}}}));
    fs.rmSync(path.join(temp,'exports'),{recursive:true,force:true});await launch();
+   // Earlier tests configured a native folder; use the actual native write bridge, fenced to this profile.
+   await page.evaluate(root=>localStorage.setItem('dancefloor:vdjRoot',root),path.join(temp,'VirtualDJ'));await page.reload();
+   await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
+   await expect(page.getByRole('button',{name:'Archive recovery copy and continue',exact:true})).toHaveCount(0);
    const toggle=page.getByRole('switch',{name:'Require clean versions',exact:true});await expect(toggle).not.toBeChecked();await toggle.click();
    await expect(page.getByText('Clean version needed',{exact:true}).first()).toBeVisible();
    await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();
    await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toContain('clean-policy blocks');
    const outputs=fs.readdirSync(path.join(temp,'exports'));const m3u=outputs.filter(n=>n.endsWith('.m3u')).map(n=>fs.readFileSync(path.join(temp,'exports',n),'utf8')).join('');
    expect(m3u).toContain(file);expect(m3u).not.toContain(dirty);expect(m3u).not.toContain(unknown);
+   expect(fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8')).toContain('clean-toggle-warm-up.m3u');
    const report=fs.readFileSync(path.join(temp,'exports',outputs.find(n=>n.endsWith('export-readiness.txt'))),'utf8');expect(report).toContain('Clean-policy blocks: 2');expect(report).toContain('Approved tracks (including extras, in playlist order): 1');
    await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.requireCleanVersions,{timeout:15000}).toBe(true);
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections['warmUp:0:band|hit'].paths).toEqual([dirty,file,unknown]);
    await page.reload();await expect(toggle).toBeChecked();
  });
+ await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
+   await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';
+   const legacy=Object.fromEntries(Array.from({length:14},(_,i)=>{const id=i===0?'A':`Legacy${i}`;return [id,{id,name:`Legacy ${i}`,updated_at:'v1',inputs:{songs:[song],hours:'.25',buffer:2,...(i===1?{eventType:'school_dance'}:{})},lists:{warmUp:[song],transition:[],peak:[]}}];}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(legacy));fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));await launch();
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeDisabled();
+   await expect(page.getByRole('alert').filter({hasText:'Update the desktop app'})).toBeVisible();
+   expect(await page.evaluate(()=>window.electronOffline?.preparationPolicyVersion)).toBeUndefined();
+   const unsupported={format:'setarchitect-backup',version:2,account:'synthetic-owner',createdAt:new Date().toISOString(),events:[],sources:[],roots:{}};
+   expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),unsupported)).ok).toBe(false);
+   // Real preservation hook + native updater guard, only download/handoff destinations are synthetic.
+   expect(await page.evaluate(()=>window.testBackend.update())).toMatchObject({ok:true});
+   const saved=JSON.parse(await page.evaluate(async()=>(await window.electronBackups.latest('synthetic-owner')).raw));
+   expect(saved.version).toBe(1);expect(saved.events).toHaveLength(14);
+   for(const event of saved.events)expect(event.snapshot).toEqual({name:legacy[event.id].name,inputs:legacy[event.id].inputs,lists:legacy[event.id].lists});
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
+   // runUpdate verifies the freeze before handoff, then explicitly releases it after the synthetic restart.
+   expect(fs.readFileSync(path.join(temp,'handoff'),'utf8')).toBe('staged and relaunched');
+   expect(await page.locator('#update-preservation-lock').count()).toBe(0);
+   delete process.env.SETARCHITECT_TEST_OLD_SHELL;
+ });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
-}catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});throw e;}finally{await app?.close().catch(()=>{});}
+}catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});console.error('EXPORT DIAGNOSTICS',JSON.stringify({ui:await page?.evaluate(()=>({errors:window.__errors,warnings:window.__warnings,success:window.__success})).catch(()=>null),checked:fs.existsSync(path.join(temp,'checked-paths.json'))?JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8')):null,outputs:fs.existsSync(path.join(temp,'exports'))?fs.readdirSync(path.join(temp,'exports')):[],profile:temp}));throw e;}finally{await app?.close().catch(()=>{});}

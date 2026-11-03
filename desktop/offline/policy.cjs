@@ -17,7 +17,8 @@
     return !!inputs && (inputs.requireCleanVersions === true || inputs.eventType === "school_dance" || inputs.eventType === "corporate");
   }
   function needsPolicyConsumer(inputs) {
-    return !!inputs && (requiresClean(inputs) || ["ownedOnlyExpansion", "includeSeasonalTracks", "requireCleanVersions"].some(k => inputs[k] !== undefined));
+    // Existing strict event types predate policy support; passive legacy backups remain v1.
+    return !!inputs && ["ownedOnlyExpansion", "includeSeasonalTracks", "requireCleanVersions"].some(k => inputs[k] !== undefined);
   }
   function cleanReason(track, required) {
     if (!required || cleanEvidence(track) === "clean") return null;

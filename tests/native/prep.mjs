@@ -347,7 +347,8 @@ try {
 
 
   await check('event policies constrain real recommendations and shortlist addition, toggle does not alter knowledge', async()=>{
-    await page.evaluate(async()=>{await window.__switchAccount('synthetic-policy');});
+    // Remount event fixtures too: changing account fences knowledge, not test-only event rows.
+    await close();await launch();await page.evaluate(async()=>{await window.__switchAccount('synthetic-policy');});
     await page.getByRole('button',{name:'Go event'}).click();
     await page.evaluate(()=>window.__setPolicy({ownedOnlyExpansion:true,includeSeasonalTracks:false,requireCleanVersions:true}));
     await prepTab('Recommendations').click();const region=page.getByRole('region',{name:'Event preparation'});
