@@ -1162,7 +1162,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             ]);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
             rankSimilarTracks = simEvidence;
-            rankSimilar = similarArtistEvidence(crowdRes.artists, uniqueSongs.filter((s) => s.fromUpload !== false).map((s) => s.artist));
+            rankSimilar = similarArtistEvidence(crowdRes.artists, uniqueSongs.map((s) => s.artist));
             if (trackSeeds.length) {
               const availability = simTrackRes?.availability ?? "unavailable";
               if (availability !== "ok") toast.info(availabilityNote(availability, trackSeeds.length));
