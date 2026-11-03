@@ -10,8 +10,10 @@ function createEventRouteHarness(actual) {
   const readinessModule = { exports: {} };
   const identityModule = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/fileIdentity.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:identityModule,exports:identityModule.exports});
+  const additionModule = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/additionIdentity.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:additionModule,exports:additionModule.exports});
   const duplicateModule = { exports: {} };
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/preparationDuplicates.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:duplicateModule,exports:duplicateModule.exports,require:k=>k === "./fileIdentity" ? identityModule.exports : require(path.join(root,"desktop/offline/policy.cjs"))});
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/preparationDuplicates.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:duplicateModule,exports:duplicateModule.exports,require:k=>k === "./fileIdentity" ? identityModule.exports : k === "./additionIdentity" ? additionModule.exports : require(path.join(root,"desktop/offline/policy.cjs"))});
   vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : k === "./fileIdentity" ? identityModule.exports : actual.vdj});
   // Real preparation-knowledge modules (no test seams): transpiled with relative requires resolved inside src/lib/prep.
   const prepModules = {};
@@ -59,7 +61,7 @@ function createEventRouteHarness(actual) {
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
       '@/lib/eventRevision':actual.revisions,
       '@/lib/preparationPolicy':require(path.join(root,'desktop/offline/policy.cjs')), '@/lib/exportReadiness':readinessModule.exports, '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
-      '@/lib/preparationDuplicates':duplicateModule.exports,
+      '@/lib/preparationDuplicates':duplicateModule.exports, '@/lib/additionIdentity':additionModule.exports,
       '@/lib/freshEvent': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/freshEvent.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:k=>k === './inputSafety' ? actual.input : k === './danceFloor' ? actual.dance : k === './fileIdentity' ? identityModule.exports : require(path.join(root,'desktop/offline/policy.cjs'))});return m.exports; })(),
       '@/lib/preparationCapability': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/preparationCapability.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:()=>require(path.join(root,'desktop/offline/policy.cjs')),get window(){return testWindow;}});return m.exports; })(),
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},

@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { intendedKey } from "../../desktop/offline/policy.cjs";
+import { additionKeys } from "./additionIdentity";
 import { boundedNumber, validateTiming, MAX_EVENT_HOURS, MAX_EVENT_MINUTES } from "./inputSafety";
 import { allowedForEventType, getEventType, libraryAllowedForEventType } from "./eventTypes";
 import { getVibe } from "./vibes";
@@ -131,7 +131,7 @@ export function songKeys(artist: string, song: string): string[] {
 export class SongKeySet {
   private keys = new Set<string>();
   constructor(private versionAware = false) {}
-  private identities(artist: string, song: string) { return this.versionAware ? [intendedKey({ artist, song })] : songKeys(artist, song); }
+  private identities(artist: string, song: string) { return this.versionAware ? additionKeys(artist, song) : songKeys(artist, song); }
   has(artist: string, song: string): boolean {
     return this.identities(artist, song).some((k) => this.keys.has(k));
   }
@@ -1046,9 +1046,10 @@ export function applyVarietyReranker(
   // which caused the same song to appear twice inside the same section.
   const seenKeys = new SongKeySet(true);
   const unique: ResultSong[] = [];
+  // Requests claim identity first, wherever they appear, so only automatic copies are dropped.
+  for (const s of allowed) if (s.fromUpload) seenKeys.add(s.artist, s.song);
   for (const s of allowed) {
     if (!s.fromUpload && !seenKeys.tryAdd(s.artist, s.song)) continue;
-    if (s.fromUpload) seenKeys.add(s.artist, s.song);
     unique.push(s);
   }
 
