@@ -11,7 +11,7 @@ const items = [
   { to: "/events", label: "Events", icon: CalendarDays },
   { to: "/library", label: "Library", icon: Library },
   { to: "/settings", label: "Settings", icon: Settings },
-  { to: "/updates", label: "Check for updates", icon: RefreshCw },
+  { to: "/updates", label: "Check for Updates", icon: RefreshCw },
 ] as const;
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
@@ -49,7 +49,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="app-no-drag mt-3 lg:mt-7">
-          <Button asChild size="sm" className="w-full justify-start gap-2 rounded-full"><Link to="/events/new"><Plus size={16}/> New event</Link></Button>
+          <Button asChild size="sm" className="w-full justify-start gap-2 rounded-full"><Link to="/events/new"><Plus size={16}/> New Event</Link></Button>
         </div>
         <div className="hidden pt-4 text-[11px] text-muted-foreground lg:mt-auto lg:block">
           <p className="font-medium text-sidebar-foreground">SetArchitect</p>

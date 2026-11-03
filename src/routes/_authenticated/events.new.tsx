@@ -165,7 +165,7 @@ const SECTION_FILES: Record<SectionKey, string> = {
 const MAX_AI_RECOMMENDATION_BATCH_SIZE = 40;
 type ListType = "dance" | "cocktail" | "dinner";
 const AVG_BACKGROUND_SONG_MIN = 3.5;
-const LIST_TYPE_LABEL: Record<ListType, string> = { dance: "Dance floor", cocktail: "Cocktail Hour", dinner: "Dinner" };
+const LIST_TYPE_LABEL: Record<ListType, string> = { dance: "Dance Floor", cocktail: "Cocktail Hour", dinner: "Dinner" };
 
 interface DirHandleLike {
   getFileHandle(name: string, options?: { create?: boolean }): Promise<unknown>;
@@ -2449,7 +2449,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         {step === 1 && (
         <StepPanel
           eyebrow="Step 1"
-          title={background ? `${bgLabel} details` : "Dance floor details"}
+          title={background ? `${bgLabel} details` : "Set Details"}
           description={background ? "One relaxed list that covers the time you set. Missing time is filled with similar songs." : "Set the vibe and length of the open dance floor."}
         >
           <div className="space-y-5">
@@ -2559,7 +2559,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               </div>
               )}
               <div>
-                <Label>Preferred decades</Label>
+                <Label>Preferred Decades</Label>
                 <div className="mt-2 flex flex-wrap gap-3">
                   {DECADES.map((d) => (
                     <label key={d} className="flex items-center gap-1.5 text-sm">
@@ -2635,7 +2635,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               </div>
             </div>
             <div>
-              <Label htmlFor="homeKey">Home key (optional)</Label>
+              <Label htmlFor="homeKey">Home Key (optional)</Label>
               <select id="homeKey" value={homeKey} onChange={(e) => editHomeKey(e.target.value)} className="mt-1.5 h-9 w-full max-w-xs rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">No preference</option>
                 {KEY_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
@@ -2643,15 +2643,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               <p className="mt-1.5 text-xs text-muted-foreground">Camelot key the night centers on. The flow chart scores how well each song mixes into the next and into this key.</p>
             </div>
             <div>
-              <Label htmlFor="artists">Favorite artists (comma separated)</Label>
+              <Label htmlFor="artists">Favorite Artists (comma separated)</Label>
               <Input id="artists" value={artistsInput} onChange={(e) => editArtistsInput(e.target.value)} className="mt-1.5" />
             </div>
             <div>
-              <Label htmlFor="genres">Favorite genres (comma separated)</Label>
+              <Label htmlFor="genres">Favorite Genres (comma separated)</Label>
               <Input id="genres" value={genresInput} onChange={(e) => editGenresInput(e.target.value)} className="mt-1.5" />
             </div>
             <div>
-              <Label htmlFor="notes">Additional notes</Label>
+              <Label htmlFor="notes">Additional Notes</Label>
               <Textarea id="notes" value={notes} onChange={(e) => editNotes(e.target.value)} className="mt-1.5" rows={3} />
             </div>
             <div>
