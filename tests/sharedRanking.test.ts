@@ -93,6 +93,14 @@ describe('shared ranking engine', () => {
     expect(out.items).toHaveLength(40);
   });
 
+  it('rankPool over a 31,250-item pool with a small limit stays bounded (no quadratic pass over all items)', () => {
+    const items = Array.from({ length: 31250 }, (_, i) => lib(`Artist ${i % 4000}`, `Song ${i}`, { genre: 'House', genreSource: 'tags' }));
+    const t = performance.now();
+    const out = rankPool(items, c => c, { ...base([]), preferences: { genres: ['House'] } }, 40);
+    expect(performance.now() - t).toBeLessThan(3000);
+    expect(out).toHaveLength(40);
+  });
+
   it('placement cycles sections in rank order and never pads', () => {
     const rows: Record<string, string[]> = { a: [], b: [] };
     const placed = placeRanked(['1', '2', '3', '4', '5'], ['a', 'b'], k => rows[k].length < 2, (k, x) => rows[k].push(x));

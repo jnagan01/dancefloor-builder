@@ -17,6 +17,8 @@ const songSchema = z.object({
   stretched: z.boolean().optional(), naturalSection: z.string().optional(), reused: z.boolean().optional(),
   waveRole: z.string().optional(), placementReason: z.string().optional(), aiSuggestion: z.boolean().optional(),
   aiReason: z.string().optional(), fromLibrary: z.boolean().optional(),
+  // Optional plain-language ranking reasons for automatic additions; older snapshots omit it.
+  rankWhy: z.string().max(1000).optional(),
 }).passthrough();
 
 export const inputsSchema = z.object({
@@ -42,7 +44,7 @@ export const inputsSchema = z.object({
   catch (e) { ctx.addIssue({ code: "custom", message: (e as Error).message }); }
 });
 
-const listsSchema = z.object({
+export const listsSchema = z.object({
   warmUp: z.array(songSchema).max(2000),
   transition: z.array(songSchema).max(2000),
   peak: z.array(songSchema).max(2000),

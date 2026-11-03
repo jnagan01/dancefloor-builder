@@ -337,6 +337,9 @@ try {
     await prepTab('Recommendations').click();
     const hiddenLine = () => region.getByText(/^Client requests always stay in the event\. Hidden:/).textContent();
     const hiddenBefore = await hiddenLine();
+    // Non-default controls must be frozen with the sample so the replay matches exactly.
+    const fam = region.getByRole('slider', { name: 'Discovery to familiar' }); await fam.focus(); for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+    const vari = region.getByRole('slider', { name: 'Artist variety' }); await vari.focus(); for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
     await prepTab(/Review quality/).click();
     await expect(region.getByRole('heading', { name: 'Review recommendation quality' })).toBeVisible();
     await region.getByLabel('Review sample name').fill('Synthetic review');
@@ -345,6 +348,7 @@ try {
     const sample = region.getByTestId('quality-sample').first();
     await expect(sample).toContainText('0 reviewed');
     await sample.locator('summary').click();
+    await expect(sample.getByTestId('quality-compare')).toContainText('same order and reasons');
     await expect(sample).toContainText('Rate at least 3 tracks');
     const rate = (label, n) => sample.getByRole('button', { name: new RegExp(`^${label}: `) }).nth(n);
     await rate('Poor fit', 0).click(); await expect(rate('Poor fit', 0)).toHaveAttribute('aria-pressed', 'true');
@@ -352,7 +356,8 @@ try {
     await expect(rate('Poor fit', 0)).toHaveAttribute('aria-pressed', 'false');
     await rate('Maybe', 1).click(); await rate('Poor fit', 2).click();
     await expect(sample).toContainText('3 reviewed');
-    await expect(sample).toContainText(/based on 3 of \d+ rated tracks only/);
+    await expect(sample.getByTestId('quality-compare')).toContainText(/Good fits in the top 5: \d+ as saved, \d+ now \(counting only rated tracks\)/);
+    await expect(sample.getByTestId('quality-compare')).not.toContainText(/gain|%/);
     await sample.getByRole('button', { name: /^Clear rating: / }).nth(2).click();
     await expect(sample).toContainText('2 reviewed');
     await expect(sample).toContainText('Rate at least 3 tracks');
@@ -364,6 +369,8 @@ try {
     await page.getByRole('button', { name: 'Go event' }).click();
     await prepTab(/Review quality \(1\)/).click();
     await expect(region.getByTestId('quality-sample').first()).toContainText('2 reviewed');
+    await region.getByTestId('quality-sample').first().locator('summary').click();
+    await expect(region.getByTestId('quality-compare').first()).toContainText('same order and reasons'); // after reload, default controls on screen
     await page.evaluate(() => window.__switchAccount('synthetic-b'));
     await expect(prepTab(/Review quality \(0\)/)).toBeVisible();
     await page.evaluate(() => window.__switchAccount('synthetic-a'));

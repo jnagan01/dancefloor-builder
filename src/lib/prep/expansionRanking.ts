@@ -1,6 +1,9 @@
 import { eventPrep, type PrepKnowledge } from "./knowledge";
 import { DEFAULT_REC_CONTROLS, type Candidate, type ClientRequest, type EventPreferences, type RankContext, type SimilarArtistEvidence } from "./recommend";
 import type { SimilarTrackEvidence } from "./similarTracks";
+import { attrSource, type ProvRow } from "./provenance";
+import type { MetaSource } from "./metaConfidence";
+import type { FactSource } from "./filters";
 
 /**
  * Glue that lets automatic expansion use the exact ranking context the preparation panel uses.
@@ -46,4 +49,18 @@ export function placeRanked<T, K extends string>(ranked: readonly T[], keys: rea
     put(keys[at % keys.length], item); placed++; at++;
   }
   return placed;
+}
+
+/**
+ * Ranking candidate from a result row's per-attribute provenance, so equivalent facts score the same whichever
+ * source found the row. Unknown provenance stays an estimate; missing values stay unknown.
+ */
+export function rowCandidate(row: ProvRow & { artist: string; song: string; genre?: string; year?: number }, origin: Candidate["origin"]): Omit<Candidate, "ref"> {
+  const gs = attrSource(row, "genre"), ys = attrSource(row, "year");
+  const decade = decadeOf(row.year);
+  const fact = (s: MetaSource): FactSource | undefined => s === "unknown" ? undefined : s === "virtualdj" || s === "tags" || s === "filename" || s === "estimate" || s === "catalogue" || s === "ai" || s === "provider" || s === "user" || s === "measured" ? s : "estimate";
+  return { artist: row.artist, song: row.song, origin, facts: {
+    genre: gs !== "unknown" ? row.genre : undefined, genreSource: row.genre ? fact(gs) : undefined,
+    decade: ys !== "unknown" ? decade : undefined, decadeSource: decade && ys !== "unknown" ? fact(ys) : undefined,
+  } };
 }

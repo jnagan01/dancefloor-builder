@@ -37,6 +37,8 @@ export interface RecInput {
   similar?: SimilarArtistEvidence[];
   /** Last.fm track.getSimilar evidence aggregated across distinct requested tracks. */ similarTracks?: SimilarTrackEvidence[];
   preferences?: EventPreferences;
+  /** Extra per-artist use counts for variety (a frozen review sample's event context); added to `inEvent` counts. */
+  artistUse?: readonly { artist: string; count: number }[];
   controls: RecControls; filter?: FilterState; limit?: number;
 }
 export interface RecOutput { items: Recommendation[]; hidden: { dismissed: number; never: number; inEvent: number; filtered: number; notOwned: number } }
@@ -44,6 +46,13 @@ export interface RecOutput { items: Recommendation[]; hidden: { dismissed: numbe
 const norm = (s: string) => s.toLowerCase().replace(/^the\s+/, "").replace(/\s+/g, " ").trim();
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 const round = (n: number) => Math.round(n * 100) / 100;
+/** The single strongest Last.fm artist-similarity entry per normalised artist, exactly as the scorer selects it. */
+export function strongestSimilar(list: readonly SimilarArtistEvidence[]): Map<string, SimilarArtistEvidence> {
+  const similar = new Map<string, SimilarArtistEvidence>();
+  for (const s of list) { const k = norm(s.artist); const o = similar.get(k); if (!o || o.match < s.match || (o.match === s.match && s.similarTo < o.similarTo)) similar.set(k, s); }
+  return similar;
+}
+export const artistKey = (a: string) => norm(a);
 const genreHit = (g: string, wants: string[]) => { const x = g.toLowerCase(); return wants.find(w => x.includes(w) || w.includes(x)); };
 
 /** Distinct requests by exact song identity, so a request repeated in several sections counts once. */
@@ -73,8 +82,7 @@ export function recommend(input: RecInput): RecOutput {
     if (r.genre) genreCount.set(r.genre.toLowerCase(), (genreCount.get(r.genre.toLowerCase()) ?? 0) + 1);
     if (r.decade) decadeCount.set(r.decade, (decadeCount.get(r.decade) ?? 0) + 1);
   }
-  const similar = new Map<string, SimilarArtistEvidence>();
-  for (const s of input.similar ?? []) { const k = norm(s.artist); const o = similar.get(k); if (!o || o.match < s.match || (o.match === s.match && s.similarTo < o.similarTo)) similar.set(k, s); }
+  const similar = strongestSimilar(input.similar ?? []);
   const simTracks = new Map<string, SimilarTrackEvidence>((input.similarTracks ?? []).map(e => [e.key, e]));
   const prefGenres = (input.preferences?.genres ?? []).map(g => g.toLowerCase().trim()).filter(Boolean);
   const prefDecades = new Set((input.preferences?.decades ?? []).filter(Boolean));
@@ -133,6 +141,7 @@ export function recommend(input: RecInput): RecOutput {
   const limit = input.limit ?? 50, pool = scored.slice(0, Math.max(limit * 6, 300));
   const artistUse = new Map<string, number>();
   for (const s of input.inEvent) artistUse.set(norm(s.artist), (artistUse.get(norm(s.artist)) ?? 0) + 1);
+  for (const a of input.artistUse ?? []) if (a.count > 0) artistUse.set(norm(a.artist), (artistUse.get(norm(a.artist)) ?? 0) + Math.floor(a.count));
   const out: Recommendation[] = [];
   while (out.length < limit && pool.length) {
     let best = -1, bestScore = -Infinity;
@@ -153,7 +162,7 @@ export function recommend(input: RecInput): RecOutput {
 /** Plain-language summary of the strongest positive reasons (no point values), for result rows. */
 export function explainTop(r: { evidence: Evidence[] }, n = 3): string {
   const top = r.evidence.filter(e => e.points > 0).slice().sort((a, b) => b.points - a.points).slice(0, n);
-  return top.length ? top.map(e => e.text).join(" · ") : "No specific evidence beyond your event rules.";
+  return (top.length ? top.map(e => e.text).join(" · ") : "No specific evidence beyond your event rules.").slice(0, 900);
 }
 
 export type RankContext = Omit<RecInput, "candidates" | "limit" | "filter" | "controls"> & { controls?: RecControls };
