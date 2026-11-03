@@ -98,12 +98,13 @@ try{
  });
  await check('Electron six-row upload blocks missing title then corrects and generates all intended rows',async()=>{
    await page.evaluate(()=>{window.__testState.page='event';window.__testState.eventId=undefined;window.__rerender();});await page.waitForTimeout(400);
+   await page.getByRole('radio',{name:'Dance floor',exact:true}).click();await page.locator('#hours').fill('3');
    await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
    const upload=path.join(temp,'six.csv');fs.writeFileSync(upload,'Artist,Song\nOne,Song One\nTwo,Song Two\nThree,Song Three\nFour,Song Four\nFive,Song Five\nArtist Only,\n');
    await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);await page.waitForTimeout(400);
    await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
    const rows=page.locator('tbody tr');expect(await rows.count()).toBe(6);
-   await page.getByRole('button',{name:'Continue',exact:false}).click();await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(300);
+   await page.getByRole('button',{name:'Continue',exact:false}).click();await page.locator('#buffer').selectOption('2');await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(300);
    expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('missing a song title');expect(await rows.count()).toBe(6);
    await rows.nth(5).locator('input').nth(1).fill('Corrected Song');await page.getByRole('button',{name:'Continue',exact:false}).click();
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(1800);
@@ -345,9 +346,10 @@ try{
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:big,aiSuggestions:[{artist:'Queen',song:'Radio Ga Ga',energy:8,danceability:8,popularity:80,valence:50},{artist:'ABBA',song:'Honey Honey',energy:8,danceability:8,popularity:80,valence:50},{artist:'Anderson .Paak',song:'Fire In The Sky',energy:8,danceability:8,popularity:80,valence:50},{artist:'Queen',song:'Killer Queen',energy:8,danceability:8,popularity:80,valence:50},{artist:'Wham!',song:'Last Christmas',energy:8,danceability:8,popularity:80,valence:50}]}));
    fs.writeFileSync(path.join(temp,'backend.json'),'{}');await launch();
    await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
-   await expect(page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true})).toBeChecked();
+   await expect(page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true})).not.toBeChecked();await page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true}).click();
    await expect(page.getByRole('switch',{name:'Include seasonal/holiday tracks',exact:true})).not.toBeChecked();
-   await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
+   await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).not.toBeChecked();await page.getByRole('switch',{name:'Require clean versions',exact:true}).click();
+   await page.getByRole('radio',{name:'Dance floor',exact:true}).click();await page.locator('#hours').fill('3');
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Policy synthetic');
    await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
@@ -355,7 +357,7 @@ try{
    await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
    await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
    await expect(page.locator('tbody tr')).toHaveCount(2);await page.getByRole('button',{name:'Continue',exact:true}).click();
-   await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();await page.locator('#buffer').selectOption('2');
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
    await expect.poll(()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Policy synthetic'),{timeout:30000}).toBeTruthy();

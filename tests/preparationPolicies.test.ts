@@ -36,9 +36,9 @@ const key = `warmUp:0:${dance.dedupeKey(request.artist, request.song)}`;
 const lists = { warmUp: [request], transition: [], peak: [], selections: { [key]: { paths: [tracks[0].filePath, tracks[1].filePath, tracks[4].filePath], confirmed: true } } };
 const row = (inputs = {}) => ({ id: 'A', name: 'Synthetic', updated_at: 'v1', inputs: { songs: [request], hours: '0.25', buffer: 2, ...inputs }, lists: structuredClone(lists) });
 describe('owned-only expansion and conservative seasonal evidence', () => {
-  it('new defaults are owned-only, seasonal excluded, clean required; legacy fields are absent', async () => {
+  it('fresh policies are off; legacy fields are absent', async () => {
     const h = harness({ eventId: null }); await h.flush();
-    expect(h.current.eventSnapshot(h.current.result ?? { warmUp: [], transition: [], peak: [] }, h.current.matches).inputs).toMatchObject(DEFAULTS); h.unmount();
+    expect(h.current.eventSnapshot(h.current.result ?? { warmUp: [], transition: [], peak: [] }, h.current.matches).inputs).toMatchObject({ownedOnlyExpansion:false,includeSeasonalTracks:false,requireCleanVersions:false}); h.unmount();
     const old = harness({ rows: { A: row() } }); await old.flush();
     for (const k of Object.keys(DEFAULTS)) expect(old.current.eventSnapshot(old.current.result, old.current.matches).inputs[k]).toBeUndefined();
     expect(old.requests).toEqual([]); old.unmount();
