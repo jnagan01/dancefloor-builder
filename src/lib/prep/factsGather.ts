@@ -12,10 +12,11 @@
  * - A failed/timed-out chunk leaves its songs unknown (never fabricated) and is reported via `failed`.
  */
 export interface FactsRow { artist: string; song: string; energy?: number | null; danceability?: number | null; popularity?: number | null }
-export interface GatherOptions { batchSize?: number; concurrency?: number; budget?: number; timeoutMs?: number }
+export interface GatherOptions<E = unknown> { batchSize?: number; concurrency?: number; budget?: number; timeoutMs?: number; isIncomplete?: (e: E) => boolean }
 /** timedOutSongs ⊆ failedSongs. skippedAfterTimeout: songs whose chunks were never sent because an earlier chunk timed
  *  out (the transport can't abort, so we stop adding in-flight requests); they are NOT marked attempted. */
-export interface GatherReport { requested: number; found: number; failedSongs: number; timedOutSongs: number; skippedAfterTimeout: number; skippedByBudget: number; alreadyAttempted: number }
+export interface GatherReport { requested: number; found: number; failedSongs: number; timedOutSongs: number; skippedAfterTimeout: number; skippedByBudget: number; alreadyAttempted: number; incompleteSongs: number }
+/** incompleteSongs: returned in time, but the server reported its online lookup unfinished (only already-known values kept). */
 
 export const FACTS_BATCH = 200;
 export const FACTS_CONCURRENCY = 2;
@@ -23,6 +24,10 @@ export const FACTS_CONCURRENCY = 2;
 export const FACTS_BUDGET = 600;
 /** Per-chunk deadline. A chunk that hasn't settled by then counts as failed; its late result is ignored. */
 export const FACTS_TIMEOUT_MS = 20_000;
+/** The server's end-to-end deadline (cache read + provider + AI + cache write + assembly). It stays a fixed margin below
+ *  the client cutoff so completed results, cache hits included, arrive before the client gives up on the chunk. */
+export const ENRICH_SERVER_DEADLINE_MS = 16_000;
+export const ENRICH_CLIENT_MARGIN_MS = FACTS_TIMEOUT_MS - ENRICH_SERVER_DEADLINE_MS;
 const TIMEOUT = Symbol("timeout");
 
 export const factsKey = (r: { artist: string; song: string }) => `${r.artist}||${r.song}`;
@@ -33,7 +38,7 @@ export function needsFacts(r: FactsRow, familiarityActive: boolean): boolean {
   return r.energy == null || r.danceability == null || (familiarityActive && r.popularity == null);
 }
 
-export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: string; song: string }>) => Promise<E[]>, keyOf: (e: E) => string, opts: GatherOptions = {}) {
+export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: string; song: string }>) => Promise<E[]>, keyOf: (e: E) => string, opts: GatherOptions<E> = {}) {
   const batchSize = Math.max(1, Math.min(FACTS_BATCH, opts.batchSize ?? FACTS_BATCH));
   const concurrency = Math.max(1, opts.concurrency ?? FACTS_CONCURRENCY);
   let budgetLeft = Math.max(0, opts.budget ?? FACTS_BUDGET);
@@ -45,7 +50,7 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
 
   /** Rows are looked up in the given order (callers pass a deterministic order); duplicates collapse to one key. */
   async function gather(rows: Array<{ artist: string; song: string }>): Promise<GatherReport> {
-    const report: GatherReport = { requested: 0, found: 0, failedSongs: 0, timedOutSongs: 0, skippedAfterTimeout: 0, skippedByBudget: 0, alreadyAttempted: 0 };
+    const report: GatherReport = { requested: 0, found: 0, failedSongs: 0, timedOutSongs: 0, skippedAfterTimeout: 0, skippedByBudget: 0, alreadyAttempted: 0, incompleteSongs: 0 };
     const todo: Array<{ artist: string; song: string }> = [];
     const seen = new Set<string>();
     for (const r of rows) {
@@ -78,7 +83,7 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
           const got = await Promise.race([call, deadline]);
           if (got === TIMEOUT) { timedOut = true; anyFailure = true; report.failedSongs += chunk.length; report.timedOutSongs += chunk.length; continue; }
           const want = new Set(chunk.map(factsKey));
-          for (const e of got) { const k = keyOf(e); if (want.has(k) && !results.has(k)) { results.set(k, e); report.found++; } }
+          for (const e of got) { const k = keyOf(e); if (want.has(k) && !results.has(k)) { results.set(k, e); report.found++; if (opts.isIncomplete?.(e)) report.incompleteSongs++; } }
         } catch {
           anyFailure = true; report.failedSongs += chunk.length;
         } finally {

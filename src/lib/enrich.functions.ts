@@ -27,9 +27,11 @@ const InputSchema = z.object({
       }),
     )
     .max(200),
+  /** Active familiarity choice: warm cache rows without track popularity get one bounded upgrade lookup. */
+  needPopularity: z.boolean().optional(),
 });
 
-export type { EnrichSource, EnrichedSong } from "./enrichPipeline.server";
+export type { EnrichSource, EnrichedSong, EnrichStatus } from "./enrichPipeline.server";
 
 export const enrichSongs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -49,5 +51,5 @@ export const enrichSongs = createServerFn({ method: "POST" })
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         await supabaseAdmin.from("song_metadata_cache").upsert(rows, { onConflict: "artist_key,song_key" });
       },
-    });
+    }, { needPopularity: data.needPopularity });
   });
