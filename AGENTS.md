@@ -29,7 +29,7 @@
 
 - Apply appearance before first paint and share semantic theme tokens through a single provider; System alone follows OS changes, because SSR and every workspace surface must agree.
 - Read sidebar installed versions from the bridged Electron app identity (or explicit currentVersion), never updater status.version; label browser versions separately because available updates are not installed versions.
-- Compare web builds only by `__APP_BUILD_ID__` via no-store `/api/public/version`, never HTML meta/semver/time, because only the deployed worker knows what refresh loads.
+- Compare web builds only by `__APP_BUILD_ID__` via no-store `/api/public/version`, never HTML meta/semver/time, because only the deployed worker knows the live build.
 - Parse VirtualDJ database.xml strictly first; on malformed XML or any DOCTYPE recover per Song block (strict block, then tolerant attributes decoding only predefined/numeric references) and skip/report unsafe paths, because one damaged entry must not discard every track's metadata nor invent file identities.
 
 - Share preparation policy evidence and intended-version resolution through desktop/offline/policy.cjs; optional inputs preserve legacy passive loads and policy-bearing backups use format v2, because old offline shells must reject rather than ignore clean restrictions.
@@ -39,5 +39,5 @@
 - Keep matching eligibility separate from expansion eligibility and never refill from raw library order; requested seasonal tracks need clean matching and constrained empty pools must remain honest gaps.
 - Keep saved keys unchanged; dedupe automatic additions by intended version/exact path and require explicit occurrence exclusions for repeated combined DJ export, because requests and legacy snapshots must stay intact.
 - Derive section coverage from export readiness's unique case-sensitive files, separate event/buffer minutes, and cap artist/title mismatches in search fallback scores, because repeated minutes and cross-field tokens are not evidence.
-- Gate automatic expansion on this owner's READY prep knowledge (await queued writes before the final recheck, never fall back); isolate each provider; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
-- Order panel and all automatic additions with the shared prep `recommend`/`rankPool` engine after eligibility; quality samples live only in optional bounded `prep.quality`, because explanations must match and ratings are not feedback.
+- Gate automatic expansion on this owner's READY prep knowledge (await queued writes, never fall back); isolate each provider; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
+- Rank panel and automatic additions via shared prep `rankPool` after eligibility; quality samples stay optional bounded `prep.quality`, because explanations must match and ratings are not feedback.

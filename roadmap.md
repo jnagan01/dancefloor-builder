@@ -126,3 +126,7 @@
 - [x] Monotonic semver and coherent signed ZIP/DMG/feed artifacts; retain macos-15 regression release prerequisite.
 - [x] Full existing suite, isolated Electron, adversarial and automatic build checks.
 - [ ] Signed macOS update/relaunch and release artifact execution (requires GitHub/macOS signing runner; no live installs allowed here).
+
+- [x] Shared evidence ranking for panel and every automatic expansion source, with plain explanations.
+- [x] Recommendation quality review samples, ratings and labeled-only evaluator with synthetic benchmarks.
+- [ ] Required read-only macOS regression gate on the final commit (runs on GitHub macOS runner, not here).
