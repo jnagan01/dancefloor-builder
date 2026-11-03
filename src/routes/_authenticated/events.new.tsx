@@ -1038,25 +1038,28 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Small helper: fetch online enrichment for a flat list of songs and
     // return a map keyed by "artist||song" (raw values). Best-effort — a
     // network failure returns an empty map so generation continues.
-    let enrichFailed = false;
+    let enrichFailed = false, budgetWarned = false;
+    // One per-generation gatherer: chunks of ≤200 (server limit), bounded concurrency, a total request budget, and each
+    // exact artist||song attempted once (misses and failures included) so later passes never re-request them.
+    const facts = createFactsGatherer<EnrichedSong>(
+      async (songs) => (await enrichFn({ data: { songs } })).results,
+      (e) => factsKey(e),
+      { budget: FACTS_BUDGET + r.warmUp.length + r.transition.length + r.peak.length },
+    );
     const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
       const map = new Map<string, EnrichedSong>();
       if (!list.length) return map;
-      try {
-        const payload = list.slice(0, 200).map((s) => ({ artist: s.artist, song: s.song }));
-        const res = await enrichFn({ data: { songs: payload } });
-        for (const e of res.results) {
-          map.set(`${e.artist}||${e.song}`, e);
-        }
-      } catch (err) {
-        console.warn("Online enrichment failed — falling back to VirtualDJ/heuristic", err);
-        if (!enrichFailed) {
-          enrichFailed = true;
-          toast.warning(
-            "Couldn't reach the online music data service — energy, BPM and genre are estimated for this run.",
-          );
-        }
+      const rep = await facts.gather(list);
+      if (rep.failedSongs && !enrichFailed) {
+        enrichFailed = true;
+        console.warn("Online enrichment failed for", rep.failedSongs, "songs — their details stay unknown/estimated");
+        toast.warning("Couldn't reach the online music data service for some songs — their energy, BPM and genre stay unknown or estimated for this run.");
       }
+      if (rep.skippedByBudget && !budgetWarned) {
+        budgetWarned = true;
+        toast.info(`${rep.skippedByBudget} candidate track${rep.skippedByBudget === 1 ? "" : "s"} weren't looked up online (per-run limit of ${FACTS_BUDGET} lookups); their details stay unknown and earn no fit bonus.`);
+      }
+      for (const s of list) { const e = facts.get(s); if (e) map.set(factsKey(s), e); }
       return map;
     };
 
