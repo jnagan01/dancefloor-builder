@@ -1,6 +1,6 @@
 # Workspace rebuild
 ## Authorized preparation policies
-- [ ] Verify direct TXT before confirmation; share captured report across dialog/messages/artifact and test cancellation/fail-closed with synthetic unit/native/prep checks.
+- [x] Verify direct TXT before confirmation; captured report shared across dialog/messages/artifact, cancellation and failed checks write nothing; 587 unit tests, 26 native event checks and 18 preparation checks passed, automatic compilation OK; external macOS acceptance pending.
 - [x] Align verified export warnings and policy-aware row displays; 581 unit tests, 25 native event checks and 18 preparation checks passed in isolated synthetic profiles; automatic compilation OK, external macOS acceptance pending.
 - [x] Per-section native M3U/TXT success summaries use captured verified availability and counts; 24 native checks and 580 unit tests passed using synthetic fixtures only.
 - [x] Review corrections: remove unsafe local refill, match requested holiday clean versions independently of expansion, align dashboard eligible extras with export.
