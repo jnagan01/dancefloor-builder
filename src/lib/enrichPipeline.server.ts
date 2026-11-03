@@ -5,6 +5,7 @@
 import { toCamelot } from "./musicTheory";
 import { normalizeKey } from "./danceFloor";
 import { decodeCacheSource, encodeCacheSource, type MetaProv } from "./prep/provenance";
+import { ENRICH_SERVER_DEADLINE_MS } from "./prep/factsGather";
 
 export type EnrichSource =
   | "ReccoBeats+MusicBrainz"
@@ -28,22 +29,57 @@ export interface EnrichedSong {
   source: EnrichSource;
   /** Per-attribute provenance. Absent from older servers; clients then decode `source` conservatively. */
   prov?: MetaProv;
+  /** The online lookup for this song didn't finish in time; values (if any) are only what was already known. */
+  incomplete?: boolean;
 }
 
 const CACHE_TTL_DAYS = 90;
 // Bounded parallelism + hard budget keep generation responsive; anything not
 // enriched in time falls back to VirtualDJ metadata / heuristics.
 const FETCH_CONCURRENCY = 8;
-const FETCH_BUDGET_MS = 20_000;
-const REQUEST_TIMEOUT_MS = 6_000;
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+/**
+ * End-to-end server deadlines. The WHOLE call (cache read, provider fetches, AI estimate, cache write, assembly) finishes
+ * by `totalMs`, which sits a fixed margin below the client's per-chunk cutoff so completed results (cache hits included)
+ * always reach the client instead of being discarded with a hung miss. Every phase is raced against its own deadline,
+ * in-flight work is aborted where the transport allows, and late results are fenced out.
+ */
+export interface EnrichLimits { totalMs: number; cacheReadMs: number; aiMs: number; upsertMs: number; requestMs: number; assemblyMs: number }
+export const ENRICH_LIMITS: EnrichLimits = { totalMs: ENRICH_SERVER_DEADLINE_MS, cacheReadMs: 3_000, aiMs: 4_000, upsertMs: 1_000, requestMs: 6_000, assemblyMs: 250 };
+export type EnrichPhase = "cacheRead" | "fetch" | "ai" | "upsert";
+export interface EnrichStatus {
+  /** True only when every phase finished in time and every looked-up song got a full provider/AI attempt. */
+  complete: boolean;
+  timedOut: EnrichPhase[];
+  /** Songs whose online lookup didn't finish; they return only what was already known (cache/partial), never invented. */
+  unfinished: number;
+}
+
+interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number }
+
+async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx): Promise<Response> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
+  const ms = ctx ? Math.max(1, Math.min(ctx.requestMs, ctx.until - ctx.now())) : ENRICH_LIMITS.requestMs;
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  const onAbort = () => ctrl.abort();
+  if (ctx?.signal.aborted) ctrl.abort(); else ctx?.signal.addEventListener("abort", onAbort);
   try {
     return await fetch(url, { ...init, signal: ctrl.signal });
   } finally {
     clearTimeout(timer);
+    ctx?.signal.removeEventListener("abort", onAbort);
+  }
+}
+
+const LATE = Symbol("late");
+/** Race `p` against an absolute deadline; the timer is always cleared and a late rejection never goes unhandled. */
+async function within<T>(p: Promise<T>, until: number, now: () => number): Promise<T | typeof LATE> {
+  p.catch(() => {});
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([p, new Promise<typeof LATE>((res) => { timer = setTimeout(() => res(LATE), Math.max(0, until - now())); })]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
 }
 
@@ -138,11 +174,12 @@ type RbItem = {
   popularity?: number;
 };
 
-async function searchReccoBeats(text: string, page = 0): Promise<RbItem[]> {
+async function searchReccoBeats(text: string, page = 0, ctx?: FetchCtx): Promise<RbItem[]> {
   const q = encodeURIComponent(text);
   const res = await fetchWithTimeout(
     `https://api.reccobeats.com/v1/track/search?searchText=${q}&size=25&page=${page}`,
     { headers: { Accept: "application/json" } },
+    ctx,
   );
   if (!res.ok) return [];
   const json = (await res.json()) as { content?: RbItem[] };
@@ -152,6 +189,7 @@ async function searchReccoBeats(text: string, page = 0): Promise<RbItem[]> {
 async function fetchReccoBeats(
   artist: string,
   song: string,
+  ctx?: FetchCtx,
 ): Promise<ReccoBeatsFeatures | null> {
   try {
     // ReccoBeats indexes titles only — never send "title artist".
@@ -172,13 +210,14 @@ async function fetchReccoBeats(
         byArtist[0]
       );
     };
-    let match = pick(await searchReccoBeats(clean, 0));
-    if (!match) match = pick(await searchReccoBeats(clean, 1));
+    let match = pick(await searchReccoBeats(clean, 0, ctx));
+    if (!match && !ctx?.signal.aborted) match = pick(await searchReccoBeats(clean, 1, ctx));
     if (!match?.id) return null;
 
     const featRes = await fetchWithTimeout(
       `https://api.reccobeats.com/v1/track/${encodeURIComponent(match.id)}/audio-features`,
       { headers: { Accept: "application/json" } },
+      ctx,
     );
     const exact = isExact(match);
     if (!featRes.ok) {
@@ -226,6 +265,7 @@ interface MusicBrainzInfo {
 async function fetchMusicBrainz(
   artist: string,
   song: string,
+  ctx?: FetchCtx,
 ): Promise<MusicBrainzInfo | null> {
   try {
     // MusicBrainz Lucene query — quoted terms escape reserved chars.
@@ -241,6 +281,7 @@ async function fetchMusicBrainz(
             "DancefloorBuilder/1.0 (https://dancefloor-builder.lovable.app)",
         },
       },
+      ctx,
     );
     if (!res.ok) return null;
     const json = (await res.json()) as {
@@ -288,6 +329,7 @@ interface AiEstimate {
  */
 async function estimateWithAi(
   songs: Array<{ artist: string; song: string; genre?: string; year?: number; bpm?: number }>,
+  signal?: AbortSignal,
 ): Promise<Array<AiEstimate | null>> {
   const out: Array<AiEstimate | null> = songs.map(() => null);
   const key = process.env.LOVABLE_API_KEY;
@@ -308,6 +350,7 @@ ${lines}`;
       model: gateway("openai/gpt-6-astra"),
       prompt,
       providerOptions: { lovable: { reasoningEffort: "low" } },
+      abortSignal: signal,
     });
     const text = await result.text;
     const start = text.indexOf("{");
