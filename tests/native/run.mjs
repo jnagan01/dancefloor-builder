@@ -163,7 +163,7 @@ try{
    expect(await page.locator('#fit-familiarity').inputValue()).toBe('familiar');
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    const find=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY Wedding Fit');
-   await expect.poll(()=>{const r=find();return r?r.lists.warmUp.length+r.lists.transition.length+r.lists.peak.length:-1;},{timeout:30000}).toBeGreaterThan(10);await page.waitForTimeout(1500);
+   await expect.poll(()=>{const r=find();return r?r.lists.warmUp.length+r.lists.transition.length+r.lists.peak.length:-1;},{timeout:30000}).toBeGreaterThan(10).catch(e=>{fs.writeFileSync(path.join(diagnostics,'wedding-row.json'),JSON.stringify({row:find(),ui:null},null,1));throw e;});await page.waitForTimeout(1500);
    const created=find();
    expect(created.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});expect(created.inputs.buffer).toBe(1);
    const all=['warmUp','transition','peak'].flatMap(k=>created.lists[k].map(r=>({...r,section:k})));
