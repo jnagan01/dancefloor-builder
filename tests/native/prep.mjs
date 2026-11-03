@@ -378,7 +378,8 @@ try {
     });});
     await prepTab('Overview').click();const region=page.getByRole('region',{name:'Event preparation'});
     await expect(region).toContainText('2 unique eligible tracks · approved length 10:20');
-    await region.getByRole('button',{name:/Waiting for your approval/}).click();
+    const drill=region.getByRole('button',{name:/Waiting for your approval/});
+    if(await drill.getAttribute('aria-expanded')!=='true')await drill.click();
     await expect(region.getByRole('button',{name:/Band – Hit.*Repeated selected file/})).toBeVisible();
     await region.getByRole('button',{name:/Band – Hit.*Repeated selected file/}).click();
     expect(await page.evaluate(()=>window.__jumps.at(-1))).toBe('warmUp:1');

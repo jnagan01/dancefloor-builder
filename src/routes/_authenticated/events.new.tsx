@@ -1184,7 +1184,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
             // ---- YOUR CRATES FIRST ----------------------------------------
             if (mergedLibrary?.tracks.length && ordered.length) {
-              const have = new SongKeySet();
+              const have = new SongKeySet(true);
               for (const s of [...r.warmUp, ...r.transition, ...r.peak]) have.add(s.artist, s.song);
               const perArtistCap = 2;
               const crateFinds: ResultSong[] = [];
@@ -1298,7 +1298,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     },
                   });
                   if (!res.suggestions.length) break;
-                  const seen = new SongKeySet();
+                  const seen = new SongKeySet(true);
                   for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                   let added = 0;
                   for (const sug of res.suggestions) {
@@ -1379,7 +1379,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   break;
                 }
                 gotAny = true;
-                const seen = new SongKeySet();
+                const seen = new SongKeySet(true);
                 for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                 let addedThisAttempt = 0;
                 for (const sug of res.suggestions) {
@@ -1442,7 +1442,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           });
           // Track keys across ALL sections so a library song can't be added
           // to two different lists during the fallback pass.
-          const globalHave = new SongKeySet();
+          const globalHave = new SongKeySet(true);
           for (const s of [...r.warmUp, ...r.transition, ...r.peak]) globalHave.add(s.artist, s.song);
           for (const { key } of stillShort) {
             const pool = background ? [...fallback.warmUp, ...fallback.transition, ...fallback.peak] : fallback[key];
@@ -2026,7 +2026,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // --- Direct-to-VirtualDJ folder exports ---
 
   function warnUnapproved(report: ReturnType<typeof exportReadiness>) {
-    if (report.omitted || report.cleanBlocked) toast.warning(summaryText(report) + ". Reference files retain intended tracks.");
+    if (report.omitted || report.cleanBlocked || report.duplicateCount) toast.warning(summaryText(report) + ". Reference files retain intended tracks.");
   }
 
   function warnUnresolvedPaths(count: number) {

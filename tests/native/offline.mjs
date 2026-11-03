@@ -443,7 +443,7 @@ try {
     await close();await launch({deny:true});const ow=await offlineWindow();
     const output=path.join(temp,'duplicate-exports');fs.mkdirSync(output);fs.writeFileSync(path.join(temp,'export-dir'),output);
     await ow.getByRole('button',{name:'Export VirtualDJ playlists'}).click();
-    await expect(ow.getByText(/Export stopped: repeated selected files/)).toBeVisible();
+    await expect(ow.locator('#status')).toContainText('Export stopped: repeated selected files');
     expect(fs.readdirSync(output)).toEqual([]);
     await close();
   });
