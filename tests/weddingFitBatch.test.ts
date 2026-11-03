@@ -37,7 +37,8 @@ async function run(applyFit: boolean) {
     await h.flush();
     h.interact((n: any) => n.props?.role === 'radio' && /^Dance floor$/i.test(n.props?.children));
     h.interact((n: any) => n.props?.id === 'hours', 'onChange', { target: { value: '1.5' } });
-    h.interact((n: any) => n.type === 'button' && n.props?.title?.startsWith('Multi-generational: classics early'), 'onClick');
+    if (process.env.DBG) console.log(JSON.stringify(h.nodes().filter((n: any) => n.props?.title || n.props?.id).map((n: any) => [typeof n.type === 'string' ? n.type : n.type?.name, n.props.title ?? n.props.id])));
+    h.interact((n: any) => n.props?.title?.startsWith('Multi-generational: classics early'), 'onClick');
     h.interact((n: any) => n.props?.id === 'notes', 'onChange', { target: { value: NOTES } });
     h.current.setEventName('TEST ONLY Wedding Fit'); h.current.setSongs(REQUESTS); h.current.setDoNotPlayInput(DNP); await h.flush();
     h.interact((n: any) => n.props?.steps && n.props?.onSelect, 'onSelect', 4);
