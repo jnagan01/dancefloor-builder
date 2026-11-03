@@ -84,8 +84,10 @@ describe('import review duplicates use the conservative version-aware identity',
   it('explicit Remove (route) drops only counted repeats and keeps the first occurrence', async () => {
     const h = harness({ eventId: null, rows: {} });
     await h.flush();
+    h.interact((n: any) => n.props?.role === 'radio' && /^Dance floor$/i.test(n.props?.children));
+    h.interact((n: any) => n.props?.id === 'hours', 'onChange', { target: { value: '1' } });
     h.current.setSongs([...SIX, { artist: 'Adele', song: 'Hello' }]); await h.flush();
-    h.interact((n: any) => n.props?.steps && n.props?.onSelect, 'onSelect', 3);
+    h.interact((n: any) => n.props?.steps && n.props?.onSelect, 'onSelect', 3); await h.flush();
     const flat = (v: any): any[] => !v || typeof v !== 'object' ? [] : Array.isArray(v) ? v.flatMap(flat) : [v, ...flat(v.props?.children), ...flat(v.props?.actions)];
     const label = (n: any) => (Array.isArray(n.props?.children) ? n.props.children : [n.props?.children]).filter((c: any) => typeof c !== 'object').join('');
     const button = flat(h.tree).find((n: any) => n.props?.onClick && /^Remove \d+ duplicate/.test(label(n)));
