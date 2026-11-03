@@ -105,6 +105,6 @@ export function suggestFitFromNotes(notes: string): EventFit | undefined {
   const t = notes.toLowerCase();
   const out: EventFit = {};
   if (/\b(familiar|crowd[- ]?pleas\w*|well[- ]known|sing[- ]?along|party favou?rites?|classic hits)\b/.test(t)) out.familiarity = "familiar";
-  if (/\b(no|avoid|skip|without)\s+(\w+\s+){0,3}?(slow(\s+(songs?|ballads?))?|ballads?)\b/.test(t)) out.avoidSlow = true;
+  if (/\b(no|avoid|skip|without)\s+([\w-]+,?\s+){0,4}?(slow(\s+(songs?|ballads?))?|ballads?)\b/.test(t)) out.avoidSlow = true;
   return normalizeEventFit(out);
 }
