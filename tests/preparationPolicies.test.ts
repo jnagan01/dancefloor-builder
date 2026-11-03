@@ -16,6 +16,7 @@ import { exportReadiness, summaryText } from '@/lib/exportReadiness';
 import { backupVersion, validateBackup, recoveryFromBackup } from '@/lib/backups';
 import { prepareOfflineAccess } from '@/lib/offlineAccess';
 import { planAddToSection } from '@/lib/prep/addToSection';
+import { supportsPreparationPolicy, assertPreparationActivation } from '@/lib/preparationCapability';
 const require = createRequire(import.meta.url);
 const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
 const core = require('../desktop/offline/core.js');
@@ -141,6 +142,29 @@ describe('event-wide clean policy and terminal export counts', () => {
   });
 });
 describe('backup/recovery/offline compatibility without mutating legacy snapshots', () => {
+  it('old 1.2.44 capability refuses activation but preserves legacy strict-type v1 backup/update input', () => {
+    const old = { electronVirtualDJ: { isAvailable: true } };
+    expect(supportsPreparationPolicy(old)).toBe(false);
+    expect(supportsPreparationPolicy({ ...old, electronOffline: { preparationPolicyVersion: 1 } })).toBe(true);
+    expect(supportsPreparationPolicy({})).toBe(true);
+    for (const inputs of [DEFAULTS, { ownedOnlyExpansion: false }, { includeSeasonalTracks: true }, { requireCleanVersions: false }]) expect(() => assertPreparationActivation(inputs, old)).toThrow('Update the desktop app');
+    const legacy = [{ snapshot: { inputs: { songs: [request], eventType: 'school_dance' } } }];
+    const before = JSON.stringify(legacy);
+    expect(backupVersion(legacy)).toBe(1);
+    expect(() => assertPreparationActivation(legacy[0].snapshot.inputs, old)).not.toThrow();
+    expect(JSON.stringify(legacy)).toBe(before);
+  });
+  it('old-shell legacy editor remains passive and rejects control activation before dirty/save', async () => {
+    const h = harness({ rows: { A: row() } });
+    h.testWindow.electronVirtualDJ = { isAvailable: true };
+    await h.flush();
+    const before = h.current.eventSnapshot(h.current.result, h.current.matches);
+    h.interact((n: any) => n.props?.['aria-label'] === 'Require clean versions', 'onCheckedChange', true);
+    expect(h.current.eventSnapshot(h.current.result, h.current.matches)).toEqual(before);
+    expect(h.current.userEdited.current).toBe(false);
+    expect(h.errors.at(-1)).toContain('Update the desktop app');
+    expect(h.requests).toEqual([]); h.unmount();
+  });
   const backup = (policy = false) => ({ format: 'setarchitect-backup' as const, version: policy ? 2 as const : 1 as const, account: 'synthetic', createdAt: new Date().toISOString(), events: Array.from({ length: 14 }, (_, i) => ({ id: `E${i}`, snapshot: { name: 'Synthetic', inputs: { songs: [request], ...(policy ? DEFAULTS : {}) }, lists } })), sources: [{ label: 'Synthetic', tracks }], roots: {} });
   it('14 legacy events untouched; optional policies roundtrip in v2 through web/native/recovery', () => {
     for (const policy of [false, true]) {
