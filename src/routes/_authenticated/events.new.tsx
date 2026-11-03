@@ -1353,8 +1353,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
         // Strict eligibility BEFORE ranking, so excluded songs never take a slot or count toward artist variety.
         const vbpm = getVibe(prefs.vibe)?.bpm;
+        let strictDropped = 0;
         const eligible = [...pool.entries()].filter(([, p]) => {
-          if (!addedAllowed(p.row) || strictLimitFailure(p.row, strictLimits)) return false;
+          if (!addedAllowed(p.row)) return false;
+          if (strictLimitFailure(p.row, strictLimits)) { strictDropped++; return false; }
           const bpm = typeof p.row.bpm === "number" ? p.row.bpm : undefined;
           // The vibe's tempo window applies only to a verified tempo; estimates never exclude.
           if (!prefs.bpmRange && vbpm && bpm && usableForHardRule(attrSource(p.row, "bpm"), true, "bpm") && (bpm < vbpm[0] - 15 || bpm > vbpm[1] + 15)) return false;
@@ -1370,6 +1372,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           if (!k) break;
           r[k].push({ ...item.row, rankWhy: explainTop(rec) } as (typeof r)[typeof k][number]);
         }
+        if (strictDropped) toast.info(`${strictDropped} candidate track${strictDropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
         if (failed.length && ranked.length) toast.error("AI suggestions unavailable for some sections — used other ranked candidates.");
       }
     }
