@@ -46,6 +46,7 @@ function EventHost() {
   const [detail, setDetail] = React.useState<DetailSubject | null>(null);
   const [policy, setPolicy] = React.useState(w.__policy);
   w.__setPolicy = (p: any) => { w.__policy = p; setPolicy(p); };
+  w.__setEventMatches = (matches: Record<string, SongMatch>) => setEvents(all => ({ ...all, [eventId]: { ...all[eventId], matches } }));
   const [playing, setPlaying] = React.useState<any>(null);
   const library = React.useMemo(() => buildLibrary(w.__fixture.tracks), []);
   const ev = events[eventId];

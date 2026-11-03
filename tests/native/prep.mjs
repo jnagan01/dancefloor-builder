@@ -17,7 +17,7 @@ const T = p => `/synthetic/Music/${p}`;
 const tracks = [
   { filePath: T('a/Song.mp3'), artist: 'Queen', title: 'Song A', genre: 'Rock', bpm: '120', songLength: '200', year: '1980', playCount: 3 },
   { filePath: T('b/Song.mp3'), artist: 'Queen', title: 'Song A', remix: 'Club Remix', genre: 'Dance', bpm: '128', songLength: '420', year: '1999', playCount: 0 },
-  { filePath: T('Hit (Clean Edit).mp3'), artist: 'Band', title: 'Hit (Clean Edit)', genre: 'Pop', bpm: '100', playCount: 0 },
+  { filePath: T('Hit (Clean Edit).mp3'), artist: 'Band', title: 'Hit (Clean Edit)', genre: 'Pop', bpm: '100', playCount: 0, songLength: '200' },
   { filePath: T('Hit.mp3'), artist: 'Band', title: 'Hit', genre: 'Pop', bpm: '101', songLength: '180', playCount: 40 },
   { filePath: T('unknown.mp3'), artist: 'Other', title: 'Unknown' }, // no play history at all
   { filePath: T('Song B.mp3'), artist: 'Queen', title: 'Song B', genre: 'Rock', bpm: '118', songLength: '210', year: '1981', playCount: 0 },
@@ -360,6 +360,16 @@ try {
     await expect(region.getByRole('status')).toHaveText('Clean version needed — choose a labelled clean file or explicitly change this event’s policy.');
     await page.evaluate(()=>window.__setPolicy({requireCleanVersions:false}));await prepTab('Recommendations').click();
     await expect(region.getByRole('button',{name:'Details for Queen – Song B',exact:true})).toBeVisible();
+  });
+  await check('dashboard keeps clean extras count and duration alongside blocked primary review', async()=>{
+    await page.evaluate(()=>{
+      window.__setPolicy({requireCleanVersions:true});
+      window.__setEventMatches({'warmUp:1:band|hit':{status:'Manually Matched',confidence:1,trackIndex:3,extraTrackIndices:[2],confirmed:true,alternatives:[]}});
+    });
+    await prepTab('Overview').click();const region=page.getByRole('region',{name:'Event preparation'});
+    await expect(region).toContainText('1 confirmed tracks · approved length 3:20');
+    await region.getByRole('button',{name:/Waiting for your approval/}).click();
+    await expect(region.getByRole('button',{name:/Band – Hit.*Clean version needed/})).toBeVisible();
   });
   const blocked = await page.evaluate(() => window.prepNative.blocked());
   if (blocked.length) throw Error(`Network requests left loopback: ${blocked.join(', ')}`);
