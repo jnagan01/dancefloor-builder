@@ -41,6 +41,7 @@ describe('real event route: one ranking over all available candidates', () => {
   it('a later, stronger AI candidate beats weaker earlier library candidates; no quota or arrival order decides', async () => {
     const rows = await run({ crowd: weakCrowd(), recommend: async () => ({ suggestions: [sug('Queen', 'Strong Synthetic')] }) }, { library: weakLibrary });
     const added = rows.filter(t => !t.fromUpload);
+    console.log('DBG', added.length, added.filter(t=>t.artist.startsWith('Weak')).length, added.filter(t=>t.metaSource!=='AI').length);
     expect(added.map(t => t.song)).toContain('Strong Synthetic');
     expect(added.find(t => t.song === 'Strong Synthetic')!.rankWhy).toMatch(/Same artist as client request/);
     const weak = added.filter(t => t.artist.startsWith('Weak Act'));
