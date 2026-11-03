@@ -1212,55 +1212,64 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             }
 
             // ---- YOUR CRATES FIRST ----------------------------------------
-            if (mergedLibrary?.tracks.length && ordered.length) {
+            if (mergedLibrary?.tracks.length && (ordered.length || simEvidence.length)) {
               const have = new SongKeySet(true);
               for (const s of [...r.warmUp, ...r.transition, ...r.peak]) have.add(s.artist, s.song);
               const perArtistCap = 2;
               const crateFinds: ResultSong[] = [];
+              const trackFinds: ResultSong[] = [];
+              // Shared musical-fit gate for every library addition: policy/feedback, decades, genres, BPM.
+              const crateTrack = (idx: number, reason: string): ResultSong | null => {
+                const t = mergedLibrary.tracks[idx];
+                if (!t?.artist || !t.title || !addedAllowed({ artist: t.artist, song: t.title, genre: t.genre })) return null;
+                const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
+                const wantDecades = prefs.decades ?? [];
+                if (wantDecades.length && (!yearNum || !wantDecades.includes(`${Math.floor(yearNum / 10) * 10}s`))) return null;
+                const wantGenres = (prefs.genres ?? []).map((g) => g.toLowerCase());
+                if (wantGenres.length) {
+                  const tg = (t.genre ?? "").toLowerCase();
+                  if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) return null;
+                }
+                const vbpm = prefs.bpmRange ?? getVibe(prefs.vibe)?.bpm;
+                const tb = parseBpm(t.bpm);
+                if (vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) return null;
+                if (!have.tryAdd(t.artist, t.title)) return null;
+                return {
+                  artist: t.artist, song: t.title, fromUpload: false, bpm: parseBpm(t.bpm), camelot: toCamelot(t.key), genre: t.genre, year: yearNum,
+                  explicit: detectExplicitFromTitle(t.title), metaSource: "Library", aiReason: reason,
+                } as ResultSong;
+              };
+              // Last.fm track evidence first: only an owned file whose own artist/title is the exact similar track
+              // (same artist is not the same version), resolved through the policy-aware resolver.
+              for (const ev of simEvidence) {
+                const idx = generationResolver.resolve({ artist: ev.artist, song: ev.song });
+                const t = idx === undefined ? undefined : mergedLibrary.tracks[idx];
+                if (idx === undefined || !t || songIdentity(t.artist, t.title) !== ev.key) continue;
+                const pick = crateTrack(idx, ev.seeds.length > 1
+                  ? `In your library — Last.fm lists this track as similar to ${ev.seeds.length} requested tracks (${ev.seeds.slice(0, 2).join("; ")}${ev.seeds.length > 2 ? "…" : ""}).`
+                  : `In your library — Last.fm lists this track as similar to requested ${ev.seeds[0]}.`);
+                if (pick) trackFinds.push(pick);
+              }
               for (const { name, seed } of ordered) {
                 let taken = 0;
                 for (const idx of searchLibrary(name, mergedLibrary, 6)) {
                   if (taken >= perArtistCap) break;
                   const t = mergedLibrary.tracks[idx];
-                  if (!t?.artist || !t.title || !addedAllowed({ artist: t.artist, song: t.title, genre: t.genre })) continue;
-                  if (normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
-                  if (!have.tryAdd(t.artist, t.title)) continue;
-                  const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
-                  // Musical fit beats "already in library": a crate track must
-                  // match the client's decades and genres when we know them.
-                  const wantDecades = prefs.decades ?? [];
-                  if (wantDecades.length) {
-                    if (!yearNum) continue;
-                    if (!wantDecades.includes(`${Math.floor(yearNum / 10) * 10}s`)) continue;
-                  }
-                  const wantGenres = (prefs.genres ?? []).map((g) => g.toLowerCase());
-                  if (wantGenres.length) {
-                    const tg = (t.genre ?? "").toLowerCase();
-                    if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) continue;
-                  }
-                  const vbpm = prefs.bpmRange ?? getVibe(prefs.vibe)?.bpm;
-                  const tb = parseBpm(t.bpm);
-                  if (vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) continue;
-                  crateFinds.push({
-                    artist: t.artist,
-                    song: t.title,
-                    fromUpload: false,
-                    bpm: parseBpm(t.bpm),
-                    camelot: toCamelot(t.key),
-                    genre: t.genre,
-                    year: yearNum,
-                    explicit: detectExplicitFromTitle(t.title),
-                    metaSource: "Library",
-                    aiReason: `In your library — close musical neighbour of ${seed}.`,
-                  } as ResultSong);
+                  if (!t || normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
+                  const pick = crateTrack(idx, `In your library — close musical neighbour of ${seed} (artist-level evidence).`);
+                  if (!pick) continue;
+                  crateFinds.push(pick);
                   taken += 1;
                 }
               }
+              const finds = [...favoredFirst(trackFinds, liveFeedback()), ...favoredFirst(crateFinds, liveFeedback())];
+              crateFinds.length = 0; crateFinds.push(...finds);
               if (crateFinds.length) {
                 // Spread them across the sections that still have room; the
                 // energy re-bucketing later puts each one where it belongs.
                 // Small quota: library picks are a tiebreaker, not a forced share.
-                const quota = Math.max(1, Math.round(r.perSectionTarget * 0.15));
+                // Track-level Last.fm evidence earns a slightly larger share than artist neighbours.
+                const quota = Math.max(1, Math.round(r.perSectionTarget * (trackFinds.length ? 0.3 : 0.15)));
                 let cursor = 0;
                 for (const { key } of sectionMap) {
                   let placed = 0;
