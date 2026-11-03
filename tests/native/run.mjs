@@ -372,7 +372,7 @@ try{
    expect(Object.values(saved.lists.selections).flatMap(v=>v.paths)).not.toContain(small[0].filePath);
    const holidaySelection=Object.entries(saved.lists.selections).find(([k])=>k.includes('wham')&&k.includes('last christmas'))?.[1];
    expect(holidaySelection).toMatchObject({confirmed:true,paths:[small[6].filePath]});
-   await page.reload();await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
+   const policyId=saved.id;await page.reload();await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},policyId);await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
  });
  await check('owned clean local refill never bypasses do-not-play and year/genre/BPM constraints',async()=>{
    await app.close();
