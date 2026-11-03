@@ -135,6 +135,7 @@ import { expansionRankContext, rowCandidate, similarArtistEvidence } from "@/lib
 import { usableForHardRule } from "@/lib/prep/metaConfidence";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
 import { libraryCandidate, requestFacts } from "@/lib/prep/requestFacts";
+import { normalizeEventFit, readEventFit, suggestFitFromNotes, type EventFit } from "@/lib/prep/eventFit";
 import { trackIdentity } from "@/lib/fileIdentity";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
@@ -326,6 +327,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [danceRange, setDanceRange] = useState<[number, number]>([6, 9]);
   const targets = useMemo(() => resolveTargets(vibe, bpmOn ? bpmRange : null, danceOn ? danceRange : null), [vibe, bpmOn, bpmRange, danceOn, danceRange]);
   const [notes, setNotes] = useState(fresh.notes);
+  // Optional event-scoped fit choices; fresh events start with none (no-op ranking).
+  const [eventFit, setEventFit] = useState<EventFit | undefined>(undefined);
   const [doNotPlayInput, setDoNotPlayInput] = useState(fresh.doNotPlayInput);
   const [expand, setExpand] = useState(fresh.expand);
   const [includeCombined, setIncludeCombined] = useState(fresh.includeCombined);
@@ -432,6 +435,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setDanceOn(false);
     setHomeKey("");
     setNotes("");
+    setEventFit(undefined);
     setDoNotPlayInput("");
     setExpand(blank.expand);
     setIncludeCombined(false);
@@ -669,7 +673,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   const doNotPlayEntries = useMemo(() => parseDoNotPlay(doNotPlayInput), [doNotPlayInput]);
 
-  const prepPreferences = useMemo(() => ({ artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean), genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean), decades }), [artistsInput, genresInput, decades]);
+  const prepPreferences = useMemo(() => ({ artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean), genres: genresInput.split(",").map((s) => s.trim()).filter(Boolean), decades, fit: eventFit }), [artistsInput, genresInput, decades, eventFit]);
   function buildCurrentPrefs(): Preferences {
     return {
       artists: artistsInput.split(",").map((s) => s.trim()).filter(Boolean),
@@ -734,7 +738,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{...snapshotExtras.current.inputs,...policies,songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours:background && !hours ? String(minutesNum / 60) : hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer:background && !buffer ? 1 : buffer,listType,minutes:minutes || undefined,split:splitOn?split:undefined},
+      inputs:{...snapshotExtras.current.inputs,...policies,songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours:background && !hours ? String(minutesNum / 60) : hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,eventFit:normalizeEventFit(eventFit),doNotPlayInput,expand,eventName,buffer:background && !buffer ? 1 : buffer,listType,minutes:minutes || undefined,split:splitOn?split:undefined},
       lists:{...snapshotExtras.current.lists,warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -756,7 +760,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (accountRef.current) {
         try { reconcileEventDraft(accountRef.current, openedEventId, remoteRevision.current, { name: row.name, inputs: row.inputs, lists: row.lists }); setRecovery(loadEventDraft(accountRef.current, pendingRecoveryEvent(openedEventId)) ?? loadEventDraft(accountRef.current, openedEventId)); } catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
       }
-      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setPolicies({ ownedOnlyExpansion: inputs.ownedOnlyExpansion, includeSeasonalTracks: inputs.includeSeasonalTracks, requireCleanVersions: inputs.requireCleanVersions });setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(displayNumber(inputs.hours, MAX_EVENT_HOURS) || 3));
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setPolicies({ ownedOnlyExpansion: inputs.ownedOnlyExpansion, includeSeasonalTracks: inputs.includeSeasonalTracks, requireCleanVersions: inputs.requireCleanVersions });setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setEventFit(safeFit(inputs.eventFit));setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(displayNumber(inputs.hours, MAX_EVENT_HOURS) || 3));
       // A saved event with only a single list and no dance-floor sections is a
       // cocktail/dinner list even if the stored snapshot predates listType.
       const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
@@ -827,7 +831,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try { storeEventDraft(draft); } catch { toast.error("Local recovery could not be saved. Do not close this event until saving is confirmed."); }
     draftTokens.current.set(snapshot, { account: owner, event, token });
     autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===owner, 1000, logicalWrite.current);
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,policies,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,account,saveState]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,policies,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,eventFit,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,account,saveState]);
   useEffect(()=>{
     const recover=()=>autosave.retry();
     window.addEventListener("online",recover);
@@ -909,7 +913,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (!asNew && recoveredId && recovery.baseRevision === undefined) throw new Error("This older recovery copy has no original version marker. Save it as a new event instead.");
       const inputs = snapshot.inputs;
       setSongs(inputs.songs); setHours(inputs.hours); setArtistsInput(inputs.artistsInput); setGenresInput(inputs.genresInput); setDecades(inputs.decades);
-      setNotes(inputs.notes); setDoNotPlayInput(inputs.doNotPlayInput); setExpand(inputs.expand); setEventName(inputs.eventName);
+      setNotes(inputs.notes); setEventFit(safeFit((inputs as { eventFit?: unknown }).eventFit)); setDoNotPlayInput(inputs.doNotPlayInput); setExpand(inputs.expand); setEventName(inputs.eventName);
       setBuffer(inputs.buffer ?? 2); setVibe(inputs.vibe ?? ""); setEventType(inputs.eventType ?? ""); setPolicies({ ownedOnlyExpansion: inputs.ownedOnlyExpansion, includeSeasonalTracks: inputs.includeSeasonalTracks, requireCleanVersions: inputs.requireCleanVersions }); setHomeKey(inputs.homeKey ?? "");
       setSplitOn(!!inputs.split); setSplit(inputs.split ?? equalSplit(Number(inputs.hours))); setListType(inputs.listType ?? "dance"); setMinutes(inputs.minutes ?? "60");
       setBpmOn(!!inputs.bpmRange); if(inputs.bpmRange)setBpmRange(inputs.bpmRange); setDanceOn(!!inputs.danceRange); if(inputs.danceRange)setDanceRange(inputs.danceRange);
@@ -985,7 +989,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const rankCtx = (rows: readonly { artist: string; song: string }[]) => {
       const now = store.get();
       const know = fill && feedbackOwner && now.account === feedbackOwner.account && now.generation === feedbackOwner.generation && now.status === "ready" ? now.knowledge : null;
-      return expansionRankContext({ knowledge: know, eventId: feedbackEvent, requests: rankRequests, rows, similar: rankSimilar, similarTracks: rankSimilarTracks, preferences: { genres: prefs.genres, decades: prefs.decades, artists: prefs.artists } });
+      return expansionRankContext({ knowledge: know, eventId: feedbackEvent, requests: rankRequests, rows, similar: rankSimilar, similarTracks: rankSimilarTracks, preferences: { genres: prefs.genres, decades: prefs.decades, artists: prefs.artists, fit: normalizeEventFit(eventFit) } });
     };
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
@@ -1358,7 +1362,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         }).map(([, p]) => p).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         const room = sectionOrder.reduce((n, k) => n + Math.max(0, sectionTargetFor(r, k) - r[k].length), 0);
         const ranked = rankPool(eligible, (p) => {
-          if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return libraryCandidate(t, trackIdentity(t.filePath, rankRoots)); }
+          if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
           return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
         }, rankCtx([...r.warmUp, ...r.transition, ...r.peak]), room);
         for (const { item, rec } of ranked) {
@@ -2310,7 +2314,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const editDecades=editValue(decades,setDecades), editEventType=editValue(eventType,setEventType), editVibe=editValue(vibe,setVibe);
   const editBpmOn=editValue(bpmOn,setBpmOn), editBpmRange=editValue(bpmRange,setBpmRange), editDanceOn=editValue(danceOn,setDanceOn), editDanceRange=editValue(danceRange,setDanceRange);
   const editHomeKey=editValue(homeKey,setHomeKey), editArtistsInput=editValue(artistsInput,setArtistsInput), editGenresInput=editValue(genresInput,setGenresInput);
-  const editNotes=editValue(notes,setNotes), editDoNotPlayInput=editValue(doNotPlayInput,setDoNotPlayInput), editExpand=editValue(expand,setExpand), editBuffer=editValue(buffer,setBuffer), editListType=editValue(listType,setListType);
+  const editNotes=editValue(notes,setNotes), editEventFit=editValue(eventFit,setEventFit), editDoNotPlayInput=editValue(doNotPlayInput,setDoNotPlayInput), editExpand=editValue(expand,setExpand), editBuffer=editValue(buffer,setBuffer), editListType=editValue(listType,setListType);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -2894,6 +2898,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               <Switch aria-label="Expand event with additional tracks" checked={expand} onCheckedChange={editExpand} className="shrink-0" />
             </div>
             <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Preparation target</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer || ""} onChange={e=>editBuffer(e.target.value ? Number(e.target.value) : 0)}>{[1,2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
+            <EventFitChoices value={eventFit} notes={notes} onChange={(f) => editEventFit(normalizeEventFit(f))} />
             {hoursNum > 0 && <div className="mt-3 space-y-2 text-sm" aria-label="Client duration coverage">
               <p>{planningMessage}</p>
               {expand && clientCoverage.preparationShortSeconds === 0 && <p className="text-muted-foreground">Client tracks already cover this preparation target. Choose a higher multiplier for extra preparation tracks; every client track stays.</p>}
@@ -3870,5 +3875,40 @@ function InlineMatchSearch({
       )}
     </div>
 
+  );
+}
+
+/** Legacy/corrupt values read as "no choice" for display; the original snapshot bytes are never rewritten here. */
+function safeFit(v: unknown): EventFit | undefined { try { return readEventFit(v); } catch { return undefined; } }
+
+/** Optional event-fit choices for automatic additions only. Notes can only SUGGEST; the user applies explicitly. */
+function EventFitChoices({ value, notes, onChange }: { value: EventFit | undefined; notes: string; onChange: (f: EventFit | undefined) => void }) {
+  const fam = value?.familiarity ?? "";
+  const hint = suggestFitFromNotes(notes);
+  const pending = hint && ((hint.familiarity && hint.familiarity !== value?.familiarity) || (hint.avoidSlow && !value?.avoidSlow)) ? hint : undefined;
+  return (
+    <div className="mt-5 space-y-3 rounded-lg border border-border/70 bg-surface/60 p-4" aria-label="Event fit for additions">
+      <p className="font-medium">Event fit for additions <span className="text-xs font-normal text-muted-foreground">(optional · client requests are never changed)</span></p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Label htmlFor="fit-familiarity">Familiarity</Label>
+        <select id="fit-familiarity" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={fam}
+          onChange={(e) => onChange({ ...value, familiarity: (e.target.value || undefined) as EventFit["familiarity"] })}>
+          <option value="">No preference</option>
+          <option value="familiar">Favor familiar hits</option>
+          <option value="discovery">Favor discoveries</option>
+        </select>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <Switch aria-label="Avoid slow or ballad additions" checked={!!value?.avoidSlow} onCheckedChange={(v) => onChange({ ...value, avoidSlow: v })} />
+        Avoid slow / ballad additions
+      </label>
+      <p className="text-xs text-muted-foreground">Familiar hits uses track popularity from a music data provider or the built-in crowd-standards list — not your play counts, file ownership or artist popularity. Songs without evidence get no bonus. Avoiding slow songs needs both low energy and low danceability; only provider or measured values remove a song, estimates just rank lower. Tempo alone is never used.</p>
+      {pending && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Your notes mention {[pending.familiarity === "familiar" && "familiar hits", pending.avoidSlow && "no slow songs/ballads"].filter(Boolean).join(" and ")}.</span>
+          <Button type="button" size="sm" variant="outline" onClick={() => onChange({ ...value, ...pending })}>Apply to additions</Button>
+        </div>
+      )}
+    </div>
   );
 }
