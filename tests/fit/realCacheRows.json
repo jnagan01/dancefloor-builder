@@ -1,0 +1,375 @@
+[
+ {
+  "artist": "Bill Withers",
+  "song": "Lovely Day",
+  "energy": 4,
+  "danceability": 8,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Toni Braxton",
+  "song": "Another Sad Love Song",
+  "energy": 5,
+  "danceability": 7,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Journey",
+  "song": "Don't Stop Believin'",
+  "energy": 7,
+  "danceability": 5,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "KISS",
+  "song": "I Was Made For Lovin' You",
+  "energy": 9,
+  "danceability": 8,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "The Beatles",
+  "song": "Let It Be",
+  "energy": 4,
+  "danceability": 4,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Mariah Carey",
+  "song": "A No No",
+  "energy": 7,
+  "danceability": 8,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Ava Max",
+  "song": "Freaking Me Out",
+  "energy": 7,
+  "danceability": 7,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Snow Patrol",
+  "song": "Chasing Cars",
+  "energy": 6,
+  "danceability": 6,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 8,
+  "heldOut": false
+ },
+ {
+  "artist": "American Authors",
+  "song": "Best Day Of My Life",
+  "energy": 9,
+  "danceability": 7,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Kool & The Gang",
+  "song": "Celebration",
+  "energy": 8,
+  "danceability": 9,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Grouplove",
+  "song": "Tongue Tied",
+  "energy": 9,
+  "danceability": 6,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Zara Larsson",
+  "song": "Don't Let Me Be Yours",
+  "energy": 7,
+  "danceability": 6,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "ABBA",
+  "song": "Mamma Mia",
+  "energy": 8,
+  "danceability": 8,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "Big Boi",
+  "song": "All Night (Dirty)",
+  "energy": 7,
+  "danceability": 9,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": false
+ },
+ {
+  "artist": "ABBA",
+  "song": "Honey Honey",
+  "energy": 8,
+  "danceability": 5,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 6,
+  "heldOut": true
+ },
+ {
+  "artist": "ABBA",
+  "song": "Take a Chance on Me",
+  "energy": 7,
+  "danceability": 7,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 7,
+  "heldOut": true
+ },
+ {
+  "artist": "Journey",
+  "song": "Faithfully",
+  "energy": 6,
+  "danceability": 5,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 5,
+  "heldOut": true
+ },
+ {
+  "artist": "Kool & The Gang",
+  "song": "Get Down On It",
+  "energy": 5,
+  "danceability": 9,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 7,
+  "heldOut": true
+ },
+ {
+  "artist": "Kool & The Gang",
+  "song": "Cherish",
+  "energy": 3,
+  "danceability": 6,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 5,
+  "heldOut": true
+ },
+ {
+  "artist": "Mariah Carey",
+  "song": "8th Grade",
+  "energy": 5,
+  "danceability": 8,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 3,
+  "heldOut": true
+ },
+ {
+  "artist": "The Beatles",
+  "song": "Here Comes the Sun",
+  "energy": 5,
+  "danceability": 6,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": true
+ },
+ {
+  "artist": "Mariah Carey",
+  "song": "Fantasy",
+  "energy": 7,
+  "danceability": 7,
+  "metaProv": {
+   "energy": "ai",
+   "danceability": "ai"
+  },
+  "heldOut": true
+ },
+ {
+  "artist": "The O'Jays",
+  "song": "Love Train",
+  "energy": 6,
+  "danceability": 8,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 6,
+  "heldOut": true
+ },
+ {
+  "artist": "The Pussycat Dolls",
+  "song": "Buttons",
+  "energy": 8,
+  "danceability": 6,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 7,
+  "heldOut": true
+ },
+ {
+  "artist": "Van Morrison",
+  "song": "Brown Eyed Girl",
+  "energy": 6,
+  "danceability": 5,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 8,
+  "heldOut": true
+ },
+ {
+  "artist": "Whitney Houston",
+  "song": "How Will I Know",
+  "energy": 6,
+  "danceability": 8,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 7,
+  "heldOut": true
+ },
+ {
+  "artist": "Whitney Houston",
+  "song": "I'm Every Woman",
+  "energy": 9,
+  "danceability": 7,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 6,
+  "heldOut": true
+ },
+ {
+  "artist": "Tracy Chapman",
+  "song": "Fast Car",
+  "energy": 4,
+  "danceability": 7,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 8,
+  "heldOut": true
+ },
+ {
+  "artist": "Tones and I",
+  "song": "Dance Monkey",
+  "energy": 6,
+  "danceability": 8,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 7,
+  "heldOut": true
+ },
+ {
+  "artist": "T.I.",
+  "song": "Live Your Life",
+  "energy": 3,
+  "danceability": 6,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 1,
+  "heldOut": true
+ },
+ {
+  "artist": "Zach Bryan",
+  "song": "Revival",
+  "energy": 4,
+  "danceability": 5,
+  "metaProv": {
+   "energy": "provider",
+   "danceability": "provider",
+   "popularity": "provider"
+  },
+  "popularity": 8,
+  "heldOut": true
+ }
+]
