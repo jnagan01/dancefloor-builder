@@ -252,7 +252,8 @@ try {
     // Optional event-scoped rejection reason, shown in the hidden list and undoable.
     await r2.locator('ul > li', { hasText: 'Queen – Song B' }).getByRole('button', { name: /here: Too slow$/ }).click();
     await expect(r2.locator('ul > li', { hasText: 'Queen – Song B' })).toHaveCount(0);
-    await expect(r2).toContainText('Queen – Song B · Too slow');
+    if (!(await r2.getByRole('button', { name: 'Undo' }).first().isVisible())) await r2.getByText('Manage hidden songs').click();
+    await expect(r2.getByText('Queen – Song B · Too slow')).toBeVisible();
     await r2.getByRole('button', { name: 'Undo' }).first().click();
     await expect(r2.locator('ul > li', { hasText: 'Queen – Song B' })).toHaveCount(1);
     await r2.locator('ul > li', { hasText: 'Familiar Act – Classic' }).getByRole('button', { name: 'Never' }).click();
