@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import { preventAutomaticDuplicates, sectionCoverage } from "@/lib/preparationDuplicates";
 import { generateLists, dedupeKey } from "@/lib/danceFloor";
 import { exportReadiness } from "@/lib/exportReadiness";
-import { buildLibrary, matchSong, searchLibraryBySong, buildM3u } from "@/lib/virtualDj";
+import { buildLibrary, matchSong, searchLibraryBySong, searchLibraryScored, buildM3u } from "@/lib/virtualDj";
 import { makeSubject, scorePair, parseTitle } from "@/lib/matchCore";
 import { buildDashboard } from "@/lib/prep/dashboard";
 const core = createRequire(import.meta.url)("../desktop/offline/core.js");
@@ -69,6 +69,24 @@ describe("preparation trial identities and unique coverage", () => {
   });
 });
 describe("artist/title/version evidence", () => {
+  it("keyword and filename fallback relevance never leaks into intended-track confidence", () => {
+    const artist = "Silk City & Dua Lipa", title = "Electricity";
+    const lib = buildLibrary([
+      {artist:"Jack Harlow",title:"Dua Lipa",filePath:"/m/Silk City and Dua Lipa Electricity.mp3"},
+      {artist,title,filePath:"/m/original.mp3"},
+      {artist,title:"Electricity (Extended)",filePath:"/m/extended.mp3"},
+    ]);
+    // Filename discovery deliberately includes the wrong recording. It is
+    // useful in free-text search but below the matcher's ranking threshold.
+    expect(searchLibraryScored(`${artist} ${title}`, lib).find(r=>r.i===0)?.s).toBe(.6);
+    const pair = scorePair(makeSubject(artist,title),lib.subjects[0]);
+    expect(pair.score).toBeLessThan(.4);
+    expect(pair.reason).toBe("Artist differs from request");
+    const results=searchLibraryBySong(artist,title,lib);
+    expect(results.map(r=>r.i)).toEqual([1,2,0]);
+    expect(results.find(r=>r.i===0)?.s).toBe(pair.score);
+    expect(matchSong({artist,song:title},lib).trackIndex).toBe(1);
+  });
   it("non-version parentheses retain identity words", () => {
     expect(parseTitle(variant.song).base).toBe(parseTitle(base.song).base);
   });

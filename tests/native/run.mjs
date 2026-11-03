@@ -548,6 +548,9 @@ try{
  await check('real matcher ranks intended artists and versions above cross-field collisions without changing saved approval',async()=>{
    await app.close();
    const tt=[{artist:'Queen',title:'Radio Ga Ga (Clean)'},{artist:'Rammstein',title:'RADIO (Clean)'},{artist:'Silk City & Dua Lipa',title:'Electricity (Clean)'},{artist:'Jack Harlow',title:'Dua Lipa (Clean)'},{artist:'Silk City & Dua Lipa',title:'Electricity (Extended Clean)'}].map((t,i)=>({...t,filePath:path.join(library,`ranking-${i}.mp3`)}));
+   // Force the broad filename fallback to discover the wrong recording;
+   // keyword relevance must not become intended-track confidence in the UI.
+   tt[3].filePath=path.join(library,'Silk City and Dua Lipa Electricity Clean.mp3');
    tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic ranking bytes'));
    const ss=[{artist:'Queen',song:'Radio Ga Ga',fromUpload:true},{artist:'Silk City & Dua Lipa',song:'Electricity',fromUpload:true}];
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
@@ -557,6 +560,10 @@ try{
    await expect(page.locator('#song-peak-1')).toContainText(tt[2].filePath);
    const wrong=page.locator('#song-peak-1 li').filter({hasText:'Jack Harlow'});
    await expect(wrong).toContainText('Artist differs from request');
+   const candidates=page.locator('#song-peak-1 li');
+   await expect(candidates.nth(0)).toContainText(tt[2].filePath);
+   await expect(candidates.nth(1)).toContainText(tt[4].filePath);
+   await expect(candidates.nth(2)).toContainText(tt[3].filePath);
    expect(await wrong.innerText()).not.toMatch(/(?:6[2-9]|[7-9]\d|100)%/);
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(original);
  });

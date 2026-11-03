@@ -3,7 +3,8 @@
 - [x] Prevent automatic duplicates, expose explicit saved-occurrence resolution and block repeated combined DJ exports.
 - [x] Rank intended artist/title/version agreement without cross-field false confidence.
 - [x] Display usable unique section lengths against configured event and buffer targets.
-- [x] Synthetic validation: 598 units, 19 preparation UI, 14 offline, 4 offline race checks passed; native event suite final rerun pending below; automatic compilation OK.
+- [x] Audited keyword fallback confidence/reasons: every candidate uses artist/title pair confidence, broad free-text relevance remains separate; forced filename-discovery unit/native UI regressions pass.
+- [x] Local synthetic gates: 599 units, 28 native event, 19 preparation UI, 14 offline and 4 offline race checks passed; automatic compilation OK. Previous missing-candidate failure was a fixture discovery miss, not hidden UI or high confidence.
 - [ ] External macOS acceptance remains required; no publishing/release/install or actual-user access.
 ## Authorized preparation policies
 - [x] Verify direct TXT before confirmation; captured report shared across dialog/messages/artifact, cancellation and failed checks write nothing; 587 unit tests, 26 native event checks and 18 preparation checks passed, automatic compilation OK; external macOS acceptance pending.
