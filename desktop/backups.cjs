@@ -17,7 +17,7 @@ function inspectBackupValues(value,parts=[],depth=0,identifierValue=false){
 function validate(raw,account){
  if(typeof raw!=='string'||Buffer.byteLength(raw)>MAX)throw Error('Backup too large.');
  const b=JSON.parse(raw);
- if(!b||b.format!=='setarchitect-backup'||b.version!==1||b.account!==account||!Array.isArray(b.events)||b.events.length>500||!Array.isArray(b.sources)||!b.roots||typeof b.roots!=='object'||!Number.isFinite(Date.parse(b.createdAt)))throw Error('Invalid backup.');
+ if(!b||b.format!=='setarchitect-backup'||![1,2].includes(b.version)||b.account!==account||!Array.isArray(b.events)||b.events.length>500||!Array.isArray(b.sources)||!b.roots||typeof b.roots!=='object'||!Number.isFinite(Date.parse(b.createdAt)))throw Error('Invalid backup.');
  inspectBackupValues(b);
  if(b.prep!==undefined&&(!b.prep||typeof b.prep!=='object'||Array.isArray(b.prep)||b.prep.version!==1))throw Error('Invalid preparation notes.');
  const labels=new Set(),rootPaths=new Set(),ids=new Set();
@@ -26,6 +26,7 @@ function validate(raw,account){
  for(const root of Object.values(b.roots)){if(rootPaths.has(root))throw Error('Conflicting root labels.');rootPaths.add(root);}
  for(const e of b.events){if(!e||typeof e.id!=='string'||!e.snapshot||typeof e.snapshot.name!=='string'||!e.snapshot.inputs||!e.snapshot.lists)throw Error('Invalid event.');if(ids.has(e.id))throw Error('Duplicate event.');ids.add(e.id);for(const section of ['warmUp','transition','peak']){const songs=e.snapshot.lists[section];if(songs!==undefined&&(!Array.isArray(songs)||songs.length>2000||songs.some(s=>!s||typeof s.artist!=='string'||typeof s.song!=='string')))throw Error('Invalid songs.');}
   const selections=e.snapshot.lists.selections;
+  for(const key of ['ownedOnlyExpansion','includeSeasonalTracks','requireCleanVersions'])if(e.snapshot.inputs[key]!==undefined&&typeof e.snapshot.inputs[key]!=='boolean')throw Error('Invalid event preparation policy.');
   if(selections!==undefined){if(!selections||typeof selections!=='object'||Array.isArray(selections))throw Error('Invalid selections.');for(const selection of Object.values(selections)){if(!selection||!Array.isArray(selection.paths)||['confirmed','excluded'].some(k=>selection[k]!==undefined&&typeof selection[k]!=='boolean')||selection.paths.some(p=>typeof p!=='string'||p.length>4000||/[\r\n\0]/.test(p)||p.split(/[\\/]/).includes('..')))throw Error('Unsafe selected track path.');}}
  }
  return b;

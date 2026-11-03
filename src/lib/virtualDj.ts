@@ -1,6 +1,7 @@
 // VirtualDJ library parsing + matching utilities. All in-browser.
 import type { Song } from "./danceFloor";
 import { normalizeKey } from "./danceFloor";
+import { cleanReason } from "./preparationPolicy";
 import { supportsNativeFolders, chooseNativeFolder } from "./desktopBridge";
 import { fullFilePath, normalizeFilePath, createIdentityIndex, qualifiedFilePath } from "./fileIdentity";
 import { recoverVdjBlocks, domBlockParser, type XmlNodeLike, type SkippedVdjEntry } from "./vdjXmlRecovery";
@@ -511,6 +512,7 @@ function xmlEscape(s: string): string {
 
 export interface ExportSongRef {
   song: Song;
+  requireClean?: boolean;
   match?: SongMatch;
   identity?: { section: "warmUp" | "transition" | "peak"; index: number; key: string };
 }
@@ -526,6 +528,13 @@ export function exportApproved(match?: SongMatch): boolean {
   return !!match && !match.excludedFromVdj && musicalMatchApproved(match);
 }
 
+/** Exact selected files only. Extras are independently policy-checked, never substituted. */
+export function exportTrackIndices(ref: ExportSongRef, lib?: VdjLibrary): number[] {
+  if (!exportApproved(ref.match) || ref.match?.trackIndex == null || !lib) return [];
+  return [...new Set([ref.match.trackIndex, ...(ref.match.extraTrackIndices ?? [])])]
+    .filter(i => !!lib.tracks[i] && !cleanReason(lib.tracks[i], !!ref.requireClean));
+}
+
 export function buildVirtualDjXml(items: ExportSongRef[], lib?: VdjLibrary): string {
   const lines: string[] = [];
   lines.push('<?xml version="1.0" encoding="UTF-8"?>');
@@ -534,7 +543,7 @@ export function buildVirtualDjXml(items: ExportSongRef[], lib?: VdjLibrary): str
   for (const item of items) {
     if (!exportApproved(item.match)) continue;
     if (item.match?.trackIndex == null || !lib) continue;
-    const indices = [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])];
+    const indices = exportTrackIndices(item, lib);
     for (const ti of indices) {
       const t = lib.tracks[ti];
       if (!t) continue;
@@ -610,7 +619,7 @@ export function countUnresolvedPaths(items: ExportSongRef[], lib?: VdjLibrary, r
   let n = 0;
   for (const item of items) {
     if (!exportApproved(item.match) || item.match?.trackIndex == null || !lib) continue;
-    for (const ti of [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])]) {
+    for (const ti of exportTrackIndices(item, lib)) {
       const t = lib.tracks[ti];
       if (t && resolveExportPath(t.filePath, roots) == null) n += 1;
     }
@@ -624,7 +633,7 @@ export function buildM3u(items: ExportSongRef[], lib?: VdjLibrary, roots: Record
   for (const item of items) {
     if (!exportApproved(item.match)) continue;
     if (item.match?.trackIndex == null || !lib) continue;
-    const indices = [item.match.trackIndex, ...(item.match.extraTrackIndices ?? [])];
+    const indices = exportTrackIndices(item, lib);
     for (const ti of indices) {
       const t = lib.tracks[ti];
       if (!t) continue;
@@ -662,7 +671,8 @@ export function buildTxtPlaylist(
   for (const item of items) {
     const label = `${item.song.artist ? `${item.song.artist} - ` : ""}${item.song.song}`;
     const ti = item.match?.trackIndex;
-    const main = exportApproved(item.match) && ti != null && lib ? lib.tracks[ti] : undefined;
+    const eligible = exportTrackIndices(item, lib);
+    const main = eligible.length && lib ? lib.tracks[eligible[0]] : undefined;
     if (opts.matchedOnly && !main) continue;
     n += 1;
     // Reference exports always describe the intended song, never a candidate's metadata.
@@ -670,11 +680,12 @@ export function buildTxtPlaylist(
     if (!main && !opts.matchedOnly) {
       const candidate = ti != null && lib ? lib.tracks[ti] : undefined;
       if (item.match?.excludedFromVdj) warning = " (excluded from DJ export)";
+      else if (candidate && cleanReason(candidate, !!item.requireClean)) warning = " (clean version needed)";
       else if (candidate) warning = " (match not confirmed)";
       else warning = " (not in library)";
     }
     lines.push(`${n}. ${opts.matchedOnly && main ? `${main.artist ? `${main.artist} - ` : ""}${main.title}` : label}${warning}`);
-    if (opts.matchedOnly) for (const ei of item.match?.extraTrackIndices ?? []) {
+    if (opts.matchedOnly) for (const ei of eligible.slice(1)) {
       const t = lib?.tracks[ei];
       if (t) lines.push(`   + ${t.artist ? `${t.artist} - ` : ""}${t.title}`);
     }
@@ -687,8 +698,7 @@ export function countMatchedForExport(items: ExportSongRef[], lib?: VdjLibrary):
   let n = 0;
   for (const item of items) {
     if (!exportApproved(item.match)) continue;
-    const ti = item.match?.trackIndex;
-    if (ti != null && lib && lib.tracks[ti]) n += 1;
+    n += exportTrackIndices(item, lib).length;
   }
   return n;
 }

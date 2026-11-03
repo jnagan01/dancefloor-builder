@@ -8,7 +8,7 @@ function createEventRouteHarness(actual) {
   source += '\nexport { SectionView };';
     const readiness = require(path.join(root, "node_modules/typescript"));
   const readinessModule = { exports: {} };
-  vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:()=>actual.vdj});
+  vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : actual.vdj});
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
   function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }) } = {}) {
     let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false, tree;
@@ -40,7 +40,7 @@ function createEventRouteHarness(actual) {
       '@/lib/snapshotSafety':actual.snapshots, '@/lib/eventDrafts':actual.drafts, '@/lib/inputSafety':actual.input,
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
       '@/lib/eventRevision':actual.revisions,
-      '@/lib/exportReadiness':readinessModule.exports, '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
+      '@/lib/preparationPolicy':require(path.join(root,'desktop/offline/policy.cjs')), '@/lib/exportReadiness':readinessModule.exports, '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},
       '@/lib/neighbors.functions':{getArtistNeighbors:async()=>({clusters:[]})},

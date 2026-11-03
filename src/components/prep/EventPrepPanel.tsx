@@ -22,10 +22,12 @@ import {
 import { FilterPanel } from "./FilterPanel";
 import type { DetailSubject } from "./TrackDetailSheet";
 import { usePrep } from "./usePrep";
+import { buildResolver, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
 
 export type PrepSectionKey = "warmUp" | "transition" | "peak";
 export interface PrepSection { key: PrepSectionKey; label: string; songs: ResultSong[] }
 interface Props {
+  policies?: PreparationInputs;
   eventId: string | null;
   sections: PrepSection[];
   matches: Record<string, SongMatch>;
@@ -73,8 +75,8 @@ export function EventPrepPanel(p: Props) {
   const dash = useMemo(() => buildDashboard(
     p.sections.map(s => ({ key: s.key, label: s.label, songs: s.songs })), p.matches,
     (sec, i, s) => p.keyOf(sec as PrepSectionKey, i, s as ResultSong),
-    i => { const t = tracks[i]; if (!t) return undefined; const f = trackFacts(t); return { durationSec: f.durationSec, genre: f.genre, decade: f.decade }; },
-  ), [p.sections, p.matches, p.keyOf, tracks]); // eslint-disable-line react-hooks/exhaustive-deps
+    i => { const t = tracks[i]; if (!t) return undefined; const f = trackFacts(t); return { durationSec: f.durationSec, genre: f.genre, decade: f.decade, cleanReason: cleanReason(t, requiresClean(p.policies)) }; },
+  ), [p.sections, p.matches, p.keyOf, tracks, p.policies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- recommendations ----
   const [controls, setControls] = useState<RecControls>({ familiarity: 0, clientSimilarity: 1, artistVariety: 0.5, ownedOnly: false });
@@ -86,15 +88,16 @@ export function EventPrepPanel(p: Props) {
   const crowdFn = useServerFn(getArtistCrowdData);
   const ownedKeys = useMemo(() => new Set(tracks.map(t => songIdentity(t.artist, t.title))), [tracks]);
   const roots = useMemo(() => getFolderRoots(), [tracks]); // eslint-disable-line react-hooks/exhaustive-deps
+  const resolver = useMemo(() => buildResolver(tracks, p.policies), [tracks, p.policies]);
   const candidates = useMemo<Candidate[]>(() => {
-    const lib: Candidate[] = tracks.map(t => libraryCandidate(t, trackIdentity(t.filePath, roots)));
+    const lib: Candidate[] = tracks.filter(t => (p.policies?.includeSeasonalTracks !== false || !seasonal(t)) && !cleanReason(t, requiresClean(p.policies))).map(t => libraryCandidate(t, trackIdentity(t.filePath, roots)));
     const cat: Candidate[] = SONG_LIBRARY.map(s => {
       const owned = ownedKeys.has(songIdentity(s.artist, s.song));
       const facts: FilterFacts = { genre: s.genre || undefined, decade: s.decade || undefined, energy: s.energy, owned };
       return { artist: s.artist, song: s.song, facts, origin: "catalogue" as const };
-    }).filter(c => !c.facts.owned); // owned catalogue songs already appear as library files
+    }).filter(c => !c.facts.owned && resolver.allowed(c) && !requiresClean(p.policies)); // owned catalogue songs already appear as library files
     return [...lib, ...cat];
-  }, [tracks, roots, ownedKeys]);
+  }, [tracks, roots, ownedKeys, resolver, p.policies]);
   const recFacts = useMemo(() => candidates.map(c => c.facts), [candidates]);
   const recOptions = useMemo(() => facetOptions(recFacts), [recFacts]);
   const notesMap = useMemo(() => new Map(knowledge.tracks.map(n => [n.id, n])), [knowledge.tracks]);
@@ -104,7 +107,7 @@ export function EventPrepPanel(p: Props) {
     [p.sections, p.matches, p.keyOf, tracks, roots]); // eslint-disable-line react-hooks/exhaustive-deps
   const requests = useMemo(() => p.sections.flatMap(s => s.songs.map((song, i) => ({ song, i, s }))).filter(x => x.song.fromUpload).map(({ song, i, s }) => {
     return requestFacts(song, p.matches[p.keyOf(s.key, i, song)], tracks);
-  }), [p.sections, p.matches, p.keyOf, tracks]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [p.sections, p.matches, p.keyOf, tracks, p.policies]); // eslint-disable-line react-hooks/exhaustive-deps
   const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, controls, filter, limit: 40 }),
     [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, controls, filter]);
   const loadSimilar = async () => {

@@ -305,7 +305,7 @@ try {
     expect(pathsIn(names[1])).toEqual([path.join(lib, "a/Other.mp3")]);
     expect(pathsIn(names[2])).toEqual([path.join(lib, "b/Song.mp3")]);
     const report = read(names[3]);
-    expect(report).toContain("Requested songs: 6");
+    expect(report).toContain("Requested tracks: 6");
     expect(report).toContain("warmUp #3. New Artist — Replaced Song — Saved choice belongs to a different song at this position"); expect(report).toContain("Local offline choices used (not synced): 2");
     expect(report).toContain("warmUp #2. Gone Artist — Gone — File missing on this Mac");
     expect(report).toContain("transition #2. Lost Artist — Lost — Unknown music folder location");
@@ -407,7 +407,32 @@ try {
     await expect(ow.locator("#detail")).toBeVisible();
     await close();
   });
-  console.log(`${count}/12 offline Electron flows passed`);
+
+  await check("offline clean policy: v2 restart, exact clean extras only, dirty/unknown choices denied", null, async () => {
+    await launch({deny:false,online:true});const online=await app.firstWindow();
+    for(const name of ['clean','dirty','unknown'])fs.writeFileSync(path.join(lib,`a/${name}.mp3`),'synthetic');
+    const b=JSON.parse(backup());b.version=2;b.sources=[{label:'Music',tracks:[
+      {filePath:'Music/a/clean.mp3',artist:'Band',title:'Hit (Clean)'},
+      {filePath:'Music/a/dirty.mp3',artist:'Band',title:'Hit (Dirty)'},
+      {filePath:'Music/a/unknown.mp3',artist:'Band',title:'Hit'}
+    ]}];const req={artist:'Band',song:'Hit'};
+    b.events=[{id:'E1',snapshot:{name:'Clean policy',inputs:{songs:[req],requireCleanVersions:true,ownedOnlyExpansion:true,includeSeasonalTracks:false},lists:{warmUp:[req],transition:[],peak:[],selections:{[core.songKey('warmUp',0,req)]:{paths:['Music/a/dirty.mp3','Music/a/clean.mp3','Music/a/unknown.mp3'],confirmed:true}}}}}];
+    expect(await online.evaluate(()=>window.electronOffline.preparationPolicyVersion)).toBe(1);
+    const prepared=await online.evaluate(async ([raw,a])=>{await window.electronOffline.accountSeen(a);return window.electronOffline.prepare(raw,a);},[JSON.stringify(b),ACCOUNT]);expect(prepared.ok).toBe(true);
+    await close();await launch({deny:true});const ow=await offlineWindow();
+    await expect(ow.getByText(/Clean versions required/)).toBeVisible();await expect(ow.locator('#song-warmUp-0')).toContainText('Clean version needed');
+    await ow.locator('#song-warmUp-0').getByRole('button',{name:/Choose track/}).click();
+    await expect(ow.getByRole('button',{name:'Use Band — Hit (Dirty)',exact:true})).toBeDisabled();
+    await expect(ow.getByRole('button',{name:'Use Band — Hit',exact:true})).toBeDisabled();
+    const denied=await ow.evaluate(()=>window.setarchitectOffline.choose('E1',{section:'warmUp',index:0,path:'Music/a/dirty.mp3'}));expect(denied.ok).toBe(false);expect(denied.error).toContain('Clean version needed');
+    const output=path.join(temp,'clean-exports');fs.mkdirSync(output);fs.writeFileSync(path.join(temp,'export-dir'),output);
+    await ow.getByRole('button',{name:'Export VirtualDJ playlists'}).click();await expect(ow.locator('.report')).toContainText('2 clean-policy blocks');
+    const names=fs.readdirSync(output),playlist=fs.readFileSync(path.join(output,names.find(n=>n.endsWith('.m3u'))),'utf8');
+    expect(playlist.split('\r\n').filter(x=>x&&!x.startsWith('#'))).toEqual([path.join(lib,'a/clean.mp3')]);
+    const report=fs.readFileSync(path.join(output,names.find(n=>n.endsWith('.txt'))),'utf8');expect(report).toContain('Clean-policy blocks: 2');
+    await close();
+  });
+  console.log(`${count} offline Electron flows passed`);
 } catch (e) {
   console.error(e);
   if (app) for (const p of app.windows()) await p.screenshot({ path: path.join(diagnostics, `failure-${p.url().startsWith("setarchitect") ? "offline" : "main"}.png`) }).catch(() => {});

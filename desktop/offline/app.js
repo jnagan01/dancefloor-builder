@@ -1,7 +1,7 @@
 /* Offline workspace renderer. All user text is inserted with textContent only. */
 (function () {
   "use strict";
-  const api = window.setarchitectOffline, C = window.OfflineCore;
+  const api = window.setarchitectOffline, C = window.OfflineCore, P = window.PreparationPolicy;
   const $ = id => document.getElementById(id);
   const el = (tag, props, ...kids) => {
     const n = document.createElement(tag);
@@ -64,7 +64,8 @@
     const files = ((st === "confirmed" || st === "local") && sel.paths || []).map(p => {
       const t = state.index.tracks[state.index.byPath.get(p)];
       const full = C.fullPath(p, state.data.roots);
-      const problem = !t ? "not in saved library" : !full ? "unknown music folder location" : state.availability[full] !== "available" ? "file missing on this Mac" : "";
+      const clean = P.cleanReason(t, P.requiresClean(state.event.inputs));
+      const problem = clean || (!t ? "not in saved library" : !full ? "unknown music folder location" : state.availability[full] !== "available" ? "file missing on this Mac" : "");
       return el("div", { class: "file" }, `${t ? `${t.artist} — ${t.title}${t.remix ? ` (${t.remix})` : ""} · ` : ""}${p}${problem ? ` · ${problem}` : ""}`);
     });
     const id = `song-${section}-${i}`;
@@ -87,7 +88,7 @@
       list.replaceChildren(...(hits.length ? hits.map(h => {
         const t = state.index.tracks[h.i];
         return el("li", {}, el("div", {}, el("div", { class: "title", text: `${t.artist} — ${t.title}${t.remix ? ` (${t.remix})` : ""}` }), el("div", { class: "file", text: `${t.filePath}${t.bpm ? ` · ${t.bpm} BPM` : ""}${t.key ? ` · ${t.key}` : ""}${Number.isFinite(t.playCount) ? ` · played ${t.playCount}×` : ""}` })),
-          el("button", { type: "button", class: "primary", text: "Use this track", "aria-label": `Use ${t.artist} — ${t.title}`, on: { click: () => choose(section, i, { path: t.filePath }) } }));
+          el("button", { type: "button", class: "primary", text: "Use this track", disabled: !!P.cleanReason(t, P.requiresClean(state.event.inputs)), title: P.cleanReason(t, P.requiresClean(state.event.inputs)), "aria-label": `Use ${t.artist} — ${t.title}`, on: { click: () => choose(section, i, { path: t.filePath }) } }));
       }) : [el("li", { class: "muted", text: "No matching tracks in the saved library." })]));
     };
     input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 150); });
@@ -120,7 +121,7 @@
       if (!current(id, gen)) return;
       if (res.canceled) { status("Export cancelled."); return; }
       state.report = res;
-      status(res.ok ? `Exported ${res.written.length} files.` : (res.error || "Export failed."), res.ok ? "ok" : "error");
+      status(res.ok ? `Exported ${res.written.length} output files · ${res.summary.approved} tracks${P.omissionText(res.summary) ? ` · left out: ${P.omissionText(res.summary)}` : ""}.` : (res.error || "Export failed."), res.ok ? "ok" : "error");
       renderDetail();
     } finally { state.busy = false; if (state.data) renderEvents(); }
   }
@@ -131,7 +132,7 @@
     return el("div", { class: "report", "aria-label": "Export readiness" },
       el("h3", { text: r.ok ? "Export complete" : "Export problem" }),
       r.error ? el("p", { class: "error", text: r.error }) : null,
-      s ? el("p", { text: `Requested ${s.requested} songs · ${s.approved} approved tracks · ${s.localChoices} offline choices · ${s.omitted} omitted · ${s.unavailable} missing files` }) : null,
+      s ? el("p", { text: `Requested ${s.requested} tracks · ${s.approved} exported tracks · ${s.localChoices} offline choices${P.omissionText(s) ? ` · left out: ${P.omissionText(s)}` : ""}` }) : null,
       r.written && r.written.length ? el("p", { text: `Written to ${r.folder}: ${r.written.join(", ")}` }) : null,
       r.problems && r.problems.length ? el("ul", {}, ...r.problems.slice(0, 200).map(p => el("li", {}, el("button", { type: "button", text: `${p.section} #${p.index + 1}`, on: { click: () => focusSong(`song-${p.section}-${p.index}`) } }), ` ${p.title} — ${p.reason}`))) : null);
   }
@@ -144,6 +145,7 @@
     // Optional parts (other-lists notice, export report) may be null; replaceChildren would print "null".
     $("detail").replaceChildren(...[
       el("h2", { text: e.name || "Untitled event" }),
+      P.requiresClean(e.inputs) ? el("p", { class: "notice", text: "Clean versions required. Clean labels are metadata/filename evidence, not verified lyrics. Dirty, unknown and conflicting files cannot export; choose a labelled clean file. Change event policy online only." }) : null,
       el("p", { class: "muted", text: `Saved event as of ${when(state.data.preparedAt)}. Unsaved edits from the online workspace are kept separately and are not shown here.${local ? ` ${local} track choice(s) made offline on this Mac.` : ""}${e.staleOverlays ? ` ${e.staleOverlays} earlier offline choice set(s) for an older copy of this event are kept but not applied.` : ""}` }),
       e.otherLists && e.otherLists.length ? el("p", { class: "notice", text: `Not available offline: ${e.otherLists.length} other saved list(s) (${e.otherLists.join(", ")}). Open them online.` }) : null,
       el("div", { class: "actions" }, el("button", { type: "button", class: "primary", text: "Export VirtualDJ playlists", on: { click: doExport } })),

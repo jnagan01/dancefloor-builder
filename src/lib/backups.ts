@@ -1,3 +1,4 @@
+import { needsPolicyConsumer, type PreparationInputs } from "./preparationPolicy";
 import { validSavedLibrary, type SavedLibrarySource } from "./libraryStore";
 import { readEventSnapshot } from "./snapshotSafety";
 import { EVENT_REVISION_FIELD } from "./eventRevision";
@@ -5,16 +6,20 @@ import { inspectBackupValues } from "./backupPolicy";
 import { readKnowledge, type PrepKnowledge } from "./prep/knowledge";
 export const MAX_BACKUP_BYTES = 32 * 1024 * 1024;
 export interface Backup {
-  format: "setarchitect-backup"; version: 1; account: string; createdAt: string;
+  format: "setarchitect-backup"; version: 1 | 2; account: string; createdAt: string;
   events: { id: string; snapshot: { name: string; inputs: Record<string, unknown>; lists: Record<string, unknown> } }[];
   sources: SavedLibrarySource[]; roots: Record<string, string>;
   /** Optional additive section (preparation notes, groups, presets, shortlists). Older backups omit it. */
   prep?: PrepKnowledge;
 }
+/** Policy-bearing output uses v2 so pre-policy native validators fail closed. */
+export function backupVersion(events: { snapshot: { inputs: unknown } }[]): 1 | 2 {
+  return events.some(e => !!e.snapshot.inputs && typeof e.snapshot.inputs === "object" && needsPolicyConsumer(e.snapshot.inputs as PreparationInputs)) ? 2 : 1;
+}
 export function validateBackup(raw: string, account: string): Backup {
   if (new TextEncoder().encode(raw).length > MAX_BACKUP_BYTES) throw Error("Backup exceeds 32 MB; original preserved.");
   const b = JSON.parse(raw);
-  if (!b || b.format !== "setarchitect-backup" || b.version !== 1 || b.account !== account || typeof b.createdAt !== "string" || !Number.isFinite(Date.parse(b.createdAt)) || !Array.isArray(b.events) || b.events.length > 500 || !validSavedLibrary({ version: 1, savedAt: Date.now(), sources: b.sources }) || b.sources.reduce((n: number, s: SavedLibrarySource) => n + s.tracks.length, 0) > 100000) throw Error("Backup version, account or contents are invalid; original preserved.");
+  if (!b || b.format !== "setarchitect-backup" || (b.version !== 1 && b.version !== 2) || b.account !== account || typeof b.createdAt !== "string" || !Number.isFinite(Date.parse(b.createdAt)) || !Array.isArray(b.events) || b.events.length > 500 || !validSavedLibrary({ version: 1, savedAt: Date.now(), sources: b.sources }) || b.sources.reduce((n: number, s: SavedLibrarySource) => n + s.tracks.length, 0) > 100000) throw Error("Backup version, account or contents are invalid; original preserved.");
   inspectBackupValues(b);
   if (b.prep !== undefined && !readKnowledge(b.prep)) throw Error("Backup preparation notes are invalid; original preserved.");
   if (!b.roots || Array.isArray(b.roots) || typeof b.roots !== "object") throw Error("Invalid source mappings.");

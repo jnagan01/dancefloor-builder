@@ -38,6 +38,9 @@ export interface WorkflowSnapshot {
     doNotPlayInput: string;
     vibe?: string;
     eventType?: string;
+    ownedOnlyExpansion?: boolean;
+    includeSeasonalTracks?: boolean;
+    requireCleanVersions?: boolean;
     split?: { warmUp: number; transition: number; peak: number };
     bpmRange?: [number, number];
     homeKey?: string;

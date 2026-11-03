@@ -9,6 +9,7 @@ const inputs = z.object({
   buffer: z.number().optional(), minutes: z.string().optional(),
   listType: z.enum(["dance", "cocktail", "dinner"]).optional(),
   vibe: z.string().optional(), eventType: z.string().optional(), homeKey: z.string().optional(),
+  ownedOnlyExpansion: z.boolean().optional(), includeSeasonalTracks: z.boolean().optional(), requireCleanVersions: z.boolean().optional(),
   bpmRange: z.tuple([z.number(), z.number()]).optional(), danceRange: z.tuple([z.number(), z.number()]).optional(),
   split: z.object({ warmUp: z.number(), transition: z.number(), peak: z.number() }).optional(),
 }).passthrough();

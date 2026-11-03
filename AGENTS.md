@@ -33,3 +33,6 @@
 - Read sidebar installed versions from the bridged Electron app identity (or explicit currentVersion), never updater status.version; label browser versions separately because available updates are not installed versions.
 - Compare web builds only by `__APP_BUILD_ID__` via no-store `/api/public/version`, never HTML meta/semver/time, because only the deployed worker knows what refresh loads.
 - Parse VirtualDJ database.xml strictly first; on malformed XML or any DOCTYPE recover per Song block (strict block, then tolerant attributes decoding only predefined/numeric references) and skip/report unsafe paths, because one damaged entry must not discard every track's metadata nor invent file identities.
+
+- Share preparation policy evidence and intended-version resolution through desktop/offline/policy.cjs; optional inputs preserve legacy passive loads and policy-bearing backups use format v2, because old offline shells must reject rather than ignore clean restrictions.
+- Export from captured exact selections and policy without padding or regeneration; count terminal omission reasons per selected recording including extras, because intended exclusions are not unmatched files.

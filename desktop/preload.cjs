@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld("electronBackups", {
   latest: account => ipcRenderer.invoke("backup:latest", account),
 });
 contextBridge.exposeInMainWorld("electronOffline", {
+  preparationPolicyVersion: 1,
   prepare: (raw, account) => ipcRenderer.invoke("offline:prepare", raw, account),
   status: account => ipcRenderer.invoke("offline:status", account),
   accountSeen: account => ipcRenderer.invoke("offline:account-seen", account),

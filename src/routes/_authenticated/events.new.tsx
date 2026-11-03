@@ -1,4 +1,5 @@
-import { exportReadiness, readinessText, type Availability } from "@/lib/exportReadiness";
+import { DEFAULTS, buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
+import { exportReadiness, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
 import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -254,7 +255,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         next[key] = { ...previous, status: "Missing From Library", confidence: 0, confirmed: false, trackIndex: undefined, alternatives: [], extraTrackIndices: [] };
         return;
       }
-      const candidates = searchLibraryBySong(song.artist, song.song, mergedLibrary, matchLimit).filter(candidate => candidate.s >= 0.55);
+      const candidates = searchLibraryBySong(song.artist, song.song, mergedLibrary, matchLimit).filter(candidate => candidate.s >= 0.55 && (!cleanRequired || intended(song, mergedLibrary.tracks[candidate.i])) && !cleanReason(mergedLibrary.tracks[candidate.i], cleanRequired));
       if (!candidates.length) return;
       const ranked = mode === "most" ? [...candidates].sort((a, b) => {
         const count = (i: number) => { const n = mergedLibrary.tracks[i]?.playCount; return typeof n === "number" && Number.isFinite(n) && n > 0 ? n : 0; };
@@ -285,6 +286,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [decades, setDecades] = useState<string[]>(["2000s", "2010s", "2020s"]);
   const [vibe, setVibe] = useState<string>("");
   const [eventType, setEventType] = useState<string>("");
+  const [policies, setPolicies] = useState<PreparationInputs>({ ...DEFAULTS });
+  const eventPolicy = { ...policies, eventType };
+  const cleanRequired = requiresClean(eventPolicy);
+  function policyMatch(song: Song, library: VdjLibrary): SongMatch {
+    const fresh = matchSong(song, library);
+    if (!cleanRequired) return fresh;
+    const index = policyResolver.resolve(song);
+    if (index !== undefined) return { status: "Matched", confidence: 1, trackIndex: index, confirmed: true, alternatives: fresh.alternatives };
+    return { ...fresh, status: fresh.trackIndex == null ? "Missing From Library" : "Possible Match", confirmed: false };
+  }
   const [bpmOn, setBpmOn] = useState(false);
   const [bpmRange, setBpmRange] = useState<[number, number]>([110, 128]);
   const [danceOn, setDanceOn] = useState(false);
@@ -389,6 +400,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setDecades([...defaultsRef.current.decades]);
     setVibe("");
     setEventType("");
+    setPolicies({ ...DEFAULTS });
     setBpmOn(false);
     setDanceOn(false);
     setHomeKey("");
@@ -492,6 +504,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // before connecting an entire folder.
   const emptyLibrary = useMemo(() => buildLibrary([]), []);
   const mergedLibrary = workspace.library ?? emptyLibrary;
+  const policyResolver = useMemo(() => buildResolver(mergedLibrary.tracks, eventPolicy), [mergedLibrary, policies, eventType]);
+  const generationContext = useRef({ library: mergedLibrary, policies, eventType });
+  if (generationContext.current.library !== mergedLibrary || generationContext.current.policies !== policies || generationContext.current.eventType !== eventType) {
+    genTokenRef.current++; generationContext.current = { library: mergedLibrary, policies, eventType };
+  }
+
 
   useEffect(() => {
     const picked = pendingFilePick.current;
@@ -509,7 +527,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       for (const sec of ["warmUp","transition","peak"] as SectionKey[]) result[sec].forEach((song,i) => {
         const key = songKey(sec,i,song);
         const prevPath = prev[key]?.trackIndex != null ? mergedLibrary.tracks[prev[key].trackIndex]?.filePath : undefined;
-        if (!prev[key] || (prev[key].trackIndex != null && !prevPath)) next[key] = matchSong(song,mergedLibrary);
+        if (!prev[key] || (prev[key].trackIndex != null && !prevPath)) next[key] = policyMatch(song,mergedLibrary);
       });
       return next;
     });
@@ -692,7 +710,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{...snapshotExtras.current.inputs,songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,split:splitOn?split:undefined},
+      inputs:{...snapshotExtras.current.inputs,...policies,songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,split:splitOn?split:undefined},
       lists:{...snapshotExtras.current.lists,warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -714,7 +732,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (accountRef.current) {
         try { reconcileEventDraft(accountRef.current, openedEventId, remoteRevision.current, { name: row.name, inputs: row.inputs, lists: row.lists }); setRecovery(loadEventDraft(accountRef.current, pendingRecoveryEvent(openedEventId)) ?? loadEventDraft(accountRef.current, openedEventId)); } catch (e) { draftBlocked.current=true; setDraftProblem((e as Error).message); }
       }
-      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(displayNumber(inputs.hours, MAX_EVENT_HOURS) || 3));
+      setSongs(inputs.songs??[]);setHours(inputs.hours??"3");setArtistsInput(inputs.artistsInput??"");setGenresInput(inputs.genresInput??"");setDecades(inputs.decades??[]);setVibe(inputs.vibe??"");setEventType(inputs.eventType??"");setPolicies({ ownedOnlyExpansion: inputs.ownedOnlyExpansion, includeSeasonalTracks: inputs.includeSeasonalTracks, requireCleanVersions: inputs.requireCleanVersions });setBpmOn(!!inputs.bpmRange);if(inputs.bpmRange)setBpmRange(inputs.bpmRange);setDanceOn(!!inputs.danceRange);if(inputs.danceRange)setDanceRange(inputs.danceRange);setHomeKey(inputs.homeKey??"");setNotes(inputs.notes??"");setDoNotPlayInput(inputs.doNotPlayInput??"");setExpand(!!inputs.expand);setEventName(inputs.eventName??"");setBuffer(inputs.buffer??2);setSplitOn(!!inputs.split);setSplit(inputs.split??equalSplit(displayNumber(inputs.hours, MAX_EVENT_HOURS) || 3));
       // A saved event with only a single list and no dance-floor sections is a
       // cocktail/dinner list even if the stored snapshot predates listType.
       const storedType=inputs.listType==="cocktail"||inputs.listType==="dinner"?inputs.listType:inputs.listType==="dance"?"dance":undefined;
@@ -784,7 +802,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try { storeEventDraft(draft); } catch { toast.error("Local recovery could not be saved. Do not close this event until saving is confirmed."); }
     draftTokens.current.set(snapshot, { account: owner, event, token });
     autosave.schedule(snapshot,savedEventId,()=>openedEventIdRef.current===boundary && accountRef.current===owner, 1000, logicalWrite.current);
-  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,account,saveState]);
+  },[result,matches,songs,hours,artistsInput,genresInput,decades,vibe,eventType,policies,bpmOn,bpmRange,danceOn,danceRange,homeKey,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,splitOn,split,savedEventId,openedEventId,recovery,account,saveState]);
   useEffect(()=>{
     const recover=()=>autosave.retry();
     window.addEventListener("online",recover);
@@ -865,7 +883,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const inputs = snapshot.inputs;
       setSongs(inputs.songs); setHours(inputs.hours); setArtistsInput(inputs.artistsInput); setGenresInput(inputs.genresInput); setDecades(inputs.decades);
       setNotes(inputs.notes); setDoNotPlayInput(inputs.doNotPlayInput); setExpand(inputs.expand); setEventName(inputs.eventName);
-      setBuffer(inputs.buffer ?? 2); setVibe(inputs.vibe ?? ""); setEventType(inputs.eventType ?? ""); setHomeKey(inputs.homeKey ?? "");
+      setBuffer(inputs.buffer ?? 2); setVibe(inputs.vibe ?? ""); setEventType(inputs.eventType ?? ""); setPolicies({ ownedOnlyExpansion: inputs.ownedOnlyExpansion, includeSeasonalTracks: inputs.includeSeasonalTracks, requireCleanVersions: inputs.requireCleanVersions }); setHomeKey(inputs.homeKey ?? "");
       setSplitOn(!!inputs.split); setSplit(inputs.split ?? equalSplit(Number(inputs.hours))); setListType(inputs.listType ?? "dance"); setMinutes(inputs.minutes ?? "60");
       setBpmOn(!!inputs.bpmRange); if(inputs.bpmRange)setBpmRange(inputs.bpmRange); setDanceOn(!!inputs.danceRange); if(inputs.danceRange)setDanceRange(inputs.danceRange);
       savedSelectionsRef.current = snapshot.lists.selections ?? null; snapshotExtras.current = { inputs, lists: snapshot.lists };
@@ -904,6 +922,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try {
     const uniqueSongs = dedupeSongs(songs);
     const prefs = buildCurrentPrefs();
+    const generationPolicy = { ...policies, eventType };
+    const generationResolver = buildResolver(mergedLibrary.tracks, generationPolicy);
+    const addedAllowed = (track: Song & { genre?: string }) => generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
+    const localPrefs = { ...prefs, additionAllowed: addedAllowed };
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
     let r = generateLists({
@@ -1161,7 +1183,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 for (const idx of searchLibrary(name, mergedLibrary, 6)) {
                   if (taken >= perArtistCap) break;
                   const t = mergedLibrary.tracks[idx];
-                  if (!t?.artist || !t.title) continue;
+                  if (!t?.artist || !t.title || !addedAllowed({ artist: t.artist, song: t.title, genre: t.genre })) continue;
                   if (normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
                   if (!have.tryAdd(t.artist, t.title)) continue;
                   const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
@@ -1271,7 +1293,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   let added = 0;
                   for (const sug of res.suggestions) {
                     if (r[key].length >= sectionTargetFor(r, key)) break;
-                    if (seen.has(sug.artist, sug.song)) continue;
+                    if (seen.has(sug.artist, sug.song) || !addedAllowed(sug)) continue;
                     // Enforce the per-list cap client-side too.
                     const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
                     if (!owner) continue;
@@ -1352,7 +1374,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 let addedThisAttempt = 0;
                 for (const sug of res.suggestions) {
                   if (r[key].length >= sectionTargetFor(r, key)) break;
-                  if (!seen.tryAdd(sug.artist, sug.song)) continue;
+                  if (!addedAllowed(sug) || !seen.tryAdd(sug.artist, sug.song)) continue;
                   r[key].push({
                     artist: sug.artist,
                     song: sug.song,
@@ -1405,7 +1427,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             expand: true,
             buffer,
             split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined,
-            prefs,
+            prefs: localPrefs,
           });
           // Track keys across ALL sections so a library song can't be added
           // to two different lists during the fallback pass.
@@ -1461,6 +1483,20 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       }
     }
 
+    for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) r[section] = r[section].filter(track => track.fromUpload || addedAllowed(track));
+    if ((fill || background) && generationPolicy.ownedOnlyExpansion) {
+      const pool = mergedLibrary.tracks.filter(t => t.artist && t.title && addedAllowed({ artist: t.artist, song: t.title, genre: t.genre }));
+      const seen = new SongKeySet();
+      for (const track of [...r.warmUp, ...r.transition, ...r.peak]) seen.add(track.artist, track.song);
+      // Bounded local work; no paths or audio are sent to any service.
+      for (const t of pool) {
+        const section = (["warmUp", "transition", "peak"] as SectionKey[]).find(k => r[k].length < sectionTargetFor(r, k));
+        if (!section) break;
+        if (!seen.tryAdd(t.artist, t.title)) continue;
+        r[section].push({ artist: t.artist, song: t.title, fromUpload: false, genre: t.genre, year: t.year ? Number(t.year) : undefined, bpm: parseBpm(t.bpm), metaSource: "Library", energy: 7, danceability: 6 });
+      }
+    }
+
     // Re-bucket + sort the merged set so uploads and AI picks interleave into
     // a single ascending energy ramp from the first warm-up song to the last
     // peak song.
@@ -1480,7 +1516,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     } else {
       r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [], eventType: prefs.eventType });
       if (fill && r.finalShortfall && r.finalShortfall.total > 0) {
-        r = topUpSectionsFromLibrary(r, prefs);
+        r = topUpSectionsFromLibrary(r, localPrefs);
       }
     }
 
@@ -1541,7 +1577,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const m: Record<string, SongMatch> = {};
       (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
         r[section].forEach((s, i) => {
-          if (matcherOn) m[songKey(section, i, s)] = matchSong(s, mergedLibrary);
+          if (matcherOn) m[songKey(section, i, s)] = policyMatch(s, mergedLibrary);
         });
       });
       matchesRef.current = m;
@@ -1550,6 +1586,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       matchesRef.current = {};
     }
     // Generation and subsequent edits share the same single-flight autosave queue.
+    r.finalShortfall = currentShortfall(r, background ? ["warmUp"] : ["warmUp", "transition", "peak"]);
     const fs = r.finalShortfall;
     if (fs && fs.total > 0) {
       const parts: string[] = [];
@@ -1696,6 +1733,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   function updateMatch(key: string, patch: Partial<SongMatch>) {
     const previous = matchesRef.current;
+    if (patch.confirmed === true || (patch.extraTrackIndices && patch.extraTrackIndices.length > (previous[key]?.extraTrackIndices?.length ?? 0))) {
+      const chosen = patch.trackIndex ?? previous[key]?.trackIndex;
+      const ids = [chosen, ...(patch.extraTrackIndices ?? previous[key]?.extraTrackIndices ?? [])].filter((i): i is number => i !== undefined);
+      const blocked = ids.map(i => cleanReason(mergedLibrary.tracks[i], cleanRequired)).find(Boolean);
+      if (blocked) { toast.error(blocked); return; }
+    }
     const next = { ...previous, [key]: { ...previous[key], ...patch } };
     if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, previous))) markPersistedEdit();
     matchesRef.current = next;
@@ -1706,7 +1749,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   /** Adds one song to the end of a section via the same path as rename; the new row is never pre-approved. */
   function addSongToSection(section: SectionKey, next: { artist: string; song: string; trackId?: string }): string | null {
     if (!result) return "Build the event first.";
-    const plan = planAddToSection(result, section, next, mergedLibrary, getFolderRoots(), songKey, matchSong);
+    const plan = planAddToSection(result, section, next, mergedLibrary, getFolderRoots(), songKey, policyMatch, eventPolicy);
     if ("error" in plan) return plan.error;
     userEdited.current=true; autosave.dirty();
     setResult(plan.result);
@@ -1730,7 +1773,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     list[idx] = updated;
     setResult({ ...result, [section]: list });
     // Re-run the matcher for the new name so the card picks up the right file.
-    const fresh = mergedLibrary.tracks.length ? matchSong(updated, mergedLibrary) : undefined;
+    const fresh = mergedLibrary.tracks.length ? policyMatch(updated, mergedLibrary) : undefined;
     setMatches((prev) => {
       const copy = { ...prev };
       delete copy[oldKey];
@@ -1833,6 +1876,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   function getSectionRefsForResult(source: GenerationResult, section: SectionKey): ExportSongRef[] {
     return source[section].map((s, i) => ({
       song: s,
+      requireClean: cleanRequired,
       identity: { section, index: i, key: songKey(section, i, s) },
       match: matchesRef.current[songKey(section, i, s)],
     }));
@@ -1840,26 +1884,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   function ensureBufferedResultForExport(): GenerationResult | null {
     if (!result) return null;
-    if (!expand || !result.finalShortfall || result.finalShortfall.total === 0) return result;
-    const topped = topUpSectionsFromLibrary(result, buildCurrentPrefs());
-    if (JSON.stringify([topped.warmUp,topped.transition,topped.peak]) !== JSON.stringify([result.warmUp,result.transition,result.peak])) markPersistedEdit();
-    setResult(topped);
-    if (mergedLibrary) {
-      // Preserve existing matches (manual picks, extra tracks, VDJ exclusions)
-      // and only auto-match songs that were just added by the top-up.
-      const existing = matchesRef.current;
-      const m: Record<string, SongMatch> = { ...existing };
-      (["warmUp", "transition", "peak"] as SectionKey[]).forEach((section) => {
-        topped[section].forEach((s, i) => {
-          const key = songKey(section, i, s);
-          if (!m[key]) m[key] = matchSong(s, mergedLibrary);
-        });
-      });
-      matchesRef.current = m;
-      setMatches(m);
-    }
-    toast.success("Filled short sections from the built-in library before export");
-    return topped;
+    // Export is read-only preparation: never introduce unseen tracks as a side effect.
+    return result;
   }
 
   function exportSectionCsv(section: SectionKey) {
@@ -1879,6 +1905,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   /** Spotify matching uses the UPLOADED artist/title only, never file matches. */
   function exportSectionToSpotify(section: SectionKey) {
+    if (cleanRequired) { toast.error("Spotify version content cannot be verified against your clean-labelled local files. Change the event clean policy explicitly to export to Spotify; reference files remain available."); return; }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
     const list = exportResult[section];
@@ -1894,6 +1921,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   function exportAllToSpotify() {
+    if (cleanRequired) { toast.error("Spotify version content cannot be verified against your clean-labelled local files. Change the event clean policy explicitly to export to Spotify; reference files remain available."); return; }
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
     const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
@@ -1913,12 +1941,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   const [readiness, setReadiness] = useState<ReturnType<typeof exportReadiness> | null>(null);
   const [readinessBusy, setReadinessBusy] = useState(false);
-  const readinessEpoch = useRef({ result, matches, mergedLibrary, background, generation: 0 });
+  const readinessEpoch = useRef({ result, matches, mergedLibrary, background, policies, eventType, generation: 0 });
   const epoch = readinessEpoch.current;
-  if (epoch.result !== result || epoch.matches !== matches || epoch.mergedLibrary !== mergedLibrary || epoch.background !== background) {
-    readinessEpoch.current = { result, matches, mergedLibrary, background, generation: epoch.generation + 1 };
+  if (epoch.result !== result || epoch.matches !== matches || epoch.mergedLibrary !== mergedLibrary || epoch.background !== background || epoch.policies !== policies || epoch.eventType !== eventType) {
+    readinessEpoch.current = { result, matches, mergedLibrary, background, policies, eventType, generation: epoch.generation + 1 };
   }
-  useEffect(() => { setReadiness(null); }, [result, matches, mergedLibrary, background]);
+  useEffect(() => { setReadiness(null); }, [result, matches, mergedLibrary, background, policies, eventType]);
   useEffect(() => () => { readinessEpoch.current.generation++; }, []);
   function captureExportFiles() {
     return { library: { ...mergedLibrary, tracks: structuredClone(mergedLibrary.tracks) }, roots: { ...getFolderRoots() }, generation: readinessEpoch.current.generation };
@@ -1955,11 +1983,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   function confirmUnmatched(exportResult: GenerationResult, section: SectionKey): boolean {
-    const unmatched = unmatchedCountForResult(exportResult, section);
-    if (unmatched === 0) return true;
-    return window.confirm(
-      `${unmatched} songs have no approved file match (including unconfirmed candidates), so they will be left out of the playlist sent to your DJ software. They are still included in the CSV, PDF, text and Spotify exports. Continue?`,
-    );
+    const report = exportReadiness(getSectionRefsForResult(exportResult, section), mergedLibrary);
+    if (!report.omitted && !report.cleanBlocked) return true;
+    return window.confirm(`${summaryText(report)}. Reference files retain intended tracks. Continue?`);
   }
 
   /** TXT download is a reference set list: every song in the list, library or not. */
@@ -2005,9 +2031,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // --- Direct-to-VirtualDJ folder exports ---
 
   function warnUnapproved(refs: ExportSongRef[]) {
-    const n = refs.filter(r => !exportApproved(r.match) || r.match?.trackIndex == null).length;
-    if (n) toast.warning(`${n} song${n === 1 ? "" : "s"} without an approved file match left out of DJ playlists. Confirm uncertain matches first. Reference files retain your intended songs.`);
+    const report = exportReadiness(refs, mergedLibrary);
+    if (report.omitted || report.cleanBlocked) toast.warning(summaryText(report) + ". Reference files retain intended tracks.");
   }
+
   function warnUnresolvedPaths(count: number) {
     if (count > 0) {
       toast.warning(
@@ -2019,6 +2046,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
 
   /** Direct-to-VirtualDJ set list: matched songs only, so VirtualDJ only sees playable files. */
+  function assertExportCurrent(files: ReturnType<typeof captureExportFiles>) {
+    if (files.generation !== readinessEpoch.current.generation) throw Error("Event or clean policy changed during export. Export stopped; files already written may remain.");
+  }
+  async function guardedWrite(files: ReturnType<typeof captureExportFiles>, dir: DirHandleLike, name: string, data: string) {
+    assertExportCurrent(files);
+    await writeFileToDir(dir, name, data);
+    assertExportCurrent(files);
+  }
+
   async function exportSectionXmlToVdj(section: SectionKey) {
     if (!mergedLibrary.tracks.length) {
       toast.error("Load a VirtualDJ database first");
@@ -2046,10 +2082,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.txt`;
     try {
-      await writeFileToDir(dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
-      await writeFileToDir(dir, fname, xml);
+      await guardedWrite(files, dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
+      await guardedWrite(files, dir, fname, xml);
       toast.success(matchedSummary(refs, fname));
     } catch {
+      if (files.generation !== readinessEpoch.current.generation) { toast.error("Event or clean policy changed during export. Export stopped; earlier files may remain."); return; }
       toast.error("Could not write to VirtualDJ folder, downloading instead");
       downloadBlob(new Blob([xml], { type: "text/plain" }), fname);
     }
@@ -2084,10 +2121,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
     const fname = `${prefix}${sectionFile(section)}.m3u`;
     try {
-      await writeFileToDir(dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
-      await writeFileToDir(dir, fname, m3u);
+      await guardedWrite(files, dir, `${prefix}${sectionFile(section)}-readiness.txt`, readinessText(report));
+      await guardedWrite(files, dir, fname, m3u);
       toast.success(matchedSummary(refs, fname));
     } catch {
+      if (files.generation !== readinessEpoch.current.generation) { toast.error("Event or clean policy changed during export. Export stopped; earlier files may remain."); return; }
       toast.error("Could not write to VirtualDJ folder, downloading instead");
       downloadBlob(new Blob([m3u], { type: "audio/x-mpegurl" }), fname);
     }
@@ -2095,12 +2133,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
   /** "Saved X matched songs … (N unmatched songs left out)" message for DJ-software exports. */
   function matchedSummary(refs: ReturnType<typeof getSectionRefsForResult>, fname: string): string {
-    const matched = countMatchedForExport(refs, mergedLibrary);
-    const skipped = refs.length - matched;
-    const where = vdjDirName ?? "VirtualDJ folder";
-    return skipped > 0
-      ? `Saved ${matched} matched song${matched === 1 ? "" : "s"} to ${where} as ${fname} — ${skipped} unmatched left out`
-      : `Saved ${matched} matched song${matched === 1 ? "" : "s"} to ${where} as ${fname}`;
+    return `Saved ${summaryText(exportReadiness(refs, mergedLibrary))} to ${vdjDirName ?? "VirtualDJ folder"} as ${fname}`;
   }
 
   async function exportAllToVdj() {
@@ -2136,7 +2169,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     let matchedTotal = 0;
     let skippedTotal = 0;
     try { for (const section of sections) buildM3u(captured[section], files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
-    try { await writeFileToDir(dir, `${prefix}export-readiness.txt`, readinessText(report)); } catch { toast.error("Readiness report could not be written. Export stopped."); return; }
+    try { await guardedWrite(files, dir, `${prefix}export-readiness.txt`, readinessText(report)); } catch { toast.error("Readiness report could not be written. Export stopped."); return; }
     for (const section of sections) {
       const list = exportResult[section];
       if (!list.length) continue;
@@ -2155,7 +2188,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       }
       for (const f of outputs) {
         try {
-          await writeFileToDir(dir, f.name, f.data);
+          await guardedWrite(files, dir, f.name, f.data);
           written += 1;
         } catch {
           failed += 1;
@@ -2174,8 +2207,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       return;
     }
     toast.success(
-      `Saved ${written} playlist${written === 1 ? "" : "s"} with ${matchedTotal} matched song${matchedTotal === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"}` +
-        (skippedTotal > 0 ? ` — ${skippedTotal} unmatched left out` : ""),
+      `Saved ${written} output file${written === 1 ? "" : "s"} to ${vdjDirName ?? "VirtualDJ folder"} · ${summaryText(report)}`,
     );
   }
 
@@ -2419,6 +2451,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
         <main className="min-w-0 space-y-6">
 
+        <fieldset className="space-y-3 border-y border-border py-3" aria-label="Event preparation choices">
+          <legend className="text-sm font-semibold">Event preparation choices</legend>
+          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Only expand with tracks in my library" checked={policies.ownedOnlyExpansion === true} onCheckedChange={v => { markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, ownedOnlyExpansion: v })); }} />Only expand with tracks in my library</label>
+          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Include seasonal/holiday tracks" checked={policies.includeSeasonalTracks !== false} onCheckedChange={v => { markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, includeSeasonalTracks: v })); }} />Include seasonal/holiday tracks</label>
+          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Require clean versions" checked={cleanRequired} disabled={getEventType(eventType)?.explicit === "strict_clean"} onCheckedChange={v => { markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, requireCleanVersions: v })); }} />Require clean versions</label>
+          <p className="text-xs text-muted-foreground">Clean labels are metadata/filename evidence, not verified lyrical content. Choose a labelled clean file for unknown or conflicting versions, or explicitly change the policy. School and Corporate events always require clean versions. Existing requests and selections are retained.</p>
+        </fieldset>
         {/* Step 1 */}
         {step === 1 && (
         <StepPanel
@@ -2960,7 +2999,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   </p>
                 )}
               </div>
-              <Switch checked={expand} onCheckedChange={editExpand} className="shrink-0" />
+              <Switch aria-label="Expand event with additional tracks" checked={expand} onCheckedChange={editExpand} className="shrink-0" />
             </div>
             <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Song buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer} onChange={e=>editBuffer(Number(e.target.value))}>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
             {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
@@ -3023,6 +3062,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 </label>
               </div>
 
+              {liveShortfall && liveShortfall.total > 0 && <p className="text-xs text-warning">Eligible pool is short. Expansion will not substitute another artist/version, add excluded holiday tracks, or use unlabelled/Dirty files under the clean requirement. Add eligible files or explicitly adjust event choices.</p>}
               {liveShortfall && liveShortfall.total > 0 ? (
                  <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -3055,7 +3095,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
               <section className="space-y-2 border-y border-border py-3" aria-label="Export readiness">
                 <Button variant="outline" size="sm" disabled={readinessBusy} onClick={previewReadiness}><CheckCircle2 className="mr-2 size-4" />{readinessBusy ? "Checking files…" : "Check export readiness"}</Button>
-                {readiness && <><p className="text-sm">{readiness.requested} requested songs · {readiness.approved} approved tracks · {readiness.omitted} omitted songs · {readiness.unavailable} unavailable files · {readiness.unknown} availability unknown</p>
+                {readiness && <><p className="text-sm">{readiness.requested} requested tracks · {summaryText(readiness)}</p>
                 <div className="max-h-40 overflow-auto">{readiness.problems.map((problem, i) => <Button key={i} variant="ghost" size="sm" className="block h-auto max-w-full whitespace-normal text-left" onClick={() => { const identity = problem.identity; if (!identity) return; const song = result[identity.section]?.[identity.index]; if (!song || songKey(identity.section, identity.index, song) !== identity.key) { setReadiness(null); return; } setActiveSection(identity.section); setTimeout(() => document.getElementById(`song-${identity.section}-${identity.index}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); }}>{problem.title} — {problem.reason}</Button>)}</div></>}
               </section>
               <EventEnergyRamp
@@ -3065,6 +3105,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 onSelect={(sec) => setActiveSection(sec)}
               />
               <EventPrepPanel
+                policies={eventPolicy}
                 eventId={savedEventId}
                 sections={((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => ({ key: sec, label: background && sec === "warmUp" ? bgLabel : sectionName(sec), songs: result[sec] ?? [] }))}
                 matches={matches}
@@ -3127,6 +3168,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   <TabsContent key={sec} value={sec}>
                     <SectionView
                       labelOverride={background && sec === "warmUp" ? bgLabel : undefined}
+                      requireClean={cleanRequired}
                       section={sec}
                       songs={result[sec]}
                       matches={matches}
@@ -3461,6 +3503,7 @@ function statusBadge(status: MatchStatus) {
 }
 
 interface SectionViewProps {
+  requireClean?: boolean;
   section: SectionKey;
   songs: Song[];
   matches: Record<string, SongMatch>;
@@ -3599,8 +3642,9 @@ function SectionView(props: SectionViewProps) {
           const key = songKey(section, i, s);
           const m = matches[key];
           const track: VdjTrack | undefined = library && m?.trackIndex != null ? library.tracks[m.trackIndex] : undefined;
-          const isMatched = m?.status === "Matched" || m?.status === "Manually Matched";
-          const inReview = m?.status === "Possible Match" || m?.status === "Multiple Matches";
+          const cleanBlock = !m?.excludedFromVdj && cleanReason(track, !!props.requireClean);
+          const isMatched = !cleanBlock && (m?.status === "Matched" || m?.status === "Manually Matched");
+          const inReview = !!cleanBlock || m?.status === "Possible Match" || m?.status === "Multiple Matches";
           if (filter === "matched" && !isMatched || filter === "unmatched" && m?.trackIndex != null || filter === "review" && !inReview) return null;
           const meta = s as BadgeSong;
           const musicalTrack = musicalMatchApproved(m) ? track : undefined;
@@ -3687,12 +3731,13 @@ function SectionView(props: SectionViewProps) {
 
               {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-                {library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
+                {cleanBlock ? <Badge variant="outline" className="border-warning text-warning">Clean version needed</Badge> : library && (m ? statusBadge(m.status) : statusBadge("Missing From Library"))}
+                {cleanBlock && <p className="w-full text-xs text-warning">{cleanBlock}</p>}
                 {m && track && <span className="text-[11px] text-muted-foreground">{Math.round(m.confidence * 100)}% confidence</span>}
                 {selectedCount > 1 && <span className="bg-primary/10 px-1.5 py-0.5 text-[11px] text-primary">{selectedCount} files selected</span>}
                 <span className="mx-1 hidden h-4 w-px bg-border sm:block" />
                 {library && inReview && m?.trackIndex != null && (
-                  <Button size="sm" className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
+                  <Button size="sm" disabled={!!cleanBlock} title={cleanBlock || undefined} className="h-7 px-2 text-xs" onClick={() => onConfirm(key)}>
                     <Check className="mr-1 h-3 w-3" /> Confirm match
                   </Button>
                 )}

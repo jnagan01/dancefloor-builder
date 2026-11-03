@@ -3,7 +3,7 @@ import { exportApproved, type SongMatch } from "@/lib/virtualDj";
 export interface DashSong { artist: string; song: string; fromUpload?: boolean; genre?: string; year?: number; metaSource?: string }
 export interface DashSection { key: string; label: string; songs: DashSong[] }
 /** Facts about a library index entry. `undefined` from trackAt means the index no longer exists. */
-export interface DashTrack { durationSec?: number; genre?: string; decade?: string }
+export interface DashTrack { durationSec?: number; genre?: string; decade?: string; cleanReason?: string | null }
 export interface DrillItem { section: string; index: number; label: string; detail?: string }
 export interface SectionDash {
   key: string; label: string; count: number; confirmed: number;
@@ -48,6 +48,7 @@ export function buildDashboard(sections: DashSection[], matches: Record<string, 
       else if (!ids.length) d.notLinked.push({ ...item, detail: s.fromUpload ? "Client request — no track linked" : "No track linked" });
       else if (missing) d.linkedMissing.push({ ...item, detail: missing === ids.length ? "Linked track is no longer in your library index" : `${missing} of ${ids.length} selected tracks are no longer in your library index` });
       else if (!exportApproved(m)) { d.pending.push({ ...item, detail: m!.status }); if (m!.alternatives.length) d.alternates.push({ ...item, detail: `${m!.alternatives.length + 1} candidate tracks` }); }
+      else if (facts.some(f => f?.cleanReason)) d.pending.push({ ...item, detail: facts.find(f => f?.cleanReason)?.cleanReason ?? "Clean version needed" });
       else { d.confirmed++; approvedTracks = facts as DashTrack[]; }
       const lens = approvedTracks.map(t => t.durationSec);
       if (approvedTracks.length && lens.every(l => l && l > 0)) { const sum = (lens as number[]).reduce((a, b) => a + b, 0); d.knownSec += sum; allKnown.push(...(lens as number[])); }

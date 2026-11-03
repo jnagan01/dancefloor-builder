@@ -241,6 +241,8 @@ export function dedupeSongs<T extends Song>(songs: T[]): T[] {
 }
 
 export interface Preferences {
+  /** Browser-only eligibility; never serialize local library paths to a service. */
+  additionAllowed?: (song: Song & { genre?: string }) => boolean;
   artists: string[];
   genres: string[];
   decades: string[];
@@ -788,7 +790,7 @@ export function topUpSectionsFromLibrary(result: GenerationResult, prefs: Prefer
   for (const s of [...next.warmUp, ...next.transition, ...next.peak]) allSeen.add(s.artist, s.song);
   const evType = getEventType(prefs.eventType);
   const unblockedLibrary = SONG_LIBRARY.filter(
-    (l) => !isBlocked(l.artist, l.song, prefs.doNotPlay) && libraryAllowedForEventType(l, evType),
+    (l) => !isBlocked(l.artist, l.song, prefs.doNotPlay) && libraryAllowedForEventType(l, evType) && (!prefs.additionAllowed || prefs.additionAllowed(l)),
   );
 
   for (const key of ["warmUp", "transition", "peak"] as SectionKey[]) {
@@ -917,6 +919,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
     const candidates = SONG_LIBRARY
       .filter((l) => !seen.has(dedupeKey(l.artist, l.song)))
       .filter((l) => !isBlocked(l.artist, l.song, prefs.doNotPlay))
+      .filter((l) => libraryAllowedForEventType(l, getEventType(prefs.eventType)) && (!prefs.additionAllowed || prefs.additionAllowed(l)))
       .map((l) => ({ lib: l, score: libraryPreferenceScore(l, prefs), section: sectionForIntensity(intensityOf(l)) }))
       .sort((a, b) => b.score - a.score);
 
