@@ -35,8 +35,13 @@ export const BASELINE_RATINGS: Record<string, string> = {
 };
 
 const catalogue = new Map(SONG_LIBRARY.map(s => [songIdentity(s.artist, s.song), s]));
-export function candidates(): Candidate[] {
-  return (rows as { artist: string; song: string; heldOut: boolean }[]).map((r, i) => {
+/** Saved-event metadata the user reported for two baseline rows (supersedes the cache snapshot when `saved` is true). */
+export const SAVED_EVENT_ROWS: Record<string, object> = {
+  "The Beatles|Let It Be": { genre: "Classic Rock", bpm: 138, energy: 4, danceability: 4, metaProv: { genre: "tags", bpm: "tags", energy: "ai", danceability: "ai" } },
+  "Snow Patrol|Chasing Cars": { genre: "Alternative Rock", bpm: 104, energy: 6, danceability: 6, popularity: 8, metaProv: { genre: "tags", bpm: "tags", energy: "estimate", danceability: "estimate", popularity: "estimate" } },
+};
+export function candidates(saved = false): Candidate[] {
+  return (rows as { artist: string; song: string; heldOut: boolean }[]).map(r0 => { const o = saved ? SAVED_EVENT_ROWS[`${r0.artist}|${r0.song}`] : undefined; return o ? { artist: r0.artist, song: r0.song, heldOut: r0.heldOut, ...o } : r0; }).map((r, i) => {
     const cat = catalogue.get(songIdentity(r.artist, r.song));
     const base = rowCandidate(r as never, cat ? "catalogue" : "ai");
     const facts = cat ? { ...base.facts, genre: cat.genre, genreSource: "catalogue" as const, decade: cat.decade, decadeSource: "catalogue" as const } : base.facts;
@@ -44,33 +49,33 @@ export function candidates(): Candidate[] {
   });
 }
 
-export function input(fit: EventFit | undefined): RecInput {
+export function input(fit: EventFit | undefined, saved = false): RecInput {
   return {
-    candidates: candidates(), requests: REQUESTS, inEvent: REQUESTS, feedback: [], dismissed: [], similar: SYNTHETIC_SIMILAR,
+    candidates: candidates(saved), requests: REQUESTS, inEvent: REQUESTS, feedback: [], dismissed: [], similar: SYNTHETIC_SIMILAR,
     preferences: { genres: [], decades: ["1970s", "1980s", "1990s", "2000s", "2010s", "2020s"], artists: [], ...(fit ? { fit } : {}) },
     controls: DEFAULT_REC_CONTROLS, limit: 14,
   };
 }
 export const AFTER_FIT: EventFit = { familiarity: "familiar", avoidSlow: true };
 
-export function runComparison() {
-  const before = recommend(input(undefined)), after = recommend(input(AFTER_FIT));
+export function runComparison(saved = false) {
+  const before = recommend(input(undefined, saved)), after = recommend(input(AFTER_FIT, saved));
   return { before, after };
 }
 
 const label = (r: Recommendation) => `${r.artist} – ${r.song}`;
-export function report(): string {
-  const { before, after } = runComparison();
+export function report(saved = false): string {
+  const { before, after } = runComparison(saved);
   const all = rows as { artist: string; song: string; heldOut: boolean }[];
   const held = new Set(all.filter(r => r.heldOut).map(r => `${r.artist}|${r.song}`));
   const row = (r: Recommendation, i: number) => {
     const k = `${r.artist}|${r.song}`;
-    return `| ${i + 1} | ${label(r)} | ${held.has(k) ? "held-out" : "baseline"} | ${BASELINE_RATINGS[k] ?? "—"} | ${r.score} | ${explainTop(r, 4).replace(/\|/g, "/")} |`;
+    return `| ${i + 1} | ${label(r)} | ${held.has(k) ? "held-out" : "baseline"} | ${BASELINE_RATINGS[k] ?? "—"} | ${r.score} | ${explainTop(r, 3).replace(/\|/g, "/")} |`;
   };
   const head = "| # | Track | Set | Saved rating (report only) | Score | Top reasons |\n|---|---|---|---|---|---|";
   const bk = new Set(before.items.map(label)), ak = new Set(after.items.map(label));
   return [
-    "# Event-fit BEFORE/AFTER — identical explicit fixture", "",
+    `# Event-fit BEFORE/AFTER — identical explicit fixture${saved ? " (saved-event metadata for Let It Be / Chasing Cars)" : ""}`, "",
     `Pool: ${all.length} candidates (14 saved-baseline additions + ${held.size} held-out), evidence from a read-only snapshot of the metadata cache. Similarity entries are synthetic and identical in both runs. Only \`preferences.fit\` differs.`, "",
     "## BEFORE (no fit choice — legacy behaviour)", head, ...before.items.map(row), "",
     `Hidden: ${JSON.stringify(before.hidden)}`, "",

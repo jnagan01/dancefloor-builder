@@ -31,7 +31,7 @@ export const DEFAULT_REC_CONTROLS: RecControls = { familiarity: 0, clientSimilar
 export interface EventPreferences { genres?: string[]; decades?: string[]; artists?: string[]; /** Optional event-scoped fit choices; absent = no-op. */ fit?: EventFit }
 export type EvidenceKind = "artist" | "genre" | "decade" | "lastfm" | "lastfmTrack" | "familiar" | "discovery" | "favor" | "tag" | "variety" | "prefGenre" | "prefDecade" | "prefArtist" | "familiarTrack" | "unfamiliarTrack" | "slowEstimate" | "discoveryTrack";
 export interface Evidence { kind: EvidenceKind; text: string; points: number }
-export interface Recommendation extends Candidate { key: string; score: number; evidence: Evidence[] }
+export interface Recommendation extends Candidate { key: string; score: number; evidence: Evidence[]; /** Unverified aspects of active event-fit choices (display only). */ uncertain?: string[] }
 export interface RecInput {
   candidates: Candidate[]; requests: ClientRequest[]; inEvent: { artist: string; song: string }[];
   /** Exact case-sensitive file identities already selected by event rows (primary + explicit extras). */
@@ -150,7 +150,7 @@ export function recommend(input: RecInput): RecOutput {
     const tagHits = note && input.eventTags?.length ? note.tags.filter(t => input.eventTags!.includes(t)) : [];
     if (tagHits.length) push("tag", `Your tag${tagHits.length > 1 ? "s" : ""} ${tagHits.map(t => `“${t}”`).join(", ")} match this event`, 1 * tagHits.length);
     const score = round(ev.reduce((n, e) => n + e.points, 0));
-    scored.push({ ...cand, key, score, evidence: ev });
+    scored.push({ ...cand, key, score, evidence: ev, ...(fitR.uncertain?.length ? { uncertain: fitR.uncertain } : {}) });
   }
   // Deterministic tie-break: score, then artist, title, file identity, then caller position.
   scored.sort((a, b) => b.score - a.score || a.artist.localeCompare(b.artist) || a.song.localeCompare(b.song) || (a.trackId ?? "").localeCompare(b.trackId ?? "") || (a.ref ?? 0) - (b.ref ?? 0));
@@ -177,9 +177,10 @@ export function recommend(input: RecInput): RecOutput {
 }
 
 /** Plain-language summary of the strongest positive reasons (no point values), for result rows. */
-export function explainTop(r: { evidence: Evidence[] }, n = 3): string {
+export function explainTop(r: { evidence: Evidence[]; uncertain?: string[] }, n = 3): string {
   const top = r.evidence.filter(e => e.points > 0).slice().sort((a, b) => b.points - a.points).slice(0, n);
-  return (top.length ? top.map(e => e.text).join(" · ") : "No specific evidence beyond your event rules.").slice(0, 900);
+  const base = top.length ? top.map(e => e.text).join(" · ") : "No specific evidence beyond your event rules.";
+  return (r.uncertain?.length ? `${base} · ${r.uncertain.join(" · ")}` : base).slice(0, 900);
 }
 
 export type RankContext = Omit<RecInput, "candidates" | "limit" | "filter" | "controls"> & { controls?: RecControls };
