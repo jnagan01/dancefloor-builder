@@ -1,4 +1,7 @@
 # Workspace rebuild
+## Entirely blank fresh events
+- [x] Central blank initializer/reset; removed profile event prefills, validated explicit required choices, preserved saved/recovery and app preferences.
+- [x] Synthetic checks: 608 units, 31 native event checks, 19 preparation checks, 16 offline flows, 4 race checks; automatic compilation passed. External macOS gate unchanged and awaits external execution.
 ## Narrow offline export outcome wording
 - [x] Separate eligible occurrences from completed exports; blocked/cancelled/failed/partial exports report zero, rollback leftovers remain explicitly named, readiness artifacts describe eligibility rather than claiming completion.
 - [x] Local synthetic checks passed: 600 unit tests, 28 native event checks, 19 preparation checks, 16 real offline flows and 4 offline race checks; automatic compilation OK. Real renderer/output assertions cover success, duplicate block, cancellation, rollback and undeletable partial files.

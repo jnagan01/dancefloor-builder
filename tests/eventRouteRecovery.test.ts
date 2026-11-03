@@ -51,7 +51,7 @@ describe('actual mounted event route recovery and ownership',()=>{
  });
  it('every manual reset uses one UUID for draft and interrupted first request across reload',async()=>{
   vi.useFakeTimers();const memory=new Map();const h=harness({eventId:null,memory,write:()=>new Promise(()=>{})});await h.flush();h.current.clearWorkflowState();await h.flush();
-  const resetId=h.current.stableCreate;h.current.setSongs([song]);await h.flush();await h.current.generate();await h.flush();await vi.advanceTimersByTimeAsync(1000);
+  const resetId=h.current.stableCreate;h.chooseFresh();h.current.setSongs([song]);await h.flush();await h.current.generate();await h.flush();await vi.advanceTimersByTimeAsync(1000);
   expect(h.requests[0].id).toBe(resetId);expect(JSON.parse(memory.get(key('owner','new'))).createId).toBe(resetId);h.unmount();
   const b=harness({eventId:null,memory,write:()=>new Promise(()=>{})});await b.flush();b.current.restoreRecovery(false);await b.flush();await vi.advanceTimersByTimeAsync(1000);const id=b.requests[0].id; expect(JSON.parse(memory.get(key('owner','new'))).createId).toBe(id);b.unmount();
   const c=harness({eventId:null,memory});await c.flush();c.current.restoreRecovery(false);await c.flush();await vi.advanceTimersByTimeAsync(1000);expect(c.requests[0].id).toBe(id);expect(c.requests[0].writeRevision).toBe(b.requests[0].writeRevision);expect(c.requests[0].writeRevision).toBe(h.requests[0].writeRevision);c.unmount();
@@ -70,7 +70,7 @@ describe('actual mounted event route recovery and ownership',()=>{
   vi.useFakeTimers();let resolve:(v:any)=>void=()=>{};const h=harness({rows:{A:row()},write:()=>new Promise(r=>resolve=r)});await h.flush();h.edit('First');await vi.advanceTimersByTimeAsync(1000);h.edit('Second');resolve({id:'A',updatedAt:'2026-10-31T00:00:02Z'});await h.flush();expect(h.current.saveState).not.toBe('saved');expect(JSON.parse(h.memory.get(key('owner','A'))).snapshot.inputs.eventName).toBe('Second');h.unmount();
  });
  it('earlier create confirmation carries marker and ID into newer pending draft and its reload',async()=>{
-  vi.useFakeTimers();const memory=new Map();let resolve:(v:any)=>void=()=>{};const h=harness({eventId:null,memory,write:()=>new Promise(r=>resolve=r)});await h.flush();h.current.setSongs([song]);await h.flush();await h.current.generate();await h.flush();await vi.advanceTimersByTimeAsync(1000);
+  vi.useFakeTimers();const memory=new Map();let resolve:(v:any)=>void=()=>{};const h=harness({eventId:null,memory,write:()=>new Promise(r=>resolve=r)});await h.flush();h.chooseFresh();h.current.setSongs([song]);await h.flush();await h.current.generate();await h.flush();await vi.advanceTimersByTimeAsync(1000);
   const first=h.requests[0];h.edit('Newer');resolve({id:first.id,updatedAt:'2026-10-31T00:00:00Z',revision:first.writeRevision});await h.flush();
   const draft=JSON.parse(memory.get(key('owner','new')));expect(draft.baseRevision).toBe(first.writeRevision);expect(draft.savedId).toBe(first.id);expect(draft.writeRevision).not.toBe(first.writeRevision);expect(h.current.saveState).not.toBe('saved');h.unmount();
   const next=harness({eventId:null,memory});await next.flush();next.current.restoreRecovery(false);await next.flush();await vi.advanceTimersByTimeAsync(1000);expect(next.requests[0]).toMatchObject({id:first.id,create:false,expectedRevision:first.writeRevision,writeRevision:draft.writeRevision});next.unmount();

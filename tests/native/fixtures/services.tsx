@@ -11,7 +11,7 @@ export async function getWorkflow(request:any){return w.testBackend.read(request
 export async function saveWorkflowSafely(request:any){return w.testBackend.write(request.data);}
 const listeners=new Set<any>();
 export const supabase={auth:{getUser:async()=>({data:{user:{id:w.__testState.account}}}),onAuthStateChange:(f:any)=>{listeners.add(f);return {data:{subscription:{unsubscribe:()=>listeners.delete(f)}}};}},from:(table:string)=>({
- select:()=>({eq:(_key:string,account:string)=>({limit:async()=>w.testBackend.list(account),maybeSingle:async()=>({data:null})})}),
+ select:()=>({eq:(_key:string,account:string)=>({limit:async()=>w.testBackend.list(account),maybeSingle:async()=>{if(w.__fixture.delayProfile)await new Promise(resolve=>{w.__releaseProfile=resolve;});w.__profileReturned=true;return {data:w.__fixture.profile??null};}})}),
  update:()=>({eq:async()=>({error:null})})
 })};
 export const loadMusicLibrary=async()=>({sources:w.__fixture.sources??[{label:'Synthetic',tracks:w.__fixture.tracks}],version:1,savedAt:Date.now()});
