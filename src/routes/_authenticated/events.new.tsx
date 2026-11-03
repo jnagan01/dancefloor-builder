@@ -125,7 +125,7 @@ import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDet
 import { planAddToSection } from "@/lib/prep/addToSection";
 import { prepStore } from "@/lib/prep/prepStore";
 import { awaitReadyFeedback, BLOCK_ALL_ADDITIONS, expansionFeedback, favoredFirst, GATE_MESSAGES, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
-import { aggregateSimilar, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
+import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { songIdentity } from "@/lib/prep/knowledge";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
@@ -1150,14 +1150,19 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             const trackSeeds = seedsFromRequests(uniqueSongs);
             const [simTrackRes, res, crowdRes] = await Promise.all([
               trackSeeds.length ? similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }).catch(() => null) : Promise.resolve(null),
+              // Each provider fails on its own: an AI neighbour outage must not discard valid Last.fm track evidence.
               neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
-              }),
+              }).catch((err) => { console.warn("AI neighbour map unavailable", err); return { clusters: [] as Array<{ artist: string; neighbors: string[] }> }; }),
               crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }).catch(
                 () => ({ available: false, artists: [] as ArtistCrowd[] }),
               ),
             ]);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
+            if (trackSeeds.length) {
+              const availability = simTrackRes?.availability ?? "unavailable";
+              if (availability !== "ok") toast.info(availabilityNote(availability, trackSeeds.length));
+            }
             const seedKeys = new Set(uniqueSeeds.map((a) => normalizeKey(a)));
             const seenNeighbor = new Set<string>();
             const ordered: Array<{ name: string; seed: string; score: number }> = [];
