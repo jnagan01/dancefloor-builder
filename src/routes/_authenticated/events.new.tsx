@@ -1,4 +1,5 @@
 import { DEFAULTS, buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
+import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
 import { getNativeFilePath } from "@/lib/desktopBridge";
 import { createFileRoute, useNavigate, useBlocker } from "@tanstack/react-router";
@@ -289,6 +290,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [policies, setPolicies] = useState<PreparationInputs>({ ...DEFAULTS });
   const eventPolicy = { ...policies, eventType };
   const cleanRequired = requiresClean(eventPolicy);
+  const policyCapable = supportsPreparationPolicy();
   function policyMatch(song: Song, library: VdjLibrary): SongMatch {
     const fresh = matchSong(song, library);
     if (!cleanRequired) return fresh;
@@ -790,6 +792,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       return;
     }
     if(draftBlocked.current || snapshotReadOnly.current || recovery || !userEdited.current || !accountRef.current || !result || !resultBoundary.current || resultBoundary.current.eventId!==openedEventId || (openedEventId && (!restoredEvent.current || savedEventId!==openedEventId)))return;
+    try { assertPreparationActivation(eventPolicy); } catch { return; }
     const boundary=openedEventId;
     const snapshot = eventSnapshot(result,matches);
     const fingerprint = JSON.stringify(snapshot);
@@ -815,6 +818,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const persistOnExit = () => {
     const owned = latestSnapshot.current;
     if (!owned || !userEdited.current || latestSaveState.current === "saved" || draftBlocked.current || snapshotReadOnly.current) return;
+    assertPreparationActivation(owned.snapshot.inputs);
     const token = crypto.randomUUID();
     const event = recovery ? pendingRecoveryEvent(owned.event) : owned.event;
     const previous = loadEventDraft<ReturnType<typeof eventSnapshot>>(owned.account, event);
@@ -870,6 +874,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (!asNew && openedEventId && recovery.writeRevision !== remoteRevision.current && (recovery.baseRevision !== remoteRevision.current || (recovery.baseRevision === null && recovery.baseVersion !== remoteVersion.current))) throw new Error("The saved event changed. Save this recovery copy as a new event instead.");
       const { snapshot, problem } = readEventSnapshot(recovery.snapshot);
       if (problem) throw new Error(problem);
+      assertPreparationActivation(snapshot.inputs);
       if (asNew && openedEventId) {
         const transferred = { ...recovery, snapshot, event: "new", token: crypto.randomUUID(), createId: crypto.randomUUID(), baseVersion: null,
           baseSnapshot: undefined, baseRevision: null, savedId: undefined, writeRevision: crypto.randomUUID(), origin: { account: recovery.account, event: recovery.event, token: recovery.token } };
@@ -2453,9 +2458,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
         <fieldset className="space-y-3 border-y border-border py-3" aria-label="Event preparation choices">
           <legend className="text-sm font-semibold">Event preparation choices</legend>
-          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Only expand with tracks in my library" checked={policies.ownedOnlyExpansion === true} onCheckedChange={v => { markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, ownedOnlyExpansion: v })); }} />Only expand with tracks in my library</label>
-          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Include seasonal/holiday tracks" checked={policies.includeSeasonalTracks !== false} onCheckedChange={v => { markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, includeSeasonalTracks: v })); }} />Include seasonal/holiday tracks</label>
-          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Require clean versions" checked={cleanRequired} disabled={getEventType(eventType)?.explicit === "strict_clean"} onCheckedChange={v => { markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, requireCleanVersions: v })); }} />Require clean versions</label>
+          {!policyCapable && <p role="alert" className="text-sm text-warning">{POLICY_UPDATE_GUIDANCE}</p>}
+          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Only expand with tracks in my library" disabled={!policyCapable} checked={policies.ownedOnlyExpansion === true} onCheckedChange={v => { try { assertPreparationActivation({ ...eventPolicy, ownedOnlyExpansion: v }); } catch(e) { toast.error((e as Error).message); return; } markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, ownedOnlyExpansion: v })); }} />Only expand with tracks in my library</label>
+          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Include seasonal/holiday tracks" disabled={!policyCapable} checked={policies.includeSeasonalTracks !== false} onCheckedChange={v => { try { assertPreparationActivation({ ...eventPolicy, includeSeasonalTracks: v }); } catch(e) { toast.error((e as Error).message); return; } markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, includeSeasonalTracks: v })); }} />Include seasonal/holiday tracks</label>
+          <label className="flex items-center gap-3 text-sm"><Switch aria-label="Require clean versions" checked={cleanRequired} disabled={!policyCapable || getEventType(eventType)?.explicit === "strict_clean"} onCheckedChange={v => { try { assertPreparationActivation({ ...eventPolicy, requireCleanVersions: v }); } catch(e) { toast.error((e as Error).message); return; } markPersistedEdit(); genTokenRef.current++; setPolicies(p => ({ ...p, requireCleanVersions: v })); }} />Require clean versions</label>
           <p className="text-xs text-muted-foreground">Clean labels are metadata/filename evidence, not verified lyrical content. Choose a labelled clean file for unknown or conflicting versions, or explicitly change the policy. School and Corporate events always require clean versions. Existing requests and selections are retained.</p>
         </fieldset>
         {/* Step 1 */}

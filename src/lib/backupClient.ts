@@ -1,6 +1,7 @@
 import { validateBackup, type Backup } from './backups';
 import { storeEventDraft, loadEventDraft, pendingRecoveryEvent } from './eventDrafts';
 import { recoveryFromBackup } from './backups';
+import { assertPreparationActivation } from './preparationCapability';
 type Bridge = { save(raw: string, account: string): Promise<{ok:boolean;error?:string}>; latest(account: string): Promise<{ok:boolean;raw?:string;error?:string}> };
 function bridge(): Bridge | undefined { return typeof window === 'undefined' ? undefined : (window as unknown as {electronBackups?:Bridge}).electronBackups; }
 const key=(account:string)=>`setarchitect:backups:${encodeURIComponent(account)}`;
@@ -23,6 +24,7 @@ export async function latestBackup(account:string):Promise<Backup|null>{
 }
 export function queueBackupEvent(backup:Backup,id:string){
   const draft=recoveryFromBackup(backup,id);
+  assertPreparationActivation(draft.snapshot.inputs);
   // Read through the durable native journal too. Unreadable bytes throw without writes.
   if(loadEventDraft(backup.account,'new') || loadEventDraft(backup.account,pendingRecoveryEvent('new')))
     throw Error('An unsaved new event already has a recovery copy. Resolve it first.');
