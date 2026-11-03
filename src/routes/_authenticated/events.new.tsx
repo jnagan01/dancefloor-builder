@@ -928,7 +928,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       toast.error("Upload client tracks first, or enable expansion and enter artists, genres or decades");
       return;
     }
-    const fill = expand;
+    const fill = expand && clientCoverage.preparationShortSeconds > 0;
     if (background ? minutesNum <= 0 : hoursNum <= 0) {
       toast.error(background ? "Enter how many minutes the list should cover" : "Enter a valid dance floor length");
       return;

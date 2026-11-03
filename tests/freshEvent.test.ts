@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { freshEvent, validateEventChoices } from '../src/lib/freshEvent';
+import { freshEvent, validateEventChoices, preparationCoverage } from '../src/lib/freshEvent';
 import { requiresClean } from '../src/lib/preparationPolicy';
 
 describe('explicit fresh event choices', () => {
-  it('starts with no content, type, buffer or preferences', () => {
+  it('starts with blank content and only the explicit 1× baseline', () => {
     const event = freshEvent();
     for (const key of ['eventName','hours','minutes','listType','artistsInput','genresInput','vibe','eventType','homeKey','notes','doNotPlayInput','spotifyLink'] as const) expect(event[key]).toBe('');
-    expect(event.decades).toEqual([]); expect(event.songs).toEqual([]); expect(event.buffer).toBe(0);
+    expect(event.decades).toEqual([]); expect(event.songs).toEqual([]); expect(event.buffer).toBe(1);
     expect(event.split).toEqual({warmUp:0,transition:0,peak:0});
   });
   it('every event switch starts off, including clean and owned expansion', () => {
@@ -23,14 +23,29 @@ describe('explicit fresh event choices', () => {
     for(const value of ['', ' ', 'NaN', '0', '-1', 'Infinity','25']) expect(()=>validateEventChoices('dance',value,'',2)).toThrow();
     expect(()=>validateEventChoices('dinner','','',0)).toThrow('positive list length');
   });
-  it('requires explicit dance buffer at generation but allows duration-only advance', () => {
+  it('accepts 1× without requiring 2× and rejects invalid preparation choices', () => {
     expect(()=>validateEventChoices('dance','1','',0,false)).not.toThrow();
-    for(const buffer of [0,NaN,1,5]) expect(()=>validateEventChoices('dance','1','',buffer)).toThrow('Choose a preparation buffer');
-    for(const buffer of [2,3,4]) expect(()=>validateEventChoices('dance','1','',buffer)).not.toThrow();
+    for(const buffer of [0,NaN,1.5,5]) expect(()=>validateEventChoices('dance','1','',buffer)).toThrow('Choose a preparation target');
+    for(const buffer of [1,2,3,4]) expect(()=>validateEventChoices('dance','1','',buffer)).not.toThrow();
   });
   it('background needs explicit minutes, not hidden hours/buffer choices', () => { expect(()=>validateEventChoices('cocktail','','60',0)).not.toThrow(); });
   it('school requirements remain intentional, legacy missing policy remains unchanged', () => {
     expect(requiresClean({...freshEvent().policies,eventType:'school_dance'})).toBe(true);
     expect(requiresClean({})).toBe(false);
+  });
+  it('40 four-minute client tracks cover a one-hour baseline but can request 4× extras', () => {
+    const baseline = preparationCoverage(Array(40).fill(240),60,1);
+    expect(baseline.baselineShortSeconds).toBe(0); expect(baseline.preparationShortSeconds).toBe(0);
+    expect(preparationCoverage(Array(40).fill(240),60,4).preparationShortSeconds).toBe(4800);
+  });
+  it('five known four-minute tracks leave an honest forty-minute baseline gap', () => {
+    expect(preparationCoverage(Array(5).fill(240),60,1)).toMatchObject({knownSeconds:1200,unknown:0,baselineShortSeconds:2400});
+  });
+  it('unknown and invalid lengths remain explicitly estimated, not known coverage', () => {
+    expect(preparationCoverage([300,undefined,0,NaN],60,1)).toMatchObject({knownSeconds:300,unknown:3,estimatedSeconds:1020,baselineShortSeconds:2580});
+  });
+  it('reset always returns 1× independently of a saved or edited preparation buffer', () => {
+    const edited=freshEvent();edited.buffer=4;edited.expand=true;
+    expect(freshEvent()).toMatchObject({buffer:1,expand:false});
   });
 });
