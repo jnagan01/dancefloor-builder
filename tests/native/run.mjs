@@ -365,6 +365,8 @@ try{
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));const req={artist:'Band',song:'Hit',fromUpload:true};
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Clean toggle',updated_at:'v1',inputs:{songs:[req],eventName:'Clean toggle',hours:'.25',buffer:2},lists:{warmUp:[req],transition:[],peak:[],selections:{'warmUp:0:band|hit':{paths:[dirty,file,unknown],confirmed:true}}}}}));
    fs.rmSync(path.join(temp,'exports'),{recursive:true,force:true});await launch();
+   // Earlier tests configured a native folder; use the actual native write bridge, fenced to this profile.
+   await page.evaluate(root=>localStorage.setItem('dancefloor:vdjRoot',root),path.join(temp,'VirtualDJ'));await page.reload();
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    const toggle=page.getByRole('switch',{name:'Require clean versions',exact:true});await expect(toggle).not.toBeChecked();await toggle.click();
    await expect(page.getByText('Clean version needed',{exact:true}).first()).toBeVisible();
@@ -372,6 +374,7 @@ try{
    await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toContain('clean-policy blocks');
    const outputs=fs.readdirSync(path.join(temp,'exports'));const m3u=outputs.filter(n=>n.endsWith('.m3u')).map(n=>fs.readFileSync(path.join(temp,'exports',n),'utf8')).join('');
    expect(m3u).toContain(file);expect(m3u).not.toContain(dirty);expect(m3u).not.toContain(unknown);
+   expect(fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8')).toContain('clean-toggle-warm-up.m3u');
    const report=fs.readFileSync(path.join(temp,'exports',outputs.find(n=>n.endsWith('export-readiness.txt'))),'utf8');expect(report).toContain('Clean-policy blocks: 2');expect(report).toContain('Approved tracks (including extras, in playlist order): 1');
    await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.requireCleanVersions,{timeout:15000}).toBe(true);
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections['warmUp:0:band|hit'].paths).toEqual([dirty,file,unknown]);

@@ -907,6 +907,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   async function generate() {
+    try { assertPreparationActivation(eventPolicy); } catch(e) { toast.error((e as Error).message); return; }
     // No uploads is fine as long as the client gave artists, genres or decades —
     // the whole list is then built by the recommender.
     try { validateTiming(hours, buffer, splitOn ? split : undefined); if (background) boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); } catch (e) { toast.error((e as Error).message); return; }
