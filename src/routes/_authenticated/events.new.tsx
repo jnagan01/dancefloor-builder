@@ -1978,8 +1978,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     ).length;
   }
 
-  function confirmUnmatched(exportResult: GenerationResult, section: SectionKey): boolean {
-    const report = exportReadiness(getSectionRefsForResult(exportResult, section), mergedLibrary);
+  function confirmUnmatched(report: ReturnType<typeof exportReadiness>): boolean {
     if (!report.omitted && !report.cleanBlocked) return true;
     return window.confirm(`${summaryText(report)}. Reference files retain intended tracks. Continue?`);
   }
@@ -2058,13 +2057,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const exportResult = ensureBufferedResultForExport();
     if (!exportResult) return;
     const files = captureExportFiles();
-    if (countMatchedForExport(getSectionRefsForResult(exportResult, section), files.library) === 0) {
+    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
+    if (countMatchedForExport(refs, files.library) === 0) {
       toast.error("No songs in this list are matched to your music files yet — nothing to export");
       return;
     }
-    if (!confirmUnmatched(exportResult, section)) return;
-    try { buildM3u(getSectionRefsForResult(exportResult, section), files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
-    const refs = structuredClone(getSectionRefsForResult(exportResult, section));
+    try { buildM3u(refs, files.library, files.roots); } catch(e) { toast.error((e as Error).message); return; }
+    // Acquire folder access before asynchronous availability checks so browser
+    // directory permissions can still use the initiating user gesture.
     const dir = await ensureExportFolder();
     if (files.generation !== readinessEpoch.current.generation) { toast.error("Event changed during folder selection. Export stopped."); return; }
     if (!dir) {
@@ -2073,6 +2073,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     }
     let report: ReturnType<typeof exportReadiness>;
     try { report = await checkReadiness(refs, files); setReadiness(report); if (report.unavailable) { toast.error("Export stopped: music files unavailable."); return; } } catch (e) { toast.error((e as Error).message); return; }
+    if (!confirmUnmatched(report)) return;
     warnUnapproved(report);
     const xml = buildTxtPlaylist(refs, files.library, { matchedOnly: true });
     const prefix = eventName ? `${toKebabCase(eventName)}-` : "";
