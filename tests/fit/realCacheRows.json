@@ -10,7 +10,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 1999
+  "year": 1999,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Toni Braxton",
@@ -23,7 +24,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 1993
+  "year": 1993,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Journey",
@@ -36,7 +38,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 2009
+  "year": 2009,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "KISS",
@@ -49,7 +52,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 1979
+  "year": 1979,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "The Beatles",
@@ -62,7 +66,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 1970
+  "year": 1970,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Mariah Carey",
@@ -75,7 +80,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 2018
+  "year": 2018,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Ava Max",
@@ -88,7 +94,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 2019
+  "year": 2019,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Snow Patrol",
@@ -96,12 +103,13 @@
   "energy": 6,
   "danceability": 6,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate"
   },
   "popularity": 8,
-  "heldOut": false
+  "heldOut": false,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "American Authors",
@@ -114,7 +122,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 2013
+  "year": 2013,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Kool & The Gang",
@@ -127,7 +136,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 2001
+  "year": 2001,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Grouplove",
@@ -140,7 +150,8 @@
    "year": "estimate"
   },
   "heldOut": false,
-  "year": 2013
+  "year": 2013,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Zara Larsson",
@@ -153,7 +164,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 2017
+  "year": 2017,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "ABBA",
@@ -163,10 +175,11 @@
   "metaProv": {
    "energy": "ai",
    "danceability": "ai",
-   "year": "provider"
+   "year": "estimate"
   },
   "heldOut": false,
-  "year": 1990
+  "year": 1990,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Big Boi",
@@ -179,7 +192,8 @@
    "year": "ai"
   },
   "heldOut": false,
-  "year": 2017
+  "year": 2017,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "ABBA",
@@ -187,14 +201,15 @@
   "energy": 8,
   "danceability": 5,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 6,
   "heldOut": true,
-  "year": 1976
+  "year": 1976,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "ABBA",
@@ -202,14 +217,15 @@
   "energy": 7,
   "danceability": 7,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 7,
   "heldOut": true,
-  "year": 2018
+  "year": 2018,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Journey",
@@ -217,12 +233,13 @@
   "energy": 6,
   "danceability": 5,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate"
   },
   "popularity": 5,
-  "heldOut": true
+  "heldOut": true,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Kool & The Gang",
@@ -230,14 +247,15 @@
   "energy": 5,
   "danceability": 9,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 7,
   "heldOut": true,
-  "year": 2002
+  "year": 2002,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Kool & The Gang",
@@ -245,12 +263,13 @@
   "energy": 3,
   "danceability": 6,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate"
   },
   "popularity": 5,
-  "heldOut": true
+  "heldOut": true,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Mariah Carey",
@@ -258,12 +277,13 @@
   "energy": 5,
   "danceability": 8,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate"
   },
   "popularity": 3,
-  "heldOut": true
+  "heldOut": true,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "The Beatles",
@@ -276,7 +296,8 @@
    "year": "ai"
   },
   "heldOut": true,
-  "year": 2023
+  "year": 2023,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "Mariah Carey",
@@ -289,7 +310,8 @@
    "year": "ai"
   },
   "heldOut": true,
-  "year": 2007
+  "year": 2007,
+  "rawCacheSource": "AI"
  },
  {
   "artist": "The O'Jays",
@@ -297,14 +319,15 @@
   "energy": 6,
   "danceability": 8,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 6,
   "heldOut": true,
-  "year": 2000
+  "year": 2000,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "The Pussycat Dolls",
@@ -312,14 +335,15 @@
   "energy": 8,
   "danceability": 6,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 7,
   "heldOut": true,
-  "year": 2006
+  "year": 2006,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Van Morrison",
@@ -327,14 +351,15 @@
   "energy": 6,
   "danceability": 5,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 8,
   "heldOut": true,
-  "year": 1996
+  "year": 1996,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Whitney Houston",
@@ -342,14 +367,15 @@
   "energy": 6,
   "danceability": 8,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 7,
   "heldOut": true,
-  "year": 2016
+  "year": 2016,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Whitney Houston",
@@ -357,14 +383,15 @@
   "energy": 9,
   "danceability": 7,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 6,
   "heldOut": true,
-  "year": 1993
+  "year": 1993,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Tracy Chapman",
@@ -372,14 +399,15 @@
   "energy": 4,
   "danceability": 7,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 8,
   "heldOut": true,
-  "year": 1995
+  "year": 1995,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Tones and I",
@@ -387,12 +415,13 @@
   "energy": 6,
   "danceability": 8,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate"
   },
   "popularity": 7,
-  "heldOut": true
+  "heldOut": true,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "T.I.",
@@ -400,14 +429,15 @@
   "energy": 3,
   "danceability": 6,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 1,
   "heldOut": true,
-  "year": 2008
+  "year": 2008,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  },
  {
   "artist": "Zach Bryan",
@@ -415,13 +445,14 @@
   "energy": 4,
   "danceability": 5,
   "metaProv": {
-   "energy": "provider",
-   "danceability": "provider",
-   "popularity": "provider",
-   "year": "provider"
+   "energy": "estimate",
+   "danceability": "estimate",
+   "popularity": "estimate",
+   "year": "estimate"
   },
   "popularity": 8,
   "heldOut": true,
-  "year": 2022
+  "year": 2022,
+  "rawCacheSource": "ReccoBeats+MusicBrainz (legacy summary, no per-field provenance)"
  }
 ]
