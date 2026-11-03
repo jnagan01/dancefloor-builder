@@ -115,7 +115,7 @@ export function addQualitySample<K extends WithQuality>(k: K, s: Omit<QualitySam
   const unrated = s.candidates.slice(0, QUALITY_LIMITS.candidates).map(c => { const { rating: _r, ...rest } = c; return rest; });
   if (!unrated.length) throw Error("There are no recommendations to review yet.");
   // Context beyond limits is never silently dropped: the sample is marked so comparisons say they are unavailable.
-  const truncated = s.truncated || s.requests.length > QUALITY_LIMITS.requests || (s.artistUse?.length ?? 0) > QUALITY_LIMITS.artists || s.candidates.length > QUALITY_LIMITS.candidates;
+  const truncated = s.truncated || s.requests.length > QUALITY_LIMITS.requests || (s.artistUse?.length ?? 0) > QUALITY_LIMITS.artists;
   const sample: QualitySample = { ...structuredClone({ ...s, candidates: unrated }), requests: s.requests.slice(0, QUALITY_LIMITS.requests), ...(s.artistUse ? { artistUse: s.artistUse.slice(0, QUALITY_LIMITS.artists) } : {}), ...(truncated ? { truncated: true } : {}), name, id: uid(), createdAt: Date.now() };
   readQualitySamples([sample]); // throws if anything is out of bounds
   return { ...k, quality: [...list, sample] };
