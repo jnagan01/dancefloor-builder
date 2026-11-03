@@ -1,5 +1,5 @@
 import { buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
-import { freshEvent, validateEventChoices, preparationCoverage } from "@/lib/freshEvent";
+import { freshEvent, validateEventChoices, clientPlanningCoverage } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
 import { preventAutomaticDuplicates, sectionCoverage, durationLabel } from "@/lib/preparationDuplicates";
@@ -644,15 +644,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const sectionMinutes = formatMinutes(hoursNum);
   const activeSplit: SectionSplit | undefined = splitOn && !background ? split : undefined;
   const splitTotal = split.warmUp + split.transition + split.peak;
-  const clientCoverage = preparationCoverage(songs.map(song => {
+  const clientCoverage = clientPlanningCoverage(songs, parseDoNotPlay(doNotPlayInput), song => {
     const index = policyResolver.resolve(song);
-    const track = index === undefined ? undefined : mergedLibrary.tracks[index];
-    return track ? Number(track.songLength) : undefined;
-  }), background ? minutesNum : hoursNum * 60, background ? 1 : buffer);
+    return index === undefined ? undefined : mergedLibrary.tracks[index];
+  }, background ? minutesNum : hoursNum * 60, background ? 1 : buffer, getFolderRoots());
   const coverageMessage = clientCoverage.baselineShortSeconds > 0
     ? `${durationLabel(clientCoverage.baselineShortSeconds)} ${clientCoverage.unknown ? "estimated " : ""}time shortfall — add client tracks or enable optional expansion.`
     : `${clientCoverage.unknown ? "Estimated baseline" : "Baseline duration"} covered — no additional tracks needed.`;
-  const planningMessage = `${durationLabel(clientCoverage.knownSeconds)} known client length${clientCoverage.unknown ? ` · ${clientCoverage.unknown} unknown lengths (estimated at 4 min each)` : ""} · ${coverageMessage}`;
+  const planningMessage = `${durationLabel(clientCoverage.knownSeconds)} known usable unique client length${clientCoverage.unknown ? ` · ${clientCoverage.unknown} unknown lengths (estimated at 4 min each)` : ""}${clientCoverage.excluded ? ` · ${clientCoverage.excluded} blocked or missing-title rows not counted` : ""}${clientCoverage.repeats ? ` · ${clientCoverage.repeats} repeated tracks not counted twice` : ""} · planning evidence, not export approval · ${coverageMessage}`;
   const targetMessage = `${durationLabel(clientCoverage.baselineSeconds)} event baseline · ${background ? 1 : buffer}× preparation ${durationLabel(clientCoverage.targetSeconds)}${expand ? " · optional expansion on" : " · expansion off"}`;
 
 
@@ -1593,7 +1592,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Generation and subsequent edits share the same single-flight autosave queue.
     r.finalShortfall = currentShortfall(r, background ? ["warmUp"] : ["warmUp", "transition", "peak"]);
     const fs = r.finalShortfall;
-    if (expand ? fs && fs.total > 0 : clientCoverage.baselineShortSeconds > 0) {
+    if (expand ? clientCoverage.preparationShortSeconds > 0 && fs && fs.total > 0 : clientCoverage.baselineShortSeconds > 0) {
       const parts: string[] = [];
       if (fs.warmUp > 0) parts.push(`${fs.warmUp} short in Warm Up`);
       if (fs.transition > 0) parts.push(`${fs.transition} short in Transition`);
