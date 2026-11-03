@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Narrow offline export outcome wording
+- [x] Separate eligible occurrences from completed exports; blocked/cancelled/failed/partial exports report zero, rollback leftovers remain explicitly named, readiness artifacts describe eligibility rather than claiming completion.
+- [x] Local synthetic checks passed: 600 unit tests, 28 native event checks, 19 preparation checks, 16 real offline flows and 4 offline race checks; automatic compilation OK. Real renderer/output assertions cover success, duplicate block, cancellation, rollback and undeletable partial files.
+- [x] Report revision and local counts; unchanged macOS gate includes the added tests. External macOS acceptance remains required; no user data, publication, release or install.
 ## Trial duplicate, ranking and section coverage improvements
 - [x] Prevent automatic duplicates, expose explicit saved-occurrence resolution and block repeated combined DJ exports.
 - [x] Rank intended artist/title/version agreement without cross-field false confidence.

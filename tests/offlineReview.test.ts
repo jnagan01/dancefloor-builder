@@ -145,12 +145,15 @@ describe("finding 4: portable exclusive all-or-nothing export publication", () =
   it("succeeds without hard links (link unsupported, e.g. exFAT) and never overwrites", async () => {
     const { res, out } = await exportWith(f => ({ ...f, promises: { ...f.promises, link: async () => { throw Object.assign(Error("ENOTSUP"), { code: "ENOTSUP" }); } } }));
     expect(res.ok).toBe(true);
+    expect(res.exportedTracks).toBe(2);
+    expect(core.exportedTrackCount(res)).toBe(2);
     expect(fs.readdirSync(out).sort()).toEqual(["Synthetic - 1 Warm Up.m3u", "Synthetic - 2 Transition.m3u", "Synthetic - offline readiness.txt"]);
   });
   it("publication failure on a later file removes every earlier file of this export", async () => {
     let opens = 0;
     const { res, out } = await exportWith(f => ({ ...f, promises: { ...f.promises, open: async (...a: Parameters<typeof fs.promises.open>) => { if (String(a[0]).endsWith(".txt") && ++opens) throw Object.assign(Error("ENOTSUP"), { code: "ENOTSUP" }); return f.promises.open(...a); } } }));
     expect(res.ok).toBe(false); expect(res.written).toEqual([]); expect(res.error).toContain("The files this export started were removed");
+    expect(res.exportedTracks).toBe(0); expect(core.exportedTrackCount(res)).toBe(0);
     expect(fs.readdirSync(out)).toEqual([]);
   });
   it("mid-write ENOSPC rolls back; undeletable partial files are reported exactly", async () => {
@@ -158,6 +161,7 @@ describe("finding 4: portable exclusive all-or-nothing export publication", () =
       open: async (...a: Parameters<typeof fs.promises.open>) => { const h = await f.promises.open(...a); if (!String(a[0]).includes("2 Transition")) return h; return { writeFile: async (t: string) => { await h.writeFile(t.slice(0, 5)); throw Object.assign(Error("ENOSPC"), { code: "ENOSPC" }); }, sync: () => h.sync(), close: () => h.close() }; },
       unlink: async (p: string) => { if (p.includes("1 Warm Up")) throw Object.assign(Error("EACCES"), { code: "EACCES" }); return f.promises.unlink(p); } } }));
     expect(res.ok).toBe(false); expect(res.leftover).toEqual(["Synthetic - 1 Warm Up.m3u"]);
+    expect(res.exportedTracks).toBe(0); expect(core.exportedTrackCount(res)).toBe(0);
     expect(res.error).toContain("could not be removed");
     expect(fs.readdirSync(out)).toEqual(["Synthetic - 1 Warm Up.m3u"]);
   });

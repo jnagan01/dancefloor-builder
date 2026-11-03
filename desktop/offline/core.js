@@ -213,15 +213,22 @@
     return lines.join("\r\n") + "\r\n";
   }
 
+  // A plan is eligibility evidence, not proof of completed output. Only the native
+  // writer's successful result may supply a completed track count; failures and
+  // rollback leftovers never count as a successful export.
+  function exportedTrackCount(result) {
+    return result && result.ok === true && Number.isSafeInteger(result.exportedTracks) && result.exportedTracks >= 0 ? result.exportedTracks : 0;
+  }
+
   function readinessText(plan, meta) {
     const s = plan.summary;
     return [
       "SetArchitect — Offline export readiness",
       `Event: ${single(meta.name)}`,
       `Saved copy prepared: ${single(meta.preparedAt)}`,
-      `Exported offline: ${single(meta.exportedAt)}`,
+      `Export attempted at: ${single(meta.exportedAt)}`,
       `Requested tracks: ${s.requested}`,
-      `Approved tracks (including extras, in playlist order): ${s.approved}`,
+      `Eligible tracks (including extras, in playlist order): ${s.approved}`,
       `Unique eligible files: ${s.uniqueTracks}`,
       `Repeated selected files: ${s.duplicateCount}`,
       `Known unique length (seconds): ${s.knownSec}`,
@@ -233,12 +240,13 @@
       `Clean-policy blocks: ${s.cleanBlocked}`,
       "Clean labels are metadata/filename evidence, not verified lyrics.",
       `Missing files: ${s.unavailable}`,
-      "Unconfirmed, excluded and unavailable songs are not in the playlists.",
+      "Eligibility is not confirmation of completed writes; check the export result in the offline workspace.",
+      "Unconfirmed, excluded and unavailable tracks are not in the playlists.",
       ...plan.problems.map(p => `${p.section} #${p.index + 1}. ${single(p.title)} — ${p.reason}`),
     ].join("\r\n") + "\r\n";
   }
 
   const safeFileName = s => single(s).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "_").slice(0, 120) || "Event";
 
-  return { SECTIONS, fullPath, norm, normalizeKey, dedupeKey, songKey, songIdentity, cachedSelection, effectiveSelection, songStatus, buildIndex, search, exportPlan, m3u, readinessText, safeFileName, unsafePath, sectionLabel };
+  return { SECTIONS, fullPath, norm, normalizeKey, dedupeKey, songKey, songIdentity, cachedSelection, effectiveSelection, songStatus, buildIndex, search, exportPlan, m3u, readinessText, exportedTrackCount, safeFileName, unsafePath, sectionLabel };
 });

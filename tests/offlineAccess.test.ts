@@ -33,6 +33,10 @@ const backup = (account = owner, extra: Record<string, unknown> = {}) => ({ form
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "offline-unit-"));
 
 describe("offline export plan", () => {
+  it("never treats eligibility, cancellation or failure leftovers as completed exports", () => {
+    for (const result of [undefined, { ok: true, summary: { approved: 29 } }, { ok: false, exportedTracks: 29, leftover: ["partial.m3u"] }, { ok: false, canceled: true }, { ok: true, exportedTracks: -1 }, { ok: true, exportedTracks: 1.5 }]) expect(core.exportedTrackCount(result)).toBe(0);
+    expect(core.exportedTrackCount({ ok: true, exportedTracks: 29 })).toBe(29);
+  });
   const event = { id: "E1", name: "x", lists };
   const index = core.buildIndex(tracks);
   const roots = { Music: "/Volumes/Synthetic Music" };
