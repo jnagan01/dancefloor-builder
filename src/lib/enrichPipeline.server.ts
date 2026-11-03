@@ -524,7 +524,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     const got = await within(pool, fetchUntil, now);
     fetchClosed = true;
     fetchCtrl.abort();
-    if (got === LATE || cursor < missOrder.length) timeout("fetch");
+    if (got === LATE) timeout("fetch");
   }
   // Unfinished lookups keep only what was already known (partial cache data), flagged incomplete.
   const unfinished = new Set<string>();
@@ -532,6 +532,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     const k = `${q.artistKey}\u0000${q.songKey}`;
     if (fetched.has(k)) continue;
     unfinished.add(k);
+    timeout("fetch");
     const prev = partial.get(k);
     if (prev) fetched.set(k, { ...prev, artist: q.original.artist, song: q.original.song, source: prev.energy != null ? prev.source : "MusicBrainz" });
   }
