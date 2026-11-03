@@ -95,4 +95,52 @@ describe('real event route: Last.fm track evidence and preparation feedback in a
     expect(h.errors).toContain('Account changed during generation; nothing was applied.');
     h.unmount();
   });
+
+  it('shared ranking explains every automatic addition; AI notes are not evidence', async () => {
+    const services = {
+      similarTracks: async () => ({ availability: 'ok', seeds: [
+        { seed: { artist: 'Queen', title: 'Radio Ga Ga' }, status: 'ok', similar: [{ artist: 'Elton John', title: "I'm Still Standing", match: 0.4 }] },
+        { seed: { artist: 'ABBA', title: 'Dancing Queen' }, status: 'ok', similar: [{ artist: 'Elton John', title: "I'm Still Standing", match: 0.5 }] },
+      ] }),
+      recommend: async () => ({ suggestions: [sug('Plain Act', 'Plain Song'), sug('Queen', 'Another Synthetic')] }),
+    };
+    const h = harness({ rows: { A: row() }, services });
+    await h.flush(); h.library(library); await h.flush();
+    await h.current.generate(); await h.flush();
+    const rows = all(h.current.result) as { artist: string; song: string; fromUpload?: boolean; aiReason?: string; rankWhy?: string }[];
+    expect(rows.filter(t => t.fromUpload).every(t => t.rankWhy === undefined)).toBe(true);
+    expect(rows.filter(t => !t.fromUpload).every(t => typeof t.rankWhy === 'string' && t.rankWhy.length > 0)).toBe(true);
+    expect(rows.find(t => t.song === "I'm Still Standing")!.rankWhy).toMatch(/Last\.fm lists this exact track as similar to 2 requested tracks/);
+    expect(rows.find(t => t.song === 'Another Synthetic')!.rankWhy).toMatch(/Same artist as client request/);
+    const plain = rows.find(t => t.song === 'Plain Song')!;
+    expect(plain.rankWhy).toBe('No specific evidence beyond your event rules.');
+    expect(plain.rankWhy).not.toContain('synthetic'); // the AI's own reason never becomes evidence
+    h.unmount();
+  });
+
+  it('AI outage falls back to the ranked built-in catalogue with explanations, never blocked tracks', async () => {
+    const h = harness({ rows: { A: row() }, services: { recommend: async () => { throw Error('AI outage'); } } });
+    h.setPrep((s: object) => ({ ...s, knowledge: knowledge(h) }));
+    await h.flush(); h.library(library); await h.flush();
+    await h.current.generate(); await h.flush();
+    const rows = all(h.current.result) as { artist: string; song: string; fromUpload?: boolean; rankWhy?: string }[];
+    const added = rows.filter(t => !t.fromUpload);
+    expect(added.length).toBeGreaterThan(0);
+    expect(added.every(t => !!t.rankWhy)).toBe(true);
+    expect(rows.map(t => t.song)).not.toContain('Never Track');
+    expect(rows.filter(t => t.fromUpload)).toHaveLength(2);
+    h.unmount();
+  });
+
+  it('requests-only generation (expansion off) adds nothing and calls no ranking sources', async () => {
+    let called = 0;
+    const off = () => ({ ...row(), inputs: { ...row().inputs, expand: false } });
+    const h = harness({ rows: { A: off() }, services: { recommend: async () => { called++; return { suggestions: [sug('Plain Act', 'Plain Song')] }; }, similarTracks: async () => { called++; return { availability: 'ok', seeds: [] }; } } });
+    await h.flush(); h.library(library); await h.flush();
+    await h.current.generate(); await h.flush();
+    const rows = all(h.current.result) as { fromUpload?: boolean; rankWhy?: string }[];
+    expect(rows.every(t => t.fromUpload && t.rankWhy === undefined)).toBe(true);
+    expect(called).toBe(0);
+    h.unmount();
+  });
 });

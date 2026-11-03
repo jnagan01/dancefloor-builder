@@ -331,6 +331,45 @@ try {
     await narrow('shortlist');
   });
 
+  await check('review recommendation quality: capture unrated sample, rate/change/clear, reload and account isolation, no feedback change', async () => {
+    await page.getByRole('button', { name: 'Go event' }).click();
+    const region = page.getByRole('region', { name: 'Event preparation' });
+    await prepTab('Recommendations').click();
+    const hiddenLine = () => region.getByText(/^Client requests always stay in the event\. Hidden:/).textContent();
+    const hiddenBefore = await hiddenLine();
+    await prepTab(/Review quality/).click();
+    await expect(region.getByRole('heading', { name: 'Review recommendation quality' })).toBeVisible();
+    await region.getByLabel('Review sample name').fill('Synthetic review');
+    await region.getByRole('button', { name: /Save current top \d+ for review/ }).click();
+    await expect(region.getByTestId('quality-note')).toContainText('All start unrated');
+    const sample = region.getByTestId('quality-sample').first();
+    await expect(sample).toContainText('0 reviewed');
+    await sample.locator('summary').click();
+    await expect(sample).toContainText('Rate at least 3 tracks');
+    const rate = (label, n) => sample.getByRole('button', { name: new RegExp(`^${label}: `) }).nth(n);
+    await rate('Poor fit', 0).click(); await expect(rate('Poor fit', 0)).toHaveAttribute('aria-pressed', 'true');
+    await rate('Good fit', 0).click(); await expect(rate('Good fit', 0)).toHaveAttribute('aria-pressed', 'true');
+    await expect(rate('Poor fit', 0)).toHaveAttribute('aria-pressed', 'false');
+    await rate('Maybe', 1).click(); await rate('Poor fit', 2).click();
+    await expect(sample).toContainText('3 reviewed');
+    await expect(sample).toContainText(/based on 3 of \d+ rated tracks only/);
+    await sample.getByRole('button', { name: /^Clear rating: / }).nth(2).click();
+    await expect(sample).toContainText('2 reviewed');
+    await expect(sample).toContainText('Rate at least 3 tracks');
+    // Ratings never become Never/favourite feedback or event dismissals.
+    await prepTab('Recommendations').click();
+    if (await hiddenLine() !== hiddenBefore) throw Error('Rating changed Never/dismissal counts');
+    // Reload keeps the sample for this account; another account sees none.
+    await page.reload(); await page.getByRole('button', { name: 'Go library' }).waitFor();
+    await page.getByRole('button', { name: 'Go event' }).click();
+    await prepTab(/Review quality \(1\)/).click();
+    await expect(region.getByTestId('quality-sample').first()).toContainText('2 reviewed');
+    await page.evaluate(() => window.__switchAccount('synthetic-b'));
+    await expect(prepTab(/Review quality \(0\)/)).toBeVisible();
+    await page.evaluate(() => window.__switchAccount('synthetic-a'));
+    await expect(prepTab(/Review quality \(1\)/)).toBeVisible();
+  });
+
   await check('backup round-trip through real browser + native validators restores preparation additively', async () => {
     await page.getByRole('button', { name: 'Go backup' }).click();
     await page.getByRole('button', { name: 'Back up preparation' }).click();
