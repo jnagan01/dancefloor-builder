@@ -64,6 +64,6 @@ export const SAVE_REJECTED_PREFIX = "Save rejected before writing:";
 export function parseSafeSaveRequest(data: unknown) {
   const parsed = safeSaveRequestSchema.safeParse(data);
   if (parsed.success) return parsed.data;
-  const fields = [...new Set(parsed.error.issues.map(i => i.path.filter(p => typeof p === "string").join(".") || "request"))].slice(0, 3);
+  const fields = [...new Set(parsed.error.issues.map(i => i.path.filter(p => typeof p === "string").map((p, n, a) => (a[n - 1] === "selections" || a[n - 1] === "metaProv" ? "*" : p)).join(".") || "request"))].slice(0, 3);
   throw new Error(`${SAVE_REJECTED_PREFIX} ${fields.join(", ")} not accepted. Nothing was changed online; your recovery copy is kept.`);
 }

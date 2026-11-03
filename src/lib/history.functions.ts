@@ -1,55 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
-import { validateTiming, boundedNumber, MAX_EVENT_MINUTES } from "./inputSafety";
 import { writeEventConditionally, renameEventConditionally } from "./eventWriteContract";
 import { withEventRevision } from "./eventRevision";
 import type { Json } from "@/integrations/supabase/types";
 
-const songSchema = z.object({
-  artist: z.string().max(300),
-  song: z.string().max(300),
-  fromUpload: z.boolean().optional(),
-  energy: z.number().optional(), danceability: z.number().optional(), popularity: z.number().optional(), valence: z.number().optional(),
-  bpm: z.number().optional(), camelot: z.string().optional(), genre: z.string().optional(), year: z.number().optional(),
-  mood: z.string().optional(), explicit: z.boolean().optional(), metaSource: z.string().optional(),
-  metaProv: z.record(z.string().max(20), z.string().max(20)).optional(),
-  stretched: z.boolean().optional(), naturalSection: z.string().optional(), reused: z.boolean().optional(),
-  waveRole: z.string().optional(), placementReason: z.string().optional(), aiSuggestion: z.boolean().optional(),
-  aiReason: z.string().optional(), fromLibrary: z.boolean().optional(),
-  // Optional plain-language ranking reasons for automatic additions; older snapshots omit it.
-  rankWhy: z.string().max(1000).optional(),
-}).passthrough();
-
-export const inputsSchema = z.object({
-  songs: z.array(songSchema).max(2000),
-  hours: z.string().max(10),
-  artistsInput: z.string().max(5000),
-  genresInput: z.string().max(2000),
-  decades: z.array(z.string().max(20)).max(20),
-  notes: z.string().max(5000),
-  doNotPlayInput: z.string().max(20000),
-  vibe: z.string().max(40).optional(),
-  bpmRange: z.tuple([z.number().min(60).max(180), z.number().min(60).max(180)]).refine(([a, b]) => a <= b).optional(),
-  danceRange: z.tuple([z.number().min(1).max(10), z.number().min(1).max(10)]).refine(([a, b]) => a <= b).optional(),
-  expand: z.boolean(),
-  buffer: z.number().int().min(2).max(4).optional(),
-  eventName: z.string().max(200),
-  listType: z.enum(["dance", "cocktail", "dinner"]).optional(),
-  minutes: z.string().max(10).optional(),
-  eventType: z.string().max(40).optional(), homeKey: z.string().max(10).optional(),
-  split: z.object({ warmUp: z.number(), transition: z.number(), peak: z.number() }).optional(),
-}).passthrough().superRefine((value, ctx) => {
-  try { validateTiming(value.hours, value.buffer ?? 2, value.split); if (value.minutes !== undefined) boundedNumber(value.minutes, MAX_EVENT_MINUTES, "List minutes"); }
-  catch (e) { ctx.addIssue({ code: "custom", message: (e as Error).message }); }
-});
-
-export const listsSchema = z.object({
-  warmUp: z.array(songSchema).max(2000),
-  transition: z.array(songSchema).max(2000),
-  peak: z.array(songSchema).max(2000),
-  selections: z.record(z.string(), z.object({ paths: z.array(z.string().max(2000)).max(100), excluded: z.boolean().optional() }).passthrough()).optional(),
-}).passthrough();
+export { inputsSchema, listsSchema } from "./eventSchemas";
+import { inputsSchema, listsSchema, parseSafeSaveRequest } from "./eventSchemas";
 
 function dbError(op: string, error: { message: string; code?: string }): Error {
   console.error(`[history.functions] ${op} failed:`, error.message, error.code ?? "");
@@ -194,9 +151,5 @@ export const listMostRequested = createServerFn({ method: "GET" })
 /** Retry-safe endpoint: same UUID for creation, atomic expected-version update for existing events. */
 export const saveWorkflowSafely = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => z.object({
-    id: z.string().uuid(), create: z.boolean(), expectedUpdatedAt: z.string().nullable(),
-    expectedRevision: z.string().uuid().nullable(), writeRevision: z.string().uuid(),
-    name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
-  }).parse(data))
+  .inputValidator((data: unknown) => parseSafeSaveRequest(data))
   .handler(async ({ data, context }) => writeEventConditionally(context.supabase, context.userId, data));
