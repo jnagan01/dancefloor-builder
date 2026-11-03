@@ -400,157 +400,169 @@ export interface CacheRow {
 export interface EnrichDeps {
   readRows(artistKeys: string[], songKeys: string[]): Promise<CacheRow[] | null>;
   upsert(rows: Array<Omit<CacheRow, "fetched_at"> & { fetched_at: string }>): Promise<void>;
-  estimate?: typeof estimateWithAi;
+  estimate?: (songs: Parameters<typeof estimateWithAi>[0], signal?: AbortSignal) => ReturnType<typeof estimateWithAi>;
+  /** Test/override hooks: phase limits and clock. Production uses ENRICH_LIMITS + Date.now. */
+  limits?: Partial<EnrichLimits>;
+  now?: () => number;
+}
+export interface EnrichOptions {
+  /** Active familiarity choice: a fresh cache row lacking track popularity is a partial hit worth one bounded lookup. */
+  needPopularity?: boolean;
 }
 
-export async function runEnrichment(songs: Array<{ artist: string; song: string }>, deps: EnrichDeps): Promise<{ results: EnrichedSong[] }> {
-    if (!songs.length) return { results: [] as EnrichedSong[] };
+export async function runEnrichment(songs: Array<{ artist: string; song: string }>, deps: EnrichDeps, opts: EnrichOptions = {}): Promise<{ results: EnrichedSong[]; status: EnrichStatus }> {
+  const status: EnrichStatus = { complete: true, timedOut: [], unfinished: 0 };
+  if (!songs.length) return { results: [] as EnrichedSong[], status };
+  const L: EnrichLimits = { ...ENRICH_LIMITS, ...(deps.limits ?? {}) };
+  const now = deps.now ?? Date.now;
+  const start = now();
+  const end = start + L.totalMs - L.assemblyMs; // everything must settle before assembly
+  const timeout = (ph: EnrichPhase) => { status.complete = false; if (!status.timedOut.includes(ph)) status.timedOut.push(ph); };
 
   // Build normalized keys and de-dupe (multiple identical songs in one batch).
-  type Query = {
-    original: { artist: string; song: string };
-    artistKey: string;
-    songKey: string;
-  };
-  const queries: Query[] = songs.map((s) => ({
-    original: s,
-    artistKey: normalizeKey(s.artist),
-    songKey: normalizeKey(s.song),
-  }));
+  type Query = { original: { artist: string; song: string }; artistKey: string; songKey: string };
+  const queries: Query[] = songs.map((s) => ({ original: s, artistKey: normalizeKey(s.artist), songKey: normalizeKey(s.song) }));
 
-  // 1) Cache read.
-  const cacheKeys = Array.from(
-    new Set(queries.filter((q) => q.artistKey && q.songKey).map((q) => `${q.artistKey}\u0000${q.songKey}`)),
-  );
+  // 1) Cache read (bounded; a hung read means "no cache knowledge", never a fabricated hit).
+  const cacheKeys = Array.from(new Set(queries.filter((q) => q.artistKey && q.songKey).map((q) => `${q.artistKey}\u0000${q.songKey}`)));
   const cache = new Map<string, EnrichedSong>();
   if (cacheKeys.length) {
     const artistKeys = Array.from(new Set(queries.map((q) => q.artistKey))).filter(Boolean);
     const songKeys = Array.from(new Set(queries.map((q) => q.songKey))).filter(Boolean);
-    const rows = await deps.readRows(artistKeys, songKeys);
+    let rows: CacheRow[] | null = null;
+    try {
+      const got = await within(Promise.resolve().then(() => deps.readRows(artistKeys, songKeys)), Math.min(end, start + L.cacheReadMs), now);
+      if (got === LATE) timeout("cacheRead"); else rows = got;
+    } catch { rows = null; }
     const cutoffMs = Date.now() - CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
     for (const row of rows ?? []) {
       const fetchedMs = row.fetched_at ? new Date(row.fetched_at).getTime() : 0;
       if (fetchedMs < cutoffMs) continue; // stale — force refetch
       const values = {
-        energy: row.energy ?? undefined,
-        danceability: row.danceability ?? undefined,
-        valence: row.valence ?? undefined,
-        popularity: row.popularity ?? undefined,
-        bpm: row.bpm ?? undefined,
-        camelot: row.camelot ?? undefined,
-        genre: row.genre ?? undefined,
-        year: row.year ?? undefined,
+        energy: row.energy ?? undefined, danceability: row.danceability ?? undefined, valence: row.valence ?? undefined,
+        popularity: row.popularity ?? undefined, bpm: row.bpm ?? undefined, camelot: row.camelot ?? undefined,
+        genre: row.genre ?? undefined, year: row.year ?? undefined,
       };
       // Cached rows keep their recorded per-attribute provenance (legacy rows decode conservatively).
       const { summary, prov } = decodeCacheSource(row.source, values);
-      cache.set(`${row.artist_key}\u0000${row.song_key}`, {
-        artist: "", // filled in from query
-        song: "",
-        ...values,
-        source: (summary as EnrichSource) || "none",
-        prov,
-      });
+      cache.set(`${row.artist_key}\u0000${row.song_key}`, { artist: "", song: "", ...values, source: (summary as EnrichSource) || "none", prov });
     }
   }
 
-  // 2) Determine misses (unique per normalized key). Cache rows without
-  //    energy/danceability are partial hits — re-fetch to upgrade them.
+  // 2) Misses. Rows without energy/danceability are partial hits (re-fetch to upgrade); with an active familiarity choice,
+  //    rows lacking track popularity are partial too. Priority is deterministic: true misses / energy gaps first (input
+  //    order), popularity-only upgrades last. Partials always keep their cached values if the upgrade doesn't finish.
   const partial = new Map<string, EnrichedSong>();
+  const popOnly = new Set<string>();
   for (const [k, c] of cache) {
-    if (c.energy == null || c.danceability == null) {
-      partial.set(k, c);
-      cache.delete(k);
-    }
+    if (c.energy == null || c.danceability == null) { partial.set(k, c); cache.delete(k); }
+    else if (opts.needPopularity && c.popularity == null) { partial.set(k, c); popOnly.add(k); cache.delete(k); }
   }
   const missSet = new Set<string>();
-  const missOrder: Query[] = [];
+  const first: Query[] = [], last: Query[] = [];
   for (const q of queries) {
     const k = `${q.artistKey}\u0000${q.songKey}`;
-    if (!q.artistKey || !q.songKey) continue;
-    if (cache.has(k)) continue;
-    if (missSet.has(k)) continue;
+    if (!q.artistKey || !q.songKey || cache.has(k) || missSet.has(k)) continue;
     missSet.add(k);
-    missOrder.push(q);
+    (popOnly.has(k) ? last : first).push(q);
   }
+  const missOrder = [...first, ...last];
 
-  // 3) Fetch misses with a bounded worker pool and an overall deadline.
+  // 3) Provider fetches: bounded pool, closes early enough to leave room for the AI estimate and the cache write.
+  //    In-flight requests are aborted at the phase deadline and their late results are fenced out.
   const fetched = new Map<string, EnrichedSong>();
-  const deadline = Date.now() + FETCH_BUDGET_MS;
+  const fresh = new Set<string>(); // keys that gained provider/AI data this call (only these are written back)
+  const fetchUntil = Math.max(now(), end - L.upsertMs - (missOrder.length ? Math.min(L.aiMs, Math.floor((end - now()) / 3)) : 0));
+  const fetchCtrl = new AbortController();
+  const ctx: FetchCtx = { signal: fetchCtrl.signal, until: fetchUntil, requestMs: L.requestMs, now };
+  let fetchClosed = false;
   let cursor = 0;
   const worker = async () => {
     for (;;) {
       const i = cursor++;
-      if (i >= missOrder.length) return;
-      if (Date.now() > deadline) return;
+      if (i >= missOrder.length || fetchClosed || now() >= fetchUntil) return;
       const q = missOrder[i];
       const k = `${q.artistKey}\u0000${q.songKey}`;
       const prev = partial.get(k);
       const [reco, mb] = await Promise.all([
-        fetchReccoBeats(q.original.artist, q.original.song),
+        fetchReccoBeats(q.original.artist, q.original.song, ctx),
         prev && (prev.genre || prev.year)
           ? Promise.resolve({ genre: prev.genre, year: prev.year } as MusicBrainzInfo)
-          : fetchMusicBrainz(q.original.artist, q.original.song),
+          : fetchMusicBrainz(q.original.artist, q.original.song, ctx),
       ]);
+      if (fetchClosed) return; // late: phase already closed, never mutate
       const rs = reco?.exact ? "provider" : "estimate";
       const reusedMb = !!(prev && (prev.genre || prev.year));
       const ms = reusedMb ? undefined : mb?.exact ? "provider" : "estimate";
       const prov: MetaProv = {};
-      const take = <A extends keyof MetaProv>(a: A, fresh: unknown, src: MetaProv[A], old: unknown) => {
-        if (fresh != null) { prov[a] = src; return fresh; }
+      const take = <A extends keyof MetaProv>(a: A, freshV: unknown, src: MetaProv[A], old: unknown) => {
+        if (freshV != null) { prov[a] = src; return freshV; }
         if (old != null) { prov[a] = prev?.prov?.[a] ?? "estimate"; return old; }
         return undefined;
       };
+      const gotNew = reco != null || (!reusedMb && mb != null);
       fetched.set(k, {
         artist: q.original.artist,
         song: q.original.song,
-        energy: take("energy", reco?.energy, rs, undefined) as number | undefined,
-        danceability: take("danceability", reco?.danceability, rs, undefined) as number | undefined,
-        valence: take("valence", reco?.valence, rs, undefined) as number | undefined,
+        energy: take("energy", reco?.energy, rs, prev?.energy) as number | undefined,
+        danceability: take("danceability", reco?.danceability, rs, prev?.danceability) as number | undefined,
+        valence: take("valence", reco?.valence, rs, prev?.valence) as number | undefined,
         popularity: take("popularity", reco?.popularity, rs, prev?.popularity) as number | undefined,
         bpm: take("bpm", reco?.bpm, rs, prev?.bpm) as number | undefined,
         camelot: take("camelot", reco?.camelot, rs, prev?.camelot) as string | undefined,
         genre: take("genre", reusedMb ? undefined : mb?.genre, ms, prev?.genre) as string | undefined,
         year: take("year", reusedMb ? undefined : mb?.year, ms, prev?.year) as number | undefined,
-        source: pickSource(reco?.energy != null, !!(mb?.genre || mb?.year)),
+        source: popOnly.has(k) && reco?.energy == null ? prev!.source : pickSource(reco?.energy != null, !!(mb?.genre || mb?.year)),
         prov,
       });
+      if (gotNew) fresh.add(k);
     }
   };
-  await Promise.all(
-    Array.from({ length: Math.min(FETCH_CONCURRENCY, missOrder.length) }, worker),
-  );
-  // Anything the budget skipped keeps its partial cache data.
+  if (missOrder.length) {
+    const pool = Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, missOrder.length) }, worker));
+    const got = await within(pool, fetchUntil, now);
+    fetchClosed = true;
+    fetchCtrl.abort();
+    if (got === LATE || cursor < missOrder.length) timeout("fetch");
+  }
+  // Unfinished lookups keep only what was already known (partial cache data), flagged incomplete.
+  const unfinished = new Set<string>();
   for (const q of missOrder) {
     const k = `${q.artistKey}\u0000${q.songKey}`;
+    if (fetched.has(k)) continue;
+    unfinished.add(k);
     const prev = partial.get(k);
-    if (!fetched.has(k) && prev) {
-      fetched.set(k, { ...prev, artist: q.original.artist, song: q.original.song, source: "MusicBrainz" });
-    }
+    if (prev) fetched.set(k, { ...prev, artist: q.original.artist, song: q.original.song, source: prev.energy != null ? prev.source : "MusicBrainz" });
   }
 
-  // 3b) AI acoustic estimate for anything still missing energy/danceability.
+  // 3b) AI acoustic estimate for anything still missing energy/danceability — bounded and abortable; a late answer is ignored.
   const needAi = missOrder
     .map((q) => ({ q, k: `${q.artistKey}\u0000${q.songKey}` }))
-    .filter(({ k }) => {
-      const e = fetched.get(k);
-      return !e || e.energy == null || e.danceability == null;
-    });
-  if (needAi.length) {
-    const est = await (deps.estimate ?? estimateWithAi)(
-      needAi.map(({ q, k }) => {
-        const e = fetched.get(k);
-        return { artist: q.original.artist, song: q.original.song, genre: e?.genre, year: e?.year, bpm: e?.bpm };
-      }),
-    );
+    .filter(({ k }) => { const e = fetched.get(k); return !e || e.energy == null || e.danceability == null; });
+  const aiUntil = end - L.upsertMs;
+  if (needAi.length && now() < aiUntil) {
+    const aiCtrl = new AbortController();
+    let est: Array<AiEstimate | null> | typeof LATE = [];
+    try {
+      est = await within(
+        Promise.resolve().then(() => (deps.estimate ?? estimateWithAi)(
+          needAi.map(({ q, k }) => { const e = fetched.get(k); return { artist: q.original.artist, song: q.original.song, genre: e?.genre, year: e?.year, bpm: e?.bpm }; }),
+          aiCtrl.signal,
+        )),
+        Math.min(aiUntil, now() + L.aiMs), now,
+      );
+    } catch { est = []; }
+    if (est === LATE) { aiCtrl.abort(); timeout("ai"); for (const { k } of needAi) unfinished.add(k); est = []; }
     needAi.forEach(({ q, k }, idx) => {
-      const a = est[idx];
+      const a = (est as Array<AiEstimate | null>)[idx];
       if (!a) return;
       const e: EnrichedSong = fetched.get(k) ?? { artist: q.original.artist, song: q.original.song, source: "none" as const };
       // AI only fills gaps and every filled attribute is labelled an AI estimate.
       const prov: MetaProv = { ...(e.prov ?? {}) };
+      let filled = false;
       const fill = <A extends "energy" | "danceability" | "valence" | "bpm" | "genre" | "year">(attr: A) => {
         if (e[attr] != null) return e[attr];
-        if (a[attr] != null) prov[attr] = "ai";
+        if (a[attr] != null) { prov[attr] = "ai"; filled = true; }
         return a[attr];
       };
       fetched.set(k, {
@@ -564,52 +576,48 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
         source: e.source === "none" || e.source === "MusicBrainz" ? "AI" : e.source,
         prov,
       });
+      if (filled) fresh.add(k);
     });
+  } else if (needAi.length) {
+    timeout("ai");
+    for (const { k } of needAi) unfinished.add(k);
   }
 
-  // 4) Upsert successful fetches into the cache (service role bypasses RLS).
+  // 4) Upsert data gained this call (service role bypasses RLS). Bounded: the response never waits on a hung write;
+  //    unchanged partial rows are not rewritten (that would only refresh their TTL without new evidence).
   const toUpsert = Array.from(fetched.entries())
-    .filter(([, e]) => e.source !== "none")
+    .filter(([k, e]) => fresh.has(k) && e.source !== "none")
     .map(([k, e]) => {
       const [artist_key, song_key] = k.split("\u0000");
       return {
-        artist_key,
-        song_key,
-        energy: e.energy ?? null,
-        danceability: e.danceability ?? null,
-        valence: e.valence ?? null,
-        popularity: e.popularity ?? null,
-        bpm: e.bpm ?? null,
-        camelot: e.camelot ?? null,
-        genre: e.genre ?? null,
-        year: e.year ?? null,
+        artist_key, song_key,
+        energy: e.energy ?? null, danceability: e.danceability ?? null, valence: e.valence ?? null, popularity: e.popularity ?? null,
+        bpm: e.bpm ?? null, camelot: e.camelot ?? null, genre: e.genre ?? null, year: e.year ?? null,
         source: encodeCacheSource(e.source, e.prov ?? {}),
         fetched_at: new Date().toISOString(),
       };
     });
   if (toUpsert.length) {
     try {
-      await deps.upsert(toUpsert);
+      const got = await within(Promise.resolve().then(() => deps.upsert(toUpsert)), end, now);
+      if (got === LATE) timeout("upsert");
     } catch (err) {
       // Cache write failure is non-fatal — we still return the fresh data.
       console.warn("[enrichSongs] cache upsert failed", err);
     }
   }
 
-  // 5) Assemble per-input results (preserves order + duplicates).
+  // 5) Assemble per-input results (preserves order + duplicates). Snapshot copies so nothing late can mutate them.
+  status.unfinished = unfinished.size;
+  if (unfinished.size) status.complete = false;
   const results: EnrichedSong[] = queries.map((q) => {
     const k = `${q.artistKey}\u0000${q.songKey}`;
     const cached = cache.get(k);
-    if (cached) {
-      return { ...cached, artist: q.original.artist, song: q.original.song };
-    }
+    if (cached) return { ...cached, prov: cached.prov && { ...cached.prov }, artist: q.original.artist, song: q.original.song };
     const got = fetched.get(k);
-    if (got) return got;
-    return {
-      artist: q.original.artist,
-      song: q.original.song,
-      source: "none" as const,
-    };
+    const inc = unfinished.has(k) ? { incomplete: true as const } : {};
+    if (got) return { ...got, prov: got.prov && { ...got.prov }, ...inc };
+    return { artist: q.original.artist, song: q.original.song, source: "none" as const, ...inc };
   });
-  return { results };
+  return { results, status };
 }
