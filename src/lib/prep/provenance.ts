@@ -117,12 +117,7 @@ export function decodeCacheSource(raw: string | null | undefined, present: { [K 
     for (const a of META_ATTRS) if (has(present[a]) && !prov[a]) prov[a] = "estimate";
     return { summary, prov };
   }
-  const reco = s === "ReccoBeats" || s === "ReccoBeats+MusicBrainz";
-  for (const a of META_ATTRS) {
-    if (!has(present[a])) continue;
-    if (s === "AI") prov[a] = "ai";
-    else if (reco && (a === "energy" || a === "danceability" || a === "valence" || a === "popularity" || a === "camelot")) prov[a] = "provider";
-    else prov[a] = "estimate";
-  }
+  // Legacy labels never recorded which attribute came from where (and title fallbacks could hit another song).
+  for (const a of META_ATTRS) if (has(present[a])) prov[a] = s === "AI" ? "ai" : "estimate";
   return { summary: s || "none", prov };
 }
