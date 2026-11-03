@@ -263,3 +263,57 @@ describe('feedback gate (bounded wait)', () => {
     expect(await awaitReadyFeedback(store, 'owner', 20)).toEqual({ ok: false, message: GATE_MESSAGES.loading });
   });
 });
+
+describe('verified provider identity is exact (artist credit + full version descriptor)', () => {
+  type Rb = { id: string; trackTitle: string; artists: { name: string }[]; tempo: number };
+  type Mb = { title: string; 'artist-credit': { name: string }[]; 'first-release-date': string };
+  function stub(rb: Rb[], mb: Mb[]) {
+    vi.stubGlobal('fetch', async (url: string) => {
+      const u = new URL(url);
+      if (u.host === 'api.reccobeats.com' && u.pathname.endsWith('/search')) return json(200, { content: Number(u.searchParams.get('page')) === 0 ? rb : [] });
+      if (u.host === 'api.reccobeats.com') { const id = decodeURIComponent(u.pathname.split('/')[3] ?? ''); return json(200, { energy: 0.8, danceability: 0.7, tempo: rb.find(r => r.id === id)?.tempo }); }
+      if (u.host === 'musicbrainz.org') return json(200, { recordings: mb });
+      return json(404, {});
+    });
+  }
+  const run = (artist: string, song: string, rows: Record<string, Partial<CacheRow>> = {}, written: Array<Record<string, unknown>> = []) =>
+    runEnrichment([{ artist, song }], cacheDeps(rows, written)).then(r => r.results[0]);
+
+  it('a differently named remix of the same title is only an estimate', async () => {
+    stub([{ id: 'g', trackTitle: 'Song (David Guetta Remix)', artists: [{ name: 'Act' }], tempo: 128 }],
+      [{ title: 'Song (David Guetta Remix)', 'artist-credit': [{ name: 'Act' }], 'first-release-date': '2010' }]);
+    const r = await run('Act', 'Song (Tiesto Remix)');
+    expect(r.prov).toMatchObject({ bpm: 'estimate', energy: 'estimate', year: 'estimate' });
+  });
+
+  it('same title by a different artist sharing a token is only an estimate', async () => {
+    stub([{ id: 'r', trackTitle: 'Hello', artists: [{ name: 'Adele Roberts' }], tempo: 100 }],
+      [{ title: 'Hello', 'artist-credit': [{ name: 'Adele Roberts' }], 'first-release-date': '2015' }]);
+    const r = await run('Adele', 'Hello');
+    expect(r.prov).toMatchObject({ bpm: 'estimate', year: 'estimate' });
+  });
+
+  it('a later exact candidate is preferred over the first loose one', async () => {
+    stub([
+      { id: 'loose', trackTitle: 'Song (David Guetta Remix)', artists: [{ name: 'Act' }], tempo: 128 },
+      { id: 'exact', trackTitle: 'Song (Tiësto Remix)', artists: [{ name: 'Act' }], tempo: 126 },
+    ], [
+      { title: 'Song', 'artist-credit': [{ name: 'Act Tribute' }], 'first-release-date': '1999' },
+      { title: 'Song (Tiesto remix)', 'artist-credit': [{ name: 'act' }], 'first-release-date': '2011' },
+    ]);
+    const r = await run('Act', 'Song (Tiesto Remix)');
+    expect(r.bpm).toBe(126); expect(r.year).toBe(2011);
+    expect(r.prov).toMatchObject({ bpm: 'provider', year: 'provider' });
+  });
+
+  it('a cache round trip never upgrades a mismatch to provider', async () => {
+    stub([{ id: 'g', trackTitle: 'Song (David Guetta Remix)', artists: [{ name: 'Act' }], tempo: 128 }], []);
+    const written: Array<Record<string, unknown>> = [];
+    await run('Act', 'Song (Tiesto Remix)', {}, written);
+    const row = written[0] as Partial<CacheRow>;
+    vi.stubGlobal('fetch', async () => { throw Error('network must not be needed'); });
+    const again = await run('Act', 'Song (Tiesto Remix)', { [key('Act', 'Song (Tiesto Remix)')]: row });
+    expect(again.bpm).toBe(128);
+    expect(Object.values(again.prov ?? {})).not.toContain('provider');
+  });
+});
