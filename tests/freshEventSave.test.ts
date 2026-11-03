@@ -25,7 +25,9 @@ const request = (inputs: Record<string, unknown>) => ({ id: crypto.randomUUID(),
 describe('safe-save contract accepts every preparation target the editor offers', () => {
   it('1× (fresh-event default) is accepted; 0× and 5× stay rejected without echoing values', () => {
     for (const buffer of [1, 2, 3, 4]) expect(() => parseSafeSaveRequest(request({ buffer }))).not.toThrow();
-    for (const buffer of [0, 5, 1.5]) {
+    // Legacy snapshots without a stored target stay accepted.
+    expect(() => parseSafeSaveRequest(request({}))).not.toThrow();
+    for (const buffer of [0, -1, 5, 1.5, Number.NaN]) {
       let message = '';
       try { parseSafeSaveRequest(request({ buffer })); } catch (e) { message = (e as Error).message; }
       expect(message.startsWith(SAVE_REJECTED_PREFIX)).toBe(true);
@@ -95,5 +97,15 @@ describe('import review duplicates use the conservative version-aware identity',
     button.props.onClick(); await h.flush();
     expect(h.current.songs).toEqual(SIX);
     h.unmount();
+  });
+});
+
+describe('the deployed endpoint uses this exact validator', () => {
+  it('saveWorkflowSafely validates with parseSafeSaveRequest and writes only through the CAS writer', async () => {
+    const src = (await import('node:fs')).readFileSync('src/lib/history.functions.ts', 'utf8');
+    const endpoint = src.slice(src.indexOf('export const saveWorkflowSafely'));
+    expect(endpoint).toContain('.inputValidator((data: unknown) => parseSafeSaveRequest(data))');
+    expect(endpoint).toContain('writeEventConditionally(context.supabase, context.userId, data)');
+    expect(src).not.toMatch(/min\(2\)\.max\(4\)/);
   });
 });
