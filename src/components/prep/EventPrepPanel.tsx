@@ -15,9 +15,11 @@ import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrac
 import { libraryCandidate, requestFacts, selectedTrackIds } from "@/lib/prep/requestFacts";
 import { EMPTY_FILTER, facetOptions, fmtDur, trackFacts, type FilterFacts, type FilterState } from "@/lib/prep/filters";
 import { buildDashboard, type DrillItem } from "@/lib/prep/dashboard";
-import { recommend, explainTop, DEFAULT_REC_CONTROLS, distinctRequests, type Candidate, type EventPreferences, type RecControls, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
-import { addQualitySample, deleteQualitySample, rateQualityCandidate, ratingCounts, QUALITY_RATINGS, type QualityCandidate } from "@/lib/prep/quality";
-import { compareRevisions, describeEvaluation } from "@/lib/prep/qualityEval";
+import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Candidate, type EventPreferences, type RecControls, type RecInput, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
+import { deleteQualitySample, rateQualityCandidate, ratingCounts, QUALITY_RATINGS } from "@/lib/prep/quality";
+import { captureFromRanking, compareRevisions, describeComparison } from "@/lib/prep/qualityEval";
+import { commitQualitySample } from "@/lib/prep/qualityCommit";
+import { prepStore } from "@/lib/prep/prepStore";
 import {
   addShortlist, copyGroupToEvent, createGroup, deleteGroup, dismissForEvent, eventPrep, itemIdentity, linkShortlistFile, removeFromGroup,
   removeShortlist, renameGroup, setEventTags, setFeedback, songIdentity, undoDismiss, updateShortlist, addToGroup, DISMISS_REASONS, type ShortStatus,
@@ -67,7 +69,7 @@ function Drill({ title, items, onJump, empty }: { title: string; items: DrillIte
 }
 
 export function EventPrepPanel(p: Props) {
-  const { state, knowledge, ready, mutate } = usePrep();
+  const { state, knowledge, ready, mutate, owner } = usePrep();
   // Live identity for async results: a response is applied only if account, session and event are unchanged.
   const live = useRef({ account: state.account, generation: state.generation, eventId: p.eventId });
   live.current = { account: state.account, generation: state.generation, eventId: p.eventId };
@@ -124,8 +126,9 @@ export function EventPrepPanel(p: Props) {
   const [similarTracksFor, setSimilarTracksFor] = useState<string | null>(null);
   useEffect(() => { trackSimGen.current++; setSimilarTracks([]); setSimilarTracksFor(null); setTrackSimState({ busy: false }); }, [seedKey]);
   const liveSimilarTracks = similarTracksFor === seedKey ? similarTracks : NO_TRACK_EVIDENCE;
-  const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, similarTracks: liveSimilarTracks, preferences: p.preferences, controls, filter, limit: 40 }),
+  const recInput = useMemo<RecInput>(() => ({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, similarTracks: liveSimilarTracks, preferences: p.preferences, controls, filter, limit: 40 }),
     [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, liveSimilarTracks, p.preferences, controls, filter]);
+  const rec = useMemo(() => recommend(recInput), [recInput]);
   const loadSimilar = async () => {
     const artists = [...new Set(requests.map(r => r.artist).filter(Boolean))].slice(0, 20);
     if (!artists.length) { setSimState({ busy: false, note: "No client requests to compare with yet." }); return; }
@@ -175,29 +178,16 @@ export function EventPrepPanel(p: Props) {
   const [sampleName, setSampleName] = useState("");
   const [qualityNote, setQualityNote] = useState<string | null>(null);
   const samples = knowledge.quality ?? [];
+  const [capturing, setCapturing] = useState(false);
   const captureSample = async () => {
-    const simByKey = new Map(liveSimilarTracks.map(e => [e.key, e]));
-    const simArtist = new Map(similar.map(x => [x.artist.toLowerCase(), x]));
-    const favored = new Set(knowledge.feedback.filter(f => f.kind === "favor").map(f => f.key));
-    const candidates: QualityCandidate[] = rec.items.slice(0, 10).map(r => {
-      const st = simByKey.get(r.key), sa = simArtist.get(r.artist.toLowerCase()), tags = r.trackId ? notesMap.get(r.trackId)?.tags : undefined;
-      const f = r.facts, c: QualityCandidate = { artist: r.artist, song: r.song, origin: r.origin };
-      if (f.genre) { c.genre = f.genre.slice(0, 60); if (f.genreSource) c.genreSource = f.genreSource; }
-      if (f.decade && /^\d{4}s$/.test(f.decade)) { c.decade = f.decade; if (f.decadeSource) c.decadeSource = f.decadeSource; }
-      if (f.owned !== undefined) c.owned = f.owned;
-      if (r.playCount !== undefined && Number.isInteger(r.playCount) && r.playCount >= 0) c.playCount = r.playCount;
-      if (st) { c.lastfmSeeds = st.seeds.slice(0, 5); c.lastfmMatch = st.bestMatch; }
-      if (sa) { c.similarTo = sa.similarTo; c.similarMatch = sa.match; }
-      if (tags?.length) c.tags = tags;
-      if (favored.has(r.key)) c.favored = true;
-      return c;
-    });
-    const reqs = distinctRequests(requests).slice(0, 60).map(r => ({ artist: r.artist, song: r.song, ...(r.genre ? { genre: r.genre.slice(0, 60) } : {}), ...(r.decade && /^\d{4}s$/.test(r.decade) ? { decade: r.decade } : {}) }));
-    const prefs = { genres: (p.preferences?.genres ?? []).slice(0, 30), decades: (p.preferences?.decades ?? []).slice(0, 30), artists: (p.preferences?.artists ?? []).slice(0, 30) };
-    try {
-      await mutate(k => addQualitySample(k, { name: sampleName, requests: reqs, preferences: prefs, eventTags, candidates }));
-      setSampleName(""); setQualityNote(`Saved ${candidates.length} tracks for review. All start unrated.`);
-    } catch (e) { setQualityNote((e as Error).message); }
+    const started = owner, sample = captureFromRanking(recInput, rec.items, sampleName);
+    setCapturing(true);
+    const res = await commitQualitySample(prepStore(), started, sample);
+    // Report only for the same owner still on screen; a failed or stale write keeps the typed name.
+    if (!started || live.current.account !== started.account || live.current.generation !== started.generation) return;
+    setCapturing(false);
+    if (res.ok) { setSampleName(""); setQualityNote(`Saved ${res.count} tracks for review. All start unrated.${sample.truncated ? " This sample had more context than can be stored, so comparisons will be unavailable." : ""}`); }
+    else setQualityNote(`Not saved: ${res.message}`);
   };
 
   // ---- groups ----
@@ -273,13 +263,13 @@ export function EventPrepPanel(p: Props) {
           <p className="text-xs text-muted-foreground">Save a small snapshot of the current recommendations, then rate each track. Samples stay on this device for your account, separate from your events and music; ratings never hide, favour or add tracks.</p></div>
         <div className="flex flex-wrap items-center gap-2">
           <Input className="h-8 max-w-xs" placeholder="Sample name (optional)" aria-label="Review sample name" maxLength={120} value={sampleName} onChange={e => setSampleName(e.target.value)} />
-          <Button size="sm" variant="outline" disabled={!ready || !rec.items.length} onClick={() => void captureSample()}>Save current top {Math.min(10, rec.items.length)} for review</Button>
+          <Button size="sm" variant="outline" disabled={!ready || capturing || !rec.items.length} onClick={() => void captureSample()}>Save current top {Math.min(10, rec.items.length)} for review</Button>
           {qualityNote && <span className="text-xs text-muted-foreground" data-testid="quality-note">{qualityNote}</span>}
         </div>
         {!samples.length && <p className="text-xs text-muted-foreground">No review samples yet.</p>}
         {samples.map(s => { const c = ratingCounts(s), cmp = compareRevisions(s); return <details key={s.id} className="rounded border border-border p-2" data-testid="quality-sample">
           <summary className="cursor-pointer text-sm"><span className="font-medium">{s.name}</span> <span className="text-xs text-muted-foreground">· {new Date(s.createdAt).toLocaleDateString()} · {c.reviewed} reviewed · {c.unrated} unrated</span></summary>
-          <p className="mt-1 text-[11px] text-muted-foreground">Saved order — {describeEvaluation(cmp.captured)}<br />Current ranking — {describeEvaluation(cmp.revision)}</p>
+          <div className="mt-1 text-[11px] text-muted-foreground" data-testid="quality-compare">{describeComparison(cmp, s).map((line, i) => <p key={i}>{line}</p>)}</div>
           <ol className="mt-2 space-y-1">{s.candidates.map((x, i) => <li key={i} className="flex flex-wrap items-center justify-between gap-1 text-xs">
             <span>{i + 1}. {x.artist} – {x.song}{x.rating ? "" : <span className="text-muted-foreground"> · unrated</span>}</span>
             <span className="flex flex-wrap gap-1">{QUALITY_RATINGS.map(r => <Button key={r.value} size="sm" className="h-6" variant={x.rating === r.value ? "default" : "ghost"} aria-pressed={x.rating === r.value} aria-label={`${r.label}: ${x.artist} – ${x.song}`} disabled={!ready} onClick={() => void mutate(k => rateQualityCandidate(k, s.id, i, r.value))}>{r.label}</Button>)}
