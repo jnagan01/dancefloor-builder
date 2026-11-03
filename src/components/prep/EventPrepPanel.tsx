@@ -220,7 +220,7 @@ export function EventPrepPanel(p: Props) {
             </div></div></li>)}</ul>
         {(ep.dismissed.length > 0 || knowledge.feedback.some(f => f.kind === "never")) && <details className="text-xs"><summary className="cursor-pointer">Manage hidden songs</summary>
           <div className="mt-2 grid gap-3 md:grid-cols-2">
-            <div><p className="font-medium">Dismissed for this event</p>{ep.dismissed.map(d => <p key={d.key} className="flex items-center justify-between">{d.label}<Button size="sm" variant="ghost" className="h-6" onClick={() => void mutate(k => undoDismiss(k, p.eventId!, d.key))}><Undo2 size={12} className="mr-1" />Undo</Button></p>)}</div>
+            <div><p className="font-medium">Dismissed for this event</p>{ep.dismissed.map(d => <p key={d.key} className="flex items-center justify-between">{d.label}{d.reason ? ` · ${DISMISS_REASONS.find(x => x.value === d.reason)?.label}` : ""}<Button size="sm" variant="ghost" className="h-6" onClick={() => void mutate(k => undoDismiss(k, p.eventId!, d.key))}><Undo2 size={12} className="mr-1" />Undo</Button></p>)}</div>
             <div><p className="font-medium">Never recommend (all events)</p>{knowledge.feedback.filter(f => f.kind === "never").map(f => { return <p key={f.key} className="flex items-center justify-between">{f.label}<Button size="sm" variant="ghost" className="h-6" onClick={() => void mutate(k => ({ ...k, feedback: k.feedback.filter(x => x.key !== f.key) }))}><Undo2 size={12} className="mr-1" />Allow</Button></p>; })}</div>
           </div></details>}
       </TabsContent>
