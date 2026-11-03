@@ -86,8 +86,10 @@ describe('import review duplicates use the conservative version-aware identity',
     await h.flush();
     h.current.setSongs([...SIX, { artist: 'Adele', song: 'Hello' }]); await h.flush();
     h.interact((n: any) => n.props?.steps && n.props?.onSelect, 'onSelect', 3);
-    const button = h.nodes().find((n: any) => n.props?.onClick && /Remove/.test(JSON.stringify(n.props?.children ?? '')) && /duplicate/.test(JSON.stringify(n.props?.children ?? '')));
-    expect(JSON.stringify(button.props.children)).toContain('"1"," duplicate"');
+    const flat = (v: any): any[] => !v || typeof v !== 'object' ? [] : Array.isArray(v) ? v.flatMap(flat) : [v, ...flat(v.props?.children), ...flat(v.props?.actions)];
+    const label = (n: any) => (Array.isArray(n.props?.children) ? n.props.children : [n.props?.children]).filter((c: any) => typeof c !== 'object').join('');
+    const button = flat(h.tree).find((n: any) => n.props?.onClick && /^Remove \d+ duplicate/.test(label(n)));
+    expect(label(button)).toBe('Remove 1 duplicate');
     button.props.onClick(); await h.flush();
     expect(h.current.songs).toEqual(SIX);
     h.unmount();
