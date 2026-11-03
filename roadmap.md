@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Trial duplicate, ranking and section coverage improvements
+- [ ] Prevent automatic duplicates, expose explicit saved-occurrence resolution and block repeated combined DJ exports.
+- [ ] Rank intended artist/title/version agreement without cross-field false confidence.
+- [ ] Display usable unique section lengths against configured event and buffer targets.
+- [ ] Run synthetic unit/native/prep/offline/race checks and report revision; external macOS gate remains required.
 ## Authorized preparation policies
 - [x] Verify direct TXT before confirmation; captured report shared across dialog/messages/artifact, cancellation and failed checks write nothing; 587 unit tests, 26 native event checks and 18 preparation checks passed, automatic compilation OK; external macOS acceptance pending.
 - [x] Align verified export warnings and policy-aware row displays; 581 unit tests, 25 native event checks and 18 preparation checks passed in isolated synthetic profiles; automatic compilation OK, external macOS acceptance pending.
