@@ -10,14 +10,15 @@ import { getFolderRoots, type SongMatch, type VdjLibrary, type VdjTrack } from "
 import { trackIdentity } from "@/lib/fileIdentity";
 import type { ResultSong } from "@/lib/danceFloor";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
-import { getArtistCrowdData } from "@/lib/lastfm.functions";
+import { getArtistCrowdData, getSimilarTracks } from "@/lib/lastfm.functions";
+import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { libraryCandidate, requestFacts, selectedTrackIds } from "@/lib/prep/requestFacts";
 import { EMPTY_FILTER, facetOptions, fmtDur, trackFacts, type FilterFacts, type FilterState } from "@/lib/prep/filters";
 import { buildDashboard, type DrillItem } from "@/lib/prep/dashboard";
 import { recommend, type Candidate, type RecControls, type SimilarArtistEvidence, type Recommendation } from "@/lib/prep/recommend";
 import {
   addShortlist, copyGroupToEvent, createGroup, deleteGroup, dismissForEvent, eventPrep, itemIdentity, linkShortlistFile, removeFromGroup,
-  removeShortlist, renameGroup, setEventTags, setFeedback, songIdentity, undoDismiss, updateShortlist, addToGroup, type ShortStatus,
+  removeShortlist, renameGroup, setEventTags, setFeedback, songIdentity, undoDismiss, updateShortlist, addToGroup, DISMISS_REASONS, type ShortStatus,
 } from "@/lib/prep/knowledge";
 import { FilterPanel } from "./FilterPanel";
 import type { DetailSubject } from "./TrackDetailSheet";
@@ -84,7 +85,11 @@ export function EventPrepPanel(p: Props) {
   const [similar, setSimilar] = useState<SimilarArtistEvidence[]>([]);
   const [simState, setSimState] = useState<{ busy: boolean; note?: string }>({ busy: false });
   const simGen = useRef(0);
-  useEffect(() => { simGen.current++; setSimilar([]); setSimState({ busy: false }); return () => { simGen.current++; }; }, [state.account, state.generation, p.eventId]);
+  const [similarTracks, setSimilarTracks] = useState<SimilarTrackEvidence[]>([]);
+  const [trackSimState, setTrackSimState] = useState<{ busy: boolean; note?: string }>({ busy: false });
+  const trackSimGen = useRef(0);
+  useEffect(() => { simGen.current++; trackSimGen.current++; setSimilar([]); setSimilarTracks([]); setSimState({ busy: false }); setTrackSimState({ busy: false }); return () => { simGen.current++; trackSimGen.current++; }; }, [state.account, state.generation, p.eventId]);
+  const similarTracksFn = useServerFn(getSimilarTracks);
   const crowdFn = useServerFn(getArtistCrowdData);
   const ownedKeys = useMemo(() => new Set(tracks.map(t => songIdentity(t.artist, t.title))), [tracks]);
   const roots = useMemo(() => getFolderRoots(), [tracks]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -108,8 +113,8 @@ export function EventPrepPanel(p: Props) {
   const requests = useMemo(() => p.sections.flatMap(s => s.songs.map((song, i) => ({ song, i, s }))).filter(x => x.song.fromUpload).map(({ song, i, s }) => {
     return requestFacts(song, p.matches[p.keyOf(s.key, i, song)], tracks);
   }), [p.sections, p.matches, p.keyOf, tracks, p.policies]); // eslint-disable-line react-hooks/exhaustive-deps
-  const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, controls, filter, limit: 40 }),
-    [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, controls, filter]);
+  const rec = useMemo(() => recommend({ candidates, requests, inEvent, inEventTrackIds, feedback: knowledge.feedback, dismissed: ep.dismissed, notes: notesMap, eventTags, similar, similarTracks, controls, filter, limit: 40 }),
+    [candidates, requests, inEvent, inEventTrackIds, knowledge.feedback, ep.dismissed, notesMap, eventTags, similar, similarTracks, controls, filter]);
   const loadSimilar = async () => {
     const artists = [...new Set(requests.map(r => r.artist).filter(Boolean))].slice(0, 20);
     if (!artists.length) { setSimState({ busy: false, note: "No client requests to compare with yet." }); return; }
@@ -123,6 +128,21 @@ export function EventPrepPanel(p: Props) {
       setSimilar(r.artists.flatMap(a => a.similar.map(s => ({ artist: s.name, similarTo: a.name, match: s.match }))));
       setSimState({ busy: false, note: `Using Last.fm similar artists for ${r.artists.length} requested artist${r.artists.length === 1 ? "" : "s"}.` });
     } catch { if (stillCurrent()) setSimState({ busy: false, note: "Couldn't reach Last.fm. Recommendations work without it." }); }
+  };
+
+  const loadSimilarTracks = async () => {
+    // Only bounded artist/title seeds from distinct client requests are sent; nothing else about the event or library.
+    const seeds = seedsFromRequests(requests);
+    if (!seeds.length) { setTrackSimState({ busy: false, note: availabilityNote("noSeeds", 0) }); return; }
+    const gen = ++trackSimGen.current, started = { ...live.current };
+    const stillCurrent = () => gen === trackSimGen.current && live.current.account === started.account && live.current.generation === started.generation && live.current.eventId === started.eventId;
+    setTrackSimState({ busy: true });
+    try {
+      const r = await similarTracksFn({ data: { seeds, perSeed: 20 } });
+      if (!stillCurrent()) return;
+      setSimilarTracks(aggregateSimilar(r.seeds));
+      setTrackSimState({ busy: false, note: availabilityNote(r.availability, seeds.length) });
+    } catch { if (stillCurrent()) setTrackSimState({ busy: false, note: availabilityNote("unavailable", seeds.length) }); }
   };
 
   // ---- shortlist ----
@@ -183,7 +203,8 @@ export function EventPrepPanel(p: Props) {
             : <p className="text-muted-foreground">Tag tracks in their details (e.g. "first dance", "singalong") to use them here.</p>}
           {!p.eventId && allTags.length > 0 && <p className="text-muted-foreground">Save the event to choose tags for it.</p>}
         </fieldset>
-        <div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" disabled={simState.busy} onClick={loadSimilar}>{simState.busy && <Loader2 size={14} className="mr-1 animate-spin" />}Add Last.fm similar artists</Button>{simState.note && <span className="text-xs text-muted-foreground">{simState.note}</span>}</div>
+        <div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" disabled={simState.busy} onClick={loadSimilar}>{simState.busy && <Loader2 size={14} className="mr-1 animate-spin" />}Add Last.fm similar artists</Button>{simState.note && <span className="text-xs text-muted-foreground">{simState.note}</span>}
+          <Button size="sm" variant="outline" disabled={trackSimState.busy} onClick={loadSimilarTracks}>{trackSimState.busy && <Loader2 size={14} className="mr-1 animate-spin" />}Add Last.fm similar tracks</Button>{trackSimState.note && <span className="text-xs text-muted-foreground" data-testid="lastfm-track-note">{trackSimState.note}</span>}</div>
         <FilterPanel context="recommendation" options={recOptions} value={filter} onChange={setFilter} shown={rec.items.length} />
         <p className="text-xs text-muted-foreground">Client requests always stay in the event. Hidden: {rec.hidden.inEvent} already in event, {rec.hidden.dismissed} dismissed here, {rec.hidden.never} never recommend, {rec.hidden.filtered} filtered{controls.ownedOnly ? `, ${rec.hidden.notOwned} not owned` : ""}.</p>
         <ul className="space-y-1.5">{rec.items.map(r => <li key={`${r.key}|${r.trackId ?? ""}`} className="rounded border border-border p-2">
@@ -194,6 +215,7 @@ export function EventPrepPanel(p: Props) {
               <Button size="sm" variant="ghost" aria-label={`Details for ${r.artist} – ${r.song}`} onClick={() => p.onDetails({ artist: r.artist, song: r.song, track: r.trackId ? trackById.get(r.trackId) : undefined, evidence: r.evidence, origin: r.origin })}><Info size={14} /></Button>
               <Button size="sm" variant="outline" disabled={!canEvent || ep.shortlist.some(s => itemIdentity(s) === itemIdentity({ artist: r.artist, song: r.song, trackId: r.trackId }))} onClick={() => void addRec(r)}><Plus size={14} className="mr-1" />Shortlist</Button>
               <Button size="sm" variant="ghost" disabled={!canEvent} onClick={() => p.eventId && void mutate(k => dismissForEvent(k, p.eventId!, r.artist, r.song))}>Dismiss here</Button>
+              {DISMISS_REASONS.map(reason => <Button key={reason.value} size="sm" variant="ghost" disabled={!canEvent} aria-label={`Dismiss ${r.artist} – ${r.song} here: ${reason.label}`} onClick={() => p.eventId && void mutate(k => dismissForEvent(k, p.eventId!, r.artist, r.song, reason.value))}>{reason.label}</Button>)}
               <Button size="sm" variant="ghost" disabled={!ready} onClick={() => void mutate(k => setFeedback(k, r.artist, r.song, "never"))}><Ban size={14} className="mr-1" />Never</Button>
             </div></div></li>)}</ul>
         {(ep.dismissed.length > 0 || knowledge.feedback.some(f => f.kind === "never")) && <details className="text-xs"><summary className="cursor-pointer">Manage hidden songs</summary>
