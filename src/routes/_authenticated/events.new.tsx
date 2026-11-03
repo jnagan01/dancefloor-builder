@@ -136,6 +136,7 @@ import { usableForHardRule } from "@/lib/prep/metaConfidence";
 import { SONG_LIBRARY } from "@/lib/songLibrary";
 import { libraryCandidate, requestFacts } from "@/lib/prep/requestFacts";
 import { normalizeEventFit, readEventFit, suggestFitFromNotes, type EventFit } from "@/lib/prep/eventFit";
+import { createFactsGatherer, factsKey, needsFacts, FACTS_BUDGET } from "@/lib/prep/factsGather";
 import { trackIdentity } from "@/lib/fileIdentity";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
@@ -1038,25 +1039,28 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Small helper: fetch online enrichment for a flat list of songs and
     // return a map keyed by "artist||song" (raw values). Best-effort — a
     // network failure returns an empty map so generation continues.
-    let enrichFailed = false;
+    let enrichFailed = false, budgetWarned = false;
+    // One per-generation gatherer: chunks of ≤200 (server limit), bounded concurrency, a total request budget, and each
+    // exact artist||song attempted once (misses and failures included) so later passes never re-request them.
+    const facts = createFactsGatherer<EnrichedSong>(
+      async (songs) => (await enrichFn({ data: { songs } })).results,
+      (e) => factsKey(e),
+      { budget: FACTS_BUDGET + r.warmUp.length + r.transition.length + r.peak.length },
+    );
     const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
       const map = new Map<string, EnrichedSong>();
       if (!list.length) return map;
-      try {
-        const payload = list.slice(0, 200).map((s) => ({ artist: s.artist, song: s.song }));
-        const res = await enrichFn({ data: { songs: payload } });
-        for (const e of res.results) {
-          map.set(`${e.artist}||${e.song}`, e);
-        }
-      } catch (err) {
-        console.warn("Online enrichment failed — falling back to VirtualDJ/heuristic", err);
-        if (!enrichFailed) {
-          enrichFailed = true;
-          toast.warning(
-            "Couldn't reach the online music data service — energy, BPM and genre are estimated for this run.",
-          );
-        }
+      const rep = await facts.gather(list);
+      if (rep.failedSongs && !enrichFailed) {
+        enrichFailed = true;
+        console.warn("Online enrichment failed for", rep.failedSongs, "songs — their details stay unknown/estimated");
+        toast.warning("Couldn't reach the online music data service for some songs — their energy, BPM and genre stay unknown or estimated for this run.");
       }
+      if (rep.skippedByBudget && !budgetWarned) {
+        budgetWarned = true;
+        toast.info(`${rep.skippedByBudget} candidate track${rep.skippedByBudget === 1 ? "" : "s"} weren't looked up online (per-run limit of ${FACTS_BUDGET} lookups); their details stay unknown and earn no fit bonus.`);
+      }
+      for (const s of list) { const e = facts.get(s); if (e) map.set(factsKey(s), e); }
       return map;
     };
 
@@ -1342,11 +1346,22 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const catalogue = generateLists({ uploaded: uniqueSongs, preserveRequestedRows: true, hours: background ? minutesNum / 60 : hoursNum, averageTrackSeconds: clientCoverage.averageSeconds, expand: true, buffer: background ? 1 : buffer, split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined, prefs: localPrefs });
         for (const k of sectionOrder) for (const s of background ? [...catalogue.warmUp, ...catalogue.transition, ...catalogue.peak] : catalogue[k]) if (!s.fromUpload) offer(withProv({ ...s, metaSource: "Library" } as PRow, "catalogue"), k);
 
-        // Attach reliable facts before ranking: one bounded online lookup for non-owned candidates (AI first), then file tags.
-        const needFacts = [...pool.values()].filter((p) => p.trackIdx === undefined).sort((a, b) => Number(!a.row.aiSuggestion) - Number(!b.row.aiSuggestion) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)));
+        // Attach facts BEFORE strict eligibility, ranking and energy ordering: every non-owned candidate (provider years/BPM
+        // feed strict limits) and every owned candidate missing facts the active ranking uses,
+        // so rankWhy and the displayed facts share one evidence set. Bounded, deterministic order (AI, owned, catalogue,
+        // then identity); owned rows keep their file tags (mergeMeta never lets provider/AI values replace tags).
+        const familiarityActive = !!normalizeEventFit(eventFit)?.familiarity;
+        const tier = (p: Pooled) => (p.row.aiSuggestion ? 0 : p.trackIdx !== undefined ? 1 : 2);
+        const needFacts = [...pool.values()].filter((p) => p.trackIdx === undefined || needsFacts(p.row, familiarityActive)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         if (needFacts.length) {
           const online = await enrichBatch(needFacts.map((p) => p.row));
-          for (const p of needFacts) p.row = enrichFromLibrary(applyOnlineEnrichment(p.row, online.get(`${p.row.artist}||${p.row.song}`)));
+          // Stale-generation/account fence after the await: never rank or apply with another run's or account's state.
+          if (genTokenRef.current !== myToken) return;
+          if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
+          for (const p of needFacts) {
+            const enriched = applyOnlineEnrichment(p.row, online.get(factsKey(p.row)));
+            p.row = (p.trackIdx !== undefined ? enriched : enrichFromLibrary(enriched)) as PRow;
+          }
         }
 
         // Strict eligibility BEFORE ranking, so excluded songs never take a slot or count toward artist variety.
@@ -1407,7 +1422,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     {
       const missing: ResultSong[] = [];
       (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
-        for (const s of r[k]) if (s.energy == null || s.danceability == null) missing.push(s);
+        // Client requests only: automatic additions already received their facts before ranking, so post-selection
+        // enrichment never changes an addition's evidence behind its rankWhy (known-attempted keys are never re-requested).
+        for (const s of r[k]) if (s.fromUpload && (s.energy == null || s.danceability == null)) missing.push(s);
       });
       if (missing.length) {
         const extra = await enrichBatch(missing);
