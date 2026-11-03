@@ -166,7 +166,7 @@ try{
    // Honest legacy provenance: cache years decode as estimates, so the unchanged strict decade policy leaves zero eligible
    // additions. Wait for the saved generation (lists present + fit persisted), not for a row count above the requests.
    await expect.poll(()=>{const r=find();return r&&r.lists&&r.inputs.eventFit?'saved':'pending';},{timeout:30000}).toBe('saved').catch(e=>{fs.writeFileSync(path.join(diagnostics,'wedding-row.json'),JSON.stringify({row:find()},null,1));throw e;});
-   await expect.poll(async()=>await page.getByText("couldn't be verified within your limits",{exact:false}).count(),{timeout:15000}).toBeGreaterThan(0);
+   await expect.poll(async()=>await page.getByText('Estimated track-count gap',{exact:false}).count(),{timeout:15000}).toBeGreaterThan(0).catch(async e=>{await page.screenshot({path:path.join(diagnostics,'wedding-gap.png')});throw e;});
    await page.waitForTimeout(1500);
    const created=find();
    expect(created.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});expect(created.inputs.buffer).toBe(1);
