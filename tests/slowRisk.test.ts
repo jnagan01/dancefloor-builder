@@ -63,7 +63,7 @@ describe("active avoid-slow held-out evidence boundaries", () => {
     const sample = { ...captureFromRanking(i, out.items, "held-out", 14), id: "risk", createdAt: 1 };
     const [read] = readQualitySamples(JSON.parse(JSON.stringify([sample])));
     expect(recommend(sampleInput(read)).items.map(r => [r.song,r.score])).toEqual(out.items.map(r => [r.song,r.score]));
-    const legacy = { songs: [], hours: "1.5", artistsInput: "", genresInput: "", decades: [], notes: "", doNotPlayInput: "", buffer: 1 };
+    const legacy = { songs: [], hours: "1.5", artistsInput: "", genresInput: "", decades: [], notes: "", doNotPlayInput: "", buffer: 1, expand: false, eventName: "TEST" };
     expect(inputsSchema.parse(legacy).eventFit).toBeUndefined();
     expect(inputsSchema.parse(JSON.parse(JSON.stringify({ ...legacy, eventFit: i.preferences?.fit }))).eventFit).toEqual(i.preferences?.fit);
   });

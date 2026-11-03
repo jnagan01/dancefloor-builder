@@ -49,7 +49,7 @@ async function settle(h: any, d: ReturnType<typeof deferredEnrich>, gen: Promise
 describe('owned-library facts are gathered BEFORE ranking (timing regression)', () => {
   it('holds ranking until the bounded lookup settles; rankWhy and fit facts agree; verified low energy+dance excludes, estimate only penalises', async () => {
     const d = deferredEnrich();
-    const h = harness({ rows: { A: row({ eventFit: { avoidSlow: true } }) }, services: { crowd, recommend: async () => ({ suggestions: [] }), enrich: d.enrich } });
+    const h = harness({ rows: { A: row({ hours: '4', eventFit: { avoidSlow: true } }) }, services: { crowd, recommend: async () => ({ suggestions: [] }), enrich: d.enrich } });
     await h.flush(); h.library(lib); await h.flush();
     const gen = h.current.generate();
     for (let i = 0; i < 10; i++) await h.flush();
