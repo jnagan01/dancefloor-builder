@@ -180,7 +180,7 @@ try {
   await page.getByRole('button', { name: 'Go event' }).click();
   await check('dashboard categories and drilldown follow export semantics', async () => {
     const region = page.getByRole('region', { name: 'Event preparation' });
-    await expect(region).toContainText('1 confirmed tracks');
+    await expect(region).toContainText('1 unique eligible tracks');
     await region.getByRole('button', { name: /No track linked/ }).click();
     await region.getByRole('button', { name: /Ghost – Missing/ }).click();
     expect(await page.evaluate(() => window.__jumps.at(-1))).toBe('warmUp:2');
@@ -367,9 +367,22 @@ try {
       window.__setEventMatches({'warmUp:1:band|hit':{status:'Manually Matched',confidence:1,trackIndex:3,extraTrackIndices:[2],confirmed:true,alternatives:[]}});
     });
     await prepTab('Overview').click();const region=page.getByRole('region',{name:'Event preparation'});
-    await expect(region).toContainText('1 confirmed tracks · approved length 3:20');
+    await expect(region).toContainText('1 unique eligible tracks · approved length 3:20');
     await region.getByRole('button',{name:/Waiting for your approval/}).click();
     await expect(region.getByRole('button',{name:/Band – Hit.*Clean version needed/})).toBeVisible();
+  });
+  await check('duplicate selected primary/extras show unique duration and review without modifying selections',async()=>{
+    await page.evaluate(()=>{window.__setPolicy({requireCleanVersions:false});window.__setEventMatches({
+      'warmUp:0:queen|song a':{status:'Manually Matched',confidence:1,trackIndex:0,extraTrackIndices:[1],confirmed:true,alternatives:[]},
+      'warmUp:1:band|hit':{status:'Manually Matched',confidence:1,trackIndex:0,confirmed:true,alternatives:[]},
+    });});
+    await prepTab('Overview').click();const region=page.getByRole('region',{name:'Event preparation'});
+    await expect(region).toContainText('2 unique eligible tracks · approved length 10:20');
+    await region.getByRole('button',{name:/Waiting for your approval/}).click();
+    await expect(region.getByRole('button',{name:/Band – Hit.*Repeated selected file/})).toBeVisible();
+    await region.getByRole('button',{name:/Band – Hit.*Repeated selected file/}).click();
+    expect(await page.evaluate(()=>window.__jumps.at(-1))).toBe('warmUp:1');
+    await narrow('duplicate-coverage');
   });
   const blocked = await page.evaluate(() => window.prepNative.blocked());
   if (blocked.length) throw Error(`Network requests left loopback: ${blocked.join(', ')}`);

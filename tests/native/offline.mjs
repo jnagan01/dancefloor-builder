@@ -432,6 +432,21 @@ try {
     const report=fs.readFileSync(path.join(output,names.find(n=>n.endsWith('.txt'))),'utf8');expect(report).toContain('Clean-policy blocks: 2');
     await close();
   });
+  await check('offline repeated exact primary and extras block all output without rewriting cached event',null,async()=>{
+    await launch({deny:false,online:true});const online=await app.firstWindow();
+    const b=JSON.parse(backup());const req={artist:'Test Artist',song:'Song'};
+    b.events=[{id:'E1',snapshot:{name:'Offline duplicate',inputs:{songs:[req,req]},lists:{warmUp:[req],transition:[req],peak:[],selections:{
+      [core.songKey('warmUp',0,req)]:{paths:['Music/a/Song.mp3'],confirmed:true},
+      [core.songKey('transition',0,req)]:{paths:['Music/b/Song.mp3','Music/a/Song.mp3'],confirmed:true},
+    }}}}];
+    const prepared=await online.evaluate(async([raw,a])=>{await window.electronOffline.accountSeen(a);return window.electronOffline.prepare(raw,a);},[JSON.stringify(b),ACCOUNT]);expect(prepared.ok).toBe(true);
+    await close();await launch({deny:true});const ow=await offlineWindow();
+    const output=path.join(temp,'duplicate-exports');fs.mkdirSync(output);fs.writeFileSync(path.join(temp,'export-dir'),output);
+    await ow.getByRole('button',{name:'Export VirtualDJ playlists'}).click();
+    await expect(ow.getByText(/Export stopped: repeated selected files/)).toBeVisible();
+    expect(fs.readdirSync(output)).toEqual([]);
+    await close();
+  });
   console.log(`${count} offline Electron flows passed`);
 } catch (e) {
   console.error(e);
