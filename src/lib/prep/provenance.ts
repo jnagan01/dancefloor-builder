@@ -8,7 +8,7 @@ import { tierOf, usableForHardRule, type MetaSource } from "./metaConfidence";
 export const META_ATTRS = ["bpm", "year", "genre", "energy", "danceability", "popularity", "valence", "camelot"] as const;
 export type MetaAttr = (typeof META_ATTRS)[number];
 export type MetaProv = Partial<Record<MetaAttr, MetaSource>>;
-export type ProvRow = { metaSource?: string; metaProv?: MetaProv } & { [K in MetaAttr]?: unknown };
+export type ProvRow = { metaSource?: string; metaProv?: MetaProv; catalogueDecade?: string } & { [K in MetaAttr]?: unknown };
 
 const RANK: Record<string, number> = { user: 6, measured: 5, tags: 4, virtualdj: 4, provider: 3, catalogue: 2, filename: 1, estimate: 1, ai: 1, unknown: 0 };
 export const sourceRank = (s: MetaSource | undefined) => RANK[s ?? "unknown"] ?? 0;
@@ -83,6 +83,8 @@ export function strictLimitFailure(row: ProvRow, limits: StrictLimits): null | "
   }
   if (limits.decades?.length) {
     const src = attrSource(row, "year"), v = row.year;
+    // The curated catalogue records a decade without an exact year; that is accepted as-is (never AI-derived).
+    if (!has(v) && row.catalogueDecade) return limits.decades.includes(row.catalogueDecade) ? null : "decade";
     if (!usableForHardRule(src, has(v), "year") || typeof v !== "number" || !limits.decades.includes(`${Math.floor(v / 10) * 10}s`)) return "decade";
   }
   return null;
