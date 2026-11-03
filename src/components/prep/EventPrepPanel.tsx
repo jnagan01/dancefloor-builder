@@ -40,6 +40,7 @@ interface Props {
   onDetails: (s: DetailSubject) => void;
 }
 
+const NO_TRACK_EVIDENCE: SimilarTrackEvidence[] = [];
 const STATUS_LABEL: Record<ShortStatus, string> = { considering: "Considering", selected: "Selected", obtain: "Need to obtain" };
 const searchLinks = (artist: string, song: string, note: string) => {
   const q = encodeURIComponent([artist, song, note].filter(Boolean).join(" "));
