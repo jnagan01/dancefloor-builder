@@ -11,6 +11,7 @@ import * as vibes from '@/lib/vibes';
 import * as isolation from '@/lib/workflowIsolation';
 import * as theory from '@/lib/musicTheory';
 import * as revisions from '@/lib/eventRevision';
+import { listsSchema } from '@/lib/history.functions';
 const require = createRequire(import.meta.url);
 const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
 
@@ -83,5 +84,23 @@ describe('real event route: one ranking over all available candidates', () => {
     const rows = await run({ recommend: async () => { called++; return { suggestions: [sug('Queen', 'X')] }; }, crowd: async () => { called++; return { available: false, artists: [] }; } }, { library: weakLibrary, inputs: { expand: false } });
     expect(rows.every(t => t.fromUpload)).toBe(true);
     expect(called).toBe(0);
+  });
+
+  it('rankWhy survives autosave and reload; old snapshots stay without it', async () => {
+    const h = harness({ rows: { A: row() }, services: { recommend: async () => ({ suggestions: [sug('Queen', 'Strong Synthetic')] }) } });
+    await h.flush(); await h.current.generate(); await h.flush(); await h.flush();
+    const saved = [...h.requests].reverse().find((r: { lists?: unknown }) => r.lists) as { lists: { warmUp: Row[]; transition: Row[]; peak: Row[] }; inputs: unknown };
+    expect(saved).toBeTruthy();
+    const parsed = listsSchema.parse(saved.lists) as unknown as { warmUp: Row[]; transition: Row[]; peak: Row[] };
+    const strong = all(parsed).find(t => t.song === 'Strong Synthetic')!;
+    expect(strong.rankWhy).toMatch(/Same artist as client request/);
+    h.unmount();
+    const again = harness({ rows: { A: { ...row(), lists: parsed } } });
+    await again.flush();
+    expect(all(again.current.result as any).find((t: Row) => t.song === 'Strong Synthetic')!.rankWhy).toBe(strong.rankWhy);
+    expect(all(again.current.result as any).filter((t: Row) => t.fromUpload).every((t: Row) => t.rankWhy === undefined)).toBe(true);
+    again.unmount();
+    expect(() => listsSchema.parse({ warmUp: [{ artist: 'A', song: 'B', rankWhy: 'x'.repeat(1001) }], transition: [], peak: [] })).toThrow();
+    expect(listsSchema.parse({ warmUp: [{ artist: 'A', song: 'B' }], transition: [], peak: [] }).warmUp[0]).not.toHaveProperty('rankWhy');
   });
 });

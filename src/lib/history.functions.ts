@@ -44,7 +44,7 @@ export const inputsSchema = z.object({
   catch (e) { ctx.addIssue({ code: "custom", message: (e as Error).message }); }
 });
 
-const listsSchema = z.object({
+export const listsSchema = z.object({
   warmUp: z.array(songSchema).max(2000),
   transition: z.array(songSchema).max(2000),
   peak: z.array(songSchema).max(2000),
