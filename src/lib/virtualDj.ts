@@ -417,9 +417,9 @@ export function searchLibraryBySong(artist: string, title: string, lib: VdjLibra
   }
   for (const r of searchLibraryScored(`${artist} ${title}`.trim(), lib, limit)) {
     if (out.length >= limit) break;
-    if (!seen.has(r.i)) { out.push(r); seen.add(r.i); }
+    if (!seen.has(r.i)) { out.push({ i: r.i, s: scorePair(makeSubject(artist, title), lib.subjects[r.i]).score }); seen.add(r.i); }
   }
-  return out.slice(0, limit);
+  return out.sort((a, b) => b.s - a.s || a.i - b.i).slice(0, limit);
 }
 
 export function searchLibraryScored(query: string, lib: VdjLibrary, limit = 25): Array<{ i: number; s: number }> {

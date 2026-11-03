@@ -3,7 +3,7 @@ import { exportApproved, type SongMatch } from "@/lib/virtualDj";
 export interface DashSong { artist: string; song: string; fromUpload?: boolean; genre?: string; year?: number; metaSource?: string }
 export interface DashSection { key: string; label: string; songs: DashSong[] }
 /** Facts about a library index entry. `undefined` from trackAt means the index no longer exists. */
-export interface DashTrack { durationSec?: number; genre?: string; decade?: string; cleanReason?: string | null }
+export interface DashTrack { durationSec?: number; genre?: string; decade?: string; cleanReason?: string | null; fileIdentity?: string }
 export interface DrillItem { section: string; index: number; label: string; detail?: string }
 export interface SectionDash {
   key: string; label: string; count: number; confirmed: number;
@@ -35,6 +35,7 @@ export function buildDashboard(sections: DashSection[], matches: Record<string, 
   const genres = new Map<string, { label: string; count: number }>(), decades = new Map<string, number>();
   let unknownGenre = 0, unknownDecade = 0, tentativeGenre = 0, tentativeDecade = 0;
   const allKnown: number[] = [];
+  const seenFiles = new Set<string>();
   const out: SectionDash[] = sections.map(sec => {
     const d: SectionDash = { key: sec.key, label: sec.label, count: sec.songs.length, confirmed: 0, pending: [], notLinked: [], linkedMissing: [], excluded: [], alternates: [], unknownDuration: [], knownSec: 0, estimatedSec: null, estimateBasis: null };
     sec.songs.forEach((s, i) => {
@@ -50,7 +51,11 @@ export function buildDashboard(sections: DashSection[], matches: Record<string, 
       else if (!exportApproved(m)) { d.pending.push({ ...item, detail: m!.status }); if (m!.alternatives.length) d.alternates.push({ ...item, detail: `${m!.alternatives.length + 1} candidate tracks` }); }
       else {
         if (facts.some(f => f?.cleanReason)) d.pending.push({ ...item, detail: facts.find(f => f?.cleanReason)?.cleanReason ?? "Clean version needed" });
-        approvedTracks = facts.filter((f): f is DashTrack => !!f && !f.cleanReason);
+        approvedTracks = facts.filter((f): f is DashTrack => {
+          if (!f || f.cleanReason) return false;
+          if (f.fileIdentity) { if (seenFiles.has(f.fileIdentity)) { d.pending.push({ ...item, detail: "Repeated selected file — not counted in unique length" }); return false; } seenFiles.add(f.fileIdentity); }
+          return true;
+        });
         d.confirmed += approvedTracks.length;
       }
       const lens = approvedTracks.map(t => t.durationSec);
@@ -58,7 +63,7 @@ export function buildDashboard(sections: DashSection[], matches: Record<string, 
       d.knownSec += known.reduce((a, b) => a + b, 0); allKnown.push(...known);
       if (approvedTracks.length) {
         for (let n = known.length; n < lens.length; n++) d.unknownDuration.push({ ...item, detail: "Approved track has no length in your VirtualDJ data" });
-      } else if (!m?.excludedFromVdj) d.unknownDuration.push({ ...item, detail: "No approved track yet" });
+      } else if (!m?.excludedFromVdj && !d.pending.some(p => p.index === i && p.detail?.startsWith("Repeated selected file"))) d.unknownDuration.push({ ...item, detail: "No approved track yet" });
       const a = s.artist.toLowerCase().replace(/^the\s+/, "").trim();
       if (a) { const e = artists.get(a) ?? { artist: s.artist, where: [] }; e.where.push(item); artists.set(a, e); }
       const tagGenre = approvedTracks.find(t => t.genre)?.genre, tagDecade = approvedTracks.find(t => t.decade)?.decade;

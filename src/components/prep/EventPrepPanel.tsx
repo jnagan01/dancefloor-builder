@@ -75,7 +75,7 @@ export function EventPrepPanel(p: Props) {
   const dash = useMemo(() => buildDashboard(
     p.sections.map(s => ({ key: s.key, label: s.label, songs: s.songs })), p.matches,
     (sec, i, s) => p.keyOf(sec as PrepSectionKey, i, s as ResultSong),
-    i => { const t = tracks[i]; if (!t) return undefined; const f = trackFacts(t); return { durationSec: f.durationSec, genre: f.genre, decade: f.decade, cleanReason: cleanReason(t, requiresClean(p.policies)) }; },
+    i => { const t = tracks[i]; if (!t) return undefined; const f = trackFacts(t); return { durationSec: f.durationSec, genre: f.genre, decade: f.decade, fileIdentity: trackIdentity(t.filePath, getFolderRoots()), cleanReason: cleanReason(t, requiresClean(p.policies)) }; },
   ), [p.sections, p.matches, p.keyOf, tracks, p.policies]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- recommendations ----
@@ -150,7 +150,7 @@ export function EventPrepPanel(p: Props) {
       <TabsList className="flex h-auto flex-wrap justify-start"><TabsTrigger value="overview">Overview</TabsTrigger><TabsTrigger value="recs">Recommendations</TabsTrigger><TabsTrigger value="shortlist">Shortlist ({ep.shortlist.length})</TabsTrigger><TabsTrigger value="groups">Groups ({knowledge.groups.length})</TabsTrigger></TabsList>
 
       <TabsContent value="overview" className="space-y-3">
-        <p className="text-xs text-muted-foreground">{dash.totals.songs} songs · {dash.totals.confirmed} confirmed tracks · approved length {fmtDur(dash.totals.knownSec)}. Uses the same approval rule as export. File presence on disk is checked by "Check export readiness". This is a planning check, not a prediction of how the night will go.</p>
+        <p className="text-xs text-muted-foreground">{dash.totals.songs} track rows · {dash.totals.confirmed} unique eligible tracks · approved length {fmtDur(dash.totals.knownSec)}. Repeated files do not add coverage. File presence on disk is checked by "Check export readiness".</p>
         <div className="grid gap-2 md:grid-cols-2">
           <Drill title="Waiting for your approval" items={dash.sections.flatMap(s => s.pending)} onJump={p.onJump} empty="Every linked track is approved." />
           <Drill title="No track linked" items={dash.sections.flatMap(s => s.notLinked)} onJump={p.onJump} empty="Every song has a linked track." />
