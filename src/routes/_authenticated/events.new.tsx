@@ -1285,13 +1285,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             const idx = generationResolver.resolve({ artist: ev.artist, song: ev.song });
             const t = idx === undefined ? undefined : mergedLibrary.tracks[idx];
             if (idx === undefined || !t || songIdentity(t.artist, t.title) !== ev.key) continue;
-            offer(ownedRow(idx, ev.seeds.length > 1 ? `Your library — Last.fm lists it as similar to ${ev.seeds.length} requested tracks.` : `Your library — Last.fm lists it as similar to requested ${ev.seeds[0]}.`));
+            offer(ownedRow(idx, ev.seeds.length > 1 ? `In your library — Last.fm lists this track as similar to ${ev.seeds.length} requested tracks (${ev.seeds.slice(0, 2).join("; ")}${ev.seeds.length > 2 ? "…" : ""}).` : `In your library — Last.fm lists this track as similar to requested ${ev.seeds[0]}.`));
           }
           for (const { name, seed } of neighborOrdered) {
             for (const idx of searchLibrary(name, mergedLibrary, 6)) {
               const t = mergedLibrary.tracks[idx];
               if (!t?.artist || !t.title || normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
-              offer(ownedRow(idx, `Your library — musical neighbour of ${seed}.`));
+              offer(ownedRow(idx, `In your library — close musical neighbour of ${seed} (artist-level evidence).`));
             }
           }
         }
