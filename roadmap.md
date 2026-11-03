@@ -1,12 +1,13 @@
 # Workspace rebuild
 ## Authorized preparation policies
-- [ ] Review corrections: remove unsafe local refill, match requested holiday clean versions independently of expansion, align dashboard eligible extras with export.
-- [ ] Diagnose clean-export failure with UI/IPC/artifacts; gate unsupported desktop policy activation before save and verify legacy backup/update.
-- [ ] Better expansion: compatible owned-only/seasonal controls, exact intended versions, honest gaps, all addition paths.
-- [ ] Event-wide clean requirement: preserved selections, fail-closed approval/export/readiness, offline capability gate.
-- [ ] Shared export count/reason wording, including extras and written outputs.
-- [ ] Synthetic unit and real Electron event/prep/offline/race/31,250-track/legacy roundtrips; retain macOS gate.
-- [ ] Report changed files, local results, revision and unverified macOS gate; no publication or user data access.
+- [x] Review corrections: remove unsafe local refill, match requested holiday clean versions independently of expansion, align dashboard eligible extras with export.
+- [x] Diagnose clean-export failure with UI/IPC/artifacts; gate unsupported desktop policy activation before save and verify legacy backup/update.
+- [x] Better expansion: compatible owned-only/seasonal controls, exact intended versions, honest gaps, all addition paths.
+- [x] Event-wide clean requirement: preserved selections, fail-closed approval/export/readiness, offline capability gate.
+- [x] Shared export count/reason wording, including extras and written outputs.
+- [x] Synthetic unit and real Electron event/prep/offline/race/31,250-track/legacy roundtrips; retain macOS gate.
+- [x] Report changed files, local results, revision and unverified macOS gate; no publication or user data access.
+- [ ] Final macOS acceptance: requires the external GitHub/macOS runner; local Linux suites and automatic compilation passed.
 
 - [x] Refine authenticated workspace to the approved noir-champagne direction.
 - [x] Add Home, Events, Library, Settings, Updates navigation and account-scoped library.
