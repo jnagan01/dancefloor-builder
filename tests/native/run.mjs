@@ -508,6 +508,39 @@ try{
    const readiness=page.getByRole('region',{name:'Export readiness'});
    await readiness.getByRole('button',{name:/Display Band — Blocked/}).click();await expect(page.locator('#song-peak-1')).toBeVisible();
  });
+ await check('saved punctuation duplicates block combined writes, unique custom duration and explicit exclusion survives CAS/reopen with requests retained',async()=>{
+   await app.close();
+   const a={artist:'Stevie Wonder',song:"Signed, Sealed, Delivered I'm Yours",fromUpload:true};
+   const b={...a,song:"Signed, Sealed, Delivered (I'm Yours)"};
+   const tt=[{artist:a.artist,title:a.song+' (Clean)',filePath:path.join(library,'duplicate-Clean.mp3'),songLength:'200'},{artist:a.artist,title:a.song+' (Extended Clean)',filePath:path.join(library,'duplicate-Extended.mp3'),songLength:'300'}];
+   tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic duplicate bytes'));
+   const selections={'warmUp:0:stevie wonder|signed sealed delivered im yours':{paths:[tt[0].filePath],confirmed:true},'transition:0:stevie wonder|signed sealed delivered':{paths:[tt[0].filePath,tt[1].filePath],confirmed:true}};
+   const original={id:'A',name:'Duplicate trial',updated_at:'v1',inputs:{songs:[a,b],eventName:'Duplicate trial',hours:'1',buffer:2,listType:'dance',split:{warmUp:10,transition:20,peak:30},splitOn:true,requireCleanVersions:true},lists:{warmUp:[a],transition:[b],peak:[],selections}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:original}));fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
+   await launch();await expect(page.getByRole('region',{name:'Repeated files'})).toContainText('1 repeated selected file');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(original);
+   await expect(page.getByRole('tab',{name:/Warm Up/})).toContainText('3:20 usable unique');
+   await expect(page.getByRole('tab',{name:/Transition/})).toContainText('5:00 usable unique');
+   const filesBefore=fs.readdirSync(path.join(temp,'exports')).sort();
+   await page.getByRole('button',{name:/Export All to VirtualDJ/}).first().click();
+   await expect.poll(()=>page.evaluate(()=>window.__errors.at(-1))).toContain('repeated selected files');
+   expect(fs.readdirSync(path.join(temp,'exports')).sort()).toEqual(filesBefore);
+   await page.getByRole('button',{name:/Export All Files as ZIP/}).first().click();
+   await expect.poll(()=>page.evaluate(()=>window.__errors.at(-1))).toContain('repeated selected files');
+   expect(fs.readdirSync(path.join(temp,'exports')).sort()).toEqual(filesBefore);
+   await page.getByRole('button',{name:'Exclude duplicate warmUp 1',exact:true}).click();
+   await expect(page.getByRole('region',{name:'Repeated files'})).toHaveCount(0);
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections['warmUp:0:stevie wonder|signed sealed delivered im yours'].excluded,{timeout:15000}).toBe(true);
+   const saved=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A;
+   expect(saved.inputs.songs).toEqual(original.inputs.songs);expect(saved.lists.warmUp).toEqual(original.lists.warmUp);expect(saved.lists.transition).toEqual(original.lists.transition);
+   for(const [key,selection] of Object.entries(selections)){expect(saved.lists.selections[key].paths).toEqual(selection.paths);expect(saved.lists.selections[key].confirmed).toBe(true);}
+   await page.reload();await expect(page.getByRole('region',{name:'Repeated files'})).toHaveCount(0);
+   await page.getByRole('button',{name:/Export All to VirtualDJ/}).first().click();
+   await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toContain('2 tracks');
+   const out=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('duplicate-trial-')&&n.endsWith('.m3u')).flatMap(n=>fs.readFileSync(path.join(temp,'exports',n),'utf8').split(/\r?\n/).filter(line=>line.startsWith(library)));
+   expect(out).toEqual(tt.map(t=>t.filePath));
+   expect(fs.readFileSync(path.join(temp,'exports','duplicate-trial-warm-up.txt'),'utf8')).toContain(a.song);
+ });
  await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
    await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';
    const legacy=Object.fromEntries(Array.from({length:14},(_,i)=>{const id=i===0?'A':`Legacy${i}`;return [id,{id,name:`Legacy ${i}`,updated_at:'v1',inputs:{songs:[song],hours:'.25',buffer:2,...(i===1?{eventType:'school_dance'}:{})},lists:{warmUp:[song],transition:[],peak:[]}}];}));
