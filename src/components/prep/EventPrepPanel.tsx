@@ -93,7 +93,7 @@ export function EventPrepPanel(p: Props) {
     const lib: Candidate[] = tracks.filter(t => (p.policies?.includeSeasonalTracks !== false || !seasonal(t)) && !cleanReason(t, requiresClean(p.policies))).map(t => libraryCandidate(t, trackIdentity(t.filePath, roots)));
     const cat: Candidate[] = SONG_LIBRARY.map(s => {
       const owned = ownedKeys.has(songIdentity(s.artist, s.song));
-      const facts: FilterFacts = { genre: s.genre || undefined, decade: s.decade || undefined, energy: s.energy, owned };
+      const facts: FilterFacts = { genre: s.genre || undefined, decade: s.decade || undefined, energy: s.energy, owned, genreSource: s.genre ? "catalogue" : undefined, decadeSource: s.decade ? "catalogue" : undefined };
       return { artist: s.artist, song: s.song, facts, origin: "catalogue" as const };
     }).filter(c => !c.facts.owned && resolver.allowed(c) && !requiresClean(p.policies)); // owned catalogue songs already appear as library files
     return [...lib, ...cat];
