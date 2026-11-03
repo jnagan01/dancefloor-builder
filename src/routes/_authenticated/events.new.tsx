@@ -1063,11 +1063,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           song: string;
           energy: number;
           danceability: number;
-          popularity: number;
+          popularity?: number;
           valence: number;
           bpm?: number;
           camelot?: string;
-          genre: string;
+          genre?: string;
           year?: number;
           mood?: string;
           explicit?: boolean;
