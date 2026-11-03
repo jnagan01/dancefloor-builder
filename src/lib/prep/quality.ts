@@ -6,8 +6,8 @@
  */
 export type QualityRating = "good" | "maybe" | "poor";
 export const QUALITY_RATINGS: { value: QualityRating; label: string }[] = [{ value: "good", label: "Good fit" }, { value: "maybe", label: "Maybe" }, { value: "poor", label: "Poor fit" }];
-type Src = "tags" | "virtualdj" | "filename" | "estimate" | "catalogue" | "ai";
-const SOURCES: Src[] = ["tags", "virtualdj", "filename", "estimate", "catalogue", "ai"];
+type Src = "tags" | "virtualdj" | "filename" | "estimate" | "catalogue" | "ai" | "provider" | "user" | "measured";
+const SOURCES: Src[] = ["tags", "virtualdj", "filename", "estimate", "catalogue", "ai", "provider", "user", "measured"];
 export interface QualityCandidate {
   artist: string; song: string; origin: "library" | "catalogue" | "ai";
   genre?: string; genreSource?: Src; decade?: string; decadeSource?: Src; owned?: boolean; playCount?: number;
@@ -15,15 +15,26 @@ export interface QualityCandidate {
   lastfmSeeds?: string[]; lastfmMatch?: number;
   /** Artist-level Last.fm similarity at capture time. */ similarTo?: string; similarMatch?: number;
   tags?: string[]; favored?: boolean;
+  /** Deterministic tie order among captured files with equal score/artist/title (an ordinal, never a path). */
+  tie?: number;
+  /** Score when captured, to detect a genuine ranking change on replay. */
+  score?: number;
   rating?: QualityRating;
 }
+export interface QualityControls { familiarity: number; clientSimilarity: number; artistVariety: number; ownedOnly: boolean }
 export interface QualityRequest { artist: string; song: string; genre?: string; decade?: string }
 export interface QualitySample {
   id: string; name: string; createdAt: number;
   requests: QualityRequest[]; preferences: { genres: string[]; decades: string[]; artists: string[] }; eventTags: string[];
   candidates: QualityCandidate[];
+  /** Ranking controls active at capture. Absent on samples saved before full context was recorded. */
+  controls?: QualityControls;
+  /** Per-artist counts already in the event at capture (artist names only), for artist variety. */
+  artistUse?: { artist: string; count: number }[];
+  /** True when context exceeded storage limits, so an exact replay is impossible and comparison is unavailable. */
+  truncated?: boolean;
 }
-export const QUALITY_LIMITS = { samples: 30, candidates: 20, requests: 60, prefs: 30, seeds: 5, tags: 30, text: 300 };
+export const QUALITY_LIMITS = { samples: 30, candidates: 20, requests: 300, prefs: 30, seeds: 20, tags: 30, text: 300, artists: 300 };
 
 const str = (v: unknown, max: number) => typeof v === "string" && v.length <= max && !v.includes("\0") ? v : null;
 const strs = (v: unknown, maxLen: number, maxEach: number): string[] => { if (!Array.isArray(v) || v.length > maxLen) throw 0; return v.map(x => { const s = str(x, maxEach); if (s === null) throw 0; return s; }); };
@@ -49,6 +60,8 @@ function readCandidate(v: unknown): QualityCandidate {
   opt(o, "similarMatch", x => finite(x, 0, 1), out);
   if (o.tags !== undefined) out.tags = strs(o.tags, QUALITY_LIMITS.tags, 60);
   opt(o, "favored", x => typeof x === "boolean", out);
+  opt(o, "tie", x => finite(x, 0, 1000) && Number.isInteger(x), out);
+  opt(o, "score", x => finite(x, -1000, 1000), out);
   opt(o, "rating", x => QUALITY_RATINGS.some(r => r.value === x), out);
   return out as unknown as QualityCandidate;
 }
@@ -76,7 +89,18 @@ export function readQualitySamples(v: unknown): QualitySample[] {
     const preferences = { genres: strs(p.genres, QUALITY_LIMITS.prefs, 60), decades: strs(p.decades, QUALITY_LIMITS.prefs, 20), artists: strs(p.artists, QUALITY_LIMITS.prefs, QUALITY_LIMITS.text) };
     const eventTags = strs(o.eventTags, QUALITY_LIMITS.tags, 60);
     if (!Array.isArray(o.candidates) || o.candidates.length < 1 || o.candidates.length > QUALITY_LIMITS.candidates) throw 0;
-    return { id, name, createdAt: o.createdAt as number, requests, preferences, eventTags, candidates: o.candidates.map(readCandidate) };
+    const out: QualitySample = { id, name, createdAt: o.createdAt as number, requests, preferences, eventTags, candidates: o.candidates.map(readCandidate) };
+    if (o.controls !== undefined) {
+      const c = o.controls as Record<string, unknown>;
+      if (!c || typeof c !== "object" || !finite(c.familiarity, -1, 1) || !finite(c.clientSimilarity, 0, 1) || !finite(c.artistVariety, 0, 1) || typeof c.ownedOnly !== "boolean" || Object.keys(c).length !== 4) throw 0;
+      out.controls = { familiarity: c.familiarity as number, clientSimilarity: c.clientSimilarity as number, artistVariety: c.artistVariety as number, ownedOnly: c.ownedOnly };
+    }
+    if (o.artistUse !== undefined) {
+      if (!Array.isArray(o.artistUse) || o.artistUse.length > QUALITY_LIMITS.artists) throw 0;
+      out.artistUse = o.artistUse.map(a => { const artist = str(a?.artist, QUALITY_LIMITS.text); if (artist === null || !finite(a?.count, 1, 10000) || !Number.isInteger(a.count)) throw 0; return { artist, count: a.count }; });
+    }
+    if (o.truncated !== undefined) { if (typeof o.truncated !== "boolean") throw 0; out.truncated = o.truncated; }
+    return out;
   });
 }
 
@@ -90,7 +114,9 @@ export function addQualitySample<K extends WithQuality>(k: K, s: Omit<QualitySam
   const name = s.name.replace(/[\r\n\t]+/g, " ").trim().slice(0, 120) || "Recommendation sample";
   const unrated = s.candidates.slice(0, QUALITY_LIMITS.candidates).map(c => { const { rating: _r, ...rest } = c; return rest; });
   if (!unrated.length) throw Error("There are no recommendations to review yet.");
-  const sample: QualitySample = { ...structuredClone({ ...s, candidates: unrated }), requests: s.requests.slice(0, QUALITY_LIMITS.requests), name, id: uid(), createdAt: Date.now() };
+  // Context beyond limits is never silently dropped: the sample is marked so comparisons say they are unavailable.
+  const truncated = s.truncated || s.requests.length > QUALITY_LIMITS.requests || (s.artistUse?.length ?? 0) > QUALITY_LIMITS.artists || s.candidates.length > QUALITY_LIMITS.candidates;
+  const sample: QualitySample = { ...structuredClone({ ...s, candidates: unrated }), requests: s.requests.slice(0, QUALITY_LIMITS.requests), ...(s.artistUse ? { artistUse: s.artistUse.slice(0, QUALITY_LIMITS.artists) } : {}), ...(truncated ? { truncated: true } : {}), name, id: uid(), createdAt: Date.now() };
   readQualitySamples([sample]); // throws if anything is out of bounds
   return { ...k, quality: [...list, sample] };
 }
