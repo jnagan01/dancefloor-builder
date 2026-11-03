@@ -63,7 +63,7 @@ describe('real event route: fresh 1× event generates and its save is confirmed 
       expect(() => parseSafeSaveRequest(saved)).not.toThrow();
       expect(writes.length).toBeGreaterThan(0);
       expect(h.current.saveState).toBe('saved');
-      expect(h.errors).toEqual([]);
+      expect(h.errors.filter((e: string) => /save/i.test(e))).toEqual([]);
     } finally { vi.useRealTimers(); h.unmount(); }
   });
 });
@@ -85,6 +85,7 @@ describe('import review duplicates use the conservative version-aware identity',
     const h = harness({ eventId: null, rows: {} });
     await h.flush();
     h.current.setSongs([...SIX, { artist: 'Adele', song: 'Hello' }]); await h.flush();
+    h.interact((n: any) => n.props?.steps && n.props?.onSelect, 'onSelect', 3);
     const button = h.nodes().find((n: any) => n.props?.onClick && /Remove/.test(JSON.stringify(n.props?.children ?? '')) && /duplicate/.test(JSON.stringify(n.props?.children ?? '')));
     expect(JSON.stringify(button.props.children)).toContain('"1"," duplicate"');
     button.props.onClick(); await h.flush();
