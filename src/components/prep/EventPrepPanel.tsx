@@ -179,6 +179,7 @@ export function EventPrepPanel(p: Props) {
   const [qualityNote, setQualityNote] = useState<string | null>(null);
   const samples = knowledge.quality ?? [];
   const [capturing, setCapturing] = useState(false);
+  useEffect(() => { setCapturing(false); setQualityNote(null); }, [state.account, state.generation]);
   const captureSample = async () => {
     const started = owner, sample = captureFromRanking(recInput, rec.items, sampleName);
     setCapturing(true);
