@@ -8,7 +8,11 @@ export function useBlocker(){return {};}
 export function useAuth(){return {user:{id:w.__testState.account}};}
 export function useServerFn(fn:any){return fn;}
 export async function getWorkflow(request:any){return w.testBackend.read(request.data.id);}
-export async function saveWorkflowSafely(request:any){return w.testBackend.write(request.data);}
+import {parseSafeSaveRequest} from '../../../src/lib/eventSchemas';
+// The real server-side request contract runs before the synthetic backend; a rejected payload never reaches it.
+// Only the legacy fixture row label 'A' stands in for a UUID; every other field uses the unchanged real validator.
+const FIXTURE_UUID='00000000-0000-4000-8000-000000000000';
+export async function saveWorkflowSafely(request:any){const d=request.data;parseSafeSaveRequest({...d,id:/^[0-9a-f-]{36}$/i.test(d.id)?d.id:FIXTURE_UUID});return w.testBackend.write(d);}
 const listeners=new Set<any>();
 export const supabase={auth:{getUser:async()=>({data:{user:{id:w.__testState.account}}}),onAuthStateChange:(f:any)=>{listeners.add(f);return {data:{subscription:{unsubscribe:()=>listeners.delete(f)}}};}},from:(table:string)=>({
  select:()=>({eq:(_key:string,account:string)=>({limit:async()=>w.testBackend.list(account),maybeSingle:async()=>{if(w.__fixture.delayProfile)await new Promise(resolve=>{w.__releaseProfile=resolve;});w.__profileReturned=true;return {data:w.__fixture.profile??null};}})}),

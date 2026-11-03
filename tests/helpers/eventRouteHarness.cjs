@@ -23,8 +23,11 @@ function createEventRouteHarness(actual) {
     vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/prep/${name}.ts`), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:m,exports:m.exports,setTimeout,clearTimeout,require:k=>k === '../additionIdentity' ? additionModule.exports : k.startsWith('./') ? loadPrep(k.slice(2)) : k === '@/lib/virtualDj' ? actual.vdj : k === '@/lib/fileIdentity' ? identityModule.exports : require(k)});
     return m.exports;
   };
+  // Real safe-save request contract (zod) so contract-checked harnesses run the server's own validation.
+  const schemaModule = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/eventSchemas.ts'), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:schemaModule,exports:schemaModule.exports,require:k=>k === './inputSafety' ? actual.input : require(path.join(root,'node_modules',k))});
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
-  function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }), services = {}, prep = null, prepStore: prepStoreOverride = null } = {}) {
+  function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }), services = {}, contract = false, prep = null, prepStore: prepStoreOverride = null } = {}) {
     // Synthetic account-fenced preparation store state: { account, generation, status, knowledge }.
     let prepState = prep ?? { account, generation: 1, status: 'ready', knowledge: loadPrep('knowledge').emptyKnowledge(), error: null };
     const prepListeners = new Set();
@@ -46,7 +49,7 @@ function createEventRouteHarness(actual) {
     const jsx = (type, props, key) => ({type,props,key});
     const no = () => undefined;
     const stub = new Proxy({}, {get: (_t,k) => k==='__esModule'?true: k==='supportsDirectoryWrite'?()=>false : k==='APP_VERSION'?'test': k==='KEY_OPTIONS'||k==='VIBES'||k==='EVENT_TYPES'?[] : no});
-    const history = { getWorkflow: async r => { loads.push(r.data.id); return await rows[r.data.id]; }, saveWorkflowSafely: async r => { requests.push({account, ...r.data}); return write(r); } };
+    const history = { getWorkflow: async r => { loads.push(r.data.id); return await rows[r.data.id]; }, saveWorkflowSafely: async r => { requests.push({account, ...r.data}); if (contract) schemaModule.exports.parseSafeSaveRequest(r.data); return write(r); } };
     const route = { useSearch: () => ({eventId:eventId ?? undefined}) };
     const navigate = async r => { navigations.push(r); eventId=r.search?.eventId; };
     const modules = {
@@ -59,7 +62,7 @@ function createEventRouteHarness(actual) {
       '@/lib/virtualDj':{...actual.vdj, supportsDirectoryWrite:()=>true, writeFileToDir:async(_dir,name,data)=>{files.push({name,data});}}, '@/lib/danceFloor':{...actual.dance,downloadBlob:(blob,name)=>downloads.push({blob,name})}, '@/lib/audioMatch':actual.audio,
       '@/lib/snapshotSafety':actual.snapshots, '@/lib/eventDrafts':actual.drafts, '@/lib/inputSafety':actual.input,
       '@/lib/eventAutosave':actual.autosave, '@/lib/vibes':actual.vibes, '@/lib/workflowIsolation':actual.isolation,
-      '@/lib/eventRevision':actual.revisions,
+      '@/lib/eventRevision':actual.revisions, '@/lib/eventSchemas':schemaModule.exports,
       '@/lib/preparationPolicy':require(path.join(root,'desktop/offline/policy.cjs')), '@/lib/exportReadiness':readinessModule.exports, '@/lib/musicTheory':actual.theory, '@/lib/pageHead':{pageHead:no},
       '@/lib/preparationDuplicates':duplicateModule.exports, '@/lib/additionIdentity':additionModule.exports,
       '@/lib/freshEvent': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/freshEvent.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:k=>k === './inputSafety' ? actual.input : k === './danceFloor' ? actual.dance : k === './fileIdentity' ? identityModule.exports : require(path.join(root,'desktop/offline/policy.cjs'))});return m.exports; })(),

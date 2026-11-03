@@ -4,7 +4,7 @@ export interface ConfirmedEvent { id: string; updatedAt?: string; revision?: str
 /** Serialized per identity; timed-out requests may retry ONLY with atomic CAS/idempotent creation. */
 export function createEventAutosave<T>(options: {
   write: (id: string | null, snapshot: T, attempt: SaveAttempt) => Promise<ConfirmedEvent>;
-  onState: (state: SaveState) => void; onId: (id: string) => void; onError: () => void;
+  onState: (state: SaveState) => void; onId: (id: string) => void; onError: (error?: unknown) => void;
   onConfirmed?: (snapshot: T, saved: ConfirmedEvent) => void;
   onCheckpoint?: (snapshot: T, saved: ConfirmedEvent, latest: boolean) => void;
   timeoutMs?: number; safeWriteContract?: boolean;
@@ -51,9 +51,9 @@ export function createEventAutosave<T>(options: {
         options.onCheckpoint?.(job.snapshot, { ...saved, revision: expectedRevision }, job.revision === revision);
         if (job.revision === revision) { options.onConfirmed?.(job.snapshot, saved); options.onState("saved"); }
       }
-    } catch {
+    } catch (error) {
       if (!timedOut && valid(job) && job.revision === revision) {
-        pending = job; options.onState("error"); options.onError();
+        pending = job; options.onState("error"); options.onError(error);
       }
     } finally {
       clearTimeout(timeout);

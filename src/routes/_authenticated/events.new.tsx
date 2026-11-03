@@ -11,7 +11,6 @@ import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from "r
 import { useDebounce } from "@/hooks/useDebounce";
 import {
   parseFile,
-  dedupeSongs,
   dedupeKey,
   SongKeySet,
   generateLists,
@@ -105,6 +104,8 @@ import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktopBridge";
 import { getWorkflow, saveWorkflowSafely } from "@/lib/history.functions";
+import { SAVE_REJECTED_PREFIX } from "@/lib/eventSchemas";
+import { repeatedRequestRows } from "@/lib/additionIdentity";
 import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
@@ -246,7 +247,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     },
     onState: setSaveState,
     onId: setSavedEventId,
-    onError: () => toast.error("Save was not confirmed. Your recovery copy is kept. Retry checks the saved version before changing it."),
+    onError: (error) => {
+      // Only already-sanitized contract rejections are shown verbatim; other failures keep the generic wording.
+      const message = error instanceof Error && error.message.startsWith(SAVE_REJECTED_PREFIX) ? error.message : null;
+      toast.error(message ?? "Save was not confirmed. Your recovery copy is kept. Retry checks the saved version before changing it.");
+    },
   }));
   const restoredEvent = useRef(false);
   const resultBoundary = useRef<{ eventId: string | undefined } | null>(null);
@@ -547,14 +552,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
   }, [mergedLibrary, result]);
 
-  const duplicateKeys = useMemo(() => {
-    const counts = new Map<string, number>();
-    songs.forEach((s) => {
-      const k = dedupeKey(s.artist, s.song);
-      counts.set(k, (counts.get(k) || 0) + 1);
-    });
-    return new Set([...counts.entries()].filter(([, c]) => c > 1).map(([k]) => k));
-  }, [songs]);
+  // Review count, row warnings and the explicit Remove action share one conservative version-aware identity.
+  const duplicateRows = useMemo(() => repeatedRequestRows(songs), [songs]);
 
   async function handleFiles(files: FileList | File[]) {
     const arr = Array.from(files);
@@ -1494,9 +1493,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
   function removeDuplicates() {
-    const before = songs.length;
-    const next = dedupeSongs(songs);
-    const removed = before - next.length;
+    const repeats = repeatedRequestRows(songs);
+    const next = songs.filter((_, i) => !repeats.has(i));
+    const removed = repeats.size;
     if (next.length !== songs.length) markPersistedEdit();
     setSongs(next);
     toast.success(`Removed ${removed} duplicate song${removed === 1 ? "" : "s"}`);
@@ -2779,10 +2778,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
           actions={
             <>
-              {duplicateKeys.size > 0 && (
+              {duplicateRows.size > 0 && (
                 <Button variant="destructive" size="sm" onClick={removeDuplicates}>
                   <AlertTriangle className="mr-1 h-4 w-4" />
-                  Remove {duplicateKeys.size} duplicate{duplicateKeys.size > 1 ? "s" : ""}
+                  Remove {duplicateRows.size} duplicate{duplicateRows.size > 1 ? "s" : ""}
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={() => editSongs([...songs, { artist: "", song: "" }])}>
@@ -2793,11 +2792,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }
         >
 
-            {duplicateKeys.size > 0 && (
+            {duplicateRows.size > 0 && (
               <div className="mb-3 flex items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 <AlertTriangle className="h-4 w-4 shrink-0" />
                 <span className="flex-1">
-                  {duplicateKeys.size} unique duplicate{duplicateKeys.size > 1 ? "s" : ""} detected.
+                  {duplicateRows.size} repeated request{duplicateRows.size > 1 ? "s" : ""} detected.
                 </span>
               </div>
             )}
@@ -2815,7 +2814,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   </TableHeader>
                   <TableBody>
                     {songs.map((s, i) => {
-                      const isDup = duplicateKeys.has(dedupeKey(s.artist, s.song));
+                      const isDup = duplicateRows.has(i);
                       return (
                         <TableRow key={i} className={isDup ? "bg-destructive/10 border-destructive/30" : ""}>
                           <TableCell>

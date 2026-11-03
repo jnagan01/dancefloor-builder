@@ -1,5 +1,5 @@
 # Project architecture
-- Subdirectories have their own `AGENTS.md`; read them before changing files there.
+- Subdirectories have their own `AGENTS.md`; read them first.
 - Keep the event builder under `/events/new` and the authenticated workspace shell under `_authenticated/route.tsx`, because Home must be the default landing page without resetting event state on unrelated pages.
 - Keep music source indexes in account-scoped IndexedDB; browsers must reconnect folders and the server never holds local audio.
 - Keep event autosave in the owner-scoped `workflow_history` JSON snapshot, because old snapshots must stay readable.
@@ -21,7 +21,7 @@
 - Use generateLists for dance target rounding in restore and display and block missing-title uploads before full generation, because partial imports must never become invented songs or silently disappear.
 
 - Keep backup imports additive and account-scoped; share the JSON private-field policy across browser/native validators, distinguish dictionary IDs from properties, and require backups before rescans/updates to preserve recoverability.
-- Run the real event route in a fenced synthetic Electron profile before packaging, stubbing network/storage only in fixtures, so release checks never reach user data.
+- Run the real event route in a fenced synthetic Electron profile before packaging; fixtures stub network/storage behind the shared `eventSchemas` save contract, so checks never reach user data or skip validation.
 
 - Fence backup/restore after every asynchronous boundary using account-session generation and captured sources/roots; compute conflict previews with identity maps and bounded samples, because late operations must not mix account data or stall large libraries.
 - Check both durable new-event recovery slots before backup restore, and capture section/song identity plus library/root mappings for export readiness and output, because native-only drafts and asynchronous path changes must never bypass preservation or availability checks.

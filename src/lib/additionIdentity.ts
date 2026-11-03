@@ -82,3 +82,19 @@ export class AdditionKeySet {
     this.add(artist, song, owner); return true;
   }
 }
+
+/**
+ * Import review: indices of rows that repeat an EARLIER row under the same conservative identity used for automatic
+ * additions. Live/remix/acoustic/extended/named edits, different artists and covers stay distinct; explicit featured
+ * credits match their primary artist; band names are never split. Rows without a title are never counted.
+ * Display/explicit-action helper only: never rewrites saved keys and never removes anything by itself.
+ */
+export function repeatedRequestRows(songs: ReadonlyArray<{ artist: string; song: string }>): Set<number> {
+  const seen = new AdditionKeySet();
+  const repeats = new Set<number>();
+  songs.forEach((s, i) => {
+    if (!versionTitleIdentity(s.artist, s.song)) return;
+    if (!seen.tryAdd(s.artist, s.song, String(i))) repeats.add(i);
+  });
+  return repeats;
+}
