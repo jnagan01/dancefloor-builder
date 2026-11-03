@@ -103,7 +103,7 @@ export function parseTitle(raw: string): ParsedTitle {
       versionRaw = inner;
       return " ";
     }
-    return " ";
+    return VERSION_WORD_RE.test(inner) || /\b(feat\.?|ft\.?|featuring)\b/i.test(inner) ? " " : ` ${inner} `;
   });
 
   // Trailing dash form: "Song - Club Mix"
@@ -191,6 +191,7 @@ export interface ScoreParts {
   titleSim: number;
   artistSim: number;
   versionMatch: boolean;
+  reason?: string;
 }
 
 /**
@@ -200,7 +201,7 @@ export interface ScoreParts {
 export function scorePair(q: MatchSubject, c: MatchSubject): ScoreParts {
   const titleSim = Math.max(
     similarity(q.title.base, c.title.base),
-    tokenOverlap(q.title.tokens, c.title.tokens) * 0.98,
+    tokenOverlap(q.title.tokens, c.title.tokens) * (Math.min(q.title.tokens.length, c.title.tokens.length) / Math.max(1, q.title.tokens.length, c.title.tokens.length)) * 0.98,
   );
   const artistSim = q.artist && c.artist ? similarity(q.artist, c.artist) : 0;
   const artistKnown = Boolean(q.artist && c.artist);
@@ -218,7 +219,9 @@ export function scorePair(q: MatchSubject, c: MatchSubject): ScoreParts {
 
   // A strong title hit against a clearly different artist is usually a
   // coincidence (e.g. a song titled like some other band's name).
-  if (artistKnown && artistSim < 0.35) score *= 0.85;
+  const artistAgreement = artistKnown && (artistSim >= 0.65 || tokenOverlap(tokenize(q.artist), tokenize(c.artist)) >= 0.75);
+  if (artistKnown && !artistAgreement) score = Math.min(score, 0.49);
+  if (titleSim < 0.65) score = Math.min(score, 0.49);
 
   const versionMatch = q.title.version === c.title.version;
   if (!versionMatch) {
@@ -227,7 +230,8 @@ export function scorePair(q: MatchSubject, c: MatchSubject): ScoreParts {
     score -= q.title.version && c.title.version ? 0.18 : 0.1;
   }
 
-  return { score: Math.max(0, Math.min(1, score)), titleSim, artistSim, versionMatch };
+  return { score: Math.max(0, Math.min(1, score)), titleSim, artistSim, versionMatch,
+    reason: artistKnown && !artistAgreement ? "Artist differs from request" : titleSim < 0.65 ? "Title differs from request" : !versionMatch ? "Different version from request" : undefined };
 }
 
 /**

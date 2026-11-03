@@ -1,10 +1,14 @@
 import { cleanReason, omissionText } from "./preparationPolicy";
+import { trackIdentity } from "./fileIdentity";
 import { exportApproved, resolveExportPath, type ExportSongRef, type VdjLibrary } from "./virtualDj";
 export type Availability = "available" | "unavailable" | "unknown";
 /** One terminal reason per selected recording (or unresolved row), including extras. */
 export function exportReadiness(refs: ExportSongRef[], library: VdjLibrary, availability: Record<string, Availability> = {}, roots?: Record<string, string>) {
   const problems: { index: number; identity?: ExportSongRef["identity"]; title: string; reason: string }[] = [];
   let approved = 0, omitted = 0, excluded = 0, unapproved = 0, missing = 0, cleanBlocked = 0, unknown = 0;
+  let duplicateCount = 0, knownSec = 0, unknownLength = 0;
+  const seen = new Map<string, { index: number; identity?: ExportSongRef["identity"]; title: string }>();
+  const duplicates: { path: string; first: { index: number; identity?: ExportSongRef["identity"]; title: string }; repeat: { index: number; identity?: ExportSongRef["identity"]; title: string } }[] = [];
   for (const [index, ref] of refs.entries()) {
     const issue = (reason: string) => problems.push({ index, identity: ref.identity, title: `${ref.song.artist} — ${ref.song.song}`, reason });
     const ids = ref.match?.trackIndex != null ? [...new Set([ref.match.trackIndex, ...(ref.match.extraTrackIndices ?? [])])] : [];
@@ -20,14 +24,24 @@ export function exportReadiness(refs: ExportSongRef[], library: VdjLibrary, avai
       const path = resolveExportPath(track.filePath, roots) ?? track.filePath;
       if (availability[path] === "unavailable") { missing++; issue("File unavailable"); continue; }
       if (availability[path] !== "available") { unknown++; issue("File availability unknown"); }
+      const fileId = trackIdentity(track.filePath, roots ?? {});
+      const occurrence = { index, identity: ref.identity, title: `${ref.song.artist} — ${ref.song.song}` };
+      const first = seen.get(fileId);
+      if (first) { duplicateCount++; duplicates.push({ path: fileId, first, repeat: occurrence }); issue("Repeated selected file — resolve occurrences before combined DJ export"); }
+      else {
+        seen.set(fileId, occurrence);
+        const seconds = Number(track.songLength);
+        if (Number.isFinite(seconds) && seconds > 0) knownSec += seconds;
+        else unknownLength++;
+      }
       approved++; wrote++;
     }
     if (!wrote) omitted++;
   }
-  return { requested: refs.length, approved, omitted, excluded, unapproved, missing, cleanBlocked, unavailable: missing, unknown, problems };
+  return { requested: refs.length, approved, uniqueTracks: seen.size, duplicateCount, duplicates, knownSec, unknownLength, omitted, excluded, unapproved, missing, cleanBlocked, unavailable: missing, unknown, problems };
 }
 export function summaryText(report: ReturnType<typeof exportReadiness>) {
-  return `${report.approved} track${report.approved === 1 ? "" : "s"}${omissionText(report) ? ` · left out: ${omissionText(report)}` : ""}${report.unknown ? ` · ${report.unknown} file availability unknown` : ""}`;
+  return `${report.approved} track${report.approved === 1 ? "" : "s"}${report.duplicateCount ? ` · ${report.uniqueTracks} unique files · ${report.duplicateCount} repeat${report.duplicateCount === 1 ? "" : "s"}` : ""}${omissionText(report) ? ` · left out: ${omissionText(report)}` : ""}${report.unknown ? ` · ${report.unknown} file availability unknown` : ""}`;
 }
 /** Display-only row units, derived from the same selected-file rules as export.
  * Mixed rows retain eligible tracks but still need review; exclusions never need approval.
@@ -42,5 +56,5 @@ export function classifySelectedRow(ref: ExportSongRef, library: VdjLibrary) {
     matched: !excluded && !attention && report.approved > 0, eligibleTracks: report.approved };
 }
 export function readinessText(report: ReturnType<typeof exportReadiness>) {
-  return ["SetArchitect — Export readiness", `Requested tracks: ${report.requested}`, `Approved tracks (including extras, in playlist order): ${report.approved}`, `Omitted event rows: ${report.omitted}`, `Explicitly excluded: ${report.excluded}`, `Unapproved/unresolved: ${report.unapproved}`, `Missing/unavailable files: ${report.missing}`, `Clean-policy blocks: ${report.cleanBlocked}`, `Availability unknown: ${report.unknown}`, "Reference files retain intended requests. Clean labels are metadata/filename evidence, not verified lyrics.", ...report.problems.map(p => `${p.index + 1}. ${p.title} — ${p.reason}`)].join("\n");
+  return ["SetArchitect — Export readiness", `Requested tracks: ${report.requested}`, `Approved tracks (including extras, in playlist order): ${report.approved}`, `Unique eligible files: ${report.uniqueTracks}`, `Repeated selected files: ${report.duplicateCount}`, `Known unique length (seconds): ${report.knownSec}`, `Unique eligible files with unknown length: ${report.unknownLength}`, `Omitted event rows: ${report.omitted}`, `Explicitly excluded: ${report.excluded}`, `Unapproved/unresolved: ${report.unapproved}`, `Missing/unavailable files: ${report.missing}`, `Clean-policy blocks: ${report.cleanBlocked}`, `Availability unknown: ${report.unknown}`, "Reference files retain intended requests. Clean labels are metadata/filename evidence, not verified lyrics.", ...report.problems.map(p => `${p.index + 1}. ${p.title} — ${p.reason}`)].join("\n");
 }
