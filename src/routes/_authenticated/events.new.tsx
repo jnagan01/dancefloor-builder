@@ -3537,7 +3537,7 @@ function SectionView(props: SectionViewProps) {
     : canWriteToVdj
       ? "Choose a folder, then write directly to it"
       : "Direct folder export requires a Chromium-based browser";
-  const rows = songs.map((s, i) => classifySelectedRow({ song: s, match: matches[songKey(section, i, s)], requireClean: !!props.requireClean }, library ?? { tracks: [] } as VdjLibrary));
+  const rows = songs.map((s, i) => classifySelectedRow({ song: s, match: matches[songKey(section, i, s)], requireClean: !!props.requireClean }, library ?? buildLibrary([])));
   const matchedCount = rows.filter(r => r.matched).length;
   const reviewCount = rows.filter(r => r.review).length;
   const excludedCount = rows.filter(r => r.excluded).length;

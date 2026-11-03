@@ -414,10 +414,11 @@ try{
  await check('native per-section M3U/TXT success uses verified availability and exact clean omission counts',async()=>{
    page.on('dialog',dialog=>dialog.accept());
    for(const [button,ext] of [['Warm Up M3U → VirtualDJ','m3u'],['Warm Up .txt → VirtualDJ','txt']]){
-     await page.evaluate(()=>{window.__success.length=0;});
+     await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;});
      await page.getByRole('button',{name:button,exact:true}).click();
      const fname=`clean-toggle-warm-up.${ext}`;
      await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toBe(`Saved 1 track · left out: 2 clean-policy blocks to ${path.join(temp,'VirtualDJ','Playlists')} as ${fname}`);
+     expect(await page.evaluate(()=>window.__warnings)).toEqual(['1 track · left out: 2 clean-policy blocks. Reference files retain intended tracks.']);
      const report=fs.readFileSync(path.join(temp,'exports','clean-toggle-warm-up-readiness.txt'),'utf8');
      expect(report).toContain('Availability unknown: 0');expect(report).toContain('Clean-policy blocks: 2');
      expect(report).toContain('Approved tracks (including extras, in playlist order): 1');
