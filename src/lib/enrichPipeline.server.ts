@@ -341,7 +341,7 @@ export interface CacheRow {
 }
 export interface EnrichDeps {
   readRows(artistKeys: string[], songKeys: string[]): Promise<CacheRow[] | null>;
-  upsert(rows: CacheRow[]): Promise<void>;
+  upsert(rows: Array<Omit<CacheRow, "fetched_at"> & { fetched_at: string }>): Promise<void>;
   estimate?: typeof estimateWithAi;
 }
 
