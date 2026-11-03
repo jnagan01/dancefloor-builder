@@ -242,7 +242,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [buffer, setBuffer] = useState(fresh.buffer);
   const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
   const [showVibe, setShowVibe] = useState(false);
-  const [spotifyLink, setSpotifyLink] = useState("");
+  const [spotifyLink, setSpotifyLink] = useState(fresh.spotifyLink);
   const [spotifyBusy, setSpotifyBusy] = useState(false);
   const spotifyImportFn = useServerFn(importSpotifyPlaylist);
   const [matchLimit, setMatchLimit] = useState(10);
@@ -273,9 +273,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setMatches(next);
   }
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
-  const [songs, setSongs] = useState<Song[]>([]);
+  const [songs, setSongs] = useState<Song[]>(fresh.songs);
   const [hours, setHours] = useState<string>(fresh.hours);
-  const [splitOn, setSplitOn] = useState(false);
+  const [splitOn, setSplitOn] = useState(fresh.splitOn);
   const [split, setSplit] = useState<SectionSplit>(fresh.split);
   const [listType, setListType] = useState<ListType | "">(fresh.listType);
   const [minutes, setMinutes] = useState<string>(fresh.minutes);
@@ -286,11 +286,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const bgFile = listType === "dinner" ? "dinner" : "cocktail-hour";
   const sectionFile = (sec: SectionKey) => (background && sec === "warmUp" ? bgFile : SECTION_FILES[sec]);
   const sectionName = (sec: SectionKey) => (background && sec === "warmUp" ? bgLabel : sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak");
-  const [artistsInput, setArtistsInput] = useState("");
-  const [genresInput, setGenresInput] = useState("");
+  const [artistsInput, setArtistsInput] = useState(fresh.artistsInput);
+  const [genresInput, setGenresInput] = useState(fresh.genresInput);
   const [decades, setDecades] = useState<string[]>(fresh.decades);
-  const [vibe, setVibe] = useState<string>("");
-  const [eventType, setEventType] = useState<string>("");
+  const [vibe, setVibe] = useState<string>(fresh.vibe);
+  const [eventType, setEventType] = useState<string>(fresh.eventType);
   const [policies, setPolicies] = useState<PreparationInputs>(fresh.policies);
   const eventPolicy = { ...policies, eventType };
   const cleanRequired = requiresClean(eventPolicy);
@@ -302,17 +302,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     if (index !== undefined) return { status: "Matched", confidence: 1, trackIndex: index, confirmed: true, alternatives: fresh.alternatives };
     return { ...fresh, status: fresh.trackIndex == null ? "Missing From Library" : "Possible Match", confirmed: false };
   }
-  const [bpmOn, setBpmOn] = useState(false);
+  const [bpmOn, setBpmOn] = useState(fresh.bpmOn);
   const [bpmRange, setBpmRange] = useState<[number, number]>([110, 128]);
-  const [danceOn, setDanceOn] = useState(false);
-  const [homeKey, setHomeKey] = useState<string>("");
+  const [danceOn, setDanceOn] = useState(fresh.danceOn);
+  const [homeKey, setHomeKey] = useState<string>(fresh.homeKey);
   const [danceRange, setDanceRange] = useState<[number, number]>([6, 9]);
   const targets = useMemo(() => resolveTargets(vibe, bpmOn ? bpmRange : null, danceOn ? danceRange : null), [vibe, bpmOn, bpmRange, danceOn, danceRange]);
-  const [notes, setNotes] = useState("");
-  const [doNotPlayInput, setDoNotPlayInput] = useState("");
-  const [expand, setExpand] = useState(false);
-  const [includeCombined, setIncludeCombined] = useState(false);
-  const [eventName, setEventName] = useState("");
+  const [notes, setNotes] = useState(fresh.notes);
+  const [doNotPlayInput, setDoNotPlayInput] = useState(fresh.doNotPlayInput);
+  const [expand, setExpand] = useState(fresh.expand);
+  const [includeCombined, setIncludeCombined] = useState(fresh.includeCombined);
+  const [eventName, setEventName] = useState(fresh.eventName);
   const [spotifyJob, setSpotifyJob] = useState<SpotifyExportJob | null>(null);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -431,6 +431,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setShowVibe(false);
     setDetail(null);
     setUploadStatuses([]);
+    setStep(1);
     setActiveSection("warmUp");
     setSpotifyLink("");
     restoredEvent.current = false;
@@ -2511,7 +2512,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   onChange={(e) => editHours(e.target.value)}
                   className="mt-1.5"
                 />
-                {hoursNum > 0 && (
+                {hoursNum > 0 && buffer > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
                     {splitOn
                       ? <>Warm Up {split.warmUp} min · Transition {split.transition} min · Peak {split.peak} min</>
@@ -2572,7 +2573,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     </label>
                   ))}
                 </div>
-                {!background && hoursNum > 0 && (
+                {!background && hoursNum > 0 && buffer > 0 && (
                   <p className="mt-2 text-xs text-muted-foreground transition-opacity duration-150">
                     Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs{splitOn ? "" : <> · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section</>} ({buffer}× buffer)
 
@@ -2980,7 +2981,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 <p className="mt-1 text-sm text-muted-foreground">
                   When turned off, the app will only use songs from the uploaded files.
                 </p>
-                {hoursNum > 0 && (
+                {hoursNum > 0 && buffer > 0 && (
                   <p className="mt-1 text-xs text-muted-foreground transition-opacity duration-150">
                     Target <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.total}</span> songs{splitOn ? "" : <> · <span className={isPendingLive ? "opacity-40" : "opacity-100"}>{liveTargets.perSection}</span> per section</>} ({buffer}× buffer)
                   </p>
@@ -2989,7 +2990,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               <Switch aria-label="Expand event with additional tracks" checked={expand} onCheckedChange={editExpand} className="shrink-0" />
             </div>
             <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Preparation buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer || ""} onChange={e=>editBuffer(e.target.value ? Number(e.target.value) : 0)}><option value="">Choose a buffer</option>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
-            {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
+            {hoursNum > 0 && buffer > 0 && !expand && liveTargets.shortfall.total > 0 && (
               <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
 
@@ -3228,9 +3229,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           <p className="min-w-0 truncate text-center text-xs text-muted-foreground">
             {background
               ? minutesNum > 0 ? `${bgLabel} · about ${bgTarget} songs for ${minutesNum} min` : "Set the length to see the song target"
-              : hoursNum > 0
+              : hoursNum > 0 && buffer > 0
               ? `Target ${result?.targetTotal ?? liveTargets.total} songs · ${result?.sectionTargets ? `${result.sectionTargets.warmUp} / ${result.sectionTargets.transition} / ${result.sectionTargets.peak}` : result?.perSectionTarget ?? liveTargets.perSection} per section (${buffer}× buffer)`
-              : "Set the dance floor length to see song targets"}
+              : !listType ? "Choose a list type" : hoursNum > 0 ? "Choose a preparation buffer" : "Set the dance floor length to see track targets"}
           </p>
           <div className="flex shrink-0 items-center gap-2">
             {step < lastInputStep && (
