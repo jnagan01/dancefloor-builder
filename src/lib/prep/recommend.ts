@@ -1,5 +1,7 @@
 import { songIdentity, type Feedback, type Dismissal, type TrackNote } from "./knowledge";
 import { matchesFilter, type FilterFacts, type FilterState } from "./filters";
+import { similarTrackPoints, type SimilarTrackEvidence } from "./similarTracks";
+import { TIER_WEIGHT, sourceLabel, tierOf } from "./metaConfidence";
 
 export interface Candidate { artist: string; song: string; facts: FilterFacts; trackId?: string; playCount?: number; origin: "library" | "catalogue" }
 export interface ClientRequest { artist: string; song: string; genre?: string; decade?: string }
@@ -10,14 +12,16 @@ export interface RecControls {
   /** 0..1 strength of the same-artist penalty. */ artistVariety: number;
   ownedOnly: boolean;
 }
-export interface Evidence { kind: "artist" | "genre" | "decade" | "lastfm" | "familiar" | "discovery" | "favor" | "tag" | "variety"; text: string; points: number }
+export interface Evidence { kind: "artist" | "genre" | "decade" | "lastfm" | "lastfmTrack" | "familiar" | "discovery" | "favor" | "tag" | "variety"; text: string; points: number }
 export interface Recommendation extends Candidate { key: string; score: number; evidence: Evidence[] }
 export interface RecInput {
   candidates: Candidate[]; requests: ClientRequest[]; inEvent: { artist: string; song: string }[];
   /** Exact case-sensitive file identities already selected by event rows (primary + explicit extras). */
   inEventTrackIds?: Iterable<string>;
   feedback: Feedback[]; dismissed: Dismissal[]; notes?: Map<string, TrackNote>; eventTags?: string[];
-  similar?: SimilarArtistEvidence[]; controls: RecControls; filter?: FilterState; limit?: number;
+  similar?: SimilarArtistEvidence[];
+  /** Last.fm track.getSimilar evidence aggregated across distinct requested tracks. */ similarTracks?: SimilarTrackEvidence[];
+  controls: RecControls; filter?: FilterState; limit?: number;
 }
 export interface RecOutput { items: Recommendation[]; hidden: { dismissed: number; never: number; inEvent: number; filtered: number; notOwned: number } }
 
@@ -45,6 +49,7 @@ export function recommend(input: RecInput): RecOutput {
   }
   const similar = new Map<string, SimilarArtistEvidence>();
   for (const s of input.similar ?? []) { const k = norm(s.artist); if (!similar.has(k) || similar.get(k)!.match < s.match) similar.set(k, s); }
+  const simTracks = new Map<string, SimilarTrackEvidence>((input.similarTracks ?? []).map(e => [e.key, e]));
   const reqCount = Math.max(1, input.requests.length);
   const hidden = { dismissed: 0, never: 0, inEvent: 0, filtered: 0, notOwned: 0 };
   const scored: Recommendation[] = [];
@@ -64,10 +69,16 @@ export function recommend(input: RecInput): RecOutput {
       const req = reqArtists.get(norm(cand.artist));
       if (req) push("artist", `Same artist as client request “${req.artist} – ${req.song}”`, 3 * c.clientSimilarity);
       const g = cand.facts.genre?.toLowerCase(), gn = g ? genreCount.get(g) ?? 0 : 0;
-      if (gn) push("genre", `Genre “${cand.facts.genre}” matches ${gn} of ${input.requests.length} client requests`, 2 * (gn / reqCount) * c.clientSimilarity);
+      const gt = tierOf(cand.facts.genreSource ?? "estimate", !!cand.facts.genre);
+      if (gn && gt !== "unknown") push("genre", `Genre “${cand.facts.genre}” (${sourceLabel(cand.facts.genreSource ?? "estimate")}) matches ${gn} of ${input.requests.length} client requests`, 2 * (gn / reqCount) * c.clientSimilarity * TIER_WEIGHT[gt]);
       const dn = cand.facts.decade ? decadeCount.get(cand.facts.decade) ?? 0 : 0;
-      if (dn) push("decade", `${cand.facts.decade} matches ${dn} of ${input.requests.length} client requests`, 1.5 * (dn / reqCount) * c.clientSimilarity);
-      const sim = req ? undefined : similar.get(norm(cand.artist));
+      const dt = tierOf(cand.facts.decadeSource ?? "estimate", !!cand.facts.decade);
+      if (dn && dt !== "unknown") push("decade", `${cand.facts.decade} (${sourceLabel(cand.facts.decadeSource ?? "estimate")}) matches ${dn} of ${input.requests.length} client requests`, 1.5 * (dn / reqCount) * c.clientSimilarity * TIER_WEIGHT[dt]);
+      const st = simTracks.get(key);
+      if (st) push("lastfmTrack", st.seeds.length > 1
+        ? `Last.fm lists this exact track as similar to ${st.seeds.length} requested tracks: ${st.seeds.slice(0, 3).map(x => `“${x}”`).join(", ")}${st.seeds.length > 3 ? "…" : ""}`
+        : `Last.fm lists this exact track as similar to requested “${st.seeds[0]}”`, similarTrackPoints(st) * c.clientSimilarity);
+      const sim = req || st ? undefined : similar.get(norm(cand.artist));
       if (sim) push("lastfm", `Last.fm lists ${cand.artist} as similar to ${sim.similarTo} (match ${sim.match.toFixed(2)})`, 2 * sim.match * c.clientSimilarity);
     }
     if (c.familiarity !== 0 && cand.origin === "library") {

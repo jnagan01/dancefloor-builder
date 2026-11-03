@@ -226,6 +226,16 @@ try {
     await page.evaluate(() => { window.__lookup.crowdDelay = 50; window.__lookup.similarArtist = 'Discovery Artist'; });
     await region.getByRole('button', { name: 'Add Last.fm similar artists' }).click();
     await expect(region).toContainText('Last.fm lists Discovery Artist as similar to Queen');
+    // Track-level Last.fm evidence: rate limit is reported truthfully, then real multi-seed track evidence appears.
+    await page.evaluate(() => { window.__lookup.trackSimFail = true; });
+    await region.getByRole('button', { name: 'Add Last.fm similar tracks' }).click();
+    await expect(region.getByTestId('lastfm-track-note')).toContainText('rate limited');
+    await page.evaluate(() => { window.__lookup.trackSimFail = false; });
+    await region.getByRole('button', { name: 'Add Last.fm similar tracks' }).click();
+    await expect(region.getByTestId('lastfm-track-note')).toContainText('Using Last.fm similar tracks');
+    await expect(region.locator('ul > li', { hasText: 'Familiar Act – Classic' })).toContainText('Last.fm lists this exact track as similar to');
+    const sentSeeds = await page.evaluate(() => window.__lookup.trackSeeds);
+    if (!sentSeeds.length || sentSeeds.some(s => Object.keys(s).sort().join() !== 'artist,title')) throw Error('Last.fm seeds must be artist/title only');
     // Dismiss here vs never
     const songB = region.locator('ul > li', { hasText: 'Queen – Song B' });
     await songB.getByRole('button', { name: 'Dismiss here' }).click();
@@ -237,6 +247,13 @@ try {
     await prepTab('Recommendations').click();
     const r2 = page.getByRole('region', { name: 'Event preparation' });
     await r2.getByText('Manage hidden songs').click();
+    await r2.getByRole('button', { name: 'Undo' }).first().click();
+    await expect(r2.locator('ul > li', { hasText: 'Queen – Song B' })).toHaveCount(1);
+    // Optional event-scoped rejection reason, shown in the hidden list and undoable.
+    await r2.locator('ul > li', { hasText: 'Queen – Song B' }).getByRole('button', { name: /here: Too slow$/ }).click();
+    await expect(r2.locator('ul > li', { hasText: 'Queen – Song B' })).toHaveCount(0);
+    if (!(await r2.getByRole('button', { name: 'Undo' }).first().isVisible())) await r2.getByText('Manage hidden songs').click();
+    await expect(r2.getByText('Queen – Song B · Too slow')).toBeVisible();
     await r2.getByRole('button', { name: 'Undo' }).first().click();
     await expect(r2.locator('ul > li', { hasText: 'Queen – Song B' })).toHaveCount(1);
     await r2.locator('ul > li', { hasText: 'Familiar Act – Classic' }).getByRole('button', { name: 'Never' }).click();

@@ -13,8 +13,19 @@ function createEventRouteHarness(actual) {
   const duplicateModule = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, "src/lib/preparationDuplicates.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:duplicateModule,exports:duplicateModule.exports,require:k=>k === "./fileIdentity" ? identityModule.exports : require(path.join(root,"desktop/offline/policy.cjs"))});
   vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : k === "./fileIdentity" ? identityModule.exports : actual.vdj});
+  // Real preparation-knowledge modules (no test seams): transpiled with relative requires resolved inside src/lib/prep.
+  const prepModules = {};
+  const loadPrep = name => {
+    if (prepModules[name]) return prepModules[name].exports;
+    const m = { exports: {} }; prepModules[name] = m;
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/prep/${name}.ts`), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:m,exports:m.exports,require:k=>k.startsWith('./') ? loadPrep(k.slice(2)) : k === '@/lib/virtualDj' ? actual.vdj : require(k)});
+    return m.exports;
+  };
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2022 } }).outputText;
-  function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }) } = {}) {
+  function harness({ account = 'owner', eventId = 'A', memory = new Map(), rows = {}, write = async r => ({ id: r.data.id, updatedAt: '2026-10-31T00:00:01Z' }), services = {}, prep = null } = {}) {
+    // Synthetic account-fenced preparation store state: { account, generation, status, knowledge }.
+    let prepState = prep ?? { account, generation: 1, status: 'ready', knowledge: loadPrep('knowledge').emptyKnowledge(), error: null };
+    const prepFake = { get: () => prepState };
     let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false, tree;
     const loads = [], requests = [], errors = [], navigations = [], downloads = [], files = [], warnings = []; let blocker;
     let workspace = { sources: [], library: null, audioIndex: actual.audio.buildAudioIndex([]) };
@@ -49,10 +60,12 @@ function createEventRouteHarness(actual) {
       '@/lib/freshEvent': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/freshEvent.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:k=>k === './inputSafety' ? actual.input : k === './danceFloor' ? actual.dance : k === './fileIdentity' ? identityModule.exports : require(path.join(root,'desktop/offline/policy.cjs'))});return m.exports; })(),
       '@/lib/preparationCapability': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/preparationCapability.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:()=>require(path.join(root,'desktop/offline/policy.cjs')),get window(){return testWindow;}});return m.exports; })(),
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
-      '@/lib/enrich.functions':{enrichSongs:async()=>({results:[]})},
+      '@/lib/enrich.functions':{enrichSongs:services.enrich ?? (async()=>({results:[]}))},
       '@/lib/neighbors.functions':{getArtistNeighbors:async()=>({clusters:[]})},
-      '@/lib/recommend.functions':{recommendSongsForSection:async()=>({suggestions:[]})},
-      '@/lib/lastfm.functions':{getArtistCrowdData:async()=>({artists:[]})},
+      '@/lib/recommend.functions':{recommendSongsForSection:services.recommend ?? (async()=>({suggestions:[]}))},
+      '@/lib/lastfm.functions':{getArtistCrowdData:services.crowd ?? (async()=>({artists:[]})),getSimilarTracks:services.similarTracks ?? (async()=>({availability:'missingKey',seeds:[]}))},
+      '@/lib/prep/prepStore':{prepStore:()=>prepFake},
+      '@/lib/prep/expansionFeedback':loadPrep('expansionFeedback'), '@/lib/prep/similarTracks':loadPrep('similarTracks'), '@/lib/prep/knowledge':loadPrep('knowledge'),
       jszip:{default:class {file(name,data){files.push({name,data});return this;} async generateAsync(){return new Blob(['zip']);}}},
       '@/lib/desktopBridge':{getNativeFilePath:()=>null,isDesktopApp:()=>false},
     };
@@ -74,7 +87,7 @@ function createEventRouteHarness(actual) {
     function nodes(){return walk(tree);}
     function interact(predicate,handler='onClick',argument){const node=nodes().find(predicate);if(!node)throw Error('No matching rendered control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});node.props[handler]?.(argument);render();}
     function sectionClick(predicate){const child=nodes().find(n=>n.props?.onPreview&&n.props?.songs);if(!child)throw Error('No review section');const parentSlots=slots;slots=[];cursor=0;const sectionTree=module.exports.SectionView(child.props);const control=walk(sectionTree).find(predicate);if(!control)throw Error('No section control');tree.props?.onClickCapture?.({target:{closest:()=>({})}});control.props.onClick?.();slots=parentSlots;render();}
-    return {testWindow,render,flush,memory,requests,loads,errors,navigations,downloads,files,warnings,nodes,interact,sectionClick,chooseFresh(){interact(n=>n.props?.role==='radio'&&/^Dance floor$/i.test(n.props?.children));interact(n=>n.props?.id==='hours','onChange',{target:{value:'3'}});interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',4);interact(n=>n.props?.id==='buffer','onChange',{target:{value:'2'}});},leave(){return blocker?.shouldBlockFn();}, async invoke(prop){const n=nodes().find(n=>typeof n.props?.[prop]==='function');if(!n)throw Error(prop); await n.props[prop]();render();}, get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
+    return {testWindow,render,flush,memory,requests,loads,errors,navigations,downloads,files,warnings,nodes,interact,sectionClick,chooseFresh(){interact(n=>n.props?.role==='radio'&&/^Dance floor$/i.test(n.props?.children));interact(n=>n.props?.id==='hours','onChange',{target:{value:'3'}});interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',4);interact(n=>n.props?.id==='buffer','onChange',{target:{value:'2'}});},leave(){return blocker?.shouldBlockFn();}, async invoke(prop){const n=nodes().find(n=>typeof n.props?.[prop]==='function');if(!n)throw Error(prop); await n.props[prop]();render();}, get tree(){return tree},get current(){return captured}, edit(name){interact(n=>n.props?.steps&&n.props?.onSelect,'onSelect',1);interact(n=>n.props?.id==='eventName','onChange',{target:{value:name}});},switchTo(a,e){account=a;eventId=e;render();}, setPrep(next){prepState=typeof next==='function'?next(prepState):next;}, prepModule:loadPrep, library(lib){workspace={...workspace,library:lib};render();},unmount(){cleanup(editorSlots);cleanup(rootSlots);}, pagehide(){events.get('pagehide')?.();}};
   }
   return harness;
 }

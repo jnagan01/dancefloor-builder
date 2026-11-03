@@ -51,3 +51,9 @@ export async function getArtistCrowdData({ data }: any) {
   w.__lookup.crowdCalls++; await delay(w.__lookup.crowdDelay);
   return { available: true, artists: data.artists.map((a: string) => ({ name: a, listeners: 0, playcount: 0, tags: [], similar: [{ name: w.__lookup.similarArtist ?? 'Discovery Artist', match: 0.9 }] })) };
 }
+export async function getSimilarTracks({ data }: any) {
+  w.__lookup.trackSeeds = data.seeds;
+  if (w.__lookup.trackSimFail) return { availability: 'rateLimited', seeds: [] };
+  const t = w.__lookup.similarTrack ?? { artist: 'Familiar Act', title: 'Classic' };
+  return { availability: 'ok', seeds: data.seeds.map((seed: any) => ({ seed, status: 'ok', similar: [{ artist: t.artist, title: t.title, match: 0.6 }] })) };
+}

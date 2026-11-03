@@ -12,7 +12,10 @@ export interface GroupItem { artist: string; song: string; trackId?: string; ver
 export interface TrackGroup { id: string; name: string; items: GroupItem[] }
 /** Global preference by exact song identity: "never" hides from all recommendations, "favor" boosts. */
 export interface Feedback { key: string; label: string; kind: "never" | "favor"; at: number }
-export interface Dismissal { key: string; label: string; at: number }
+/** Optional event-scoped reason for rejecting an automatic addition. Older readers ignore it. */
+export type DismissReason = "tooSlow" | "wrongStyle" | "tooObscure";
+export const DISMISS_REASONS: { value: DismissReason; label: string }[] = [{ value: "tooSlow", label: "Too slow" }, { value: "wrongStyle", label: "Wrong style" }, { value: "tooObscure", label: "Too obscure" }];
+export interface Dismissal { key: string; label: string; at: number; reason?: DismissReason }
 export interface ShortItem { id: string; artist: string; song: string; status: ShortStatus; versionNote: string; trackId?: string; addedAt: number }
 export interface EventPrep { eventId: string; dismissed: Dismissal[]; shortlist: ShortItem[]; /** Your preparation tags this event should favour in recommendations. */ tags?: string[] }
 export interface Enrichment { key: string; source: "musicbrainz" | "lastfm"; label: string; url?: string; data: Record<string, string | number | string[]>; fetchedAt: number }
@@ -77,7 +80,11 @@ export function readKnowledge(v: unknown): PrepKnowledge | null {
       if (e.tags !== undefined) { const t = arr(e.tags, LIMITS.tags); if (!t || !t.every((x: unknown) => str(x, 60))) throw 0; tags = t as string[]; }
       return {
         eventId, ...(tags ? { tags } : {}),
-        dismissed: dismissed.map(d => { const key = str(d?.key, 700), label = str(d?.label, 700), at = num(d?.at); if (!key || label === null || at === null) throw 0; return { key, label, at }; }),
+        dismissed: dismissed.map(d => {
+          const key = str(d?.key, 700), label = str(d?.label, 700), at = num(d?.at); if (!key || label === null || at === null) throw 0;
+          if (d.reason !== undefined && !DISMISS_REASONS.some(r => r.value === d.reason)) throw 0;
+          return d.reason !== undefined ? { key, label, at, reason: d.reason as DismissReason } : { key, label, at };
+        }),
         shortlist: shortlist.map(s => {
           const base = item(s), id = str(s?.id, 80), at = num(s?.addedAt), note = str(s?.versionNote ?? "", 300);
           if (!id || at === null || note === null || !STATUSES.includes(s.status)) throw 0;
@@ -151,10 +158,12 @@ export function setFeedback(k: PrepKnowledge, artist: string, song: string, kind
 const eventOf = (k: PrepKnowledge, eventId: string): EventPrep => k.events.find(e => e.eventId === eventId) ?? { eventId, dismissed: [], shortlist: [] };
 const withEvent = (k: PrepKnowledge, e: EventPrep): PrepKnowledge => ({ ...k, events: [...k.events.filter(x => x.eventId !== e.eventId), e] });
 export const eventPrep = eventOf;
-export function dismissForEvent(k: PrepKnowledge, eventId: string, artist: string, song: string): PrepKnowledge {
+export function dismissForEvent(k: PrepKnowledge, eventId: string, artist: string, song: string, reason?: DismissReason): PrepKnowledge {
   const e = eventOf(k, eventId), key = songIdentity(artist, song);
-  if (e.dismissed.some(d => d.key === key)) return k;
-  return withEvent(k, { ...e, dismissed: [...e.dismissed, { key, label: `${artist} – ${song}`, at: Date.now() }] });
+  const old = e.dismissed.find(d => d.key === key);
+  if (old && (!reason || old.reason === reason)) return k;
+  const entry: Dismissal = { key, label: `${artist} – ${song}`, at: old?.at ?? Date.now(), ...(reason ? { reason } : {}) };
+  return withEvent(k, { ...e, dismissed: [...e.dismissed.filter(d => d.key !== key), entry] });
 }
 export function setEventTags(k: PrepKnowledge, eventId: string, tags: string[]): PrepKnowledge {
   const e = eventOf(k, eventId), t = normTags(tags);

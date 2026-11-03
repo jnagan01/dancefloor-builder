@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { SIMILAR_LIMITS, runSimilarTracks, type SimilarCache, type SimilarTracksResponse } from "@/lib/prep/similarTracks";
 
 /**
  * Last.fm crowd data.
@@ -156,3 +157,17 @@ export const getArtistCrowdData = createServerFn({ method: "POST" })
 
     return { available: true, artists: out };
   });
+
+// ---- Track-level similarity (track.getSimilar) -------------------------------------------
+
+const TrackSeedsSchema = z.object({
+  seeds: z.array(z.object({ artist: z.string().max(150), title: z.string().max(150) })).max(SIMILAR_LIMITS.seeds),
+  perSeed: z.number().int().min(1).max(SIMILAR_LIMITS.perSeed).default(20),
+});
+const trackCache: SimilarCache = new Map();
+
+export const getSimilarTracks = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: unknown) => TrackSeedsSchema.parse(data))
+  .handler(async ({ data }): Promise<SimilarTracksResponse> =>
+    runSimilarTracks(process.env["LASTFM_API_KEY"], data.seeds, data.perSeed, (u, init) => fetch(u, init), trackCache));

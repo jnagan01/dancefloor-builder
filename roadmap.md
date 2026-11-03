@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Recommendation accuracy (items 1–3)
+- [x] Last.fm track.getSimilar evidence from distinct requested tracks (bounded, cached, truthful availability), in recommendations and automatic expansion with exact owned identity.
+- [x] Automatic expansion honours account-fenced Never/favour/event dismissals (optional reasons), late feedback re-check and account fence; requests always kept.
+- [x] Source-aware metadata confidence in ranking; no invented Pop/2000s/popularity defaults; AI estimates never hard-rule evidence.
+- [x] Local synthetic gates: 630 units, 32 native, 19 prep, 16 offline, 4 races; compilation OK. External macOS gate pending.
 ## Optional expansion and 1× baseline
 - [x] Follow-up coverage: exclude DNP/missing titles and repeated intended/files from planning; covered expansion-on 1× has no rounded gap warnings and preserves 40 requests on reopen. All synthetic gates passed: 619 units, 32 native, 19 prep, 16 offline, 4 races; automatic compilation passed. macOS gate remains unchanged and pending external execution.
 - [x] Capitalization audit: user labels retained; Dance Floor harness/native radio locators already case-insensitive exact, remaining New Event heading made case-insensitive exact. Local gates: 617 units, 32 native, 19 prep, 16 offline, 4 races passed; external macOS gate unchanged and pending.

@@ -89,7 +89,7 @@ import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
 import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { getArtistNeighbors } from "@/lib/neighbors.functions";
-import { getArtistCrowdData, type ArtistCrowd } from "@/lib/lastfm.functions";
+import { getArtistCrowdData, getSimilarTracks, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
 import { importSpotifyPlaylist } from "@/lib/spotify.functions";
 import { type PreviewTarget } from "@/components/PreviewPlayer";
@@ -123,6 +123,10 @@ import { useAuth } from "@/hooks/useAuth";
 import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
 import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
 import { planAddToSection } from "@/lib/prep/addToSection";
+import { prepStore } from "@/lib/prep/prepStore";
+import { expansionFeedback, favoredFirst, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
+import { aggregateSimilar, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
+import { songIdentity } from "@/lib/prep/knowledge";
 import { createEventAutosave } from "@/lib/eventAutosave";
 
 const VDJ_DIR_KEY = "vdjExportFolder";
@@ -319,6 +323,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const recommendFn = useServerFn(recommendSongsForSection);
   const neighborsFn = useServerFn(getArtistNeighbors);
   const crowdFn = useServerFn(getArtistCrowdData);
+  const similarTracksFn = useServerFn(getSimilarTracks);
   const enrichFn = useServerFn(enrichSongs);
   const [dragOver, setDragOver] = useState(false);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
@@ -939,7 +944,19 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const prefs = buildCurrentPrefs();
     const generationPolicy = { ...policies, eventType };
     const generationResolver = buildResolver(mergedLibrary.tracks, generationPolicy);
-    const addedAllowed = (track: Song & { genre?: string }) => generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
+    // Account-fenced preparation knowledge: global Never, event-only dismissals and favourites apply to
+    // automatic additions only (requests are never filtered). Read live so feedback changed mid-run is honoured.
+    const store = prepStore(), prepStart = store.get(), feedbackEvent = savedEventId, accountAtStart = accountRef.current;
+    if (prepStart.status === "blocked") toast.warning("Saved preparation notes are unreadable, so your Never/dismiss choices couldn't be applied to additions this run.");
+    let fbCache: { k: unknown; fb: ExpansionFeedback } | null = null;
+    const liveFeedback = (): ExpansionFeedback => {
+      const now = store.get();
+      const same = now.account === prepStart.account && now.generation === prepStart.generation && now.status === "ready";
+      const k = same ? now.knowledge : prepStart.status === "ready" ? prepStart.knowledge : null;
+      if (!fbCache || fbCache.k !== k) fbCache = { k, fb: expansionFeedback(k, feedbackEvent) };
+      return fbCache.fb;
+    };
+    const addedAllowed = (track: Song & { genre?: string }) => !liveFeedback().blocked(track.artist, track.song) && generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
     const localPrefs = { ...prefs, additionAllowed: addedAllowed };
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
@@ -1063,11 +1080,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           song: string;
           energy: number;
           danceability: number;
-          popularity: number;
+          popularity?: number;
           valence: number;
           bpm?: number;
           camelot?: string;
-          genre: string;
+          genre?: string;
           year?: number;
           mood?: string;
           explicit?: boolean;
@@ -1098,6 +1115,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // neighbours BEFORE the AI invents anything.
         let neighborArtists: string[] = [];
         let crowdArtists: Array<{ artist: string; listeners?: number; tags: string[] }> = [];
+        let simEvidence: SimilarTrackEvidence[] = [];
         try {
           const seedCounts = new Map<string, number>();
           for (const s of uniqueSongs) {
@@ -1120,7 +1138,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             // AI cluster and Last.fm crowd data in parallel: the model knows
             // vibe and context, Last.fm knows what real listeners actually
             // play together.
-            const [res, crowdRes] = await Promise.all([
+            // Track-level Last.fm evidence: only bounded artist/title seeds from distinct client requests.
+            const trackSeeds = seedsFromRequests(uniqueSongs);
+            const [simTrackRes, res, crowdRes] = await Promise.all([
+              trackSeeds.length ? similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }).catch(() => null) : Promise.resolve(null),
               neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
               }),
@@ -1128,6 +1149,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 () => ({ available: false, artists: [] as ArtistCrowd[] }),
               ),
             ]);
+            simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
             const seedKeys = new Set(uniqueSeeds.map((a) => normalizeKey(a)));
             const seenNeighbor = new Set<string>();
             const ordered: Array<{ name: string; seed: string; score: number }> = [];
@@ -1190,55 +1212,64 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             }
 
             // ---- YOUR CRATES FIRST ----------------------------------------
-            if (mergedLibrary?.tracks.length && ordered.length) {
+            if (mergedLibrary?.tracks.length && (ordered.length || simEvidence.length)) {
               const have = new SongKeySet(true);
               for (const s of [...r.warmUp, ...r.transition, ...r.peak]) have.add(s.artist, s.song);
               const perArtistCap = 2;
               const crateFinds: ResultSong[] = [];
+              const trackFinds: ResultSong[] = [];
+              // Shared musical-fit gate for every library addition: policy/feedback, decades, genres, BPM.
+              const crateTrack = (idx: number, reason: string): ResultSong | null => {
+                const t = mergedLibrary.tracks[idx];
+                if (!t?.artist || !t.title || !addedAllowed({ artist: t.artist, song: t.title, genre: t.genre })) return null;
+                const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
+                const wantDecades = prefs.decades ?? [];
+                if (wantDecades.length && (!yearNum || !wantDecades.includes(`${Math.floor(yearNum / 10) * 10}s`))) return null;
+                const wantGenres = (prefs.genres ?? []).map((g) => g.toLowerCase());
+                if (wantGenres.length) {
+                  const tg = (t.genre ?? "").toLowerCase();
+                  if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) return null;
+                }
+                const vbpm = prefs.bpmRange ?? getVibe(prefs.vibe)?.bpm;
+                const tb = parseBpm(t.bpm);
+                if (vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) return null;
+                if (!have.tryAdd(t.artist, t.title)) return null;
+                return {
+                  artist: t.artist, song: t.title, fromUpload: false, bpm: parseBpm(t.bpm), camelot: toCamelot(t.key), genre: t.genre, year: yearNum,
+                  explicit: detectExplicitFromTitle(t.title), metaSource: "Library", aiReason: reason,
+                } as ResultSong;
+              };
+              // Last.fm track evidence first: only an owned file whose own artist/title is the exact similar track
+              // (same artist is not the same version), resolved through the policy-aware resolver.
+              for (const ev of simEvidence) {
+                const idx = generationResolver.resolve({ artist: ev.artist, song: ev.song });
+                const t = idx === undefined ? undefined : mergedLibrary.tracks[idx];
+                if (idx === undefined || !t || songIdentity(t.artist, t.title) !== ev.key) continue;
+                const pick = crateTrack(idx, ev.seeds.length > 1
+                  ? `In your library — Last.fm lists this track as similar to ${ev.seeds.length} requested tracks (${ev.seeds.slice(0, 2).join("; ")}${ev.seeds.length > 2 ? "…" : ""}).`
+                  : `In your library — Last.fm lists this track as similar to requested ${ev.seeds[0]}.`);
+                if (pick) trackFinds.push(pick);
+              }
               for (const { name, seed } of ordered) {
                 let taken = 0;
                 for (const idx of searchLibrary(name, mergedLibrary, 6)) {
                   if (taken >= perArtistCap) break;
                   const t = mergedLibrary.tracks[idx];
-                  if (!t?.artist || !t.title || !addedAllowed({ artist: t.artist, song: t.title, genre: t.genre })) continue;
-                  if (normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
-                  if (!have.tryAdd(t.artist, t.title)) continue;
-                  const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
-                  // Musical fit beats "already in library": a crate track must
-                  // match the client's decades and genres when we know them.
-                  const wantDecades = prefs.decades ?? [];
-                  if (wantDecades.length) {
-                    if (!yearNum) continue;
-                    if (!wantDecades.includes(`${Math.floor(yearNum / 10) * 10}s`)) continue;
-                  }
-                  const wantGenres = (prefs.genres ?? []).map((g) => g.toLowerCase());
-                  if (wantGenres.length) {
-                    const tg = (t.genre ?? "").toLowerCase();
-                    if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) continue;
-                  }
-                  const vbpm = prefs.bpmRange ?? getVibe(prefs.vibe)?.bpm;
-                  const tb = parseBpm(t.bpm);
-                  if (vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) continue;
-                  crateFinds.push({
-                    artist: t.artist,
-                    song: t.title,
-                    fromUpload: false,
-                    bpm: parseBpm(t.bpm),
-                    camelot: toCamelot(t.key),
-                    genre: t.genre,
-                    year: yearNum,
-                    explicit: detectExplicitFromTitle(t.title),
-                    metaSource: "Library",
-                    aiReason: `In your library — close musical neighbour of ${seed}.`,
-                  } as ResultSong);
+                  if (!t || normalizeKey(t.artist).indexOf(normalizeKey(name)) < 0) continue;
+                  const pick = crateTrack(idx, `In your library — close musical neighbour of ${seed} (artist-level evidence).`);
+                  if (!pick) continue;
+                  crateFinds.push(pick);
                   taken += 1;
                 }
               }
+              const finds = [...favoredFirst(trackFinds, liveFeedback()), ...favoredFirst(crateFinds, liveFeedback())];
+              crateFinds.length = 0; crateFinds.push(...finds);
               if (crateFinds.length) {
                 // Spread them across the sections that still have room; the
                 // energy re-bucketing later puts each one where it belongs.
                 // Small quota: library picks are a tiebreaker, not a forced share.
-                const quota = Math.max(1, Math.round(r.perSectionTarget * 0.15));
+                // Track-level Last.fm evidence earns a slightly larger share than artist neighbours.
+                const quota = Math.max(1, Math.round(r.perSectionTarget * (trackFinds.length ? 0.3 : 0.15)));
                 let cursor = 0;
                 for (const { key } of sectionMap) {
                   let placed = 0;
@@ -1308,7 +1339,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   const seen = new SongKeySet(true);
                   for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                   let added = 0;
-                  for (const sug of res.suggestions) {
+                  for (const sug of favoredFirst(res.suggestions, liveFeedback())) {
                     if (r[key].length >= sectionTargetFor(r, key)) break;
                     if (seen.has(sug.artist, sug.song) || !addedAllowed(sug)) continue;
                     // Enforce the per-list cap client-side too.
@@ -1389,7 +1420,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 const seen = new SongKeySet(true);
                 for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                 let addedThisAttempt = 0;
-                for (const sug of res.suggestions) {
+                for (const sug of favoredFirst(res.suggestions, liveFeedback())) {
                   if (r[key].length >= sectionTargetFor(r, key)) break;
                   if (!addedAllowed(sug) || !seen.tryAdd(sug.artist, sug.song)) continue;
                   r[key].push({
@@ -1454,9 +1485,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           for (const s of [...r.warmUp, ...r.transition, ...r.peak]) globalHave.add(s.artist, s.song);
           for (const { key } of stillShort) {
             const pool = background ? [...fallback.warmUp, ...fallback.transition, ...fallback.peak] : fallback[key];
-            for (const s of pool) {
+            for (const s of favoredFirst(pool, liveFeedback())) {
               if (r[key].length >= sectionTargetFor(r, key)) break;
-              if (!globalHave.tryAdd(s.artist, s.song)) continue;
+              if (!addedAllowed(s) || !globalHave.tryAdd(s.artist, s.song)) continue;
               r[key].push({ ...s, metaSource: "Library" });
             }
           }
@@ -1563,6 +1594,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // A newer generate() (or a workflow reset) started while we were awaiting
     // AI/enrichment — drop this stale result instead of clobbering state.
     if (genTokenRef.current !== myToken) return;
+    // Account/session fence: a sign-out or account switch during generation discards this result.
+    { const now = store.get(); if (accountRef.current !== accountAtStart || now.account !== prepStart.account || now.generation !== prepStart.generation) { toast.error("Account changed during generation; nothing was applied."); return; } }
+    // Late feedback re-check: additions that became Never/dismissed while generation ran are dropped; requests stay.
+    { let removed = 0; for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) { const c = recheckAdditions(r[section], liveFeedback()); removed += c.removed; r[section] = c.kept; }
+      if (removed) toast.info(`${removed} added track${removed === 1 ? " was" : "s were"} left out because of your Never or dismiss choices made during generation.`); }
 
     // This explicit generation may remove added repeats, never requests or saved selections.
     r = preventAutomaticDuplicates(r, song => {

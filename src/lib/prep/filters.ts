@@ -25,6 +25,8 @@ export const EMPTY_FILTER: FilterState = {
 export interface FilterFacts {
   genre?: string; decade?: string; bpm?: number; durationSec?: number; energy?: number;
   clean?: CleanValue; cleanSource?: FieldSource; owned?: boolean;
+  /** Where genre/decade came from; absent means unknown provenance (treated as an estimate for ranking). */
+  genreSource?: FieldSource | "ai"; decadeSource?: FieldSource | "ai";
 }
 
 const CLEAN_RE = /(?:^|[\s([_-])(clean(?:\s+(?:edit|version))?|radio\s+clean)(?=$|[\s)\]_.-])/i;
@@ -47,6 +49,7 @@ export function trackFacts(t: VdjTrack): FilterFacts {
   const clean = inferCleanFromText(t.title, t.remix, base);
   return {
     genre: normGenre(t.genre) || undefined, decade: decadeOf(t),
+    genreSource: normGenre(t.genre) ? "tags" : undefined, decadeSource: decadeOf(t) ? "tags" : undefined,
     bpm: Number.isFinite(bpm) && bpm > 0 ? bpm : undefined,
     durationSec: Number.isFinite(len) && len > 0 ? len : undefined,
     energy: undefined, // local files carry no energy; never derived from BPM

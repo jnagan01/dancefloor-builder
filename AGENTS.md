@@ -5,7 +5,6 @@
 - Keep event autosave in the owner-scoped `workflow_history` JSON snapshot, because old snapshots must stay readable.
 - Use shared semantic CSS tokens and one local-file waveform player for library/event review, for consistent visuals and playback.
 - Keep app-only prep knowledge in the account-fenced `src/lib/prep` store, never in snapshots/audio, backed up as optional `prep`, because events must stay readable.
-- Read and write song metadata tags only inside the Mac app (desktop/tags.cjs via node-taglib-sharp, cached by size+mtime in userData), because browsers cannot modify local files and edits must land in the music files themselves.
 - Use `freshEvent`, never profile defaults. Expansion-off never pads/truncates. Planning excludes DNP/missing titles/repeated identities, because estimates and allocation slots are not unique approved coverage.
 - Route every same-row event writer through owner/id plus the reserved inputs revision marker compare-and-set; initialize missing legacy markers atomically with the observed timestamp, use fresh UUIDs per logical edit stable through retry/reload, and never put full JSON in URL filters, because timestamps and payload ABA are insufficient.
 - Treat native scans as atomic source replacements and retain saved tracks on failed, partial or unexpectedly empty rescans, because inaccessible folders must not erase library indexes.
@@ -25,7 +24,6 @@
 - Run the real event route in a fenced synthetic Electron profile before packaging, stubbing network/storage only in fixtures, so release checks never reach user data.
 
 - Fence backup/restore after every asynchronous boundary using account-session generation and captured sources/roots; compute conflict previews with identity maps and bounded samples, because late operations must not mix account data or stall large libraries.
-- Mirror native event recovery in an fsynced, account/event-key-hashed journal behind exact-origin main-frame IPC; keep existing browser recovery keys, because Chromium localStorage alone did not survive an abrupt process kill.
 - Check both durable new-event recovery slots before backup restore, and capture section/song identity plus library/root mappings for export readiness and output, because native-only drafts and asynchronous path changes must never bypass preservation or availability checks.
 - Reuse the read-only macOS regression workflow as a required release dependency; web-only changes trigger checks but not installer publication, because every release must pass the same synthetic gates.
 
@@ -41,3 +39,4 @@
 - Keep matching eligibility separate from expansion eligibility and never refill from raw library order; requested seasonal tracks need clean matching and constrained empty pools must remain honest gaps.
 - Keep saved keys unchanged; dedupe automatic additions by intended version/exact path and require explicit occurrence exclusions for repeated combined DJ export, because requests and legacy snapshots must stay intact.
 - Derive section coverage from export readiness's unique case-sensitive files, separate event/buffer minutes, and cap artist/title mismatches in search fallback scores, because repeated minutes and cross-field tokens are not evidence.
+- Route every automatic expansion addition through one live feedback-aware gate (account-fenced Never, event-only dismissals, favour ordering) and re-check it before commit; send Last.fm only bounded artist/title seeds and weight metadata by source tier, because requests must never be filtered and estimates are not evidence.
