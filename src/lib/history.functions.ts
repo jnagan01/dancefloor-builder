@@ -13,6 +13,7 @@ const songSchema = z.object({
   energy: z.number().optional(), danceability: z.number().optional(), popularity: z.number().optional(), valence: z.number().optional(),
   bpm: z.number().optional(), camelot: z.string().optional(), genre: z.string().optional(), year: z.number().optional(),
   mood: z.string().optional(), explicit: z.boolean().optional(), metaSource: z.string().optional(),
+  metaProv: z.record(z.string().max(20), z.string().max(20)).optional(),
   stretched: z.boolean().optional(), naturalSection: z.string().optional(), reused: z.boolean().optional(),
   waveRole: z.string().optional(), placementReason: z.string().optional(), aiSuggestion: z.boolean().optional(),
   aiReason: z.string().optional(), fromLibrary: z.boolean().optional(),

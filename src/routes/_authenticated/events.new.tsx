@@ -124,6 +124,9 @@ import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
 import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
 import { planAddToSection } from "@/lib/prep/addToSection";
 import { prepStore } from "@/lib/prep/prepStore";
+import { decodeCacheSource, mergeMeta, metaLabel, strictLimitFailure, withProv, type StrictLimits } from "@/lib/prep/provenance";
+import { attrSource } from "@/lib/prep/provenance";
+import { sourceLabel } from "@/lib/prep/metaConfidence";
 import { awaitReadyFeedback, BLOCK_ALL_ADDITIONS, expansionFeedback, favoredFirst, GATE_MESSAGES, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
 import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { songIdentity } from "@/lib/prep/knowledge";
@@ -966,6 +969,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     };
     const addedAllowed = (track: Song & { genre?: string }) => !liveFeedback().blocked(track.artist, track.song) && generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
     const localPrefs = { ...prefs, additionAllowed: addedAllowed };
+    const strictLimits: StrictLimits = { bpmRange: prefs.bpmRange, decades: prefs.decades };
     // Always build the base from uploads only; AI fills the gap when expand=true,
     // with the built-in library as a fallback if AI is unavailable.
     let r = generateLists({
@@ -995,18 +999,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // We only fetch metadata for songs actually used in a generation.
     const applyOnlineEnrichment = (s: ResultSong, e: EnrichedSong | undefined): ResultSong => {
       if (!e || e.source === "none") return s;
-      return {
-        ...s,
-        energy: s.energy ?? e.energy,
-        danceability: s.danceability ?? e.danceability,
-        popularity: s.popularity ?? e.popularity,
-        valence: s.valence ?? e.valence,
-        bpm: s.bpm ?? e.bpm,
-        camelot: s.camelot ?? e.camelot,
-        genre: s.genre ?? e.genre,
-        year: s.year ?? e.year,
-        metaSource: s.metaSource ?? "Online",
-      };
+      // Per-attribute: provider values replace AI/heuristic estimates; user edits and file tags are kept.
+      return mergeMeta(s, e, e.prov ?? decodeCacheSource(e.source, e).prov);
     };
     const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
@@ -1017,15 +1011,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const bpmNum = parseBpm(t.bpm);
       const cam = toCamelot(t.key);
       const yearNum = t.year && /^\d{4}$/.test(t.year) ? parseInt(t.year, 10) : undefined;
-      return {
-        ...s,
-        // The music file's own BPM always beats online/AI estimates.
-        bpm: bpmNum ?? s.bpm,
-        camelot: s.camelot ?? cam,
-        genre: s.genre ?? t.genre,
-        year: s.year ?? yearNum,
-        metaSource: s.metaSource ?? "VirtualDJ",
-      };
+      // The approved music file's own tags beat online/AI values (user edits still win).
+      return mergeMeta(s, { bpm: bpmNum, camelot: cam, genre: t.genre, year: yearNum }, "tags");
     };
     // Small helper: fetch online enrichment for a flat list of songs and
     // return a map keyed by "artist||song" (raw values). Best-effort — a
@@ -1097,7 +1084,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           mood?: string;
           explicit?: boolean;
           reason: string;
-        }) => ({
+        }) => withProv({
           artist: sug.artist,
           song: sug.song,
           fromUpload: false,
@@ -1115,7 +1102,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           metaSource: "AI" as const,
           aiSuggestion: true,
           aiReason: sug.reason,
-        });
+        } as ResultSong & { aiSuggestion?: boolean; aiReason?: string }, "ai");
 
         // ---- MUSIC-MAP NEIGHBOR GRAPH -------------------------------------
         // Build a similarity cluster around the artists the client actually
@@ -1243,14 +1230,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   const tg = (t.genre ?? "").toLowerCase();
                   if (!tg || !wantGenres.some((g) => tg.includes(g) || g.includes(tg))) return null;
                 }
-                const vbpm = prefs.bpmRange ?? getVibe(prefs.vibe)?.bpm;
                 const tb = parseBpm(t.bpm);
-                if (vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) return null;
-                if (!have.tryAdd(t.artist, t.title)) return null;
-                return {
-                  artist: t.artist, song: t.title, fromUpload: false, bpm: parseBpm(t.bpm), camelot: toCamelot(t.key), genre: t.genre, year: yearNum,
+                const row = withProv({
+                  artist: t.artist, song: t.title, fromUpload: false, bpm: tb, camelot: toCamelot(t.key), genre: t.genre, year: yearNum,
                   explicit: detectExplicitFromTitle(t.title), metaSource: "Library", aiReason: reason,
-                } as ResultSong;
+                } as ResultSong, "tags");
+                // Strict user BPM limit needs the file's own tempo inside the range; the vibe's tempo stays a soft guide.
+                if (strictLimitFailure(row, strictLimits)) return null;
+                const vbpm = getVibe(prefs.vibe)?.bpm;
+                if (!prefs.bpmRange && vbpm && tb && (tb < vbpm[0] - 15 || tb > vbpm[1] + 15)) return null;
+                if (!have.tryAdd(t.artist, t.title)) return null;
+                return row;
               };
               // Last.fm track evidence first: only an owned file whose own artist/title is the exact similar track
               // (same artist is not the same version), resolved through the policy-aware resolver.
@@ -1436,7 +1426,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 for (const sug of favoredFirst(res.suggestions, liveFeedback())) {
                   if (r[key].length >= sectionTargetFor(r, key)) break;
                   if (!addedAllowed(sug) || !seen.tryAdd(sug.artist, sug.song)) continue;
-                  r[key].push({
+                  r[key].push(withProv({
                     artist: sug.artist,
                     song: sug.song,
                     fromUpload: false,
@@ -1456,7 +1446,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     metaSource: "AI",
                     aiSuggestion: true,
                     aiReason: sug.reason,
-                  } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string });
+                  } as (typeof r)[typeof key][number] & { aiSuggestion?: boolean; aiReason?: string }, "ai"));
 
                   addedThisAttempt += 1;
                 }
@@ -1525,20 +1515,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             r[k] = r[k].map((s) => {
               if (s.metaSource !== "AI" && s.metaSource !== "Library") return s;
               const e = aiOnline.get(`${s.artist}||${s.song}`);
-              if (!e || e.source === "none") return enrichFromLibrary(s);
-              // For AI picks the model's numbers were guesses — prefer online.
-              return enrichFromLibrary({
-                ...s,
-                energy: e.energy ?? s.energy,
-                danceability: e.danceability ?? s.danceability,
-                popularity: e.popularity ?? s.popularity,
-                valence: e.valence ?? s.valence,
-                bpm: e.bpm ?? s.bpm,
-                camelot: e.camelot ?? s.camelot,
-                genre: e.genre ?? s.genre,
-                year: e.year ?? s.year,
-                metaSource: "Online",
-              });
+              // AI numbers are guesses: provider values replace them per attribute, file tags beat both.
+              return enrichFromLibrary(applyOnlineEnrichment(s, e));
             });
           });
         }
@@ -1585,24 +1563,20 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
           r[k] = r[k].map((s) => {
             if (s.energy != null && s.danceability != null) return s;
-            const e = extra.get(`${s.artist}||${s.song}`);
-            if (!e || e.source === "none") return s;
-            return {
-              ...s,
-              energy: s.energy ?? e.energy,
-              danceability: s.danceability ?? e.danceability,
-              valence: s.valence ?? e.valence,
-              popularity: s.popularity ?? e.popularity,
-              bpm: s.bpm ?? e.bpm,
-              camelot: s.camelot ?? e.camelot,
-              genre: s.genre ?? e.genre,
-              year: s.year ?? e.year,
-            };
+            return applyOnlineEnrichment(s, extra.get(`${s.artist}||${s.song}`));
           });
         });
       }
     }
 
+
+    // Strict BPM/decade limits: automatic additions need verified in-range evidence (never AI guesses or unknown).
+    // Requests are never removed. Row labels are derived from per-attribute provenance.
+    { let dropped = 0;
+      for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) {
+        r[section] = r[section].filter(t => t.fromUpload || !strictLimitFailure(t, strictLimits) || (dropped++, false)).map(t => (t.metaProv ? { ...t, metaSource: metaLabel(t) as ResultSong["metaSource"] } : t));
+      }
+      if (dropped) toast.info(`${dropped} added track${dropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`); }
 
     // A newer generate() (or a workflow reset) started while we were awaiting
     // AI/enrichment — drop this stale result instead of clobbering state.
@@ -3454,7 +3428,7 @@ function MetricsDetail({ song, fileBpm }: { song: BadgeSong; fileBpm?: number })
     fileBpm != null
       ? { label: "BPM (from file)", value: String(Math.round(fileBpm)) }
       : typeof song.bpm === "number"
-        ? { label: "BPM (estimate)", value: Math.round(song.bpm).toString() }
+        ? { label: `BPM (${sourceLabel(attrSource(song, "bpm"))})`, value: Math.round(song.bpm).toString() }
         : null,
     song.camelot ? { label: "Key", value: song.camelot } : null,
     song.genre ? { label: "Genre", value: song.genre } : null,
