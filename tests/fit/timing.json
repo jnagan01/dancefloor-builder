@@ -1,0 +1,569 @@
+{
+ "limitations": [
+  "Controlled fixture, not an exact replay of the saved run and not live native/Mac generation: the original full candidate pool was not captured.",
+  "The 4 new rows of the published fit rerun are not in this pool (no captured metadata); their overlap is reported as not-in-pool, never invented.",
+  "All energy/danceability/popularity values are legacy estimates/AI; they can lower ranks but never exclude, and are not ballad proof.",
+  "Similarity links are synthetic and identical in every run. Ratings are reporting-only and never ranking input."
+ ],
+ "noFit": {
+  "fit": null,
+  "oldTop14": [
+   "ABBA|Honey Honey",
+   "Whitney Houston|How Will I Know",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "ABBA|Mamma Mia",
+   "Whitney Houston|I'm Every Woman",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun",
+   "KISS|I Was Made For Lovin' You",
+   "The Pussycat Dolls|Buttons"
+  ],
+  "newTop14": [
+   "ABBA|Honey Honey",
+   "Whitney Houston|How Will I Know",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "ABBA|Mamma Mia",
+   "Whitney Houston|I'm Every Woman",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun",
+   "KISS|I Was Made For Lovin' You",
+   "The Pussycat Dolls|Buttons"
+  ],
+  "overlapWithSavedBaseline14": {
+   "old": 9,
+   "new": 9
+  },
+  "overlapWithPublishedRerun14": {
+   "old": 6,
+   "new": 6,
+   "notInPool": 4
+  },
+  "ratingsTop14ReportOnly": {
+   "old": {
+    "Good": 2,
+    "Fair": 2,
+    "Poor": 0,
+    "Unfamiliar": 5,
+    "Unrated": 5
+   },
+   "new": {
+    "Good": 2,
+    "Fair": 2,
+    "Poor": 0,
+    "Unfamiliar": 5,
+    "Unrated": 5
+   }
+  },
+  "ranks": [
+   {
+    "track": "ABBA|Honey Honey",
+    "oldRank": 1,
+    "newRank": 1,
+    "rating": null,
+    "newReasons": "Same artist as client request “ABBA – Dancing Queen” · 1970s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Whitney Houston|How Will I Know",
+    "oldRank": 2,
+    "newRank": 2,
+    "rating": null,
+    "newReasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Big Boi|All Night (Dirty)",
+    "oldRank": 3,
+    "newRank": 3,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Big Boi as similar to Outkast (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "American Authors|Best Day Of My Life",
+    "oldRank": 4,
+    "newRank": 4,
+    "rating": "Good",
+    "newReasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Grouplove|Tongue Tied",
+    "oldRank": 5,
+    "newRank": 5,
+    "rating": "Fair",
+    "newReasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Mariah Carey|A No No",
+    "oldRank": 6,
+    "newRank": 6,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "ABBA|Mamma Mia",
+    "oldRank": 7,
+    "newRank": 7,
+    "rating": "Good",
+    "newReasons": "Same artist as client request “ABBA – Dancing Queen” · 1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Whitney Houston|I'm Every Woman",
+    "oldRank": 8,
+    "newRank": 8,
+    "rating": null,
+    "newReasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” · 1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Ava Max|Freaking Me Out",
+    "oldRank": 9,
+    "newRank": 9,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Zara Larsson|Don't Let Me Be Yours",
+    "oldRank": 10,
+    "newRank": 10,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) · 2010s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Toni Braxton|Another Sad Love Song",
+    "oldRank": 11,
+    "newRank": 11,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) · 1990s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "The Beatles|Here Comes the Sun",
+    "oldRank": 12,
+    "newRank": 12,
+    "rating": null,
+    "newReasons": "Last.fm lists The Beatles as similar to Queen (artist-level) · 2020s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "KISS|I Was Made For Lovin' You",
+    "oldRank": 13,
+    "newRank": 13,
+    "rating": "Fair",
+    "newReasons": "Last.fm lists KISS as similar to Queen (artist-level) · 1970s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "The Pussycat Dolls|Buttons",
+    "oldRank": 14,
+    "newRank": 14,
+    "rating": null,
+    "newReasons": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) · 2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Snow Patrol|Chasing Cars",
+    "oldRank": 15,
+    "newRank": 15,
+    "rating": "Poor",
+    "newReasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level)"
+   },
+   {
+    "track": "Mariah Carey|Fantasy",
+    "oldRank": 16,
+    "newRank": 16,
+    "rating": null,
+    "newReasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) · 2000s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "ABBA|Take a Chance on Me",
+    "oldRank": 17,
+    "newRank": 17,
+    "rating": null,
+    "newReasons": "Same artist as client request “ABBA – Dancing Queen” · 2010s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Tones and I|Dance Monkey",
+    "oldRank": 18,
+    "newRank": 18,
+    "rating": null,
+    "newReasons": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level)"
+   },
+   {
+    "track": "The Beatles|Let It Be",
+    "oldRank": 19,
+    "newRank": 19,
+    "rating": "Poor",
+    "newReasons": "Last.fm lists The Beatles as similar to Queen (artist-level)"
+   },
+   {
+    "track": "Bill Withers|Lovely Day",
+    "oldRank": 20,
+    "newRank": 20,
+    "rating": "Good",
+    "newReasons": "1990s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Journey|Don't Stop Believin'",
+    "oldRank": 21,
+    "newRank": 21,
+    "rating": "Good",
+    "newReasons": "2000s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Kool & The Gang|Celebration",
+    "oldRank": 22,
+    "newRank": 22,
+    "rating": "Good",
+    "newReasons": "2000s (AI estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "T.I.|Live Your Life",
+    "oldRank": 23,
+    "newRank": 23,
+    "rating": null,
+    "newReasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "The O'Jays|Love Train",
+    "oldRank": 24,
+    "newRank": 24,
+    "rating": null,
+    "newReasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Tracy Chapman|Fast Car",
+    "oldRank": 25,
+    "newRank": 25,
+    "rating": null,
+    "newReasons": "1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Van Morrison|Brown Eyed Girl",
+    "oldRank": 26,
+    "newRank": 26,
+    "rating": null,
+    "newReasons": "1990s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Zach Bryan|Revival",
+    "oldRank": 27,
+    "newRank": 27,
+    "rating": null,
+    "newReasons": "2020s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Mariah Carey|8th Grade",
+    "oldRank": 28,
+    "newRank": 28,
+    "rating": null,
+    "newReasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level)"
+   },
+   {
+    "track": "Kool & The Gang|Get Down On It",
+    "oldRank": 29,
+    "newRank": 29,
+    "rating": null,
+    "newReasons": "2000s (estimate) is a preferred decade for this event"
+   },
+   {
+    "track": "Journey|Faithfully",
+    "oldRank": 30,
+    "newRank": 30,
+    "rating": null,
+    "newReasons": "No specific evidence beyond your event rules."
+   },
+   {
+    "track": "Kool & The Gang|Cherish",
+    "oldRank": 31,
+    "newRank": 31,
+    "rating": null,
+    "newReasons": "No specific evidence beyond your event rules."
+   }
+  ]
+ },
+ "fit": {
+  "fit": {
+   "familiarity": "familiar",
+   "avoidSlow": true
+  },
+  "oldTop14": [
+   "Bill Withers|Lovely Day",
+   "Journey|Don't Stop Believin'",
+   "Van Morrison|Brown Eyed Girl",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "ABBA|Honey Honey",
+   "Whitney Houston|How Will I Know",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun",
+   "KISS|I Was Made For Lovin' You"
+  ],
+  "newTop14": [
+   "Van Morrison|Brown Eyed Girl",
+   "ABBA|Take a Chance on Me",
+   "Whitney Houston|How Will I Know",
+   "Bill Withers|Lovely Day",
+   "Journey|Don't Stop Believin'",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "The Pussycat Dolls|Buttons",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Snow Patrol|Chasing Cars",
+   "Toni Braxton|Another Sad Love Song"
+  ],
+  "overlapWithSavedBaseline14": {
+   "old": 10,
+   "new": 10
+  },
+  "overlapWithPublishedRerun14": {
+   "old": 7,
+   "new": 7,
+   "notInPool": 4
+  },
+  "ratingsTop14ReportOnly": {
+   "old": {
+    "Good": 3,
+    "Fair": 2,
+    "Poor": 0,
+    "Unfamiliar": 5,
+    "Unrated": 4
+   },
+   "new": {
+    "Good": 3,
+    "Fair": 1,
+    "Poor": 1,
+    "Unfamiliar": 5,
+    "Unrated": 4
+   }
+  },
+  "ranks": [
+   {
+    "track": "Van Morrison|Brown Eyed Girl",
+    "oldRank": 3,
+    "newRank": 1,
+    "rating": null,
+    "newReasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "track": "ABBA|Take a Chance on Me",
+    "oldRank": 27,
+    "newRank": 2,
+    "rating": null,
+    "newReasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "track": "Whitney Houston|How Will I Know",
+    "oldRank": 9,
+    "newRank": 3,
+    "rating": null,
+    "newReasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "track": "Bill Withers|Lovely Day",
+    "oldRank": 1,
+    "newRank": 4,
+    "rating": "Good",
+    "newReasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1990s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "track": "Journey|Don't Stop Believin'",
+    "oldRank": 2,
+    "newRank": 5,
+    "rating": "Good",
+    "newReasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+   },
+   {
+    "track": "Big Boi|All Night (Dirty)",
+    "oldRank": 4,
+    "newRank": 6,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Big Boi as similar to Outkast (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "American Authors|Best Day Of My Life",
+    "oldRank": 5,
+    "newRank": 7,
+    "rating": "Good",
+    "newReasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "The Pussycat Dolls|Buttons",
+    "oldRank": 15,
+    "newRank": 8,
+    "rating": null,
+    "newReasons": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "track": "Grouplove|Tongue Tied",
+    "oldRank": 6,
+    "newRank": 9,
+    "rating": "Fair",
+    "newReasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "Mariah Carey|A No No",
+    "oldRank": 7,
+    "newRank": 10,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "Ava Max|Freaking Me Out",
+    "oldRank": 10,
+    "newRank": 11,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "Zara Larsson|Don't Let Me Be Yours",
+    "oldRank": 11,
+    "newRank": 12,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "Snow Patrol|Chasing Cars",
+    "oldRank": 16,
+    "newRank": 13,
+    "rating": "Poor",
+    "newReasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence · Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "track": "Toni Braxton|Another Sad Love Song",
+    "oldRank": 12,
+    "newRank": 14,
+    "rating": "Unfamiliar",
+    "newReasons": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 1990s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "The Beatles|Here Comes the Sun",
+    "oldRank": 13,
+    "newRank": 15,
+    "rating": null,
+    "newReasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 2020s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "KISS|I Was Made For Lovin' You",
+    "oldRank": 14,
+    "newRank": 16,
+    "rating": "Fair",
+    "newReasons": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 1970s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "Tones and I|Dance Monkey",
+    "oldRank": 17,
+    "newRank": 17,
+    "rating": null,
+    "newReasons": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "track": "Kool & The Gang|Get Down On It",
+    "oldRank": 28,
+    "newRank": 18,
+    "rating": null,
+    "newReasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate"
+   },
+   {
+    "track": "Tracy Chapman|Fast Car",
+    "oldRank": 24,
+    "newRank": 19,
+    "rating": null,
+    "newReasons": "Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "track": "Zach Bryan|Revival",
+    "oldRank": 25,
+    "newRank": 20,
+    "rating": null,
+    "newReasons": "Track popularity 8/10 (estimate, audience-wide) (advisory estimate) · 2020s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate"
+   },
+   {
+    "track": "Mariah Carey|Fantasy",
+    "oldRank": 18,
+    "newRank": 21,
+    "rating": null,
+    "newReasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "ABBA|Honey Honey",
+    "oldRank": 8,
+    "newRank": 22,
+    "rating": null,
+    "newReasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1970s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "track": "Whitney Houston|I'm Every Woman",
+    "oldRank": 20,
+    "newRank": 23,
+    "rating": null,
+    "newReasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "track": "T.I.|Live Your Life",
+    "oldRank": 22,
+    "newRank": 24,
+    "rating": null,
+    "newReasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 1/10 is an estimate"
+   },
+   {
+    "track": "The O'Jays|Love Train",
+    "oldRank": 23,
+    "newRank": 25,
+    "rating": null,
+    "newReasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate"
+   },
+   {
+    "track": "ABBA|Mamma Mia",
+    "oldRank": 19,
+    "newRank": 26,
+    "rating": "Good",
+    "newReasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "Kool & The Gang|Celebration",
+    "oldRank": 21,
+    "newRank": 27,
+    "rating": "Good",
+    "newReasons": "2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "Mariah Carey|8th Grade",
+    "oldRank": 29,
+    "newRank": 28,
+    "rating": null,
+    "newReasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 3/10 is an estimate"
+   },
+   {
+    "track": "Journey|Faithfully",
+    "oldRank": 30,
+    "newRank": 29,
+    "rating": null,
+    "newReasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate"
+   },
+   {
+    "track": "The Beatles|Let It Be",
+    "oldRank": 26,
+    "newRank": 30,
+    "rating": "Poor",
+    "newReasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · Energy 4/10 and danceability 4/10 suggest a slow song (estimate, advisory) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data"
+   },
+   {
+    "track": "Kool & The Gang|Cherish",
+    "oldRank": 31,
+    "newRank": 31,
+    "rating": null,
+    "newReasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate"
+   }
+  ]
+ }
+}

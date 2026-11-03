@@ -24,7 +24,7 @@ function pool(timing: "old" | "new") {
   return (rows as Raw[]).map(r0 => { const o = SAVED_EVENT_ROWS[`${r0.artist}|${r0.song}`]; return (o ? { artist: r0.artist, song: r0.song, heldOut: r0.heldOut, ...o } : r0) as Raw; }).map((r, i) => {
     let row: Raw = r;
     if (timing === "old") { row = { ...r, metaProv: { ...(r.metaProv ?? {}) } }; for (const k of LATE) { delete row[k]; delete row.metaProv![k]; } }
-    return { ...rowCandidate(row as never, "owned" as never), ref: i };
+    return { ...rowCandidate(row as never, "library"), ref: i };
   });
 }
 const label = (r: Recommendation) => `${r.artist}|${r.song}`;
