@@ -1,4 +1,5 @@
-import { DEFAULTS, buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
+import { buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
+import { freshEvent, validateEventChoices } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
 import { preventAutomaticDuplicates, sectionCoverage } from "@/lib/preparationDuplicates";
@@ -237,7 +238,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }));
   const restoredEvent = useRef(false);
   const resultBoundary = useRef<{ eventId: string | undefined } | null>(null);
-  const [buffer, setBuffer] = useState(2);
+  const fresh = freshEvent();
+  const [buffer, setBuffer] = useState(fresh.buffer);
   const [activeSection, setActiveSection] = useState<SectionKey>("warmUp");
   const [showVibe, setShowVibe] = useState(false);
   const [spotifyLink, setSpotifyLink] = useState("");
@@ -272,12 +274,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
   useEffect(() => { setMatchLimit(Number(localStorage.getItem(MATCH_LIMIT_KEY))||10); setMatcherOn(localStorage.getItem(MATCH_AUTO_KEY)!=="false"); setSoftware(localStorage.getItem(DJ_SOFTWARE_KEY)||"VirtualDJ"); }, []);
   const [songs, setSongs] = useState<Song[]>([]);
-  const [hours, setHours] = useState<string>("3");
+  const [hours, setHours] = useState<string>(fresh.hours);
   const [splitOn, setSplitOn] = useState(false);
-  const [split, setSplit] = useState<SectionSplit>(() => equalSplit(3));
-  const [listType, setListType] = useState<ListType>("dance");
-  const [minutes, setMinutes] = useState<string>("60");
-  const background = listType !== "dance";
+  const [split, setSplit] = useState<SectionSplit>(fresh.split);
+  const [listType, setListType] = useState<ListType | "">(fresh.listType);
+  const [minutes, setMinutes] = useState<string>(fresh.minutes);
+  const background = listType === "cocktail" || listType === "dinner";
   const minutesNum = displayNumber(minutes, MAX_EVENT_MINUTES);
   const bgTarget = Math.ceil(minutesNum / AVG_BACKGROUND_SONG_MIN);
   const bgLabel = listType === "dinner" ? "Dinner" : "Cocktail Hour";
@@ -286,10 +288,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const sectionName = (sec: SectionKey) => (background && sec === "warmUp" ? bgLabel : sec === "warmUp" ? "Warm Up" : sec === "transition" ? "Transition" : "Peak");
   const [artistsInput, setArtistsInput] = useState("");
   const [genresInput, setGenresInput] = useState("");
-  const [decades, setDecades] = useState<string[]>(["2000s", "2010s", "2020s"]);
+  const [decades, setDecades] = useState<string[]>(fresh.decades);
   const [vibe, setVibe] = useState<string>("");
   const [eventType, setEventType] = useState<string>("");
-  const [policies, setPolicies] = useState<PreparationInputs>({ ...DEFAULTS });
+  const [policies, setPolicies] = useState<PreparationInputs>(fresh.policies);
   const eventPolicy = { ...policies, eventType };
   const cleanRequired = requiresClean(eventPolicy);
   const policyCapable = supportsPreparationPolicy();
@@ -387,8 +389,6 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [workflowInstanceId, setWorkflowInstanceId] = useState(0);
   const [danceFloorConfirmed, setDanceFloorConfirmed] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  // Per-user defaults pulled from the profile; used for new/reset workflows.
-  const defaultsRef = useRef({ hours: "3", decades: ["2000s", "2010s", "2020s"] as string[], expand: false });
 
   // Resets every piece of state that belongs to a single workflow. Device-level
   // setup (connected music folders, VirtualDJ export folder) is intentionally
@@ -398,19 +398,24 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     if (latestSnapshot.current) persistOnExit();
     resultBoundary.current = null;
     setSongs([]);
-    setHours(defaultsRef.current.hours);
+    const blank = freshEvent();
+    setHours(blank.hours);
+    setMinutes(blank.minutes);
+    setListType(blank.listType);
+    setSplitOn(blank.splitOn);
+    setSplit(blank.split);
     setArtistsInput("");
     setGenresInput("");
-    setDecades([...defaultsRef.current.decades]);
+    setDecades(blank.decades);
     setVibe("");
     setEventType("");
-    setPolicies({ ...DEFAULTS });
+    setPolicies(blank.policies);
     setBpmOn(false);
     setDanceOn(false);
     setHomeKey("");
     setNotes("");
     setDoNotPlayInput("");
-    setExpand(defaultsRef.current.expand);
+    setExpand(blank.expand);
     setIncludeCombined(false);
     setEventName("");
     setResult(null);
@@ -422,7 +427,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setDanceFloorConfirmed(false);
     setSavedEventId(null);
     setSaveState("idle");
-    setBuffer(2);
+    setBuffer(blank.buffer);
+    setShowVibe(false);
+    setDetail(null);
+    setUploadStatuses([]);
     setActiveSection("warmUp");
     setSpotifyLink("");
     restoredEvent.current = false;
@@ -443,7 +451,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [musicSetupCompleted, setMusicSetupCompleted] = useState<boolean | null>(null);
   useEffect(() => { setCanDirWrite(supportsDirectoryWrite()); }, []);
 
-  // Load the user's profile settings (setup flag + saved defaults) once.
+  // Only device setup belongs here; profile event defaults never populate an event.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -451,24 +459,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (!user || user.id !== account || cancelled) return;
       const { data } = await supabase
         .from("profiles")
-        .select("music_setup_completed, default_hours, default_decades, default_expand, favorite_artists")
+        .select("music_setup_completed")
         .eq("id", user.id)
         .maybeSingle();
       if (cancelled || !data) return;
       setMusicSetupCompleted(!!data.music_setup_completed);
-      defaultsRef.current = {
-        hours: data.default_hours || "3",
-        decades: data.default_decades?.length ? data.default_decades : ["2000s", "2010s", "2020s"],
-        expand: !!data.default_expand,
-      };
-      // Apply the saved defaults only to a brand-new workflow — never over an opened event.
-      if (openedEventIdRef.current) return;
-      setHours(defaultsRef.current.hours);
-      setDecades([...defaultsRef.current.decades]);
-      setExpand(defaultsRef.current.expand);
-      if (data.favorite_artists) {
-        setArtistsInput((prev) => (prev.trim() ? prev : data.favorite_artists));
-      }
     })();
     return () => { cancelled = true; };
   }, [account]);
@@ -715,7 +710,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
-      inputs:{...snapshotExtras.current.inputs,...policies,songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer,listType,minutes,split:splitOn?split:undefined},
+      inputs:{...snapshotExtras.current.inputs,...policies,songs:songs.filter(s=>s.artist.trim()||s.song.trim()),hours:background && !hours ? String(minutesNum / 60) : hours,artistsInput,genresInput,decades,vibe,eventType:eventType||undefined,bpmRange:bpmOn?bpmRange:undefined,danceRange:danceOn?danceRange:undefined,homeKey:homeKey||undefined,notes,doNotPlayInput,expand,eventName,buffer:background && !buffer ? 1 : buffer,listType,minutes:minutes || undefined,split:splitOn?split:undefined},
       lists:{...snapshotExtras.current.lists,warmUp:nextResult.warmUp,transition:nextResult.transition,peak:nextResult.peak,selections} };
   }
   useEffect(() => {
@@ -913,7 +908,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     try { assertPreparationActivation(eventPolicy); } catch(e) { toast.error((e as Error).message); return; }
     // No uploads is fine as long as the client gave artists, genres or decades —
     // the whole list is then built by the recommender.
-    try { validateTiming(hours, buffer, splitOn ? split : undefined); if (background) boundedNumber(minutes, MAX_EVENT_MINUTES, "List minutes"); } catch (e) { toast.error((e as Error).message); return; }
+    try { validateEventChoices(listType, hours, minutes, buffer); validateTiming(background ? minutesNum / 60 : hours, background ? 1 : buffer, splitOn && !background ? split : undefined); } catch (e) { toast.error((e as Error).message); return; }
     const missingTitles = songs.filter(s => s.artist.trim() && !s.song.trim());
     if (missingTitles.length) { toast.error(`${missingTitles.length} uploaded row${missingTitles.length === 1 ? " is" : "s are"} missing a song title. Add the title in Uploaded songs before generating; every row has been kept.`); setStep(3); return; }
     const noUploads = !songs.some((x) => x.artist.trim() || x.song.trim());
@@ -2330,6 +2325,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [isPendingLive, startLiveTransition] = useTransition();
 
   function computeLiveTargets(songsArg: Song[], hoursArg: number) {
+    if (!listType || (!background && ![2,3,4].includes(buffer))) return { total: 0, perSection: 0, perSectionBase: 0, shortfall: {warmUp:0,transition:0,peak:0,total:0} };
     const safeHours = displayNumber(hoursArg, MAX_EVENT_HOURS);
     let safeSplit = activeSplit;
     try { validateTiming(safeHours, buffer, safeSplit); } catch { safeSplit = undefined; }
@@ -2359,7 +2355,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
     // debouncedExpand is intentionally part of deps for visual pending state only
     void debouncedExpand;
-  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer, splitOn, split, background, minutes, doNotPlayInput]);
+  }, [debouncedSongs, debouncedHours, debouncedExpand, buffer, splitOn, split, background, listType, minutes, doNotPlayInput]);
 
 
   const [step, setStep] = useState(1);
@@ -2435,7 +2431,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       </header>
       <div className="space-y-6 pb-32 pt-6">
         <div className="sticky top-3 z-30">
-          <StepRail steps={stepDefs} current={step} onSelect={setStep} />
+          <StepRail steps={stepDefs} current={step} onSelect={(next) => { if (next > 1 && !result) { try { validateEventChoices(listType, hours, minutes, buffer, false); } catch(e) { toast.error((e as Error).message); return; } } setStep(next); }} />
         </div>
 
         <main className="min-w-0 space-y-6">
@@ -2458,6 +2454,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           <div className="space-y-5">
             <div>
               <Label>List type</Label>
+              {!listType && <p className="mt-1 text-sm text-muted-foreground">Choose a list type</p>}
               <div className="mt-2 inline-flex flex-wrap gap-1 rounded-full border border-border bg-muted/40 p-1" role="radiogroup">
                 {(["dance", "cocktail", "dinner"] as ListType[]).map((t) => (
                   <button
@@ -2599,7 +2596,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     </button>
                   ))}
                 </div>
-                <p className="mt-1.5 text-xs text-muted-foreground">{getEventType(eventType)?.description ?? "Optional · sets the crowd's era flow, starting energy and clean/explicit rules. None = traditional wedding."}</p>
+                <p className="mt-1.5 text-xs text-muted-foreground">{getEventType(eventType)?.description ?? "Choose an event type (optional)."}</p>
               </div>
             )}
             <div>
@@ -2991,7 +2988,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               </div>
               <Switch aria-label="Expand event with additional tracks" checked={expand} onCheckedChange={editExpand} className="shrink-0" />
             </div>
-            <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Song buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer} onChange={e=>editBuffer(Number(e.target.value))}>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
+            <div className="mt-5 flex items-center gap-3"><Label htmlFor="buffer">Preparation buffer</Label><select id="buffer" className="rounded-md border border-input bg-background px-3 py-2 text-sm" value={buffer || ""} onChange={e=>editBuffer(e.target.value ? Number(e.target.value) : 0)}><option value="">Choose a buffer</option>{[2,3,4].map(n=><option key={n} value={n}>{n}×</option>)}</select></div>
             {hoursNum > 0 && !expand && liveTargets.shortfall.total > 0 && (
               <div className="mt-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                 <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-warning" />
@@ -3240,6 +3237,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               <Button
                 size="sm"
                 onClick={() => {
+                  if (step === 1) { try { validateEventChoices(listType, hours, minutes, buffer, false); } catch(e) { toast.error((e as Error).message); return; } }
                   if (step === 1 && (background ? minutesNum > 0 : hoursNum > 0)) setDanceFloorConfirmed(true);
                   setStep((s) => Math.min(5, s + 1));
                 }}
