@@ -131,7 +131,7 @@ describe('preventAutomaticDuplicates', () => {
   it('two AI aliases without files collapse; versions kept; distinct-case paths stay distinct', () => {
     const r = { ...empty(), warmUp: [
       { artist: 'Mark Ronson', song: 'Uptown Funk', fromUpload: false },
-      { artist: 'Bruno Mars feat. Mark Ronson', song: 'Uptown Funk', fromUpload: false },
+      { artist: 'Mark Ronson ft. Bruno Mars', song: 'Uptown Funk', fromUpload: false },
       { artist: 'Mark Ronson', song: 'Uptown Funk (Live)', fromUpload: false },
       { artist: 'X', song: 'One', fromUpload: false }, { artist: 'Y', song: 'Two', fromUpload: false },
     ] } as GenerationResult;
