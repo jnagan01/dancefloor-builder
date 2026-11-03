@@ -81,15 +81,15 @@ describe('factsGather per-chunk deadline', () => {
     });
     const g = createFactsGatherer<E>(fetch, factsKey, { timeoutMs: 100, batchSize: 1, concurrency: 2 });
     const run = g.gather(songs(5));
-    await vi.advanceTimersByTimeAsync(50);
+    await vi.advanceTimersByTimeAsync(100); // chunk 1 times out while chunk 2 is still in flight
     ok.resolve([]);
-    await vi.advanceTimersByTimeAsync(0);
-    await vi.advanceTimersByTimeAsync(100);
     const rep = await run;
+    expect(rep.found).toBe(1); // in-flight chunk 2 (within its own deadline) still lands
+    expect(fetch).toHaveBeenCalledTimes(2);
     expect(peak).toBeLessThanOrEqual(2);
     expect(rep.timedOutSongs).toBe(1);
     expect(rep.found + rep.failedSongs + rep.skippedAfterTimeout).toBe(5);
-    expect(rep.skippedAfterTimeout).toBeGreaterThan(0);
+    expect(rep.skippedAfterTimeout).toBe(3);
     expect(vi.getTimerCount()).toBe(0);
   });
 
