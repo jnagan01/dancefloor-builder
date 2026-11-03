@@ -1139,7 +1139,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             // vibe and context, Last.fm knows what real listeners actually
             // play together.
             // Track-level Last.fm evidence: only bounded artist/title seeds from distinct client requests.
-            const trackSeeds = seedsFromRequests(uniqueSongs.filter((x) => x.fromUpload !== false));
+            const trackSeeds = seedsFromRequests(uniqueSongs);
             const [simTrackRes, res, crowdRes] = await Promise.all([
               trackSeeds.length ? similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }).catch(() => null) : Promise.resolve(null),
               neighborsFn({
@@ -1339,7 +1339,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   const seen = new SongKeySet(true);
                   for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                   let added = 0;
-                  for (const sug of res.suggestions) {
+                  for (const sug of favoredFirst(res.suggestions, liveFeedback())) {
                     if (r[key].length >= sectionTargetFor(r, key)) break;
                     if (seen.has(sug.artist, sug.song) || !addedAllowed(sug)) continue;
                     // Enforce the per-list cap client-side too.
@@ -1420,7 +1420,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 const seen = new SongKeySet(true);
                 for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...existingNow]) seen.add(s.artist, s.song);
                 let addedThisAttempt = 0;
-                for (const sug of res.suggestions) {
+                for (const sug of favoredFirst(res.suggestions, liveFeedback())) {
                   if (r[key].length >= sectionTargetFor(r, key)) break;
                   if (!addedAllowed(sug) || !seen.tryAdd(sug.artist, sug.song)) continue;
                   r[key].push({
@@ -1485,9 +1485,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           for (const s of [...r.warmUp, ...r.transition, ...r.peak]) globalHave.add(s.artist, s.song);
           for (const { key } of stillShort) {
             const pool = background ? [...fallback.warmUp, ...fallback.transition, ...fallback.peak] : fallback[key];
-            for (const s of pool) {
+            for (const s of favoredFirst(pool, liveFeedback())) {
               if (r[key].length >= sectionTargetFor(r, key)) break;
-              if (!globalHave.tryAdd(s.artist, s.song)) continue;
+              if (!addedAllowed(s) || !globalHave.tryAdd(s.artist, s.song)) continue;
               r[key].push({ ...s, metaSource: "Library" });
             }
           }
@@ -1594,6 +1594,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // A newer generate() (or a workflow reset) started while we were awaiting
     // AI/enrichment — drop this stale result instead of clobbering state.
     if (genTokenRef.current !== myToken) return;
+    // Account/session fence: a sign-out or account switch during generation discards this result.
+    { const now = store.get(); if (accountRef.current !== accountAtStart || now.account !== prepStart.account || now.generation !== prepStart.generation) { toast.error("Account changed during generation; nothing was applied."); return; } }
+    // Late feedback re-check: additions that became Never/dismissed while generation ran are dropped; requests stay.
+    { let removed = 0; for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) { const c = recheckAdditions(r[section], liveFeedback()); removed += c.removed; r[section] = c.kept; }
+      if (removed) toast.info(`${removed} added track${removed === 1 ? " was" : "s were"} left out because of your Never or dismiss choices made during generation.`); }
 
     // This explicit generation may remove added repeats, never requests or saved selections.
     r = preventAutomaticDuplicates(r, song => {
