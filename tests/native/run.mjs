@@ -655,7 +655,7 @@ try{
    const client=Array.from({length:40},(_,i)=>({artist:`Client ${i}`,song:`Normal track ${i}`}));
    const local=client.map((song,i)=>({artist:song.artist,title:song.song,filePath:path.join(library,`client-${i}.mp3`),songLength:'240'}));
    local.forEach(t=>fs.writeFileSync(t.filePath,'synthetic audio fixture'));
-   const legacy={id:'A',name:'Legacy 2×',updated_at:'v1',inputs:{songs:[song],hours:'1',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[]}};
+   const legacy={id:'A',name:'Legacy 2×',updated_at:'v1',inputs:{eventName:'Legacy 2×',songs:[song],hours:'1',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[]}};
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:local}));fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:legacy}));await launch();
    const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')));
    const prepare=async(count,name)=>{

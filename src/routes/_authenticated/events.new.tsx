@@ -3058,12 +3058,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 </label>
               </div>
 
-              {liveShortfall && liveShortfall.total > 0 && <p className="text-xs text-warning">Eligible pool is short. Expansion will not substitute another artist/version, add excluded holiday tracks, or use unlabelled/Dirty files under the clean requirement. Add eligible files or explicitly adjust event choices.</p>}
-              {liveShortfall && liveShortfall.total > 0 ? (
+              {expand && liveShortfall && liveShortfall.total > 0 && <p className="text-xs text-warning">Eligible pool is short. Expansion will not substitute another artist/version, add excluded holiday tracks, or use unlabelled/Dirty files under the clean requirement. Add eligible files or explicitly adjust event choices.</p>}
+              {expand && liveShortfall && liveShortfall.total > 0 ? (
                  <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="w-full">
-                    <div className="font-medium">{background ? `${bgLabel} is ${liveShortfall.warmUp} songs (about ${Math.round(liveShortfall.warmUp * AVG_BACKGROUND_SONG_MIN)} min) short` : "Not enough songs to fully fill every section"}</div>
+                    <div className="font-medium">{background ? `${bgLabel} is ${liveShortfall.warmUp} songs (about ${Math.round(liveShortfall.warmUp * AVG_BACKGROUND_SONG_MIN)} min) short` : "Optional preparation track-count gaps"}</div>
                     {!background && <div className="mt-1.5 grid grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                        <div className="rounded border border-warning/30 bg-warning/5 px-2 py-1.5 text-center">
                         <div className="font-semibold">Warm Up</div>
@@ -3083,12 +3083,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     </div>}
 
                     {!background && <div className="mt-1.5 text-xs">
-                      Target {result.sectionTargets ? `${result.sectionTargets.warmUp} / ${result.sectionTargets.transition} / ${result.sectionTargets.peak} songs (Warm Up / Transition / Peak)` : `${result.perSectionTarget} songs per section`}. The lowest-energy songs are still first and the highest-energy last — add more uploads, turn on AI/library expansion, or shorten the dance-floor length to close the gap.
+                      Target {result.sectionTargets ? `${result.sectionTargets.warmUp} / ${result.sectionTargets.transition} / ${result.sectionTargets.peak} songs (Warm Up / Transition / Peak)` : `${result.perSectionTarget} estimated tracks per section`}. Track counts are planning estimates, not confirmed duration. Add eligible tracks or choose a different optional preparation target.
                     </div>}
                   </div>
                 </div>
               ) : null}
 
+              <section className="space-y-1 border-y border-border py-3" aria-label="Event duration coverage">
+                <p className="text-sm">{targetMessage}</p>
+                <p className="text-sm">{durationLabel(coverage.report.knownSec)} approved usable unique length · {coverage.report.knownSec >= clientCoverage.baselineSeconds ? "Baseline duration covered — no additional tracks needed." : `${durationLabel(clientCoverage.baselineSeconds - coverage.report.knownSec)} baseline time not yet covered by known eligible files.`}</p>
+                <p className="text-xs text-muted-foreground">{coverage.report.unknownLength} eligible tracks with unknown length · {coverage.report.duplicateCount} repeated files not counted. {planningMessage} Client planning lengths do not confirm file selection or export eligibility.</p>
+              </section>
               <section className="space-y-2 border-y border-border py-3" aria-label="Export readiness">
                 <Button variant="outline" size="sm" disabled={readinessBusy} onClick={previewReadiness}><CheckCircle2 className="mr-2 size-4" />{readinessBusy ? "Checking files…" : "Check export readiness"}</Button>
                 {readiness && <><p className="text-sm">{readiness.requested} requested tracks · {summaryText(readiness)}</p>
@@ -3127,7 +3132,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   {((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => {
                     const label = sectionName(sec);
                     const ps = summary?.perSection[sec];
-                    const shortfall = liveShortfall?.[sec] ?? 0;
+                    const shortfall = expand ? liveShortfall?.[sec] ?? 0 : 0;
                     return (
                        <TabsTrigger key={sec} value={sec} className="h-auto min-w-0 whitespace-normal rounded-none border-b-2 border-transparent px-3 py-2 text-left leading-tight data-[state=active]:border-primary data-[state=active]:bg-sidebar-accent">
                         <span className="flex flex-col gap-0.5">
