@@ -91,7 +91,9 @@ describe('quality evaluator (labeled judgments only)', () => {
   it(`synthetic benchmark (${SYNTHETIC_NOTICE}): current engine orders the evidence ladder and beats the captured order`, () => {
     const cmp = compareRevisions(syntheticEvidenceSample);
     const names = cmp.revision.order.map(i => syntheticEvidenceSample.candidates[i].song);
-    expect(names).toEqual(['Two Seeds Similar', 'One Seed Similar', 'Artist Similar', 'File Tag House', 'AI Genre Guess', 'No Evidence']);
+    expect(names).toEqual(['Two Seeds Similar', 'One Seed Similar', 'File Tag House', 'Artist Similar', 'AI Genre Guess', 'No Evidence']);
+    // Invariant: verified file-tag genre outranks the same genre as an AI estimate.
+    expect(names.indexOf('File Tag House')).toBeLessThan(names.indexOf('AI Genre Guess'));
     expect(cmp.revision.gain).toBe(1);
     expect(cmp.captured.gain!).toBeLessThan(cmp.revision.gain!);
     expect(cmp.revision.topK).toEqual({ k: 5, good: 2, rated: 5 });
