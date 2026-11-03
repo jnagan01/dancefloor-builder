@@ -98,15 +98,24 @@ interface ReccoBeatsFeatures {
   exact: boolean;
 }
 
-const VERSION_WORDS = /\b(remix|mix|edit|live|extended|acoustic|remaster(?:ed)?|radio|club|dub|instrumental|clean|dirty|explicit|version|intro|redrum|bootleg|rework|vip)\b/gi;
-/** Version markers of a raw title, order-free ("Radio Edit" == "Edit (Radio)"). */
-export function versionMarkers(title: string): string {
-  return [...new Set((title.toLowerCase().match(VERSION_WORDS) ?? []).map(w => w.replace(/remastered/, "remaster")))].sort().join(" ");
+/** Full-title identity: case/accents/punctuation normalised, every word kept (remixer names included). */
+export function fullTitleKey(title: string): string {
+  return title.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/&/g, " and ").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
-/** Conservative recording check: same base title and same version markers. Provider data for a different version
- * (a remix has a different tempo) is kept only as an estimate. */
+/** Verified recording title: the complete version descriptor must match ("Tiesto Remix" ≠ "David Guetta Remix").
+ * Anything looser stays an estimate (false negatives preferred over false verification). */
 export function sameRecordingTitle(want: string, got: string): boolean {
-  return normalizeKey(cleanTitleForSearch(want) || want) === normalizeKey(cleanTitleForSearch(got) || got) && versionMarkers(want) === versionMarkers(got);
+  const w = fullTitleKey(want);
+  return !!w && w === fullTitleKey(got);
+}
+/** Verified artist identity: an exact (normalised) credit for the requested artist, its primary artist or the whole
+ * joined credit. Token overlap ("Adele" vs "Adele Roberts") never counts. */
+export function exactArtistCredit(credits: readonly string[], want: string): boolean {
+  const keys = credits.map(fullTitleKey).filter(Boolean);
+  if (!keys.length) return false;
+  const full = fullTitleKey(want);
+  const primary = fullTitleKey(want.split(/\s*(?:,|&| x | feat\.?| ft\.?| featuring| and )\s*/i)[0] || want);
+  return keys.includes(full) || (!!primary && keys.includes(primary)) || fullTitleKey(credits.join(" ")) === full;
 }
 
 /**
@@ -149,7 +158,12 @@ async function fetchReccoBeats(
     const clean = cleanTitleForSearch(song) || song.trim();
     const wantTitle = normalizeKey(clean);
     const primaryArtist = artist.split(/\s*(?:,|&| x | feat\.?| ft\.?| featuring| and )\s*/i)[0] || artist;
+    const names = (it: RbItem) => (it.artists ?? []).map((a) => a?.name ?? "").filter(Boolean);
+    const isExact = (it: RbItem) => exactArtistCredit(names(it), artist) && sameRecordingTitle(song, it.trackTitle ?? "");
     const pick = (items: RbItem[]) => {
+      // An exact artist+full-title candidate always wins over the first loose base-title candidate.
+      const exactHit = items.find(isExact);
+      if (exactHit) return exactHit;
       const byArtist = items.filter((it) =>
         (it.artists ?? []).some((a) => a?.name && (artistLooseMatch(a.name, artist) || artistLooseMatch(a.name, primaryArtist))),
       );
@@ -166,7 +180,7 @@ async function fetchReccoBeats(
       `https://api.reccobeats.com/v1/track/${encodeURIComponent(match.id)}/audio-features`,
       { headers: { Accept: "application/json" } },
     );
-    const exact = sameRecordingTitle(song, match.trackTitle ?? "");
+    const exact = isExact(match);
     if (!featRes.ok) {
       // Popularity alone is still useful.
       return { popularity: popularityTo10(match.popularity), exact };
@@ -244,7 +258,8 @@ async function fetchMusicBrainz(
         .filter(Boolean);
       return credits.some((n) => artistLooseMatch(n, artist));
     });
-    const exactMatch = byArtist.find((r) => sameRecordingTitle(song, r.title ?? ""));
+    const creditsOf = (r: (typeof recs)[number]) => (r["artist-credit"] ?? []).map((c) => c?.name ?? c?.artist?.name ?? "").filter(Boolean);
+    const exactMatch = recs.find((r) => exactArtistCredit(creditsOf(r), artist) && sameRecordingTitle(song, r.title ?? ""));
     const match = exactMatch ?? byArtist[0];
     if (!match) return null;
     const year = parseYear(match["first-release-date"]);
