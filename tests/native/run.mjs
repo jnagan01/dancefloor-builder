@@ -372,7 +372,7 @@ try{
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
-   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs._writeRevision,{timeout:15000}).toBeTruthy();
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.__setarchitect_write_revision_v1,{timeout:15000}).toBeTruthy();
    const saved=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A;
    const all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
    expect(all.filter(t=>!t.fromUpload)).toEqual([]);expect(all.some(t=>t.song==='Keep Request'&&t.fromUpload)).toBe(true);
