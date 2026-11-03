@@ -3059,7 +3059,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               </div>
 
               {expand && liveShortfall && liveShortfall.total > 0 && <p className="text-xs text-warning">Eligible pool is short. Expansion will not substitute another artist/version, add excluded holiday tracks, or use unlabelled/Dirty files under the clean requirement. Add eligible files or explicitly adjust event choices.</p>}
-              {expand && liveShortfall && liveShortfall.total > 0 ? (
+              {liveShortfall && liveShortfall.total > 0 && (expand || clientCoverage.baselineShortSeconds > 0) ? (
                  <div className="mb-3 flex items-start gap-2 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm text-foreground">
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="w-full">
@@ -3132,7 +3132,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   {((background ? ["warmUp"] : ["warmUp", "transition", "peak"]) as SectionKey[]).map((sec) => {
                     const label = sectionName(sec);
                     const ps = summary?.perSection[sec];
-                    const shortfall = expand ? liveShortfall?.[sec] ?? 0 : 0;
+                    const shortfall = liveShortfall?.[sec] ?? 0;
                     return (
                        <TabsTrigger key={sec} value={sec} className="h-auto min-w-0 whitespace-normal rounded-none border-b-2 border-transparent px-3 py-2 text-left leading-tight data-[state=active]:border-primary data-[state=active]:bg-sidebar-accent">
                         <span className="flex flex-col gap-0.5">
@@ -3155,7 +3155,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                               )}
                             </span>
                           )}
-                          {coverage.bySection[sec] && <span className="max-w-72 text-[11px] font-normal" aria-label={`${label} duration`}>{coverage.bySection[sec]?.text}{coverage.bySection[sec]?.unknown ? ` · ${coverage.bySection[sec]?.unknown} unknown length` : ""}{coverage.bySection[sec]?.repeats ? ` · ${coverage.bySection[sec]?.repeats} repeated file (not counted)` : ""}</span>}
+                          {shortfall > 0 && <span className="text-[11px] font-normal">Estimated track-count gap; see duration coverage</span>}{coverage.bySection[sec] && <span className="max-w-72 text-[11px] font-normal" aria-label={`${label} duration`}>{coverage.bySection[sec]?.text}{coverage.bySection[sec]?.unknown ? ` · ${coverage.bySection[sec]?.unknown} unknown length` : ""}{coverage.bySection[sec]?.repeats ? ` · ${coverage.bySection[sec]?.repeats} repeated file (not counted)` : ""}</span>}
                         </span>
                       </TabsTrigger>
                     );
