@@ -1361,15 +1361,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           return true;
         }).map(([, p]) => p).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         const room = sectionOrder.reduce((n, k) => n + Math.max(0, sectionTargetFor(r, k) - r[k].length), 0);
+        const rankStats: { hidden?: { slow?: number } } = {};
         const ranked = rankPool(eligible, (p) => {
           if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
           return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
-        }, rankCtx([...r.warmUp, ...r.transition, ...r.peak]), room);
+        }, rankCtx([...r.warmUp, ...r.transition, ...r.peak]), room, rankStats);
         for (const { item, rec } of ranked) {
           const k = item.prefer && r[item.prefer].length < sectionTargetFor(r, item.prefer) ? item.prefer : sectionOrder.find((x) => r[x].length < sectionTargetFor(r, x));
           if (!k) break;
           r[k].push({ ...item.row, rankWhy: explainTop(rec) } as (typeof r)[typeof k][number]);
         }
+        if (rankStats.hidden?.slow) toast.info(`${rankStats.hidden.slow} candidate track${rankStats.hidden.slow === 1 ? " was" : "s were"} left out as slow/ballad additions (provider or measured energy and danceability). Remaining time stays an honest gap.`);
         if (strictDropped) toast.info(`${strictDropped} candidate track${strictDropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
         if (failed.length && ranked.length) toast.error("AI suggestions unavailable for some sections — used other ranked candidates.");
       }

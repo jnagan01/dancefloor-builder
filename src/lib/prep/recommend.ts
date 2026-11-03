@@ -184,9 +184,10 @@ export type RankContext = Omit<RecInput, "candidates" | "limit" | "filter" | "co
  * (policy, strict limits, feedback) must already be checked by the caller and is re-applied here for feedback.
  * Returns items in rank order with their recommendation (score + evidence). Never pads.
  */
-export function rankPool<T>(items: readonly T[], toCandidate: (t: T) => Omit<Candidate, "ref">, ctx: RankContext, limit = items.length): { item: T; rec: Recommendation }[] {
+export function rankPool<T>(items: readonly T[], toCandidate: (t: T) => Omit<Candidate, "ref">, ctx: RankContext, limit = items.length, stats?: { hidden?: RecOutput["hidden"] }): { item: T; rec: Recommendation }[] {
   if (!items.length || limit <= 0) return [];
   const candidates = items.map((t, i) => ({ ...toCandidate(t), ref: i }));
   const out = recommend({ ...ctx, controls: ctx.controls ?? DEFAULT_REC_CONTROLS, candidates, limit });
+  if (stats) stats.hidden = out.hidden;
   return out.items.map(rec => ({ item: items[rec.ref!], rec }));
 }
