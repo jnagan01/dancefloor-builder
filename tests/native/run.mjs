@@ -687,6 +687,17 @@ try{
    await assertCoveredWithoutAllocationGap();await page.screenshot({path:path.join(diagnostics,'optional-covered-results-no-gap.png')});
    await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},covered.r.id);await expect(page.getByRole('heading',{name:'Covered off',exact:true})).toBeVisible();expect(saved().find(r=>r.id===covered.r.id)).toEqual(covered.r);
    await assertCoveredWithoutAllocationGap();
+   await prepare(40,'Covered expansion 1×');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();
+   const warningsBefore=await page.evaluate(()=>window.__warnings.length);
+   const coveredOn=await generateAndRead('Covered expansion 1×',40);expect(coveredOn.all).toHaveLength(40);expect(coveredOn.r.inputs).toMatchObject({buffer:1,expand:true});
+   await assertCoveredWithoutAllocationGap();expect(await page.evaluate(n=>window.__warnings.slice(n),warningsBefore)).toEqual([]);
+   await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},coveredOn.r.id);await expect(page.getByRole('heading',{name:'Covered expansion 1×',exact:true})).toBeVisible();await assertCoveredWithoutAllocationGap();expect(saved().find(r=>r.id===coveredOn.r.id)).toEqual(coveredOn.r);
+   await prepare(40,'Blocked coverage');await page.getByRole('button',{name:/Dance floor/i}).first().click();
+   await page.locator('#donotplay').fill(client.slice(0,35).map(t=>`${t.artist} - ${t.song}`).join('\n'));
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();await page.getByRole('button',{name:'Continue',exact:true}).click();
+   await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');await expect(page.getByLabel('Client duration coverage')).toContainText('35 blocked or missing-title rows not counted');
+   await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   await expect.poll(()=>saved().find(r=>r.name==='Blocked coverage'),{timeout:15000}).toBeTruthy();const blocked=saved().find(r=>r.name==='Blocked coverage');expect(blocked.inputs.songs).toEqual(client);expect([...blocked.lists.warmUp,...blocked.lists.transition,...blocked.lists.peak]).toHaveLength(5);
    await prepare(5,'Short off');await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');const short=await generateAndRead('Short off',5);expect(short.all).toHaveLength(5);
    await prepare(5,'Short expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();const expanded=await generateAndRead('Short expansion',5);expect(expanded.all.length).toBeGreaterThan(5);expect(expanded.r.inputs).toMatchObject({buffer:1,expand:true});
    await prepare(40,'Covered expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();await expect(page.getByLabel('Client duration coverage')).toContainText('Choose a higher multiplier');await page.locator('#buffer').selectOption('4');await expect(page.getByLabel('Client duration coverage')).toContainText('80:00 additional time');const extras=await generateAndRead('Covered expansion',40);expect(extras.all.length).toBeGreaterThan(40);expect(extras.r.inputs).toMatchObject({buffer:4,expand:true});
