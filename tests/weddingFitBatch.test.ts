@@ -27,11 +27,20 @@ const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarne
 const NOTES = 'Fictional client brief: mixed-age wedding guests, ages 25–70. Familiar upbeat pop, funk, disco and 2000s party favorites. Build from approachable classics into a lively finish. No line dances, slow ballads, or hard EDM. Preserve every client request.';
 const DNP = 'Village People - YMCA\nDJ Casper - Cha Cha Slide\nCupid - Cupid Shuffle';
 const suggestions = (cache as any[]).map(r => ({ artist: r.artist, song: r.song, reason: 'synthetic fixture suggestion' }));
+const enrichFrom = (pool: any[]) => async (req: any) => ({ results: (req.data.songs as any[]).flatMap(s => { const r = pool.find(c => c.artist === s.artist && c.song === s.song); return r ? [{ artist: r.artist, song: r.song, energy: r.energy, danceability: r.danceability, popularity: r.popularity, year: r.year, source: 'ReccoBeats+MusicBrainz', prov: r.metaProv }] : []; }) });
+/** TEST-ONLY synthetic pool with explicitly VERIFIED provider years/popularity/energy (fictional tracks; NOT real data and
+ *  NOT realCacheRows). Exists only to prove fit choices change automatic selection under the unchanged strict decade rule. */
+const V = { energy: 'provider', danceability: 'provider', popularity: 'provider', year: 'provider' };
+export const SYNTHETIC_VERIFIED = [
+  ...Array.from({ length: 10 }, (_, i) => ({ artist: `TEST ONLY Popular ${i + 1}`, song: `Synthetic Hit ${i + 1}`, popularity: 9, energy: 7, danceability: 8, year: 1985 + i, metaProv: V, kind: 'popular' })),
+  ...Array.from({ length: 10 }, (_, i) => ({ artist: `TEST ONLY Obscure ${i + 1}`, song: `Synthetic Deep Cut ${i + 1}`, popularity: 2, energy: 7, danceability: 8, year: 1985 + i, metaProv: V, kind: 'obscure' })),
+  ...Array.from({ length: 4 }, (_, i) => ({ artist: `TEST ONLY Slow ${i + 1}`, song: `Synthetic Ballad ${i + 1}`, popularity: 9, energy: 2, danceability: 2, year: 1990 + i, metaProv: V, kind: 'slow' })),
+];
 const enrich = async (req: any) => ({ results: (req.data.songs as any[]).flatMap(s => { const r = (cache as any[]).find(c => c.artist === s.artist && c.song === s.song); return r ? [{ artist: r.artist, song: r.song, energy: r.energy, danceability: r.danceability, ...(r.popularity !== undefined ? { popularity: r.popularity } : {}), ...(r.year !== undefined ? { year: r.year } : {}), source: String(r.rawCacheSource ?? '').startsWith('ReccoBeats') ? 'ReccoBeats' : 'AI', prov: r.metaProv }] : []; }) });
 
-async function run(applyFit: boolean) {
+async function run(applyFit: boolean, pool?: any[]) {
   const writes: any[] = [];
-  const h = harness({ eventId: null, contract: true, rows: {}, services: { recommend: async () => ({ suggestions }), enrich }, write: async (r: any) => { writes.push(r.data); return { id: r.data.id, updatedAt: new Date(Date.UTC(2026, 10, 3, 20, writes.length)).toISOString(), revision: r.data.writeRevision }; } });
+  const h = harness({ eventId: null, contract: true, rows: {}, services: { recommend: async () => ({ suggestions: pool ? pool.map(r => ({ artist: r.artist, song: r.song, reason: 'TEST ONLY synthetic suggestion' })) : suggestions }), enrich: pool ? enrichFrom(pool) : enrich }, write: async (r: any) => { writes.push(r.data); return { id: r.data.id, updatedAt: new Date(Date.UTC(2026, 10, 3, 20, writes.length)).toISOString(), revision: r.data.writeRevision }; } });
   vi.useFakeTimers();
   try {
     await h.flush();
@@ -79,5 +88,22 @@ describe('synthetic real-route batch: Traditional Wedding brief', () => {
     writeFileSync(process.env.WRITE_WEDDING_BATCH ?? 'test-results/wedding-fit-batch.json', JSON.stringify(out, null, 1));
     // Honest shortfall allowed: no confirmed years exist in this fixture, and strict decades are intentionally unchanged.
     expect(out.after.every((r: any) => r.prov?.year !== 'estimate' && r.prov?.year !== 'ai')).toBe(true);
+  }, 30000);
+
+  it('TEST-ONLY verified synthetic pool: fit changes automatic selection/order, requests preserved, strict decades unchanged', async () => {
+    const { saved: before } = await run(false, SYNTHETIC_VERIFIED);
+    const { saved: after } = await run(true, SYNTHETIC_VERIFIED);
+    const kind = (r: any) => SYNTHETIC_VERIFIED.find(x => x.artist === r.artist && x.song === r.song)?.kind;
+    for (const s of [before, after]) {
+      expect(() => parseSafeSaveRequest(s)).not.toThrow();
+      expect(rowsOf(s).filter((r: any) => r.fromUpload).map((r: any) => `${r.artist}|${r.song}`).sort()).toEqual(REQUESTS.map(r => `${r.artist}|${r.song}`).sort());
+    }
+    const addsB = rowsOf(before).filter((r: any) => !r.fromUpload), addsA = rowsOf(after).filter((r: any) => !r.fromUpload);
+    expect(addsA.length).toBeGreaterThan(0);
+    expect(addsA.some((r: any) => kind(r) === 'slow')).toBe(false); // verified slow additions avoided
+    expect(addsB.some((r: any) => kind(r) === 'slow')).toBe(true);  // control: without fit they are eligible
+    const pop = (xs: any[]) => xs.filter(r => kind(r) === 'popular').length;
+    expect(pop(addsA)).toBeGreaterThan(pop(addsB));
+    expect(after.inputs.eventFit).toEqual({ familiarity: 'familiar', avoidSlow: true }); expect(before.inputs.eventFit).toBeUndefined();
   }, 30000);
 });
