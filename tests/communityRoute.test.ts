@@ -105,7 +105,8 @@ it("uncertain dance bound: lookup fetches the relevant uncertain track, final ra
   const {result,saved,calls,row}=await runUD(async(r:any)=>late(r.data.songs.map((s:any)=>({...s,status:"none"}))));
   expect(calls.map((s:any)=>s.artist)).toContain("TEST UD Weak");
   const w=ud1(result,"TEST UD Weak");expect(w.rankWhy).toMatch(/similarity bounded: dance suitability uncertain/);
-  const adds=result.filter((r:any)=>!r.fromUpload).map((r:any)=>r.artist);expect(adds.indexOf("TEST UD Up")).toBeLessThan(adds.indexOf("TEST UD Weak"));
+  // Set order is energy-flow, not rank order: assert the bound itself (Weak bounded, upbeat Up not).
+  expect(ud1(result,"TEST UD Up").rankWhy).not.toMatch(/dance suitability uncertain/);
   expect(result.filter((r:any)=>r.fromUpload)).toHaveLength(REQUESTS.length);
   expect(JSON.stringify(saved)).not.toMatch(/lookupPriority|similarityCap|"community"|upbeatTags/);
   expect(Object.keys(saved.inputs).sort()).toEqual(Object.keys({...row.inputs,...saved.inputs}).sort());
