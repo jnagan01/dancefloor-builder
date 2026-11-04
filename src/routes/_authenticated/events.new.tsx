@@ -1380,12 +1380,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
         // Exact-track community evidence (Last.fm tags/listeners), only while an event-fit choice is active, BEFORE
         // ranking. Runtime-only side map: never written into rows, snapshots or the library. Bounded: one attempt per
-        // song per generation, 20 per request, ≤ 40 songs, 12 s client cutoff; failures/timeouts stay unknown.
+        // song per generation, only songs that pass eligibility, 20 per request, ≤ 40 songs, 12 s client cutoff;
+        // failures/timeouts stay unknown.
         const community = new Map<string, CommunityEvidence>();
         const fitNow = normalizeEventFit(eventFit);
         if (fitNow && pool.size) {
           const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
-          const order = [...pool.values()].sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)));
+          const order = [...pool.values()].filter((p) => addedAllowed(p.row) && !strictLimitFailure(p.row, strictLimits)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)));
           const rep = await cg.gather(order.map((p) => ({ artist: p.row.artist, song: p.row.song })));
           if (genTokenRef.current !== myToken) return;
           if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }

@@ -31,7 +31,7 @@ async function run(fit:any, community:any){
     const result=all(h.current.result);
     await vi.advanceTimersByTimeAsync(1500);await h.flush();
     const saved=h.requests.at(-1);h.unmount();
-    if(process.env.DBG)console.log("DBG",JSON.stringify({n:result.length,errors:h.errors,warnings:h.warnings,infos:h.infos}));return {result,saved,calls,infos:h.infos,row};
+    return {result,saved,calls,infos:h.infos,row};
   }finally{vi.useRealTimers();}
 }
 const tagged=async(r:any)=>r.data.songs.map((s:any)=>s.artist==="TEST Held Out Tagged"?{...s,status:"found",evidence:{source:"lastfm",listeners:90000,slowTags:["ballad"],upbeatTags:[]}}:{...s,status:"none"});
@@ -53,6 +53,6 @@ it("no fit choices: no community lookups at all (legacy/neutral)",async()=>{
 it("provider failure: candidates stay, evidence unknown, honest notice",async()=>{
   const {result,infos}=await run({avoidSlow:true},async()=>{throw Error("down");});
   expect(result.filter((r:any)=>!r.fromUpload).map((r:any)=>r.artist)).toEqual(expect.arrayContaining(["TEST Held Out Tagged","TEST Held Out Plain"]));
-  expect(infos.join(" ")).toMatch(/community tags couldn't be checked/);
+  expect(infos.join(" ")).toMatch(/community tags couldn.t be checked for 3 candidate tracks/);
   expect(result.find((r:any)=>r.artist==="TEST Held Out Tagged")?.rankWhy ?? "").not.toMatch(/community tags "/);
 });
