@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Complete expansion candidate sourcing
+- [ ] Offer eligible built-in catalogue before final shared ranking, retaining provenance and exact owned promotion without source-order crowding.
+- [ ] Add frozen candidate-stage comparison, pure-helper and real-route/save-reopen regressions; preserve prior artifacts.
+- [ ] Run full unit suite, automatic build and isolated native checks; final macOS workflow acceptance requires external runner.
 ## Active avoid-slow evidence ranking
 - [x] Strengthen bounded advisory slow-risk ranking and conditional uncertain familiarity; retain neutral/discovery defaults and requests.
 - [x] Freeze current scoring for original reports; add identical-evidence comparison, latest reported profile and held-out matrix.
