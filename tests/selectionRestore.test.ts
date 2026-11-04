@@ -127,3 +127,94 @@ describe("real event route reopening", () => {
     } finally { vi.useRealTimers(); }
   });
 });
+
+import { exportReadiness } from "@/lib/exportReadiness";
+// TEST-ONLY: complete saved records (empty, partial availability, exclusion) and explicit relinks.
+describe("real event route: complete saved records survive open/save/reopen", () => {
+  const avail = (h: any) => { h.testWindow.electronAvailability = { check: async (paths: string[]) => ({ ok: true, availability: Object.fromEntries(paths.map(p => [p, "available"])) }) }; };
+  const m3u = (h: any) => h.files.filter((f: any) => f.name.endsWith(".m3u")).map((f: any) => f.data).join("\n");
+  const report = (h: any, sec: string, i: number, s: any) => exportReadiness([{ song: s, match: h.current.matches[k(sec as any, i, s)] } as any], h.lib, {});
+  const open = async (selections: object) => { const h = harness({ rows: { A: rowOf(selections) } }); await h.flush(); const lib = vdj.buildLibrary(tracks as any); h.lib = lib; h.library(lib); await h.flush(); return h; };
+  const saveAfterUnrelatedEdit = async (h: any) => { h.edit("Unrelated"); await vi.advanceTimersByTimeAsync(1500); return h.requests.at(-1).lists.selections; };
+  const reopen = async (h: any, saved: object, lib = h.lib) => { const re = harness({ rows: { A: { ...rowOf(saved), inputs: h.requests.at(-1).inputs } } }); await re.flush(); re.lib = lib; re.library(lib); await re.flush(); return re; };
+
+  it("explicitly empty saved entry stays empty/unapproved despite a perfect automatic match", async () => {
+    vi.useFakeTimers();
+    try {
+      const empty = { [k("peak", 0, common)]: { paths: [] } };
+      const h = await open(empty);
+      const m = h.current.matches[k("peak", 0, common)];
+      expect(m.trackIndex).toBeUndefined(); expect(m.confirmed).toBe(false);
+      await vi.advanceTimersByTimeAsync(2000); expect(h.requests).toHaveLength(0);
+      const saved = await saveAfterUnrelatedEdit(h);
+      expect(saved[k("peak", 0, common)]).toEqual({ paths: [] });
+      avail(h); await h.current.exportAllZip(); expect(m3u(h)).not.toContain("/lib/common-be.mp3");
+      h.unmount();
+      const re = await reopen(h, saved);
+      expect(re.current.matches[k("peak", 0, common)].trackIndex).toBeUndefined(); re.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("missing primary + available extra: no promotion, nothing exported, record kept, resolves when primary arrives", async () => {
+    vi.useFakeTimers();
+    try {
+      const rec = { paths: ["/gone/usher-radio.mp3", "/lib/usher-ext.mp3"], confirmed: true };
+      const h = await open({ [k("warmUp", 0, usher)]: rec });
+      const m = h.current.matches[k("warmUp", 0, usher)];
+      expect(m.trackIndex).toBeUndefined(); expect(m.extraTrackIndices).toEqual([]);
+      const r = report(h, "warmUp", 0, usher); expect(r.approved).toBe(0); expect(r.missing).toBe(2);
+      avail(h); await h.current.exportAllZip(); expect(m3u(h)).not.toContain("/lib/usher-ext.mp3");
+      const saved = await saveAfterUnrelatedEdit(h);
+      expect(saved[k("warmUp", 0, usher)]).toEqual(rec);
+      const lib2 = vdj.buildLibrary([{ artist: "Usher", title: "Yeah (Radio)", filePath: "/gone/usher-radio.mp3" }, ...tracks] as any); h.lib = lib2; h.library(lib2); await h.flush();
+      expect(pathsOf(h, "warmUp", 0, usher)).toEqual(["/gone/usher-radio.mp3", "/lib/usher-ext.mp3"]);
+      expect(h.current.matches[k("warmUp", 0, usher)].confirmed).toBe(true);
+      h.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("available primary + missing extra: primary exports, missing extra reported and kept through explicit exclusion edit", async () => {
+    vi.useFakeTimers();
+    try {
+      const rec = { paths: ["/lib/usher-live.mp3", "/gone/usher-dub.mp3"], confirmed: true };
+      const h = await open({ [k("warmUp", 0, usher)]: rec });
+      expect(h.current.matches[k("warmUp", 0, usher)].trackIndex).toBeDefined();
+      const r = report(h, "warmUp", 0, usher); expect(r.approved).toBe(1); expect(r.missing).toBe(1);
+      expect(r.problems.map((p: any) => p.reason)).toContain("Saved extra file is not in the library");
+      expect((await saveAfterUnrelatedEdit(h))[k("warmUp", 0, usher)]).toEqual(rec);
+      h.current.toggleExclude(k("warmUp", 0, usher)); await h.flush(); await vi.advanceTimersByTimeAsync(1500);
+      expect(h.requests.at(-1).lists.selections[k("warmUp", 0, usher)]).toMatchObject({ paths: rec.paths, excluded: true });
+      h.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it.each([["all missing + excluded", { paths: ["/gone/queen.mp3"], excluded: true, confirmed: true }], ["empty + excluded", { paths: [], excluded: true }]])("%s stays verbatim after unrelated edit and reopen", async (_n, rec) => {
+    vi.useFakeTimers();
+    try {
+      const h = await open({ [k("peak", 1, queen)]: rec });
+      const m = h.current.matches[k("peak", 1, queen)];
+      expect(m.trackIndex).toBeUndefined(); expect(m.excludedFromVdj).toBe(true);
+      const saved = await saveAfterUnrelatedEdit(h);
+      expect(saved[k("peak", 1, queen)]).toEqual(rec); h.unmount();
+      const re = await reopen(h, saved); expect(re.current.matches[k("peak", 1, queen)].excludedFromVdj).toBe(true);
+      expect((await saveAfterUnrelatedEdit(re))[k("peak", 1, queen)]).toEqual(rec); re.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("explicit relink survives a library rebuild that reorders tracks (identity, not position)", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = await open({ [k("peak", 1, queen)]: sel("/lib/queen.mp3") });
+      const stevieAt = h.lib.tracks.findIndex((t: any) => t.filePath === "/lib/stevie.mp3");
+      h.current.updateMatch(k("peak", 1, queen), { status: "Manually Matched", confidence: 1, confirmed: true, trackIndex: stevieAt, alternatives: [], extraTrackIndices: [] }); await h.flush();
+      expect(pathOf(h, "peak", 1, queen)).toBe("/lib/stevie.mp3");
+      const lib2 = vdj.buildLibrary([...tracks].reverse() as any); h.lib = lib2; h.library(lib2); await h.flush();
+      expect(lib2.tracks[stevieAt]?.filePath).not.toBe("/lib/stevie.mp3");
+      expect(pathOf(h, "peak", 1, queen)).toBe("/lib/stevie.mp3");
+      expect(pathOf(h, "peak", 0, common)).not.toBe("/lib/stevie.mp3");
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(h.requests.at(-1).lists.selections[k("peak", 1, queen)]).toMatchObject({ paths: ["/lib/stevie.mp3"], confirmed: true });
+      h.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+});
