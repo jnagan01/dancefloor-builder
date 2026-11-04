@@ -1,6 +1,6 @@
 /** Community-evidence comparison. Identical candidate pool/evidence on both sides; ratings are reporting-only. */
 import rows from "./realCacheRows.json";
-import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Candidate, type RecInput } from "../../src/lib/prep/recommend";
+import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Candidate, type RecInput } from "./archived/recommend.6564da7";
 import { recommend as before, explainTop as beforeExplain } from "./archived/recommend.110eb35";
 import { rowCandidate } from "../../src/lib/prep/expansionRanking";
 import { parseCommunityTrackInfo } from "../../src/lib/prep/communityEvidence";

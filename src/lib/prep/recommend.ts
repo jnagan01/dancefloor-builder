@@ -34,6 +34,9 @@ export interface Evidence { kind: EvidenceKind; text: string; points: number }
 export interface Recommendation extends Candidate { key: string; score: number; evidence: Evidence[]; /** Unverified aspects of active event-fit choices (display only). */ uncertain?: string[] }
 export interface RecInput {
   candidates: Candidate[]; requests: ClientRequest[]; inEvent: { artist: string; song: string }[];
+  /** Community-lookup budget priority only (never final ranking): leave uncertain-dance similarity unbounded so the
+   *  most request-relevant tracks are checked first, since their community tags may supply the missing upbeat support. */
+  lookupPriority?: boolean;
   /** Exact case-sensitive file identities already selected by event rows (primary + explicit extras). */
   inEventTrackIds?: Iterable<string>;
   feedback: Feedback[]; dismissed: Dismissal[]; notes?: Map<string, TrackNote>; eventTags?: string[];
@@ -129,12 +132,12 @@ export function recommend(input: RecInput): RecOutput {
       const sim = req || st ? undefined : similar.get(norm(cand.artist));
       if (sim) push("lastfm", `Last.fm lists ${cand.artist} as similar to ${sim.similarTo} (artist-level)${dampNote}`, 2 * sim.match * c.clientSimilarity * damp);
     }
-    if (fitR.similarityCap !== undefined) {
+    if (fitR.similarityCap !== undefined && !(input.lookupPriority && fitR.similarityCapReason === "uncertainDance")) {
       const kinds = new Set<EvidenceKind>(["artist", "genre", "decade", "lastfm", "lastfmTrack"]);
       const total = ev.filter(e => kinds.has(e.kind) && e.points > 0).reduce((n, e) => n + e.points, 0);
       if (total > fitR.similarityCap) for (const e of ev) if (kinds.has(e.kind) && e.points > 0) {
         e.points = round(e.points * fitR.similarityCap / total);
-        e.text += " — similarity bounded by advisory low-both slow risk";
+        e.text += fitR.similarityCapReason === "uncertainDance" ? " — similarity bounded: dance suitability uncertain (not confirmed slow)" : " — similarity bounded by advisory low-both slow risk";
       }
     }
     const pa = prefArtists.get(norm(cand.artist));

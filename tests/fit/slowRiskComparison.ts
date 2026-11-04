@@ -1,6 +1,6 @@
 /** Same complete post-timeout facts on both sides. No metadata-timing/timeout change in this comparison. */
 import rows from "./realCacheRows.json";
-import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Candidate, type RecInput } from "../../src/lib/prep/recommend";
+import { recommend, explainTop, DEFAULT_REC_CONTROLS, type Candidate, type RecInput } from "./archived/recommend.6564da7";
 import { recommend as before, explainTop as beforeExplain } from "./archived/recommend.543920d";
 import { rowCandidate } from "../../src/lib/prep/expansionRanking";
 import { REQUESTS, SYNTHETIC_SIMILAR, BASELINE_RATINGS, SAVED_EVENT_ROWS, AFTER_FIT } from "./fitComparison";

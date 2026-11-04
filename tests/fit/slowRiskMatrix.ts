@@ -1,6 +1,6 @@
 /** Predetermined, held-out generic boundaries; no real names, ratings or tuning feedback. */
-import type { Candidate, RecInput } from "../../src/lib/prep/recommend";
-import { DEFAULT_REC_CONTROLS } from "../../src/lib/prep/recommend";
+import type { Candidate, RecInput } from "./archived/recommend.6564da7";
+import { DEFAULT_REC_CONTROLS } from "./archived/recommend.6564da7";
 import { songIdentity } from "../../src/lib/prep/knowledge";
 export const matrix: Candidate[] = [
   { artist: "TEST Risk", song: "A", origin: "ai", facts: {}, fit: { energy: 4, danceability: 4, energySource: "ai", danceabilitySource: "ai", popularity: 10, popularitySource: "estimate" } },
