@@ -4,7 +4,7 @@ const ts = require(path.join(root, 'node_modules/typescript'));
 function createEventRouteHarness(actual) {
   let source = fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
   // Expose actual closures in the test VM only; no production test seam or replacement logic.
-  source = source.replace('  const withFileBpm =', '  capture({ applyReviewMode, updateMatch, toggleExclude, withAnalysis: (sec, songs) => withFileBpm(sec, songs), songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, exportSectionM3u, exportSectionXmlToVdj, previewReadiness, readiness, activeSection, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
+  source = source.replace('  const withFileBpm =', '  capture({ applyReviewMode, updateMatch, toggleExclude, pickLocalFileForMatch, withAnalysis: (sec, songs) => withFileBpm(sec, songs), songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, exportSectionM3u, exportSectionXmlToVdj, previewReadiness, readiness, activeSection, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   source += '\nexport { SectionView };';
     const readiness = require(path.join(root, "node_modules/typescript"));
   const readinessModule = { exports: {} };
@@ -37,7 +37,7 @@ function createEventRouteHarness(actual) {
       settled: async o => { if (prepState.account !== o.account || prepState.generation !== o.generation) throw Error('stale'); if (prepState.status !== 'ready') throw Error(prepState.error || 'not ready'); return prepState.knowledge; } };
     let slots = [], cursor = 0, queued = [], captured, activeKey, dirty = false, rootSlots = [], renderingRoot = false, tree;
     const loads = [], requests = [], errors = [], navigations = [], downloads = [], files = [], warnings = [], infos = []; let blocker;
-    let workspace = { sources: [], library: null, audioIndex: actual.audio.buildAudioIndex([]) };
+    let workspace = { sources: [], library: null, audioIndex: actual.audio.buildAudioIndex([]), addFile: f => f.path || f.name };
     const storage = { getItem: k => memory.get(k) ?? null, setItem: (k,v) => memory.set(k,v), removeItem: k => memory.delete(k) };
     global.localStorage = storage;
     const same = (a,b) => a && b && a.length === b.length && a.every((v,i) => Object.is(v,b[i]));
