@@ -32,5 +32,5 @@ it('bounded deterministic admission reserves catalogue even when it arrives last
 it('arbitrary remix has no standard catalogue familiarity and no-fit remains a no-op',()=>{
  const c={origin:'ai' as const,artist:'ABBA',song:'Dancing Queen (TEST Remix)'};
  expect(evaluateFit({familiarity:'familiar'},c).familiarEvidence).toBe(false);
- expect(evaluateFit(undefined,rowCandidate(catalogueCandidates({uploaded:[],prefs,expand:true},CATALOGUE)[0].row,'catalogue'))).toMatchObject({points:0});
+ expect(evaluateFit(undefined,rowCandidate(catalogueCandidates({uploaded:[],prefs,expand:true},CATALOGUE)[0].row,'catalogue'))).toEqual({lines:[],familiarEvidence:false});
 });

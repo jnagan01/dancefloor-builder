@@ -20,6 +20,7 @@ async function run(opts:{reverse?:boolean;baseline?:boolean;off?:boolean;neutral
 it('actual route: >14 alternatives compete for 14 unchanged slots; evidence beyond old cut displaces weak picks; requests/save/reopen preserved',async()=>{
  const after=await run(),reverse=await run({reverse:true}),before=await run({baseline:true});
  const adds=all(after.result).filter(r=>!r.fromUpload),old=all(before.result).filter(r=>!r.fromUpload);
+ console.log('candidate diagnostic',JSON.stringify({after:adds.map(r=>({song:r.song,popularity:r.popularity,energy:r.energy,why:r.rankWhy})),before:old.map(key)}));
  expect(adds).toHaveLength(14);expect(after.looked.filter(s=>CATALOGUE.some(c=>key(c)===key(s)))).toHaveLength(30);
  expect(adds.map(key).sort()).toEqual(all(reverse.result).filter(r=>!r.fromUpload).map(key).sort());
  expect(adds.every(r=>PROVIDERS.find(p=>key(p)===key(r))?.popularity===9)).toBe(true);expect(old).toHaveLength(0); // old cut discards decade; strict policy rejects it
