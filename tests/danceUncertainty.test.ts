@@ -50,7 +50,7 @@ describe("uncertain dance suitability: community tag conflicts and wording", () 
     expect(ev({ avoidSlow: true }, { ...est(5, 8, "ai"), ...cm(["slow"], ["party"]) }).similarityCap).toBeUndefined();
   });
   it("describes each attribute's own source; no 'moderate'/'estimates' mislabel and no point counts", () => {
-    const t = ev({ avoidSlow: true }, { energy: 9, energySource: "provider", danceability: 3, danceabilitySource: "ai" }).uncertain!.join(" ");
+    const t = ev({ avoidSlow: true }, { energy: 9, energySource: "provider", danceability: 3, danceabilitySource: "ai" }).uncertain!.find(u => u.startsWith("Dance suitability"))!;
     expect(t).toMatch(/energy 9\/10 \(music data provider\), danceability 3\/10 \(.+\) do not establish upbeat fit/);
     expect(t).not.toMatch(/moderate|are estimates|points/);
     expect(ev({ avoidSlow: true }, { energy: 6, energySource: "estimate" }).uncertain!.join(" ")).toMatch(/danceability unknown/);
