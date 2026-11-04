@@ -2,6 +2,14 @@ name: Read-only native regressions
 on:
   workflow_call:
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Mac runner (Intel fallback when Apple Silicon capacity is constrained)
+        type: choice
+        default: macos-15
+        options:
+          - macos-15
+          - macos-15-intel
   push:
     branches: [main]
     paths: ['src/**', 'tests/**', 'desktop/**', 'package.json', 'bun.lock', 'bunfig.toml', 'vite.config.ts', 'tsconfig.json', '.github/workflows/**']
@@ -11,7 +19,8 @@ permissions:
   contents: read
 jobs:
   regression:
-    runs-on: macos-15
+    # Push, pull request, and reusable release checks retain Apple Silicon.
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.runner || 'macos-15' }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
