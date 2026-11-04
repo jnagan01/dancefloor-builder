@@ -951,9 +951,10 @@ export function generateLists(input: GenerationInput): GenerationResult {
 
     // Score library candidates by intensity and pick the section they belong
     // in based on the same band rule used for uploads.
-    const eligible = new Set(catalogueCandidates(input).map(c => c.row));
-    const candidates = [...eligible]
-      .map((row) => ({ lib: row, score: libraryPreferenceScore({ ...row, genre: row.genre ?? "", decade: row.catalogueDecade ?? "", energy: row.energy ?? 7, danceability: row.danceability ?? 6, section: row.naturalSection ?? "Transition" }, prefs), section: row.naturalSection ?? "Transition" }))
+    const eligible = new SongKeySet(true);
+    catalogueCandidates(input).forEach(c => eligible.add(c.row.artist, c.row.song));
+    const candidates = SONG_LIBRARY.filter(l => eligible.has(l.artist, l.song))
+      .map((lib) => ({ lib, score: libraryPreferenceScore(lib, prefs), section: sectionForIntensity(intensityOf(lib)) }))
       .sort((a, b) => b.score - a.score);
 
     const padTo = (bucket: Scored[], section: Section, target: number) => {
@@ -963,7 +964,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
         const k = dedupeKey(lib.artist, lib.song);
         if (seen.has(k)) continue;
         seen.add(k);
-        bucket.push({ ...lib, section });
+        bucket.push({ ...librarySongToResult(lib, section), section });
       }
     };
 

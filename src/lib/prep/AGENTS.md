@@ -1,0 +1,3 @@
+# Preparation ranking architecture
+- Enumerate complete eligible finite catalogue candidates before shared ranking, reserve their admission within the bounded pool, and preserve per-field curated provenance without inventing exact years, because gap-sized/source-order admission hides stronger alternatives.
+- Merge metadata into an exact owned recording only when its full identity agrees; file tags outrank catalogue/provider estimates, because standard-recording facts must never be lent to a different remix or credit.
