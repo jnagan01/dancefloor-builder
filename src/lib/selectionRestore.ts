@@ -36,8 +36,10 @@ export function legacyIdentityMatches(identity: string, song: Row): boolean {
   const a = identity.slice(0, bar), t = identity.slice(bar + 1);
   if (dedupeKey(a, t) === dedupeKey(song.artist, song.song)) return true;
   // Older spellings normalized the row's own artist/title without later title clean-up (e.g. "Song - Live").
-  const na = normalizeKey(song.artist), nt = normalizeKey(song.song);
-  if (nt && [na, na.replace(/^(the|a)\s+/, "")].some(x => x && `${x}|${nt}` === identity)) return true;
+  const plain = (x: string) => (x || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
+  for (const [ar, ti] of [[normalizeKey(song.artist), normalizeKey(song.song)], [plain(song.artist), plain(song.song)]]) {
+    if (ti && [ar, ar.replace(/^(the|a)\s+/, "")].some(x => x && `${x}|${ti}` === identity)) return true;
+  }
   const theirs = new Set(songKeys(a, t));
   return songKeys(song.artist, song.song).some(k => theirs.has(k));
 }
