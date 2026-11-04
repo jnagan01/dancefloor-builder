@@ -188,10 +188,11 @@ try{
  await check('held-out slow risk: exact similarity bounded, estimates retained, strong low both excluded, save/reopen preserves requests',async()=>{
    const additions=[{artist:'TEST Native Risk',song:'A',energy:4,danceability:4,popularity:10,src:'ai'},
      {artist:'TEST Native Supported',song:'B',energy:7,danceability:7,src:'provider'},
-     {artist:'TEST Native Strong',song:'C',energy:4,danceability:4,src:'provider'}];
+     {artist:'TEST Native Strong',song:'C',energy:4,danceability:4,src:'provider'},
+     {artist:'TEST Native Weak',song:'D',energy:6,danceability:6,src:'estimate'}];
    await page.evaluate(additions=>{window.__fixture.aiSuggestions=additions.map(r=>({artist:r.artist,song:r.song}));
      window.__fixture.enrichResults=additions.map(r=>({...r,year:1985,source:'AI',prov:{year:'provider',energy:r.src,danceability:r.src,popularity:'estimate'}}));
-     window.__fixture.similarTracks={availability:'ok',seeds:['One','Two','Three','Four'].map((song,i)=>({seed:{artist:'TEST Native Client',title:song},status:'ok',similar:additions.filter(r=>i===0||r.song==='A').map(r=>({artist:r.artist,title:r.song,match:r.song==='B'?0.5:1}))}))};
+     window.__fixture.similarTracks={availability:'ok',seeds:['One','Two','Three','Four'].map((song,i)=>({seed:{artist:'TEST Native Client',title:song},status:'ok',similar:additions.filter(r=>i===0||r.song==='A'||r.song==='D').map(r=>({artist:r.artist,title:r.song,match:r.song==='B'?0.5:1}))}))};
      window.__testState.eventId=undefined;window.__testState.page='event';window.__errors=[];window.__rerender();},additions);
    await page.waitForTimeout(400);await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('4');
    await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('TEST ONLY Native Slow Risk');
@@ -206,6 +207,9 @@ try{
    expect(all.filter(r=>r.fromUpload).map(r=>r.song).sort()).toEqual(['One','Two','Three','Four','Keep (Live)'].sort());
    const risk=all.find(r=>r.artist==='TEST Native Risk');expect(risk).toBeTruthy();expect(risk.rankWhy).toContain('ranked lower, not confirmed slow');expect(risk.rankWhy).toContain('similarity bounded');
    expect(all.some(r=>r.artist==='TEST Native Supported')).toBe(true);expect(all.some(r=>r.artist==='TEST Native Strong')).toBe(false);
+   const weak=all.find(r=>r.artist==='TEST Native Weak');expect(weak).toBeTruthy();expect(weak.rankWhy).toContain('similarity bounded: dance suitability uncertain (not confirmed slow)');expect([weak.energy,weak.danceability]).toEqual([6,6]);
+   expect(all.find(r=>r.artist==='TEST Native Supported').rankWhy??'').not.toContain('dance suitability uncertain');
+   expect(JSON.stringify(saved)).not.toMatch(/lookupPriority|similarityCap|upbeatTags/);
    expect(saved.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});
    await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},saved.id);await page.waitForTimeout(1200);
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))[saved.id].lists).toEqual(saved.lists);
