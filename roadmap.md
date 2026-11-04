@@ -135,3 +135,5 @@
 - [x] Shared evidence ranking for panel and every automatic expansion source, with plain explanations.
 - [x] Recommendation quality review samples, ratings and labeled-only evaluator with synthetic benchmarks.
 - [ ] Required read-only macOS regression gate on the final commit (runs on GitHub macOS runner, not here).
+
+- [x] Exact-track Last.fm community evidence (advisory slow tags/listeners) + conservative same-work Versions drawer; report tests/fit/community.{json,md}. Mac CI on final commit: external, pending.
