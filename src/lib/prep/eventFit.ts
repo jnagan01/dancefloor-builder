@@ -161,13 +161,14 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
     // an upbeat floor. Without adequate positive upbeat support, bound ALL similarity together. Not a slow verdict, no
     // extra penalty, never excludes; stricter slow-risk caps (low-both / community tags) are kept, never stacked.
     const groove = d !== undefined && ds !== "unknown" && d >= 7 && !communitySlow;
-    const tagUpbeat = !!cm?.upbeatTags.length && !communitySlow && !(e !== undefined && d !== undefined && e <= 4 && d <= 4);
+    // Tag-only support needs purely upbeat tags: mixed slow+party tags are a conflict, never positive support.
+    const tagUpbeat = !!cm?.upbeatTags.length && !cm.slowTags.length && !(e !== undefined && d !== undefined && e <= 4 && d <= 4);
     if (!r.exclude && r.similarityCap === undefined && !supported && !groove && !tagUpbeat) {
       r.similarityCap = UNCERTAIN_DANCE_SIMILARITY_CAP; r.similarityCapReason = "uncertainDance";
+      const attr = (n: string, v: number | undefined, src: MetaSource | undefined) => v === undefined ? `${n} unknown` : `${n} ${v}/10 (${sourceLabel(src)})`;
       const why = e === undefined && d === undefined ? "no energy or danceability data"
-        : es === "strong" && ds === "strong" ? `verified energy ${e}/10 and danceability ${d}/10 are moderate, not clearly upbeat`
-        : `energy ${e ?? "?"}/10 and danceability ${d ?? "?"}/10 are ${es === "unknown" || ds === "unknown" ? "incomplete" : "estimates"} without clear upbeat support`;
-      (r.uncertain ??= []).push(`Dance suitability uncertain (${why}): similarity limited to ${UNCERTAIN_DANCE_SIMILARITY_CAP} points — not classified slow`);
+        : `${attr("energy", e, f.energySource)}, ${attr("danceability", d, f.danceabilitySource)} do not establish upbeat fit`;
+      (r.uncertain ??= []).push(`Dance suitability uncertain (${why}): similarity gets limited credit — not classified slow`);
     } else if (r.similarityCap !== undefined) r.similarityCapReason = "slowRisk";
     if (pop !== undefined && ps === "strong") (r.uncertain ??= []).push("Verified popularity supports recognition, not slow/ballad or dance suitability");
     if (!r.exclude && (es !== "strong" || ds !== "strong")) (r.uncertain ??= []).push(e === undefined && d === undefined ? "Slow/ballad status unknown: no energy or danceability data" : "Slow/ballad status unverified: energy/danceability are estimates or incomplete");
