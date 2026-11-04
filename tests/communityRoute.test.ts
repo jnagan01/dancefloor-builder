@@ -16,8 +16,8 @@ const harness = createRequire(import.meta.url)("./helpers/eventRouteHarness.cjs"
 const id="10000000-0000-4000-8000-000000000077";
 const requests=REQUESTS.map(r=>({...r,fromUpload:true}));
 // TEST-ONLY renamed synthetic owned files with identical estimated feel; only community evidence differs.
-const extras=["Held Out Tagged","Held Out Plain","Held Out Wrong"].map(a=>({artist:`TEST ${a}`,song:"Same Feel"}));
-const library=vdj.buildLibrary(extras.map(c=>({artist:c.artist,title:c.song,filePath:`/synthetic/${c.artist}.mp3`,year:"1985",genre:"Pop"})) as vdj.VdjTrack[]);
+const extras=[["Held Out Tagged","Q"],["Held Out Plain","R"],["Held Out Wrong","S"]].map(([a,s])=>({artist:`TEST ${a}`,song:s}));
+const library=vdj.buildLibrary(extras.map(c=>({artist:c.artist,title:c.song,filePath:`/synthetic/${c.song}.mp3`,year:"1985",genre:"Pop"})) as vdj.VdjTrack[]);
 const inputBase={songs:requests,hours:"1.5",buffer:1,listType:"dance",expand:true,eventName:"TEST ONLY community",artistsInput:"",genresInput:"",decades:["1970s","1980s","1990s","2000s","2010s","2020s"],notes:"",doNotPlayInput:""};
 const all=(r:any)=>[...r.warmUp,...r.transition,...r.peak];
 const enrich=async({data}:any)=>({results:data.songs.flatMap((s:any)=>extras.some(c=>c.artist===s.artist)?[{...s,energy:6,danceability:6,source:"AI",prov:{energy:"estimate",danceability:"estimate"}}]:[])});
