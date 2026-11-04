@@ -90,6 +90,8 @@ import { recommendSongsForSection } from "@/lib/recommend.functions";
 import { getArtistNeighbors } from "@/lib/neighbors.functions";
 import { getArtistCrowdData, getSimilarTracks, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
+import { lookupCommunityBatch, COMMUNITY_BATCH, type CommunityRow } from "@/lib/prep/community.functions";
+import type { CommunityEvidence } from "@/lib/prep/communityEvidence";
 import { importSpotifyPlaylist } from "@/lib/spotify.functions";
 import { type PreviewTarget } from "@/components/PreviewPlayer";
 import { resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audioMatch";
@@ -342,6 +344,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const crowdFn = useServerFn(getArtistCrowdData);
   const similarTracksFn = useServerFn(getSimilarTracks);
   const enrichFn = useServerFn(enrichSongs);
+  const communityFn = useServerFn(lookupCommunityBatch);
   const [dragOver, setDragOver] = useState(false);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -1375,6 +1378,23 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }
         }
 
+        // Exact-track community evidence (Last.fm tags/listeners), only while an event-fit choice is active, BEFORE
+        // ranking. Runtime-only side map: never written into rows, snapshots or the library. Bounded: one attempt per
+        // song per generation, 20 per request, ≤ 40 songs, 12 s client cutoff; failures/timeouts stay unknown.
+        const community = new Map<string, CommunityEvidence>();
+        const fitNow = normalizeEventFit(eventFit);
+        if (fitNow && pool.size) {
+          const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
+          const order = [...pool.values()].sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)));
+          const rep = await cg.gather(order.map((p) => ({ artist: p.row.artist, song: p.row.song })));
+          if (genTokenRef.current !== myToken) return;
+          if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
+          let unavailable = rep.failedSongs + rep.skippedAfterTimeout;
+          for (const p of order) { const c = cg.get(p.row); if (c?.evidence) community.set(factsKey(p.row), c.evidence); else if (c && (c.status === "failed" || c.status === "timeout")) unavailable++; }
+          if (unavailable) toast.info(`Last.fm community tags couldn't be checked for ${unavailable} candidate track${unavailable === 1 ? "" : "s"}; their slow/familiarity evidence stays unknown.`);
+        }
+        const withCommunity = <C extends { fit?: FitFacts }>(c: C, row: { artist: string; song: string }): C => { const e = community.get(factsKey(row)); return e ? { ...c, fit: { ...(c.fit ?? {}), community: e } } : c; };
+
         // Strict eligibility BEFORE ranking, so excluded songs never take a slot or count toward artist variety.
         const vbpm = getVibe(prefs.vibe)?.bpm;
         let strictDropped = 0;
@@ -1389,8 +1409,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const room = sectionOrder.reduce((n, k) => n + Math.max(0, sectionTargetFor(r, k) - r[k].length), 0);
         const rankStats: Parameters<typeof rankPool>[4] & object = {};
         const ranked = rankPool(eligible, (p) => {
-          if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
-          return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
+          if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return withCommunity({ ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }, p.row); }
+          return withCommunity(rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai"), p.row);
         }, rankCtx([...r.warmUp, ...r.transition, ...r.peak]), room, rankStats);
         for (const { item, rec } of ranked) {
           const k = item.prefer && r[item.prefer].length < sectionTargetFor(r, item.prefer) ? item.prefer : sectionOrder.find((x) => r[x].length < sectionTargetFor(r, x));
