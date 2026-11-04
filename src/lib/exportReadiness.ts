@@ -12,10 +12,14 @@ export function exportReadiness(refs: ExportSongRef[], library: VdjLibrary, avai
   for (const [index, ref] of refs.entries()) {
     const issue = (reason: string) => problems.push({ index, identity: ref.identity, title: `${ref.song.artist} — ${ref.song.song}`, reason });
     const ids = ref.match?.trackIndex != null ? [...new Set([ref.match.trackIndex, ...(ref.match.extraTrackIndices ?? [])])] : [];
-    const count = Math.max(1, ids.length);
+    const lost = ref.match?.unresolvedPaths ?? [];
+    const count = Math.max(1, ids.length + lost.length);
     if (ref.match?.excludedFromVdj) { excluded += count; omitted++; issue("Excluded from DJ export"); continue; }
+    // Saved files not in the library are reported, never substituted; a missing primary exports nothing.
+    if (!ids.length && lost.length) { missing += lost.length; omitted++; issue(lost.length > 1 ? "Saved primary file is not in the library (its extras are not exported)" : "Saved file is not in the library"); continue; }
     if (!exportApproved(ref.match) || !ids.length) { unapproved += count; omitted++; issue("No confirmed track"); continue; }
     let wrote = 0;
+    for (let n = 0; n < lost.length; n++) { missing++; issue("Saved extra file is not in the library"); }
     for (const id of ids) {
       const track = library.tracks[id];
       if (!track) { missing++; issue("Chosen file is not in the library"); continue; }

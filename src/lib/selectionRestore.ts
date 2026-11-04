@@ -1,3 +1,5 @@
+import type { SongMatch } from "@/lib/virtualDj";
+import { createIdentityIndex } from "@/lib/fileIdentity";
 import { dedupeKey, normalizeKey, songKeys } from "@/lib/danceFloor";
 
 export type SavedSelection = { paths: string[]; excluded?: boolean; confirmed?: boolean };
@@ -91,8 +93,6 @@ export function selectionBase(stored: SelectionMap | null | undefined, resolved:
 }
 
 // ---- Runtime file selections (library indices are positional; saved paths are the identity) ----
-import type { SongMatch } from "@/lib/virtualDj";
-import { createIdentityIndex } from "@/lib/fileIdentity";
 
 type TrackLike = { filePath?: string };
 
