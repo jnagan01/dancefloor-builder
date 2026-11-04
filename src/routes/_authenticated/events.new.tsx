@@ -1383,7 +1383,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // map: never written into rows, snapshots or the library. Bounded: songs that pass eligibility, one attempt per
         // song per generation, 20 per request, ≤ 40 songs, 12 s client cutoff. Budget priority = a deterministic
         // preliminary shared ranking WITHOUT community evidence (identity order for anything it hides); the final
-        // ranking below then reuses the same scorer with the evidence. Unattempted songs stay unknown and are reported.
+        // ranking below then reuses the same scorer with the evidence (lookupPriority leaves only the uncertain-dance similarity
+        // bound off here, because community upbeat tags can lift it; slow-risk caps and exclusions still apply). Unattempted songs stay unknown and are reported.
         const community = new Map<string, CommunityEvidence>();
         const fitNow = normalizeEventFit(eventFit);
         const baseCandidate = (p: Pooled) => {
@@ -1393,7 +1394,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         if (fitNow && (fitNow.avoidSlow || fitNow.familiarity === "familiar") && pool.size) {
           const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
           const candidatesForLookup = [...pool.values()].filter((p) => addedAllowed(p.row) && !strictLimitFailure(p.row, strictLimits)).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
-          const prelim = rankPool(candidatesForLookup, baseCandidate, rankCtx([...r.warmUp, ...r.transition, ...r.peak])).map((x) => x.item);
+          const prelim = rankPool(candidatesForLookup, baseCandidate, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true }).map((x) => x.item);
           const prelimSet = new Set(prelim);
           const order = [...prelim, ...candidatesForLookup.filter((p) => !prelimSet.has(p))];
           const rep = await cg.gather(order.map((p) => ({ artist: p.row.artist, song: p.row.song })));
