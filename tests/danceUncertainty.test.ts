@@ -35,3 +35,24 @@ describe("uncertain dance suitability (avoid-slow only)", () => {
     expect(sim(recommend({ ...base, lookupPriority: true }))).toBeGreaterThan(2);
   });
 });
+describe("uncertain dance suitability: community tag conflicts and wording", () => {
+  const cm = (slowTags: string[], upbeatTags: string[]) => ({ community: { listeners: 500000, slowTags, upbeatTags } });
+  it("mixed slow+party tags never lift the cap (6/6 estimate or unknown feel); no slow penalty", () => {
+    for (const f of [{ ...est(6, 6), ...cm(["slow"], ["party"]) }, cm(["ballad"], ["dance"])]) {
+      const r = ev({ avoidSlow: true }, f);
+      expect(r.similarityCap).toBe(2); expect(r.similarityCapReason).toBe("uncertainDance");
+      expect(r.lines.some(l => l.points < 0)).toBe(false);
+      expect(r.uncertain!.join(" ")).toMatch(/Dance suitability uncertain/);
+    }
+  });
+  it("purely upbeat tags lift it; numeric groove support still stands under mixed tags", () => {
+    expect(ev({ avoidSlow: true }, { ...est(6, 6), ...cm([], ["party"]) }).similarityCap).toBeUndefined();
+    expect(ev({ avoidSlow: true }, { ...est(5, 8, "ai"), ...cm(["slow"], ["party"]) }).similarityCap).toBeUndefined();
+  });
+  it("describes each attribute's own source; no 'moderate'/'estimates' mislabel and no point counts", () => {
+    const t = ev({ avoidSlow: true }, { energy: 9, energySource: "provider", danceability: 3, danceabilitySource: "ai" }).uncertain!.join(" ");
+    expect(t).toMatch(/energy 9\/10 \(music data provider\), danceability 3\/10 \(.+\) do not establish upbeat fit/);
+    expect(t).not.toMatch(/moderate|are estimates|points/);
+    expect(ev({ avoidSlow: true }, { energy: 6, energySource: "estimate" }).uncertain!.join(" ")).toMatch(/danceability unknown/);
+  });
+});
