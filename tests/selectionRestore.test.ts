@@ -135,7 +135,7 @@ describe("real event route: complete saved records survive open/save/reopen", ()
   const m3u = (h: any) => h.files.filter((f: any) => f.name.endsWith(".m3u")).map((f: any) => f.data).join("\n");
   const report = (h: any, sec: string, i: number, s: any) => exportReadiness([{ song: s, match: h.current.matches[k(sec as any, i, s)] } as any], h.lib, {});
   const open = async (selections: object) => { const h = harness({ rows: { A: rowOf(selections) } }); await h.flush(); const lib = vdj.buildLibrary(tracks as any); h.lib = lib; h.library(lib); await h.flush(); return h; };
-  const saveAfterUnrelatedEdit = async (h: any) => { h.edit("Unrelated"); await vi.advanceTimersByTimeAsync(1500); return h.requests.at(-1).lists.selections; };
+  const saveAfterUnrelatedEdit = async (h: any, name = "Unrelated") => { h.edit(name); await vi.advanceTimersByTimeAsync(1500); return h.requests.at(-1).lists.selections; };
   const reopen = async (h: any, saved: object, lib = h.lib) => { const re = harness({ rows: { A: { ...rowOf(saved), inputs: h.requests.at(-1).inputs } } }); await re.flush(); re.lib = lib; re.library(lib); await re.flush(); return re; };
 
   it("explicitly empty saved entry stays empty/unapproved despite a perfect automatic match", async () => {
@@ -197,7 +197,7 @@ describe("real event route: complete saved records survive open/save/reopen", ()
       const saved = await saveAfterUnrelatedEdit(h);
       expect(saved[k("peak", 1, queen)]).toEqual(rec); h.unmount();
       const re = await reopen(h, saved); expect(re.current.matches[k("peak", 1, queen)].excludedFromVdj).toBe(true);
-      expect((await saveAfterUnrelatedEdit(re))[k("peak", 1, queen)]).toEqual(rec); re.unmount();
+      expect((await saveAfterUnrelatedEdit(re, "Unrelated again"))[k("peak", 1, queen)]).toEqual(rec); re.unmount();
     } finally { vi.useRealTimers(); }
   });
 
@@ -208,7 +208,7 @@ describe("real event route: complete saved records survive open/save/reopen", ()
       const stevieAt = h.lib.tracks.findIndex((t: any) => t.filePath === "/lib/stevie.mp3");
       h.current.updateMatch(k("peak", 1, queen), { status: "Manually Matched", confidence: 1, confirmed: true, trackIndex: stevieAt, alternatives: [], extraTrackIndices: [] }); await h.flush();
       expect(pathOf(h, "peak", 1, queen)).toBe("/lib/stevie.mp3");
-      const lib2 = vdj.buildLibrary([...tracks].reverse() as any); h.lib = lib2; h.library(lib2); await h.flush();
+      const lib2 = vdj.buildLibrary([{ artist: "Aaa", title: "One", filePath: "/lib/a1.mp3" }, { artist: "Aab", title: "Two", filePath: "/lib/a2.mp3" }, ...[...tracks].reverse()] as any); h.lib = lib2; h.library(lib2); await h.flush();
       expect(lib2.tracks[stevieAt]?.filePath).not.toBe("/lib/stevie.mp3");
       expect(pathOf(h, "peak", 1, queen)).toBe("/lib/stevie.mp3");
       expect(pathOf(h, "peak", 0, common)).not.toBe("/lib/stevie.mp3");
