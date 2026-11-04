@@ -34,6 +34,9 @@ describe("identity-safe selection restore (unit)", () => {
     expect(legacyIdentityMatches("weeknd|save your tears", weeknd)).toBe(false);
     expect(legacyIdentityMatches("usher feat lil jon|yeah", usher)).toBe(true);
     expect(legacyIdentityMatches("cover band|yeah", usher)).toBe(false);
+    const live = { artist: "Test Artist", song: "Test Song - Live" };
+    expect(legacyIdentityMatches("test artist|test song live", live)).toBe(true);
+    expect(legacyIdentityMatches("test artist|other song live", live)).toBe(false);
   });
   it("disagreeing validated legacy entries are ambiguous and apply nothing", () => {
     const w = { artist: "The Weeknd", song: "Blinding Lights" };
