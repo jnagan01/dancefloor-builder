@@ -1,0 +1,2928 @@
+{
+  "label": "CONTROLLED FICTIONAL fixture, real event route and save validator. NOT original native pool/replay; no ratings or claimed real quality gains.",
+  "sourceCommit": "985f18cf4a204381f597883299d1ab1f9aa05b28",
+  "targetCommit": "content-addressed patch; final automatic revision reported separately",
+  "targetSourceHash": "7fb4273561923b28c2876d1e148a3e968f001fa49b249f8ce1b22d682be111ad",
+  "fixture": {
+    "clients": [
+      {
+        "artist": "TEST Client 0",
+        "song": "Request 0"
+      },
+      {
+        "artist": "TEST Client 1",
+        "song": "Request 1"
+      },
+      {
+        "artist": "TEST Client 2",
+        "song": "Request 2"
+      },
+      {
+        "artist": "TEST Client 3",
+        "song": "Request 3"
+      },
+      {
+        "artist": "TEST Client 4",
+        "song": "Request 4"
+      },
+      {
+        "artist": "TEST Client 5",
+        "song": "Request 5"
+      },
+      {
+        "artist": "TEST Client 6",
+        "song": "Request 6"
+      },
+      {
+        "artist": "TEST Client 7",
+        "song": "Request 7"
+      },
+      {
+        "artist": "TEST Client 8",
+        "song": "Request 8"
+      },
+      {
+        "artist": "TEST Client 9",
+        "song": "Request 9"
+      }
+    ],
+    "catalogue": [
+      {
+        "artist": "TEST Alternative 00",
+        "song": "Recording 0",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 01",
+        "song": "Recording 1",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 02",
+        "song": "Recording 2",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 03",
+        "song": "Recording 3",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 04",
+        "song": "Recording 4",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 05",
+        "song": "Recording 5",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 06",
+        "song": "Recording 6",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 07",
+        "song": "Recording 7",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 08",
+        "song": "Recording 8",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 09",
+        "song": "Recording 9",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 10",
+        "song": "Recording 10",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 11",
+        "song": "Recording 11",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 12",
+        "song": "Recording 12",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 13",
+        "song": "Recording 13",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 14",
+        "song": "Recording 14",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 15",
+        "song": "Recording 15",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 16",
+        "song": "Recording 16",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 17",
+        "song": "Recording 17",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 18",
+        "song": "Recording 18",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 19",
+        "song": "Recording 19",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 20",
+        "song": "Recording 20",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 21",
+        "song": "Recording 21",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 22",
+        "song": "Recording 22",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 23",
+        "song": "Recording 23",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 24",
+        "song": "Recording 24",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 25",
+        "song": "Recording 25",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 26",
+        "song": "Recording 26",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 27",
+        "song": "Recording 27",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 28",
+        "song": "Recording 28",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      },
+      {
+        "artist": "TEST Alternative 29",
+        "song": "Recording 29",
+        "genre": "Pop",
+        "decade": "1980s",
+        "energy": 7,
+        "danceability": 8,
+        "section": "Transition"
+      }
+    ],
+    "providers": [
+      {
+        "artist": "TEST Alternative 00",
+        "song": "Recording 0",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 01",
+        "song": "Recording 1",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 02",
+        "song": "Recording 2",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 03",
+        "song": "Recording 3",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 04",
+        "song": "Recording 4",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 05",
+        "song": "Recording 5",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 06",
+        "song": "Recording 6",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 07",
+        "song": "Recording 7",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 08",
+        "song": "Recording 8",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 09",
+        "song": "Recording 9",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 10",
+        "song": "Recording 10",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 11",
+        "song": "Recording 11",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 12",
+        "song": "Recording 12",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 13",
+        "song": "Recording 13",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 14",
+        "song": "Recording 14",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 15",
+        "song": "Recording 15",
+        "energy": 6,
+        "danceability": 6,
+        "popularity": 2,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 16",
+        "song": "Recording 16",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 17",
+        "song": "Recording 17",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 18",
+        "song": "Recording 18",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 19",
+        "song": "Recording 19",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 20",
+        "song": "Recording 20",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 21",
+        "song": "Recording 21",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 22",
+        "song": "Recording 22",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 23",
+        "song": "Recording 23",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 24",
+        "song": "Recording 24",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 25",
+        "song": "Recording 25",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 26",
+        "song": "Recording 26",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 27",
+        "song": "Recording 27",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 28",
+        "song": "Recording 28",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      },
+      {
+        "artist": "TEST Alternative 29",
+        "song": "Recording 29",
+        "energy": 8,
+        "danceability": 8,
+        "popularity": 9,
+        "source": "ReccoBeats",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "popularity": "provider"
+        }
+      }
+    ],
+    "inputs": {
+      "songs": [
+        {
+          "artist": "TEST Client 0",
+          "song": "Request 0"
+        },
+        {
+          "artist": "TEST Client 1",
+          "song": "Request 1"
+        },
+        {
+          "artist": "TEST Client 2",
+          "song": "Request 2"
+        },
+        {
+          "artist": "TEST Client 3",
+          "song": "Request 3"
+        },
+        {
+          "artist": "TEST Client 4",
+          "song": "Request 4"
+        },
+        {
+          "artist": "TEST Client 5",
+          "song": "Request 5"
+        },
+        {
+          "artist": "TEST Client 6",
+          "song": "Request 6"
+        },
+        {
+          "artist": "TEST Client 7",
+          "song": "Request 7"
+        },
+        {
+          "artist": "TEST Client 8",
+          "song": "Request 8"
+        },
+        {
+          "artist": "TEST Client 9",
+          "song": "Request 9"
+        }
+      ],
+      "hours": "1.5",
+      "buffer": 1,
+      "listType": "dance",
+      "expand": true,
+      "eventName": "TEST candidate sourcing",
+      "artistsInput": "",
+      "genresInput": "",
+      "notes": "",
+      "doNotPlayInput": "",
+      "decades": [
+        "1980s"
+      ],
+      "eventFit": {
+        "avoidSlow": true,
+        "familiarity": "familiar"
+      }
+    },
+    "community": "disabled",
+    "recommendations": [],
+    "library": []
+  },
+  "before": {
+    "beforeTruncation": 30,
+    "afterSourcing": 8,
+    "afterPolicy": 0,
+    "slots": 16,
+    "candidates": [],
+    "ranking": [],
+    "selected": [],
+    "sourceContribution": {
+      "catalogue": 0,
+      "ai": 0,
+      "owned": 0
+    },
+    "community": "disabled; unknown, no tags assumed"
+  },
+  "after": {
+    "beforeTruncation": 30,
+    "afterSourcing": 30,
+    "afterPolicy": 30,
+    "slots": 16,
+    "candidates": [
+      {
+        "key": "TEST Alternative 00|Recording 0",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 01|Recording 1",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 02|Recording 2",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 03|Recording 3",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 04|Recording 4",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 05|Recording 5",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 06|Recording 6",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 07|Recording 7",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 08|Recording 8",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 09|Recording 9",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 10|Recording 10",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 11|Recording 11",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 12|Recording 12",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 13|Recording 13",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 14|Recording 14",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 15|Recording 15",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 16|Recording 16",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 17|Recording 17",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 18|Recording 18",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 19|Recording 19",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 20|Recording 20",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 21|Recording 21",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 22|Recording 22",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 23|Recording 23",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 24|Recording 24",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 25|Recording 25",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 26|Recording 26",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 27|Recording 27",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 28|Recording 28",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      },
+      {
+        "key": "TEST Alternative 29|Recording 29",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        },
+        "missingFacts": [
+          "year",
+          "bpm"
+        ]
+      }
+    ],
+    "ranking": [
+      {
+        "key": "TEST Alternative 16|Recording 16",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 17|Recording 17",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 18|Recording 18",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 19|Recording 19",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 20|Recording 20",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 21|Recording 21",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 22|Recording 22",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 23|Recording 23",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 24|Recording 24",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 25|Recording 25",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 26|Recording 26",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 27|Recording 27",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 28|Recording 28",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 29|Recording 29",
+        "score": 3.75,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity",
+            "points": 2
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 00|Recording 0",
+        "score": 0.25,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "unfamiliarTrack",
+            "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+            "points": -1.5
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      },
+      {
+        "key": "TEST Alternative 01|Recording 1",
+        "score": 0.25,
+        "reasons": [
+          {
+            "kind": "prefDecade",
+            "text": "1980s (built-in catalogue) is a preferred decade for this event",
+            "points": 0.75
+          },
+          {
+            "kind": "unfamiliarTrack",
+            "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+            "points": -1.5
+          },
+          {
+            "kind": "familiarTrack",
+            "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+            "points": 1
+          }
+        ],
+        "uncertain": [
+          "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+          "Verified popularity supports recognition, not slow/ballad or dance suitability"
+        ]
+      }
+    ],
+    "selected": [
+      {
+        "key": "TEST Alternative 00|Recording 0",
+        "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 01|Recording 1",
+        "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 17|Recording 17",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 18|Recording 18",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 19|Recording 19",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 20|Recording 20",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 23|Recording 23",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 24|Recording 24",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 25|Recording 25",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 26|Recording 26",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 22|Recording 22",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 27|Recording 27",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 28|Recording 28",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      },
+      {
+        "key": "TEST Alternative 29|Recording 29",
+        "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity · In the built-in crowd-standards catalogue (app curation, not chart data) · 1980s (built-in catalogue) is a preferred decade for this event · Verified popularity supports recognition, not slow/ballad or dance suitability",
+        "prov": {
+          "energy": "provider",
+          "danceability": "provider",
+          "genre": "catalogue",
+          "popularity": "provider"
+        }
+      }
+    ],
+    "sourceContribution": {
+      "catalogue": 14,
+      "ai": 0,
+      "owned": 0
+    },
+    "community": "disabled; unknown, no tags assumed"
+  },
+  "noStrictDecadesControl": {
+    "before": {
+      "beforeTruncation": 30,
+      "afterSourcing": 8,
+      "afterPolicy": 8,
+      "slots": 16,
+      "candidates": [
+        {
+          "key": "TEST Alternative 00|Recording 0",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 01|Recording 1",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 02|Recording 2",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 03|Recording 3",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 04|Recording 4",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 05|Recording 5",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 06|Recording 6",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 07|Recording 7",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        }
+      ],
+      "ranking": [
+        {
+          "key": "TEST Alternative 00|Recording 0",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 01|Recording 1",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 02|Recording 2",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 03|Recording 3",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 04|Recording 4",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 05|Recording 5",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 06|Recording 6",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 07|Recording 7",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        }
+      ],
+      "selected": [
+        {
+          "key": "TEST Alternative 00|Recording 0",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 01|Recording 1",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 02|Recording 2",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 03|Recording 3",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 04|Recording 4",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 05|Recording 5",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 06|Recording 6",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 07|Recording 7",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "popularity": "provider"
+          }
+        }
+      ],
+      "sourceContribution": {
+        "catalogue": 8,
+        "ai": 0,
+        "owned": 0
+      },
+      "community": "disabled; unknown, no tags assumed"
+    },
+    "after": {
+      "beforeTruncation": 30,
+      "afterSourcing": 30,
+      "afterPolicy": 30,
+      "slots": 16,
+      "candidates": [
+        {
+          "key": "TEST Alternative 00|Recording 0",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 01|Recording 1",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 02|Recording 2",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 03|Recording 3",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 04|Recording 4",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 05|Recording 5",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 06|Recording 6",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 07|Recording 7",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 08|Recording 8",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 09|Recording 9",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 10|Recording 10",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 11|Recording 11",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 12|Recording 12",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 13|Recording 13",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 14|Recording 14",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 15|Recording 15",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 16|Recording 16",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 17|Recording 17",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 18|Recording 18",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 19|Recording 19",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 20|Recording 20",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 21|Recording 21",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 22|Recording 22",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 23|Recording 23",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 24|Recording 24",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 25|Recording 25",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 26|Recording 26",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 27|Recording 27",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 28|Recording 28",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        },
+        {
+          "key": "TEST Alternative 29|Recording 29",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          },
+          "missingFacts": [
+            "year",
+            "bpm"
+          ]
+        }
+      ],
+      "ranking": [
+        {
+          "key": "TEST Alternative 16|Recording 16",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 17|Recording 17",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 18|Recording 18",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 19|Recording 19",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 20|Recording 20",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 21|Recording 21",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 22|Recording 22",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 23|Recording 23",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 24|Recording 24",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 25|Recording 25",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 26|Recording 26",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 27|Recording 27",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 28|Recording 28",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 29|Recording 29",
+          "score": 1.5,
+          "reasons": [
+            {
+              "kind": "familiarTrack",
+              "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+              "points": 1
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 00|Recording 0",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        },
+        {
+          "key": "TEST Alternative 01|Recording 1",
+          "score": -1,
+          "reasons": [
+            {
+              "kind": "unfamiliarTrack",
+              "text": "Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known",
+              "points": -1.5
+            },
+            {
+              "kind": "familiarTrack",
+              "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+              "points": 0.5
+            }
+          ],
+          "uncertain": [
+            "Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow",
+            "Verified popularity supports recognition, not slow/ballad or dance suitability"
+          ]
+        }
+      ],
+      "selected": [
+        {
+          "key": "TEST Alternative 00|Recording 0",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 01|Recording 1",
+          "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 2/10 (music data provider, audience-wide): evidence it is not widely known · Dance suitability uncertain (energy 6/10 (music data provider), danceability 6/10 (music data provider) do not establish upbeat fit): similarity gets limited credit — not classified slow · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 17|Recording 17",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 18|Recording 18",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 19|Recording 19",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 20|Recording 20",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 23|Recording 23",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 24|Recording 24",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 25|Recording 25",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 26|Recording 26",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 22|Recording 22",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 27|Recording 27",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 28|Recording 28",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        },
+        {
+          "key": "TEST Alternative 29|Recording 29",
+          "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+          "prov": {
+            "energy": "provider",
+            "danceability": "provider",
+            "genre": "catalogue",
+            "popularity": "provider"
+          }
+        }
+      ],
+      "sourceContribution": {
+        "catalogue": 14,
+        "ai": 0,
+        "owned": 0
+      },
+      "community": "disabled; unknown, no tags assumed"
+    }
+  }
+}
