@@ -462,7 +462,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setActiveSection("warmUp");
     setSpotifyLink("");
     restoredEvent.current = false;
-    savedSelectionsRef.current = null; resolvedSelectionsRef.current = {}; restorePending.current = false; missingRestore.current = new Set();
+    savedSelectionsRef.current = null; resolvedSelectionsRef.current = {}; restorePending.current = false; missingRestore.current = new Set(); restoredMatches.current = new Map();
     stableCreate.current = autosave.reset();
     snapshotReadOnly.current = false; snapshotExtras.current = { inputs: {}, lists: {} };
     restoredFingerprint.current = null;
@@ -794,7 +794,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       // Identity-safe restore: exact current keys win; older dedupe spellings apply only when their
       // identity names the row's song. Raw stored keys are kept untouched (passive loads never write).
       savedSelectionsRef.current=lists.selections??null;
-      resolvedSelectionsRef.current=resolveSavedSelections(lists,lists.selections);restorePending.current=true;missingRestore.current=new Set();
+      resolvedSelectionsRef.current=resolveSavedSelections(lists,lists.selections);restorePending.current=true;missingRestore.current=new Set();restoredMatches.current=new Map();
       resultBoundary.current={eventId:openedEventId};
       restoredEvent.current=true;
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
@@ -803,25 +803,29 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   },[openedEventId, account]);
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>|null>(null);
   const resolvedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>>({});
-  const restorePending=useRef(false), missingRestore=useRef<Set<string>>(new Set());
+  const restorePending=useRef(false), missingRestore=useRef<Set<string>>(new Set()), restoredMatches=useRef(new Map<string,SongMatch>()), restoredLibrary=useRef<unknown>(null);
   useEffect(()=>{
     if(!result || !workspace.library || resultBoundary.current?.eventId!==openedEventId)return;
-    const first=restorePending.current;
-    if(!first && !missingRestore.current.size)return;
-    restorePending.current=false;
-    const current=new Map<string,true>();
-    for (const sec of ["warmUp","transition","peak"] as SectionKey[]) result[sec].forEach((song,i)=>current.set(songKey(sec,i,song),true));
+    const first=restorePending.current, libraryChanged=restoredLibrary.current!==workspace.library;
+    if(!first && !libraryChanged)return;
+    if(!first && !restoredMatches.current.size)return;
+    restorePending.current=false; restoredLibrary.current=workspace.library;
+    const current=new Set<string>();
+    for (const sec of ["warmUp","transition","peak"] as SectionKey[]) result[sec].forEach((song,i)=>current.add(songKey(sec,i,song)));
     const resolved=resolvedSelectionsRef.current, pathIndex=new Map<string,number>();
     mergedLibrary.tracks.forEach((t,i)=>{ if(t.filePath && !pathIndex.has(t.filePath)) pathIndex.set(t.filePath,i); });
+    const passive=!userEdited.current;
     setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(resolved)){
       if(!current.has(key))continue;
-      // Later library loads only fill rows whose saved file was missing and that nobody has re-linked.
-      if(!first && (!missingRestore.current.has(key) || next[key]?.trackIndex!=null))continue;
+      // Library re-indexes re-resolve saved paths (track indices are positional) — but only for rows the
+      // user has not re-linked since restore. Never by position, basename or a scored substitute.
+      if(!first && !passive && next[key]!==restoredMatches.current.get(key))continue;
       const indices=value.paths.map(path=>pathIndex.get(path)).filter((i):i is number=>i!==undefined);
       if(indices.length) missingRestore.current.delete(key); else if(value.paths.length) missingRestore.current.add(key);
       const base=next[key]??{status:"Missing From Library" as MatchStatus,confidence:0,alternatives:[]};
       next[key]={...base,...(indices.length?{status:(value.confirmed === true ? "Manually Matched" : "Possible Match") as MatchStatus,confidence:value.confirmed === true ? 1 : 0,confirmed:value.confirmed === true,trackIndex:indices[0],extraTrackIndices:indices.slice(1)}
         :value.paths.length?{status:"Missing From Library" as MatchStatus,confidence:0,confirmed:false,trackIndex:undefined,extraTrackIndices:[],alternatives:[]}:{}),excludedFromVdj:value.excluded};
+      restoredMatches.current.set(key,next[key]);
     }matchesRef.current=next;return next});
   },[result,workspace.library]);
   useEffect(()=>{
@@ -938,7 +942,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       setBuffer(inputs.buffer ?? 2); setVibe(inputs.vibe ?? ""); setEventType(inputs.eventType ?? ""); setPolicies({ ownedOnlyExpansion: inputs.ownedOnlyExpansion, includeSeasonalTracks: inputs.includeSeasonalTracks, requireCleanVersions: inputs.requireCleanVersions }); setHomeKey(inputs.homeKey ?? "");
       setSplitOn(!!inputs.split); setSplit(inputs.split ?? equalSplit(Number(inputs.hours))); setListType(inputs.listType ?? "dance"); setMinutes(inputs.minutes ?? "60");
       setBpmOn(!!inputs.bpmRange); if(inputs.bpmRange)setBpmRange(inputs.bpmRange); setDanceOn(!!inputs.danceRange); if(inputs.danceRange)setDanceRange(inputs.danceRange);
-      savedSelectionsRef.current = snapshot.lists.selections ?? null; resolvedSelectionsRef.current = resolveSavedSelections(snapshot.lists, snapshot.lists.selections); restorePending.current = true; missingRestore.current = new Set(); snapshotExtras.current = { inputs, lists: snapshot.lists };
+      savedSelectionsRef.current = snapshot.lists.selections ?? null; resolvedSelectionsRef.current = resolveSavedSelections(snapshot.lists, snapshot.lists.selections); restorePending.current = true; missingRestore.current = new Set(); restoredMatches.current = new Map(); snapshotExtras.current = { inputs, lists: snapshot.lists };
       const r = generateLists({ uploaded: inputs.songs, hours: Number(inputs.hours), buffer: inputs.buffer ?? 2, split: inputs.split, prefs: { artists: [], genres: [], decades: [], notes: "" }, expand: false });
       const isBackground = inputs.listType === "cocktail" || inputs.listType === "dinner";
       const t = Math.ceil(displayNumber(inputs.minutes ?? "60", MAX_EVENT_MINUTES) / AVG_BACKGROUND_SONG_MIN);
@@ -1543,7 +1547,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     resultBoundary.current={eventId:openedEventId};
     userEdited.current = true;
     // Regeneration starts fresh matching: earlier saved choices must not re-attach by position.
-    resolvedSelectionsRef.current = {}; restorePending.current = false; missingRestore.current = new Set();
+    resolvedSelectionsRef.current = {}; restorePending.current = false; missingRestore.current = new Set(); restoredMatches.current = new Map();
     setResult(r);
     setActiveSection("warmUp");
     setSaveState("saving");
@@ -1744,7 +1748,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const updated = { ...old, artist, song };
     const oldKey = songKey(section, idx, old);
     const newKey = songKey(section, idx, updated);
-    delete resolvedSelectionsRef.current[oldKey]; missingRestore.current.delete(oldKey);
+    delete resolvedSelectionsRef.current[oldKey]; missingRestore.current.delete(oldKey); restoredMatches.current.delete(oldKey);
     const list = [...result[section]];
     list[idx] = updated;
     setResult({ ...result, [section]: list });
