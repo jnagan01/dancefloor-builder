@@ -92,12 +92,16 @@ export function catalogueFitFacts(s: { energy?: number; danceability?: number })
   return Object.keys(f).length ? f : undefined;
 }
 
+/** Similarity ceiling when avoid-slow is active but upbeat dance suitability is not adequately supported. */
+export const UNCERTAIN_DANCE_SIMILARITY_CAP = 2;
+
 export interface FitResult {
   /** Reason the candidate is excluded (strong evidence only), else undefined. */ exclude?: string;
   /** Evidence lines to add (points may be negative). */ lines: { kind: "familiarTrack" | "unfamiliarTrack" | "slowEstimate" | "discoveryTrack"; text: string; points: number }[];
   /** True when there is positive track-level guest-familiarity evidence (used to keep similarity from dominating). */ familiarEvidence: boolean;
   /** Plain statements of what an active choice could NOT verify for this track (shown, never scored). */ uncertain?: string[];
   /** Active advisory low-both risk bounds ALL similarity points together, never excludes. */ similarityCap?: number;
+  /** Why similarity is bounded: advisory slow risk, or merely uncertain/unestablished dance suitability (not slow). */ similarityCapReason?: "slowRisk" | "uncertainDance";
 }
 
 export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | "catalogue" | "ai"; artist?: string; song?: string; fit?: FitFacts }): FitResult {
@@ -153,6 +157,18 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
       if (ps === "estimate") { l.points = 0; (r.uncertain ??= []).push("Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported"); }
       else { l.points /= 2; l.text += " — counted half: recognition does not prove upbeat dance fit"; }
     }
+    // Uncertain dance suitability (avoid-slow only): similarity says a track resembles the requests, not that it suits
+    // an upbeat floor. Without adequate positive upbeat support, bound ALL similarity together. Not a slow verdict, no
+    // extra penalty, never excludes; stricter slow-risk caps (low-both / community tags) are kept, never stacked.
+    const groove = d !== undefined && ds !== "unknown" && d >= 7 && !communitySlow;
+    const tagUpbeat = !!cm?.upbeatTags.length && !communitySlow && !(e !== undefined && d !== undefined && e <= 4 && d <= 4);
+    if (!r.exclude && r.similarityCap === undefined && !supported && !groove && !tagUpbeat) {
+      r.similarityCap = UNCERTAIN_DANCE_SIMILARITY_CAP; r.similarityCapReason = "uncertainDance";
+      const why = e === undefined && d === undefined ? "no energy or danceability data"
+        : es === "strong" && ds === "strong" ? `verified energy ${e}/10 and danceability ${d}/10 are moderate, not clearly upbeat`
+        : `energy ${e ?? "?"}/10 and danceability ${d ?? "?"}/10 are ${es === "unknown" || ds === "unknown" ? "incomplete" : "estimates"} without clear upbeat support`;
+      (r.uncertain ??= []).push(`Dance suitability uncertain (${why}): similarity limited to ${UNCERTAIN_DANCE_SIMILARITY_CAP} points — not classified slow`);
+    } else if (r.similarityCap !== undefined) r.similarityCapReason = "slowRisk";
     if (pop !== undefined && ps === "strong") (r.uncertain ??= []).push("Verified popularity supports recognition, not slow/ballad or dance suitability");
     if (!r.exclude && (es !== "strong" || ds !== "strong")) (r.uncertain ??= []).push(e === undefined && d === undefined ? "Slow/ballad status unknown: no energy or danceability data" : "Slow/ballad status unverified: energy/danceability are estimates or incomplete");
   }

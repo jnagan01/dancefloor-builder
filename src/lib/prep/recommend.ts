@@ -134,7 +134,7 @@ export function recommend(input: RecInput): RecOutput {
       const total = ev.filter(e => kinds.has(e.kind) && e.points > 0).reduce((n, e) => n + e.points, 0);
       if (total > fitR.similarityCap) for (const e of ev) if (kinds.has(e.kind) && e.points > 0) {
         e.points = round(e.points * fitR.similarityCap / total);
-        e.text += " — similarity bounded by advisory low-both slow risk";
+        e.text += fitR.similarityCapReason === "uncertainDance" ? " — similarity bounded: dance suitability uncertain (not confirmed slow)" : " — similarity bounded by advisory low-both slow risk";
       }
     }
     const pa = prefArtists.get(norm(cand.artist));
