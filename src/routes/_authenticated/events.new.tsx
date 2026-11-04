@@ -548,7 +548,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const old = remapTracks.current; remapTracks.current = mergedLibrary.tracks;
     if (!old || old === mergedLibrary.tracks) return;
     const roots = getFolderRoots();
-    setMatches(prev => { const next = remapMatches(prev, old, mergedLibrary.tracks, roots); matchesRef.current = next; return next; });
+    // Synchronous on matchesRef so a later same-commit updateMatch (pending pick) builds on remapped state.
+    const next = remapMatches(matchesRef.current, old, mergedLibrary.tracks, roots); matchesRef.current = next; setMatches(next);
   }, [mergedLibrary]);
   useEffect(() => {
     const picked = pendingFilePick.current;
