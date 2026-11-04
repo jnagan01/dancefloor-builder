@@ -166,23 +166,26 @@ try{
    // Honest legacy provenance: cache years decode as estimates, so the unchanged strict decade policy leaves zero eligible
    // additions. Wait for the saved generation (lists present + fit persisted), not for a row count above the requests.
    await expect.poll(()=>{const r=find();return r&&r.lists&&r.inputs.eventFit?'saved':'pending';},{timeout:30000}).toBe('saved').catch(e=>{fs.writeFileSync(path.join(diagnostics,'wedding-row.json'),JSON.stringify({row:find()},null,1));throw e;});
-   await expect.poll(async()=>await page.getByText('Estimated track-count gap',{exact:false}).count(),{timeout:15000}).toBeGreaterThan(0).catch(async e=>{await page.screenshot({path:path.join(diagnostics,'wedding-gap.png')});throw e;});
+   await expect.poll(()=>{const r=find();return r&&['warmUp','transition','peak'].flatMap(k=>r.lists[k]).filter(s=>!s.fromUpload).length;},{timeout:15000}).toBe(14);
    await page.waitForTimeout(1500);
    const created=find();
    expect(created.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});expect(created.inputs.buffer).toBe(1);
    const all=['warmUp','transition','peak'].flatMap(k=>created.lists[k].map(r=>({...r,section:k})));
    const rk=r=>`${r.artist}|${r.song}`;
    expect(all.filter(r=>r.fromUpload).map(rk).sort()).toEqual(['Earth, Wind & Fire|September','Mark Ronson feat. Bruno Mars|Uptown Funk','Whitney Houston|I Wanna Dance With Somebody','Usher feat. Lil Jon & Ludacris|Yeah!','The Killers|Mr. Brightside','Walk The Moon|Shut Up and Dance','Dua Lipa|Levitating','Queen|Don\'t Stop Me Now','Outkast|Hey Ya!','ABBA|Dancing Queen'].sort());
-   expect(all.filter(r=>!r.fromUpload)).toEqual([]); // zero additions: honest gap, nothing invented
+   const additions=all.filter(r=>!r.fromUpload);
+   expect(additions).toHaveLength(14);
+   expect(additions.every(r=>r.catalogueDecade&&r.metaProv?.genre==='catalogue')).toBe(true);
+   expect(additions.every(r=>r.year===undefined||r.metaProv?.year==='provider')).toBe(true);
    expect(all.some(r=>/YMCA|Cha Cha Slide|Cupid Shuffle/i.test(r.song))).toBe(false);
-   expect(await page.getByText('Estimated track-count gap',{exact:false}).count()).toBeGreaterThan(0);
-   fs.writeFileSync(path.join(diagnostics,'wedding-fit-batch.json'),JSON.stringify({conditions:'synthetic real-route batch in isolated Electron profile; AI suggestions + online details from tests/fit/realCacheRows.json (legacy cache labels decode as estimates); strict decades unchanged; Last.fm unavailable; built-in catalogue live; no owned library',additions:[]},null,1));
+   fs.writeFileSync(path.join(diagnostics,'wedding-candidate-stage.json'),JSON.stringify({conditions:'CONTROLLED isolated Electron event route, not original native outcome. Frozen cache guesses cannot pass strict decades; complete catalogue alternatives retain known decade/genre and compete through rankPool. Last.fm unavailable; synthetic library.',additions},null,1));
    // Reopen the saved event through the route: the fit choices must restore from the persisted snapshot.
    await page.evaluate(id=>{window.__testState.page='event';window.__testState.eventId=id;window.__rerender();},created.id);await page.waitForTimeout(1500);
    await page.getByRole('button',{name:/Track expansion/}).first().click();await page.waitForTimeout(300);
    expect(await page.locator('#fit-familiarity').inputValue()).toBe('familiar');
    expect(await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).getAttribute('aria-checked')).toBe('true');
    expect(all.filter(r=>r.fromUpload).length).toBe(10);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))[created.id].lists).toEqual(created.lists);
    expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
  });
  await check('held-out slow risk: exact similarity bounded, estimates retained, strong low both excluded, save/reopen preserves requests',async()=>{
