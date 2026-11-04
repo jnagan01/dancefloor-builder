@@ -430,6 +430,31 @@ try{
    expect(lengths()).toEqual(expected);
  });
 
+ await check('versions drawer: only same-work files listed; fuzzy title matches hidden; exact selection kept',async()=>{
+   await app.close();
+   const dir=path.join(library,'versions');fs.mkdirSync(path.join(dir,'b'),{recursive:true});
+   const lib=[{filePath:path.join(dir,'Snow Patrol - Chasing Cars.mp3'),artist:'Snow Patrol',title:'Chasing Cars'},{filePath:path.join(dir,'b','Snow Patrol - Chasing Cars.mp3'),artist:'Snow Patrol',title:'Chasing Cars (Live)'},{filePath:path.join(dir,'Tiesto - Chasing Summers.mp3'),artist:'Tiësto',title:'Chasing Summers'},{filePath:path.join(dir,'Walking On Cars - Speeding Cars.mp3'),artist:'Walking On Cars',title:'Speeding Cars'},{filePath:path.join(dir,'ALMA - Chasing Highs.mp3'),artist:'ALMA',title:'Chasing Highs'}];
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib}));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const request={artist:'Snow Patrol',song:'Chasing Cars',fromUpload:true};
+   const backendBefore={V:{id:'V',name:'Versions',updated_at:'2026-11-04T10:00:00Z',inputs:{eventName:'Versions',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[`warmUp:0:${dedupeKey(request.artist,request.song)}`]:{paths:[lib[0].filePath],confirmed:true}}}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(backendBefore));
+   await launch();
+   await page.getByRole('button',{name:'Details for Snow Patrol – Chasing Cars'}).first().click();
+   await expect(page.getByTestId('detail-exact-file')).toHaveText(lib[0].filePath);
+   const region=page.getByRole('region',{name:'Version comparison'});
+   await expect(region).toBeVisible();
+   await expect(region).not.toContainText('Chasing Summers');await expect(region).not.toContainText('Speeding Cars');await expect(region).not.toContainText('Chasing Highs');
+   const rows=await page.getByTestId('detail-version-row').allTextContents();
+   expect(rows.length).toBeLessThanOrEqual(2);expect(rows[0]).toContain('shown');
+   if(rows.length===2) expect(rows[1]).toContain('different version');
+   await expect(page.getByTestId('detail-selection-mismatch')).toHaveCount(0);
+   await page.keyboard.press('Escape');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).V.lists.selections).toEqual(backendBefore.V.lists.selections); // drawer never changes the saved selection
+ });
+
  await check('preparation policies: 31,250 library, wrong AI artists and holiday additions filtered, requests retained, exact clean versions and honest gaps',async()=>{
    await app.close();
    const defs=[
