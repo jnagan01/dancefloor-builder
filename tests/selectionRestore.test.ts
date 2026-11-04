@@ -218,3 +218,40 @@ describe("real event route: complete saved records survive open/save/reopen", ()
     } finally { vi.useRealTimers(); }
   });
 });
+
+describe("real event route: explicit clears and delayed picks", () => {
+  const open = async (selections: object) => { const h = harness({ rows: { A: rowOf(selections) } }); await h.flush(); const lib = vdj.buildLibrary(tracks as any); h.lib = lib; h.library(lib); await h.flush(); return h; };
+  it.each([["explicit clear", (h: any) => h.current.updateMatch(k("peak", 0, common), { status: "Missing From Library", confidence: 0, confirmed: false, trackIndex: undefined, alternatives: [], extraTrackIndices: [] })],
+           ["Unselect all (review mode none)", (h: any) => h.current.applyReviewMode("none", "peak")]])("%s persists an empty record and reopen with a perfect match stays unlinked", async (_n, clear) => {
+    vi.useFakeTimers();
+    try {
+      const h = await open({ [k("peak", 0, common)]: sel("/lib/common-be.mp3") });
+      expect(pathOf(h, "peak", 0, common)).toBe("/lib/common-be.mp3");
+      clear(h); await h.flush(); await vi.advanceTimersByTimeAsync(1500);
+      const saved = h.requests.at(-1).lists.selections;
+      expect(saved[k("peak", 0, common)]).toEqual({ paths: [], confirmed: false });
+      h.unmount();
+      const re = harness({ rows: { A: { ...rowOf(saved), inputs: h.requests.at(-1).inputs } } }); await re.flush(); re.lib = h.lib; re.library(h.lib); await re.flush();
+      const m = re.current.matches[k("peak", 0, common)];
+      expect(m.trackIndex).toBeUndefined(); expect(m.confirmed).toBe(false);
+      re.edit("Again"); await vi.advanceTimersByTimeAsync(1500);
+      expect(re.requests.at(-1).lists.selections[k("peak", 0, common)]).toEqual({ paths: [], confirmed: false });
+      re.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+  it("delayed picked file keeps its file when new/old library indices are swapped", async () => {
+    vi.useFakeTimers();
+    try {
+      const h = await open({ [k("peak", 1, queen)]: sel("/lib/queen.mp3") });
+      h.current.pickLocalFileForMatch(k("peak", 1, queen), { name: "queen-pick.mp3", size: 1, path: "/new/queen-pick.mp3" }); await h.flush();
+      const lib2 = vdj.buildLibrary([{ artist: "Queen", title: "Dont Stop Me Now (Pick)", filePath: "/new/queen-pick.mp3" }, ...[...tracks].reverse()] as any);
+      const pickAt = lib2.tracks.findIndex((t: any) => t.filePath === "/new/queen-pick.mp3");
+      // Precondition: the new index names a different file in the old library.
+      expect(h.lib.tracks[pickAt]?.filePath).toBeDefined(); expect(h.lib.tracks[pickAt].filePath).not.toBe("/new/queen-pick.mp3");
+      h.lib = lib2; h.library(lib2); await h.flush();
+      expect(pathOf(h, "peak", 1, queen)).toBe("/new/queen-pick.mp3");
+      expect(pathOf(h, "peak", 0, common)).toBe("/lib/common-be.mp3");
+      h.unmount();
+    } finally { vi.useRealTimers(); }
+  });
+});
