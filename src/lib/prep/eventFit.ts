@@ -2,6 +2,7 @@ import { attrSource, type ProvRow } from "./provenance";
 import { sourceLabel, tierOf, type MetaSource } from "./metaConfidence";
 import { additionKeys } from "../additionIdentity";
 import { SONG_LIBRARY } from "../songLibrary";
+import { fmtListeners, type CommunityEvidence } from "./communityEvidence";
 
 /**
  * Optional, event-scoped "event fit" choices for AUTOMATIC additions and the preparation panel.
@@ -22,6 +23,8 @@ export interface FitFacts {
   popularity?: number; popularitySource?: MetaSource;
   energy?: number; energySource?: MetaSource;
   danceability?: number; danceabilitySource?: MetaSource;
+  /** Exact-track Last.fm community tags/listeners (advisory; runtime-only, never persisted in snapshots). */
+  community?: CommunityEvidence;
 }
 
 /** Strict reader for persisted inputs / backups / quality samples. Returns undefined for absent or empty choices. */
@@ -112,6 +115,8 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
       // Advisory only: small bonus, never treated as familiarity evidence that lifts similarity.
       r.lines.push({ kind: "familiarTrack", text: `${popText(pop, f.popularitySource)} (advisory estimate)`, points: 0.35 });
     }
+    const lis = f.community?.listeners;
+    if (lis !== undefined && lis >= 250_000) r.lines.push({ kind: "familiarTrack", text: `Last.fm listeners ${fmtListeners(lis)} for this exact track (community count, advisory — not proof this crowd knows it)`, points: lis >= 1_000_000 ? 0.5 : 0.25 });
     if (c.origin === "catalogue" || (c.artist && c.song && inCrowdCatalogue(c.artist, c.song))) { r.lines.push({ kind: "familiarTrack", text: "In the built-in crowd-standards catalogue (app curation, not chart data)", points: 1 }); r.familiarEvidence = true; }
   } else if (fit.familiarity === "discovery" && pop !== undefined && ps === "strong") {
     if (pop <= 5) r.lines.push({ kind: "discoveryTrack", text: `${popText(pop, f.popularitySource)}: less-common pick (discovery)`, points: 0.75 });
@@ -126,11 +131,24 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
       r.lines.push({ kind: "slowEstimate", text: `Energy ${e}/10 (${sourceLabel(f.energySource)}) and danceability ${d}/10 (${sourceLabel(f.danceabilitySource)}) suggest low-both slow risk — ranked lower, not confirmed slow (advisory)`, points: -3 });
       r.similarityCap = 1;
     }
+    // Independent exact-track community tags: explicit slow/ballad tags lower rank (advisory, never exclude); explicit
+    // dance/party tags or verified upbeat energy+danceability make it a visible conflict instead of a penalty.
+    const cm = f.community;
+    const verifiedUpbeat = e !== undefined && d !== undefined && es === "strong" && ds === "strong" && e >= 5 && d >= 5 && (e >= 7 || d >= 7);
+    if (cm?.slowTags.length) {
+      const tags = cm.slowTags.map(t => `"${t}"`).join(", ");
+      if (cm.upbeatTags.length || verifiedUpbeat) (r.uncertain ??= []).push(`Last.fm community tags ${tags} conflict with ${cm.upbeatTags.length ? `tags ${cm.upbeatTags.map(t => `"${t}"`).join(", ")}` : `verified energy ${e}/10 and danceability ${d}/10`}: not classified slow or penalised`);
+      else if (r.exclude) { /* strong evidence already decides */ }
+      else if (r.lines.some(l => l.kind === "slowEstimate")) (r.uncertain ??= []).push(`Last.fm community tags ${tags} agree with the slow-risk estimate (advisory, not counted twice)`);
+      else { r.lines.push({ kind: "slowEstimate", text: `Last.fm community tags ${tags} for this exact track — ranked lower, not confirmed slow (advisory)`, points: -2 }); r.similarityCap = 1; }
+    } else if (cm?.upbeatTags.length && r.lines.some(l => l.kind === "slowEstimate")) (r.uncertain ??= []).push(`Last.fm community tags ${cm.upbeatTags.map(t => `"${t}"`).join(", ")} contradict the low energy/danceability estimate: slow risk uncertain`);
+    const communitySlow = !!cm?.slowTags.length && !cm.upbeatTags.length;
     const conflict = e !== undefined && d !== undefined && ((e <= 4 && d >= 7) || (d <= 4 && e >= 7));
     if (conflict) (r.uncertain ??= []).push(`Energy ${e}/10 (${sourceLabel(f.energySource)}) and danceability ${d}/10 (${sourceLabel(f.danceabilitySource)}) conflict for slow avoidance: a groove is possible; not classified slow or penalised`);
     // Positive estimates cannot rescue questionable/unknown fit. Verified popularity still describes recognition,
     // not dance suitability; retain half of its familiarity points when upbeat support is absent.
-    const supported = e !== undefined && d !== undefined && es !== "unknown" && ds !== "unknown" && e >= 5 && d >= 5 && (e >= 7 || d >= 7);
+    const supported = e !== undefined && d !== undefined && es !== "unknown" && ds !== "unknown" && e >= 5 && d >= 5 && (e >= 7 || d >= 7) && !communitySlow;
+    for (const l of r.lines) if (l.kind === "familiarTrack" && l.points > 0 && /^Last\.fm listeners/.test(l.text) && !supported) { l.points = 0; (r.uncertain ??= []).push("Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported"); }
     for (const l of r.lines) if (l.kind === "familiarTrack" && l.points > 0 && /Track popularity/.test(l.text) && !supported) {
       if (ps === "estimate") { l.points = 0; (r.uncertain ??= []).push("Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported"); }
       else { l.points /= 2; l.text += " — counted half: recognition does not prove upbeat dance fit"; }
