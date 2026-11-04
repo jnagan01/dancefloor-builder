@@ -47,13 +47,23 @@ export async function runCommunityBatch(songs: Array<{ artist: string; song: str
         const u = new URL("https://ws.audioscrobbler.com/2.0/");
         // Query drops only clean/radio labels; the reply is validated against the ORIGINAL artist/title (exact version).
         for (const [a, b] of Object.entries({ method: "track.getInfo", artist: s.artist, track: providerQueryTitle(s.song), autocorrect: "0", api_key: key, format: "json" })) u.searchParams.set(a, b);
+        // Wall-clock guard after every await: a microtask may resolve past the cutoff before the timer callback runs.
+        // Overall cutoff => stop (no writes, no scheduling); per-call cutoff => abort, record timeout, never cache.
+        const pastCutoff = (): "stop" | "late" | null => {
+          const now = Date.now();
+          if (stopped || now >= end) { stopped = true; ac.abort(); return "stop"; }
+          if (now >= callEnd) { ac.abort(); return "late"; }
+          return null;
+        };
         const res = await within(Promise.resolve().then(() => fetcher(u, { headers: { "User-Agent": "SetArchitect/1.2" }, signal: ac.signal })), left(), late);
-        if (stopped) return;
-        if (res === LATE) { out[i] = { ...s, status: "timeout" }; continue; }
+        let g = pastCutoff();
+        if (g === "stop") return;
+        if (res === LATE || g === "late") { out[i] = { ...s, status: "timeout" }; continue; }
         if (!res.ok) { out[i] = { ...s, status: "failed" }; continue; }
         const j = await within(Promise.resolve().then(() => res.json() as Promise<Record<string, unknown>>), left(), late);
-        if (stopped) return;
-        if (j === LATE) { out[i] = { ...s, status: "timeout" }; continue; }
+        g = pastCutoff();
+        if (g === "stop") return;
+        if (j === LATE || g === "late") { out[i] = { ...s, status: "timeout" }; continue; }
         if (typeof j.error === "number") { if (j.error === 6) { cache.set(ck, { at: Date.now(), v: null }); out[i] = { ...s, status: "none" }; } else out[i] = { ...s, status: "failed" }; continue; }
         const ev = parseCommunityTrackInfo(j, s.artist, s.song) ?? null;
         if (cache.size > 5000) cache.clear();
