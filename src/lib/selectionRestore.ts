@@ -1,4 +1,4 @@
-import { dedupeKey, songKeys } from "@/lib/danceFloor";
+import { dedupeKey, normalizeKey, songKeys } from "@/lib/danceFloor";
 
 export type SavedSelection = { paths: string[]; excluded?: boolean; confirmed?: boolean };
 export type SelectionMap = Record<string, SavedSelection>;
@@ -35,6 +35,9 @@ export function legacyIdentityMatches(identity: string, song: Row): boolean {
   if (bar <= 0 || bar === identity.length - 1) return false;
   const a = identity.slice(0, bar), t = identity.slice(bar + 1);
   if (dedupeKey(a, t) === dedupeKey(song.artist, song.song)) return true;
+  // Older spellings normalized the row's own artist/title without later title clean-up (e.g. "Song - Live").
+  const na = normalizeKey(song.artist), nt = normalizeKey(song.song);
+  if (nt && [na, na.replace(/^(the|a)\s+/, "")].some(x => x && `${x}|${nt}` === identity)) return true;
   const theirs = new Set(songKeys(a, t));
   return songKeys(song.artist, song.song).some(k => theirs.has(k));
 }
