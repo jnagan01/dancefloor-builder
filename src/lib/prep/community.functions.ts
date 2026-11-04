@@ -33,6 +33,7 @@ export async function runCommunityBatch(songs: Array<{ artist: string; song: str
   let next = 0;
   const worker = async () => {
     while (!stopped && next < songs.length) {
+      if (Date.now() >= end) { stopped = true; return; } // overall deadline reached: never schedule another call
       const i = next++, s = songs[i]!;
       const ck = `${s.artist.toLowerCase()}||${s.song.toLowerCase()}`;
       const hit = cache.get(ck);
