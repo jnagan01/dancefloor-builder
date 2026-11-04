@@ -27,6 +27,7 @@ const minReason = (a?: string, b?: string) => (!a ? b : !b ? a : a <= b ? a : b)
 export function createCandidatePool<R extends PoolRow, S>(o: PoolOptions<R, S>) {
   const map = o.map ?? new Map<string, PoolEntry<R, S>>();
   let alias = new AdditionKeySet();
+  const credits = new Map<string, { artist: string; song: string }[]>();
   const owned = (idx: number, reason: string | undefined, ai: boolean | undefined) => ({ ...o.ownedRow(idx, reason), aiSuggestion: ai });
   function offer(row: R, prefer?: S): boolean {
     if (!row.artist || !row.song || o.taken(row.artist, row.song)) return false;
@@ -40,22 +41,31 @@ export function createCandidatePool<R extends PoolRow, S>(o: PoolOptions<R, S>) 
         const worst = [...map.entries()].sort((a, b) => keyFor(b[1].row).localeCompare(keyFor(a[1].row)))[0];
         if (!worst || keyFor(row).localeCompare(keyFor(worst[1].row)) >= 0) return false;
         map.delete(worst[0]);
+        credits.delete(worst[0]);
         alias = new AdditionKeySet();
-        for (const [key, entry] of map) alias.add(entry.row.artist, entry.row.song, key);
+        for (const [key, entry] of map) {
+          alias.add(entry.row.artist, entry.row.song, key);
+          for (const credit of credits.get(key) ?? []) alias.absorb(credit.artist, credit.song, key);
+        }
       }
       const key = o.identity(row.artist, row.song);
-      map.set(key, exact !== undefined ? { row: o.merge(owned(exact, row.aiReason, row.aiSuggestion), row), prefer, trackIdx: exact } : { row, prefer });
+      const file = exact !== undefined ? owned(exact, row.aiReason, row.aiSuggestion) : undefined;
+      map.set(key, file ? { row: o.identity(file.artist, file.song) === key ? o.merge(file, row) : file, prefer, trackIdx: exact } : { row, prefer });
+      credits.set(key, [{ artist: row.artist, song: row.song }]);
       alias.add(row.artist, row.song, key);
       return true;
     }
     if (group === undefined) return false;
     alias.absorb(row.artist, row.song, group);
+    const observed = credits.get(group);
+    if (observed && !observed.some(c => c.artist === row.artist && c.song === row.song)) observed.push({ artist: row.artist, song: row.song });
     const reason = minReason(old.row.aiReason, row.aiReason);
     const ai = old.row.aiSuggestion || row.aiSuggestion || undefined;
     if (exact !== undefined && (old.trackIdx === undefined || exact < old.trackIdx)) {
       const file = owned(exact, reason, ai);
       old.row = o.identity(file.artist, file.song) === o.identity(old.row.artist, old.row.song) ? o.merge(file, old.row) : file;
-      old.row = o.merge(old.row, row); old.trackIdx = exact;
+      if (o.identity(old.row.artist, old.row.song) === o.identity(row.artist, row.song)) old.row = o.merge(old.row, row);
+      old.trackIdx = exact;
     } else if (old.trackIdx === undefined) {
       const merged = o.merge(old.row, row);
       const takeNew = o.identity(row.artist, row.song) < o.identity(old.row.artist, old.row.song);

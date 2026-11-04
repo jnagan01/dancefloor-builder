@@ -34,3 +34,10 @@ it('arbitrary remix has no standard catalogue familiarity and no-fit remains a n
  expect(evaluateFit({familiarity:'familiar'},c).familiarEvidence).toBe(false);
  expect(evaluateFit(undefined,rowCandidate(catalogueCandidates({uploaded:[],prefs,expand:true},CATALOGUE)[0].row,'catalogue'))).toEqual({lines:[],familiarEvidence:false});
 });
+it('saturation eviction retains corroborated credit aliases and never lends metadata to a different owned identity',()=>{
+ const p=createCandidatePool<any,string>({cap:2,taken:()=>false,identity:songIdentity,sectionRank:()=>0,admissionKey:r=>r.artist.startsWith('A')?'0':'1',exactOwned:()=>undefined,ownedRow:()=>({}),merge:(a,b)=>({...a,bpm:a.bpm??b.bpm})});
+ p.offer({artist:'A',song:'Tune'});p.offer({artist:'A feat. B',song:'Tune'});p.offer({artist:'Z',song:'Other'});p.offer({artist:'C',song:'New'});
+ p.offer({artist:'B & A',song:'Tune'});expect(p.map.size).toBe(2);expect([...p.map.values()].filter(e=>e.row.song==='Tune')).toHaveLength(1);
+ const q=createCandidatePool<any,string>({cap:2,taken:()=>false,identity:songIdentity,sectionRank:()=>0,exactOwned:()=>0,ownedRow:()=>({artist:'A',song:'Tune (Remix)'}),merge:(a,b)=>({...a,bpm:b.bpm})});
+ q.offer({artist:'A',song:'Tune',bpm:120});expect([...q.map.values()][0].row.bpm).toBeUndefined();
+});
