@@ -1378,21 +1378,41 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }
         }
 
-        // Exact-track community evidence (Last.fm tags/listeners), only while an event-fit choice is active, BEFORE
-        // ranking. Runtime-only side map: never written into rows, snapshots or the library. Bounded: one attempt per
-        // song per generation, only songs that pass eligibility, 20 per request, ≤ 40 songs, 12 s client cutoff;
-        // failures/timeouts stay unknown.
+        // Exact-track community evidence (Last.fm tags/listeners) BEFORE ranking, only when it can change the ranking:
+        // "Favor familiar hits" (listener hint) or "Avoid slow" (tags). Discovery-only never fetches. Runtime-only side
+        // map: never written into rows, snapshots or the library. Bounded: songs that pass eligibility, one attempt per
+        // song per generation, 20 per request, ≤ 40 songs, 12 s client cutoff. Budget priority = a deterministic
+        // preliminary shared ranking WITHOUT community evidence (identity order for anything it hides); the final
+        // ranking below then reuses the same scorer with the evidence. Unattempted songs stay unknown and are reported.
         const community = new Map<string, CommunityEvidence>();
         const fitNow = normalizeEventFit(eventFit);
-        if (fitNow && pool.size) {
+        const baseCandidate = (p: Pooled) => {
+          if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
+          return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
+        };
+        if (fitNow && (fitNow.avoidSlow || fitNow.familiarity === "familiar") && pool.size) {
           const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
-          const order = [...pool.values()].filter((p) => addedAllowed(p.row) && !strictLimitFailure(p.row, strictLimits)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)));
+          const candidatesForLookup = [...pool.values()].filter((p) => addedAllowed(p.row) && !strictLimitFailure(p.row, strictLimits)).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
+          const prelim = rankPool(candidatesForLookup, baseCandidate, rankCtx([...r.warmUp, ...r.transition, ...r.peak])).map((x) => x.item);
+          const prelimSet = new Set(prelim);
+          const order = [...prelim, ...candidatesForLookup.filter((p) => !prelimSet.has(p))];
           const rep = await cg.gather(order.map((p) => ({ artist: p.row.artist, song: p.row.song })));
           if (genTokenRef.current !== myToken) return;
           if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
-          let unavailable = rep.failedSongs + rep.skippedAfterTimeout;
-          for (const p of order) { const c = cg.get(p.row); if (c?.evidence) community.set(factsKey(p.row), c.evidence); else if (c && (c.status === "failed" || c.status === "timeout")) unavailable++; }
-          if (unavailable) toast.info(`Last.fm community tags couldn't be checked for ${unavailable} candidate track${unavailable === 1 ? "" : "s"}; their slow/familiarity evidence stays unknown.`);
+          let unavailable = 0, disabled = 0, unattempted = 0;
+          const counted = new Set<string>();
+          for (const p of order) {
+            const k = factsKey(p.row); if (counted.has(k)) continue; counted.add(k);
+            const c = cg.get(p.row);
+            if (c?.evidence) community.set(k, c.evidence);
+            else if (c?.status === "disabled") disabled++;
+            else if (c?.status === "failed" || c?.status === "timeout") unavailable++;
+            else if (!c) { if (cg.wasAttempted(p.row)) unavailable++; else unattempted++; }
+          }
+          const s = (n: number) => (n === 1 ? "" : "s");
+          if (disabled) toast.info(`Last.fm isn't available, so community tags and listener counts weren't checked for ${disabled} candidate track${s(disabled)}. Only that community evidence is unknown; other details are kept.`);
+          if (unavailable) toast.info(`Last.fm community tags couldn't be checked for ${unavailable} candidate track${s(unavailable)} (no reply in time or an error). Only that community evidence is unknown; other details are kept.`);
+          if (unattempted) toast.info(`${unattempted} lower-ranked candidate track${s(unattempted)} weren't checked on Last.fm (per-run limit of 40). Their community evidence is unknown; nothing was assumed.`);
         }
         const withCommunity = <C extends { fit?: FitFacts }>(c: C, row: { artist: string; song: string }): C => { const e = community.get(factsKey(row)); return e ? { ...c, fit: { ...(c.fit ?? {}), community: e } } : c; };
 
@@ -1409,10 +1429,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         }).map(([, p]) => p).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         const room = sectionOrder.reduce((n, k) => n + Math.max(0, sectionTargetFor(r, k) - r[k].length), 0);
         const rankStats: Parameters<typeof rankPool>[4] & object = {};
-        const ranked = rankPool(eligible, (p) => {
-          if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return withCommunity({ ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }, p.row); }
-          return withCommunity(rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai"), p.row);
-        }, rankCtx([...r.warmUp, ...r.transition, ...r.peak]), room, rankStats);
+        const ranked = rankPool(eligible, (p) => withCommunity(baseCandidate(p), p.row), rankCtx([...r.warmUp, ...r.transition, ...r.peak]), room, rankStats);
         for (const { item, rec } of ranked) {
           const k = item.prefer && r[item.prefer].length < sectionTargetFor(r, item.prefer) ? item.prefer : sectionOrder.find((x) => r[x].length < sectionTargetFor(r, x));
           if (!k) break;

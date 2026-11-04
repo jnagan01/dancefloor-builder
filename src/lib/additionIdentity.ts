@@ -32,10 +32,12 @@ export function parseCredit(artist: string): Credit {
   return { primary, set };
 }
 
-const LABEL = /^(?:clean|dirty|explicit|uncensored|radio edit|radio version|radio clean|clean edit|clean version|clean radio edit|dirty version|explicit version|edited|edited version)$/;
+export const LABEL = /^(?:clean|dirty|explicit|uncensored|radio edit|radio version|radio clean|clean edit|clean version|clean radio edit|dirty version|explicit version|edited|edited version)$/;
 /** Title identity keeping every remix/live/acoustic/extended/named-edit descriptor and all bare title words. Removes
  * only bracketed or dash-suffix featured credits, a bracketed/suffix clean/dirty/radio-edit LABEL, and an embedded copy
  * of the row's own full credit ("Artist - Title"). */
+/** True when a bracket/suffix text is only a clean/dirty/radio-edit label (the same rule versionTitleIdentity uses). */
+export const isVersionLabel = (text: string) => LABEL.test(tidy(fold(text)));
 export function versionTitleIdentity(artist: string, song: string): string {
   let s = fold(song).trim();
   s = s.replace(/[([{]\s*(?:feat\.?|ft\.?|featuring|with)\s+[^)\]}]*[)\]}]/g, " ");

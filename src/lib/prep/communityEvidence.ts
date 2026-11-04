@@ -1,4 +1,4 @@
-import { additionKeys, parseCredit, versionTitleIdentity } from "../additionIdentity";
+import { additionKeys, isVersionLabel, parseCredit, versionTitleIdentity } from "../additionIdentity";
 import { cleanText } from "./lookupParse";
 
 /**
@@ -28,6 +28,18 @@ const SLOW = new Set(["ballad", "ballads", "power ballad", "power ballads", "slo
 const UPBEAT = new Set(["dance", "party", "upbeat", "disco", "dancefloor", "dance floor", "energetic", "party songs", "party anthem", "party anthems", "dance party"]);
 const normTag = (s: string) => cleanText(s, 60).toLowerCase().replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
 
+/** Provider QUERY title: removes only bracketed or dash-suffix clean/dirty/radio-edit labels (the labels the identity
+ *  rule already ignores). Remix/live/acoustic/extended/intro descriptors, featured credits, punctuation, case and all
+ *  other title words are kept. The response is still validated against the ORIGINAL request. */
+export function providerQueryTitle(song: string): string {
+  let s = String(song || "");
+  let prev: string;
+  do { prev = s; s = s.replace(/\s*[([{]([^)\]}]*)[)\]}]\s*$/, (all, inner: string) => (isVersionLabel(inner) ? "" : all)); } while (s !== prev);
+  s = s.replace(/\s+[-–—]\s+([^-–—]+)$/, (all, tail: string) => (isVersionLabel(tail) ? "" : all));
+  s = s.replace(/\s*[([{]([^)\]}]*)[)\]}]/g, (all, inner: string) => (isVersionLabel(inner) ? " " : all)).replace(/\s+/g, " ").trim();
+  return s || String(song || "").trim();
+}
+
 /** True when the provider's artist/title is the same version-aware work as the request. */
 export function sameTrackIdentity(reqArtist: string, reqSong: string, gotArtist: string, gotSong: string): boolean {
   if (!gotArtist || !gotSong) return false;
@@ -45,8 +57,7 @@ export function parseCommunityTrackInfo(body: unknown, artist: string, song: str
   const gotArtist = cleanText(typeof t.artist === "object" && t.artist ? (t.artist as { name?: unknown }).name : t.artist, 200);
   const gotSong = cleanText(t.name);
   if (!sameTrackIdentity(artist, song, gotArtist, gotSong)) return undefined;
-  const n = Number(t.listeners);
-  const listeners = Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
+  const listeners = readListeners(t.listeners);
   const raw = (t.toptags as { tag?: unknown } | undefined)?.tag;
   const tags = (Array.isArray(raw) ? raw : raw ? [raw] : []).slice(0, COMMUNITY_TOP_TAGS).map((x: { name?: unknown }) => normTag(String(x?.name ?? ""))).filter(Boolean);
   const enough = listeners !== undefined && listeners >= COMMUNITY_MIN_LISTENERS_FOR_TAGS;
@@ -56,6 +67,16 @@ export function parseCommunityTrackInfo(body: unknown, artist: string, song: str
   return { source: "lastfm", ...(listeners !== undefined ? { listeners } : {}), slowTags, upbeatTags };
 }
 
+/** Listener count from a provider field: absent/null/empty/non-numeric/negative/unsafe stays unknown (never 0 by
+ *  coercion); valid values are integers below the same cap readCommunity accepts. */
+export const MAX_LISTENERS = 1e10;
+export function readListeners(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isInteger(v) && v >= 0 && v < MAX_LISTENERS ? v : undefined;
+  if (typeof v !== "string" || !/^\d{1,10}$/.test(v.trim())) return undefined;
+  const n = Number(v.trim());
+  return n < MAX_LISTENERS ? n : undefined;
+}
+
 /** Strict reader for frozen quality samples (additive optional field). */
 export function readCommunity(v: unknown): CommunityEvidence | undefined {
   if (v === undefined) return undefined;
@@ -63,7 +84,7 @@ export function readCommunity(v: unknown): CommunityEvidence | undefined {
   const o = v as Record<string, unknown>;
   for (const k of Object.keys(o)) if (!["source", "listeners", "slowTags", "upbeatTags"].includes(k)) throw new Error("Invalid community evidence");
   if (o.source !== "lastfm") throw new Error("Invalid community evidence");
-  if (o.listeners !== undefined && !(typeof o.listeners === "number" && Number.isInteger(o.listeners) && o.listeners >= 0 && o.listeners < 1e10)) throw new Error("Invalid community evidence");
+  if (o.listeners !== undefined && !(typeof o.listeners === "number" && Number.isInteger(o.listeners) && o.listeners >= 0 && o.listeners < MAX_LISTENERS)) throw new Error("Invalid community evidence");
   const tags = (x: unknown, allowed: Set<string>) => { if (!Array.isArray(x) || x.length > COMMUNITY_TOP_TAGS || x.some(t => typeof t !== "string" || !allowed.has(t))) throw new Error("Invalid community evidence"); return [...x] as string[]; };
   return { source: "lastfm", ...(o.listeners !== undefined ? { listeners: o.listeners as number } : {}), slowTags: tags(o.slowTags, SLOW), upbeatTags: tags(o.upbeatTags, UPBEAT) };
 }

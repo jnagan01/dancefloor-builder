@@ -56,3 +56,28 @@ it("provider failure: candidates stay, evidence unknown, honest notice",async()=
   expect(infos.join(" ")).toMatch(/community tags couldn.t be checked for 3 candidate tracks/);
   expect(result.find((r:any)=>r.artist==="TEST Held Out Tagged")?.rankWhy ?? "").not.toMatch(/community tags "/);
 });
+it("discovery-only: no community lookups (they could not change the ranking)",async()=>{
+  const {calls}=await run({familiarity:"discovery"},tagged);expect(calls).toEqual([]);
+});
+it("provider disabled: truthful notice limited to community evidence; other facts kept",async()=>{
+  const {result,infos}=await run({avoidSlow:true},async(r:any)=>r.data.songs.map((s:any)=>({...s,status:"disabled"})));
+  expect(infos.join(" ")).toMatch(/Last\.fm isn't available, so community tags and listener counts weren't checked for 3 candidate tracks\. Only that community evidence is unknown/);
+  const t=result.find((r:any)=>r.artist==="TEST Held Out Tagged");expect([t.energy,t.danceability]).toEqual([6,6]);
+});
+it("budget: at most 40 distinct lookups, preliminary-rank priority, unattempted eligible tracks reported once",async()=>{
+  const many=Array.from({length:45},(_,i)=>({artist:`TEST Bulk ${String(i).padStart(2,"0")}`,song:`T${i}`}));
+  const lib=vdj.buildLibrary(many.map(c=>({artist:c.artist,title:c.song,filePath:`/synthetic/bulk/${c.song}.mp3`,year:"1985",genre:"Pop"})) as vdj.VdjTrack[]);
+  const row={id,name:inputBase.eventName,updated_at:"2026-11-04T00:00:00Z",inputs:{...inputBase,eventFit:{avoidSlow:true}},lists:{warmUp:requests,transition:[],peak:[]}};
+  const calls:any[]=[];
+  // T44 gets the strongest exact-track similarity, so the preliminary shared ranking must spend budget on it first.
+  const services={recommend:async()=>({suggestions:[]}),enrich:async()=>({results:[]}),similarTracks:async()=>({availability:"ok",seeds:REQUESTS.slice(0,1).map(s=>({seed:{artist:s.artist,title:s.song},status:"ok",similar:many.map(c=>({artist:c.artist,title:c.song,match:c.song==="T44"?1:0.2}))}))}),community:async(r:any)=>{calls.push(...r.data.songs);return r.data.songs.map((s:any)=>({...s,status:"none"}));}};
+  vi.useFakeTimers();
+  try{
+    const h=harness({eventId:id,rows:{[id]:row},services,contract:true});await h.flush();h.library(lib);await h.flush();await h.current.generate();await h.flush();
+    expect(calls.length).toBe(40);expect(new Set(calls.map((s:any)=>`${s.artist}||${s.song}`)).size).toBe(40);
+    expect(calls[0]).toEqual({artist:"TEST Bulk 44",song:"T44"});
+    const notice=h.infos.filter((m:string)=>/per-run limit of 40/.test(m));expect(notice).toHaveLength(1);
+    const n=Number(notice[0].match(/^(\d+)/)[1]);expect(n).toBeGreaterThanOrEqual(5);
+    h.unmount();
+  }finally{vi.useRealTimers();}
+});

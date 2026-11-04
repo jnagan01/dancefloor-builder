@@ -455,6 +455,31 @@ try{
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections).toEqual(backendBefore.A.lists.selections); // drawer never changes the saved selection
  });
 
+ await check('versions drawer: wrong linked file stays linked/shown but never inside version rows while true variants are listed',async()=>{
+   await app.close();
+   const dir=path.join(library,'versions-wrong');fs.mkdirSync(path.join(dir,'b'),{recursive:true});
+   const lib=[{filePath:path.join(dir,'Tiesto - Chasing Summers.mp3'),artist:'Tiësto',title:'Chasing Summers'},{filePath:path.join(dir,'Snow Patrol - Chasing Cars.mp3'),artist:'Snow Patrol',title:'Chasing Cars'},{filePath:path.join(dir,'b','Snow Patrol - Chasing Cars (Live).mp3'),artist:'Snow Patrol',title:'Chasing Cars (Live)'}];
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib}));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const request={artist:'Snow Patrol',song:'Chasing Cars',fromUpload:true};
+   const backendBefore={A:{id:'A',name:'Wrong link',updated_at:'2026-11-04T11:00:00Z',inputs:{eventName:'Wrong link',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[`warmUp:0:${dedupeKey(request.artist,request.song)}`]:{paths:[lib[0].filePath],confirmed:true}}}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(backendBefore));
+   await launch();
+   await page.getByRole('button',{name:'Details for Snow Patrol – Chasing Cars'}).first().click();
+   await expect(page.getByTestId('detail-exact-file')).toHaveText(lib[0].filePath);
+   await expect(page.getByTestId('detail-selection-mismatch')).toBeVisible();
+   const rows=page.getByTestId('detail-version-row');
+   await expect(rows.first()).toBeVisible();
+   const texts=await rows.allTextContents();
+   expect(texts.length).toBeGreaterThanOrEqual(1);
+   for(const t of texts){expect(t).not.toContain('Chasing Summers');expect(t).not.toContain('shown');}
+   expect(texts.join(' ')).toContain('Chasing Cars');
+   await page.keyboard.press('Escape');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections).toEqual(backendBefore.A.lists.selections);
+ });
+
  await check('preparation policies: 31,250 library, wrong AI artists and holiday additions filtered, requests retained, exact clean versions and honest gaps',async()=>{
    await app.close();
    const defs=[

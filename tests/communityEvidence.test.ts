@@ -90,3 +90,63 @@ describe("community evidence in shared scoring (held-out renamed synthetic track
     expect(recommend(ctx([{ ...base, fit: { community: cm(["ballad"], [], 9e6) } }], undefined)).items[0].score).toBe(recommend(ctx([base], undefined)).items[0].score);
   });
 });
+
+import { providerQueryTitle, readListeners } from "../src/lib/prep/communityEvidence";
+import { __resetCommunityCache } from "../src/lib/prep/community.functions";
+describe("provider query title and listener parsing (review fixes)", () => {
+  it("drops only clean/radio labels; keeps remix/live/acoustic/intro/feat and punctuation", () => {
+    expect(providerQueryTitle("Freaking Me Out (Clean)")).toBe("Freaking Me Out");
+    expect(providerQueryTitle("Stayin' Alive (Clean) (Radio Edit)")).toBe("Stayin' Alive");
+    expect(providerQueryTitle("Song - Clean Radio Edit")).toBe("Song");
+    expect(providerQueryTitle("Get Down On It (Calvo Remix) (Clean)")).toBe("Get Down On It (Calvo Remix)");
+    expect(providerQueryTitle("Can I Kick It (Intro Clean)")).toBe("Can I Kick It (Intro Clean)");
+    expect(providerQueryTitle("Yeah! (feat. Lil Jon)")).toBe("Yeah! (feat. Lil Jon)");
+    expect(providerQueryTitle("Chasing Cars (Live)")).toBe("Chasing Cars (Live)");
+    expect(providerQueryTitle("(Clean)")).toBe("(Clean)");
+  });
+  it("listeners: absent/null/empty/garbage/negative/unsafe stay unknown, never 0", () => {
+    for (const v of [undefined, null, "", " ", "abc", "-5", "1.5", 1.5, -1, 1e10, "99999999999", NaN, Infinity]) expect(readListeners(v)).toBeUndefined();
+    expect(readListeners("0")).toBe(0); expect(readListeners("123456")).toBe(123456); expect(readListeners(42)).toBe(42);
+    const t = { track: { name: "B", artist: { name: "A" }, listeners: null, toptags: { tag: [{ name: "ballad" }] } } };
+    expect(parseCommunityTrackInfo(t, "A", "B")).toBeUndefined();
+    const big = { track: { name: "B", artist: { name: "A" }, listeners: "99999999999", toptags: { tag: [] } } };
+    expect(parseCommunityTrackInfo(big, "A", "B")).toBeUndefined();
+    const ev = parseCommunityTrackInfo({ track: { name: "B", artist: { name: "A" }, listeners: "9999999999", toptags: { tag: [] } } }, "A", "B");
+    expect(readCommunity(ev)).toEqual(ev);
+  });
+});
+
+describe("community transport (synthetic)", () => {
+  const ok = (body: unknown) => ({ ok: true, json: async () => body }) as Response;
+  it("clean/radio request queries the base title, accepts the base reply, keeps original keys; remix never accepts original", async () => {
+    __resetCommunityCache();
+    const seen: string[] = [];
+    const fetcher = (async (u: URL) => { const t = u.searchParams.get("track")!; seen.push(`${u.searchParams.get("artist")}|${t}`);
+      return ok(info(u.searchParams.get("artist")!, t.replace(/ \(Calvo Remix\)$/, ""), 500000, ["dance"])); }) as never;
+    const r = await runCommunityBatch([{ artist: "Bee Gees", song: "Stayin' Alive (Clean) (Radio Edit)" }, { artist: "Kool & The Gang", song: "Get Down On It (Calvo Remix) (Clean)" }, { artist: "Usher feat. Lil Jon", song: "Yeah!" }], "k", fetcher, 1000, 500);
+    expect(seen).toEqual(["Bee Gees|Stayin' Alive", "Kool & The Gang|Get Down On It (Calvo Remix)", "Usher feat. Lil Jon|Yeah!"]);
+    expect(r.map(x => [x.song, x.status])).toEqual([["Stayin' Alive (Clean) (Radio Edit)", "found"], ["Get Down On It (Calvo Remix) (Clean)", "none"], ["Yeah!", "found"]]);
+  });
+  it("fetch and json resolving AFTER the deadlines never write results or poison the cache; no scheduling after stop", async () => {
+    __resetCommunityCache();
+    const calls: string[] = [];
+    const late = (ms: number, v: unknown) => new Promise(r => setTimeout(() => r(v), ms));
+    const slowFetch = (async (u: URL) => { const t = u.searchParams.get("track")!; calls.push(t);
+      if (t === "SlowFetch") return late(150, ok(info("Z", t, 9e5, ["ballad"])));
+      if (t === "SlowJson") return { ok: true, json: () => late(150, info("Z", t, 9e5, ["ballad"])) } as unknown as Response;
+      return late(5, ok(info("Z", t, 9e5, []))); }) as never;
+    const r = await runCommunityBatch([{ artist: "Z", song: "SlowFetch" }, { artist: "Z", song: "SlowJson" }], "k", slowFetch, 1000, 40);
+    expect(r.map(x => x.status)).toEqual(["timeout", "timeout"]);
+    // overall deadline: 6 songs, 4 workers, all slow → nothing scheduled after stop
+    const r2 = await runCommunityBatch(["SlowFetch", "SlowJson", "A1", "A2", "A3", "A4"].map(song => ({ artist: "Z", song: song === "SlowFetch" ? "SlowFetch" : song })), "k", (async (u: URL) => { calls.push("o:" + u.searchParams.get("track")); return late(200, ok({})); }) as never, 60, 1000);
+    expect(r2.every(x => x.status === "timeout")).toBe(true);
+    const before = calls.length;
+    await late(300, 0);
+    expect(calls.length).toBe(before);
+    expect(calls.filter(c => c.startsWith("o:"))).toHaveLength(4);
+    expect(r2).toEqual(r2.map(x => ({ ...x, status: "timeout" })));
+    // same keys again with a fast provider: cache was not poisoned by the late replies
+    const r3 = await runCommunityBatch([{ artist: "Z", song: "SlowFetch" }, { artist: "Z", song: "SlowJson" }], "k", (async (u: URL) => ok(info("Z", u.searchParams.get("track")!, 7000, ["dance"]))) as never, 1000, 500);
+    expect(r3.map(x => x.evidence?.upbeatTags)).toEqual([["dance"], ["dance"]]);
+  });
+});
