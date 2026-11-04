@@ -541,6 +541,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   }
 
 
+  // Declared before the pending-pick effect: remap must see only old-library indices.
+  // Library rebuilds re-point matches by case-sensitive file identity (indices are positional).
+  const remapTracks = useRef<VdjLibrary["tracks"] | null>(null);
+  useEffect(() => {
+    const old = remapTracks.current; remapTracks.current = mergedLibrary.tracks;
+    if (!old || old === mergedLibrary.tracks) return;
+    const roots = getFolderRoots();
+    setMatches(prev => { const next = remapMatches(prev, old, mergedLibrary.tracks, roots); matchesRef.current = next; return next; });
+  }, [mergedLibrary]);
   useEffect(() => {
     const picked = pendingFilePick.current;
     if (!picked) return;
@@ -550,14 +559,6 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     updateMatch(picked.key, {status:"Manually Matched",confidence:1,confirmed:true,trackIndex:index,alternatives:[],extraTrackIndices:[]});
   }, [mergedLibrary]);
 
-  // Library rebuilds re-point matches by case-sensitive file identity (indices are positional).
-  const remapTracks = useRef<VdjLibrary["tracks"] | null>(null);
-  useEffect(() => {
-    const old = remapTracks.current; remapTracks.current = mergedLibrary.tracks;
-    if (!old || old === mergedLibrary.tracks) return;
-    const roots = getFolderRoots();
-    setMatches(prev => { const next = remapMatches(prev, old, mergedLibrary.tracks, roots); matchesRef.current = next; return next; });
-  }, [mergedLibrary]);
   useEffect(() => {
     if (!result || !matcherOn || !mergedLibrary.tracks.length) return;
     setMatches(prev => {
@@ -756,6 +757,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (!match || !mergedLibrary) return;
       const paths = selectionPaths(match, mergedLibrary.tracks);
       if(paths.length || match.excludedFromVdj) selections[key]={...selections[key],paths,excluded:match.excludedFromVdj,confirmed:match.trackIndex==null?match.confirmed===true:exportApproved({...match,excludedFromVdj:false})};
+      // An explicit clear is a choice: persist it as an empty, unapproved record so reopen never auto-matches.
+      else if (supersededRows.current.has(key)) selections[key]={paths:[],confirmed:false};
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
