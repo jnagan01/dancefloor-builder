@@ -141,7 +141,7 @@ try{
    // SYNTHETIC real-route batch: real event screen + real ranking/save contract; AI suggestions and online details come from
    // tests/fit/realCacheRows.json (read-only metadata-cache snapshot). Not live native generation, not the original candidate pool.
    const cache=JSON.parse(fs.readFileSync(path.join(root,'tests/fit/realCacheRows.json'),'utf8'));
-   await page.evaluate(cache=>{window.__fixture.aiSuggestions=cache.map(r=>({artist:r.artist,song:r.song,reason:'synthetic fixture suggestion'}));
+   await page.evaluate(cache=>{window.__fixture.enrichRequests=[];window.__fixture.aiSuggestions=cache.map(r=>({artist:r.artist,song:r.song,reason:'synthetic fixture suggestion'}));
      window.__fixture.enrichResults=cache.map(r=>({artist:r.artist,song:r.song,energy:r.energy,danceability:r.danceability,...(r.popularity!==undefined?{popularity:r.popularity}:{}),...(r.year!==undefined?{year:r.year}:{}),source:String(r.rawCacheSource??'').startsWith('ReccoBeats')?'ReccoBeats':'AI',prov:r.metaProv}));
      window.__testState.page='event';window.__testState.eventId=undefined;window.__errors=[];window.__rerender();},cache);
    await page.waitForTimeout(400);
@@ -175,8 +175,12 @@ try{
    expect(all.filter(r=>r.fromUpload).map(rk).sort()).toEqual(['Earth, Wind & Fire|September','Mark Ronson feat. Bruno Mars|Uptown Funk','Whitney Houston|I Wanna Dance With Somebody','Usher feat. Lil Jon & Ludacris|Yeah!','The Killers|Mr. Brightside','Walk The Moon|Shut Up and Dance','Dua Lipa|Levitating','Queen|Don\'t Stop Me Now','Outkast|Hey Ya!','ABBA|Dancing Queen'].sort());
    const additions=all.filter(r=>!r.fromUpload);
    expect(additions).toHaveLength(14);
+   expect(created.inputs.decades).toEqual(['1970s','1980s','1990s','2000s','2010s','2020s']);
+   expect(additions.every(r=>created.inputs.decades.includes(r.catalogueDecade))).toBe(true);
    expect(additions.every(r=>r.catalogueDecade&&r.metaProv?.genre==='catalogue')).toBe(true);
    expect(additions.every(r=>r.year===undefined||r.metaProv?.year==='provider')).toBe(true);
+   const lookupRequests=await page.evaluate(()=>window.__fixture.enrichRequests);
+   expect(new Set(lookupRequests.map(s=>`${s.artist}|${s.song}`)).size).toBeGreaterThan(24);
    expect(all.some(r=>/YMCA|Cha Cha Slide|Cupid Shuffle/i.test(r.song))).toBe(false);
    fs.writeFileSync(path.join(diagnostics,'wedding-candidate-stage.json'),JSON.stringify({conditions:'CONTROLLED isolated Electron event route, not original native outcome. Frozen cache guesses cannot pass strict decades; complete catalogue alternatives retain known decade/genre and compete through rankPool. Last.fm unavailable; synthetic library.',additions},null,1));
    // Reopen the saved event through the route: the fit choices must restore from the persisted snapshot.
@@ -197,7 +201,8 @@ try{
      window.__fixture.enrichResults=additions.map(r=>({...r,year:1985,source:'AI',prov:{year:'provider',energy:r.src,danceability:r.src,popularity:'estimate'}}));
      window.__fixture.similarTracks={availability:'ok',seeds:['One','Two','Three','Four'].map((song,i)=>({seed:{artist:'TEST Native Client',title:song},status:'ok',similar:additions.filter(r=>i===0||r.song==='A'||r.song==='D').map(r=>({artist:r.artist,title:r.song,match:r.song==='B'?0.5:1}))}))};
      window.__testState.eventId=undefined;window.__testState.page='event';window.__errors=[];window.__rerender();},additions);
-   await page.waitForTimeout(400);await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('4');
+   // Keep this evidence-propagation fixture unsaturated now that the complete catalogue also competes.
+   await page.waitForTimeout(400);await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('6');
    await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('TEST ONLY Native Slow Risk');
    await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
    const file=path.join(temp,'held-out-risk.csv');fs.writeFileSync(file,'Artist,Song\nTEST Native Client,One\nTEST Native Client,Two\nTEST Native Client,Three\nTEST Native Client,Four\nTEST Native Request,Keep (Live)\n');
