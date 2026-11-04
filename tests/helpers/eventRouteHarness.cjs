@@ -2,7 +2,7 @@ const fs = require('node:fs'), vm = require('node:vm'), path = require('node:pat
 const root = path.resolve(__dirname, '../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 function createEventRouteHarness(actual) {
-  let source = fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
+  let source = actual.routeSource ?? fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
   // Expose actual closures in the test VM only; no production test seam or replacement logic.
   source = source.replace('  const withFileBpm =', '  capture({ applyReviewMode, updateMatch, toggleExclude, pickLocalFileForMatch, withAnalysis: (sec, songs) => withFileBpm(sec, songs), songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, exportSectionM3u, exportSectionXmlToVdj, previewReadiness, readiness, activeSection, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   source += '\nexport { SectionView };';
