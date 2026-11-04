@@ -33,4 +33,7 @@ it("reproduces the uncertain-dance-suitability report on identical pools without
   expect(row(c, "HX Kapok|Stomp").score).toBe(prev(c, "HX Kapok|Stomp").score);
   expect(row(c, "HX Larch|Ballad Of Rain").score).toBe(prev(c, "HX Larch|Ballad Of Rain").score);
   expect(row(c, "HX Juniper|Crossfade").evidence.some((e: any) => e.points < 0)).toBe(false);
+  expect(row(c, "HX Juniper|Crossfade").uncertain.join(" ")).toMatch(/Dance suitability uncertain/);
+  expect(row(c, "HX Juniper|Crossfade").score).toBeLessThan(prev(c, "HX Juniper|Crossfade").score);
+  expect(row(c, "HX Kapok|Stomp").uncertain.join(" ")).not.toMatch(/Dance suitability uncertain/);
 });
