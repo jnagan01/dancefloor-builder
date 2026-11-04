@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { parseCommunityTrackInfo, type CommunityEvidence } from "./communityEvidence";
+import { parseCommunityTrackInfo, providerQueryTitle, type CommunityEvidence } from "./communityEvidence";
 
 /**
  * Bounded exact-track Last.fm community lookup (track.getInfo, autocorrect OFF) for ranking candidates.
@@ -16,36 +16,64 @@ export interface CommunityRow { artist: string; song: string; status: CommunityS
 const CACHE_MS = 24 * 60 * 60 * 1000;
 const cache = new Map<string, { at: number; v: CommunityEvidence | null }>();
 
+const LATE = Symbol("late");
+/** Resolves to the value, or LATE once `ms` passes (timer always cleared; a later rejection is swallowed). */
+function within<T>(p: Promise<T>, ms: number, onLate: () => void): Promise<T | typeof LATE> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  p.catch(() => {});
+  return Promise.race([p, new Promise<typeof LATE>(r => { timer = setTimeout(() => { onLate(); r(LATE); }, Math.max(0, ms)); })]).finally(() => clearTimeout(timer));
+}
+
 export async function runCommunityBatch(songs: Array<{ artist: string; song: string }>, key: string | undefined, fetcher: typeof fetch = fetch, deadlineMs = 9000, callMs = 4000): Promise<CommunityRow[]> {
   if (!key) return songs.map(s => ({ ...s, status: "disabled" as const }));
   const out: CommunityRow[] = songs.map(s => ({ ...s, status: "timeout" as const }));
   const end = Date.now() + deadlineMs;
+  let stopped = false; // set at the overall deadline: no scheduling, cache writes or result writes afterwards
+  const live = new Set<AbortController>();
   let next = 0;
   const worker = async () => {
-    while (next < songs.length && Date.now() < end) {
+    while (!stopped && next < songs.length) {
       const i = next++, s = songs[i]!;
       const ck = `${s.artist.toLowerCase()}||${s.song.toLowerCase()}`;
       const hit = cache.get(ck);
       if (hit && Date.now() - hit.at < CACHE_MS) { out[i] = hit.v ? { ...s, status: "found", evidence: hit.v } : { ...s, status: "none" }; continue; }
+      const ac = new AbortController(); live.add(ac);
+      const callEnd = Math.min(end, Date.now() + callMs);
+      const left = () => callEnd - Date.now();
+      let callTimedOut = false;
+      const late = () => { callTimedOut = true; ac.abort(); };
       try {
         const u = new URL("https://ws.audioscrobbler.com/2.0/");
-        for (const [a, b] of Object.entries({ method: "track.getInfo", artist: s.artist, track: s.song, autocorrect: "0", api_key: key, format: "json" })) u.searchParams.set(a, b);
-        const res = await fetcher(u, { headers: { "User-Agent": "SetArchitect/1.2" }, signal: AbortSignal.timeout(Math.max(1, Math.min(callMs, end - Date.now()))) });
+        // Query drops only clean/radio labels; the reply is validated against the ORIGINAL artist/title (exact version).
+        for (const [a, b] of Object.entries({ method: "track.getInfo", artist: s.artist, track: providerQueryTitle(s.song), autocorrect: "0", api_key: key, format: "json" })) u.searchParams.set(a, b);
+        const res = await within(Promise.resolve().then(() => fetcher(u, { headers: { "User-Agent": "SetArchitect/1.2" }, signal: ac.signal })), left(), late);
+        if (stopped) return;
+        if (res === LATE) { out[i] = { ...s, status: "timeout" }; continue; }
         if (!res.ok) { out[i] = { ...s, status: "failed" }; continue; }
-        const j = await res.json() as Record<string, unknown>;
+        const j = await within(Promise.resolve().then(() => res.json() as Promise<Record<string, unknown>>), left(), late);
+        if (stopped) return;
+        if (j === LATE) { out[i] = { ...s, status: "timeout" }; continue; }
         if (typeof j.error === "number") { if (j.error === 6) { cache.set(ck, { at: Date.now(), v: null }); out[i] = { ...s, status: "none" }; } else out[i] = { ...s, status: "failed" }; continue; }
         const ev = parseCommunityTrackInfo(j, s.artist, s.song) ?? null;
         if (cache.size > 5000) cache.clear();
         cache.set(ck, { at: Date.now(), v: ev });
         out[i] = ev ? { ...s, status: "found", evidence: ev } : { ...s, status: "none" };
-      } catch (e) {
-        out[i] = { ...s, status: (e as Error)?.name === "TimeoutError" || Date.now() >= end ? "timeout" : "failed" };
-      }
+      } catch {
+        if (stopped) return;
+        out[i] = { ...s, status: callTimedOut ? "timeout" : "failed" };
+      } finally { live.delete(ac); }
     }
   };
-  await Promise.race([Promise.all(Array.from({ length: Math.min(4, songs.length) }, worker)), new Promise(r => setTimeout(r, deadlineMs))]);
-  return out.map(r => ({ ...r })); // snapshot: late completions cannot mutate a returned result
+  let overall: ReturnType<typeof setTimeout> | undefined;
+  await Promise.race([Promise.all(Array.from({ length: Math.min(4, songs.length) }, worker)), new Promise<void>(r => { overall = setTimeout(r, Math.max(0, end - Date.now())); })]);
+  clearTimeout(overall);
+  stopped = true;
+  for (const ac of live) ac.abort();
+  return out.map(r => ({ ...r })); // snapshot; workers can no longer write after `stopped`
 }
+
+/** Test-only: clears the in-memory cache. */
+export const __resetCommunityCache = () => cache.clear();
 
 export const lookupCommunityBatch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

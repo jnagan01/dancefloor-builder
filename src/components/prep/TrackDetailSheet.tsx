@@ -103,7 +103,7 @@ export function TrackDetailSheet({ subject, onClose, onPreview }: { subject: Det
   }
   const args = { data: { artist: subject.artist, title: subject.song } };
   const view = classifyVersions(subject.artist, subject.song, t, subject.alternatives ?? []);
-  const versions = [...(view.selected ? [{ track: view.selected.track, variant: false, shown: true }] : []), ...view.versions.map(v => ({ ...v, shown: false }))];
+  const versions = [...(view.selected?.sameWork ? [{ track: view.selected.track, variant: false, shown: true }] : []), ...view.versions.map(v => ({ ...v, shown: false }))];
   return <Sheet open onOpenChange={o => { if (!o) onClose(); }}>
     <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
       <SheetHeader>
