@@ -484,6 +484,32 @@ try{
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections).toEqual(backendBefore.A.lists.selections);
  });
 
+ for(const order of ['stale-last','stale-first']) await check(`reopen with colliding stale/current selection keys (${order}): each row keeps its own file, passive open writes nothing`,async()=>{
+   await app.close();
+   const dir=path.join(library,`collide-${order}`);fs.mkdirSync(dir,{recursive:true});
+   const lib=[['Common','Be'],['Bee Gees','Stayin Alive'],['Queen',"Don't Stop Me Now"],['Stevie Wonder','Signed Sealed Delivered'],['Usher','Yeah']].map(([artist,title])=>({filePath:path.join(dir,`${artist} - ${title}.mp3`),artist,title}));
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib}));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const [common,bee,queen,stevie,usher]=lib.map(t=>({artist:t.artist,song:t.title,fromUpload:true}));
+   const key=(i,s)=>`warmUp:${i}:${dedupeKey(s.artist,s.song)}`;
+   const current={[key(0,common)]:{paths:[lib[0].filePath],confirmed:true},[key(1,queen)]:{paths:[lib[2].filePath],confirmed:true},[key(2,usher)]:{paths:[lib[4].filePath],confirmed:true}};
+   const stale={[key(0,bee)]:{paths:[lib[1].filePath],confirmed:true},[key(1,stevie)]:{paths:[lib[3].filePath],confirmed:true},[key(3,usher)]:{paths:[lib[4].filePath],confirmed:true}};
+   const selections=order==='stale-last'?{...current,...stale}:{...stale,...current};
+   const backendBefore={A:{id:'A',name:'Collide',updated_at:'2026-11-04T12:00:00Z',inputs:{eventName:'Collide',songs:[common,queen,usher],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[common,queen,usher],transition:[],peak:[],selections}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(backendBefore));
+   await launch();
+   for(const [s,file] of [[common,lib[0]],[queen,lib[2]],[usher,lib[4]]]){
+     await page.getByRole('button',{name:`Details for ${s.artist} – ${s.song}`}).first().click();
+     await expect(page.getByTestId('detail-exact-file')).toHaveText(file.filePath);
+     await expect(page.getByTestId('detail-selection-mismatch')).toHaveCount(0);
+     await page.keyboard.press('Escape');
+   }
+   await page.waitForTimeout(2200);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(backendBefore.A); // passive reopen never rewrites
+ });
+
  await check('preparation policies: 31,250 library, wrong AI artists and holiday additions filtered, requests retained, exact clean versions and honest gaps',async()=>{
    await app.close();
    const defs=[
