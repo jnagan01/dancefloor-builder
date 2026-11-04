@@ -24,7 +24,7 @@ const enrich=async({data}:any)=>({results:data.songs.flatMap((s:any)=>extras.som
 async function run(fit:any, community:any){
   const row={id,name:inputBase.eventName,updated_at:"2026-11-04T00:00:00Z",inputs:{...inputBase,...(fit?{eventFit:fit}:{})},lists:{warmUp:requests,transition:[],peak:[]}};
   const calls:any[]=[];
-  const services={recommend:async()=>({suggestions:[]}),enrich,community:async(r:any)=>{calls.push(r.data.songs);return community(r);}};
+  const services={recommend:async()=>({suggestions:[]}),enrich,similarTracks:async()=>({availability:"ok",seeds:REQUESTS.slice(0,1).map(s=>({seed:{artist:s.artist,title:s.song},status:"ok",similar:extras.map(c=>({artist:c.artist,title:c.song,match:1}))}))}),community:async(r:any)=>{calls.push(r.data.songs);return community(r);}};
   vi.useFakeTimers();
   try{
     const h=harness({eventId:id,rows:{[id]:row},services,contract:true});await h.flush();h.library(library);await h.flush();await h.current.generate();await h.flush();
