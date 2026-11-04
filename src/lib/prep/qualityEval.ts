@@ -40,6 +40,7 @@ export function captureFromRanking(input: RecInput, items: readonly Recommendati
     const tags = r.trackId ? input.notes?.get(r.trackId)?.tags : undefined; if (tags?.length) c.tags = tags.slice(0, QUALITY_LIMITS.tags);
     if (favored.has(r.key)) c.favored = true;
     const ff = r.fit; if (ff) for (const a of ["popularity", "energy", "danceability"] as const) { const v = ff[a], src = ff[`${a}Source` as const]; if (v !== undefined && src && src !== "unknown") { c[a] = v; c[`${a}Source` as const] = src as QualityCandidate["genreSource"]; } }
+    if (ff?.community) c.community = { ...ff.community, slowTags: [...ff.community.slowTags], upbeatTags: [...ff.community.upbeatTags] };
     if (r.trackId) c.tie = tieOrder.indexOf(r.trackId);
     return c;
   });
@@ -146,5 +147,6 @@ export function describeComparison(c: Comparison, s: QualitySample): string[] {
 function sampleFit(c: QualityCandidate): FitFacts | undefined {
   const f: FitFacts = {};
   for (const a of ["popularity", "energy", "danceability"] as const) { const v = c[a], src = c[`${a}Source` as const]; if (v !== undefined && src) { f[a] = v; f[`${a}Source` as const] = src; } }
+  if (c.community) f.community = c.community;
   return Object.keys(f).length ? f : undefined;
 }
