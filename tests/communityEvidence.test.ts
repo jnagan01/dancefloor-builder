@@ -150,3 +150,32 @@ describe("community transport (synthetic)", () => {
     expect(r3.map(x => x.evidence?.upbeatTags)).toEqual([["dance"], ["dance"]]);
   });
 });
+
+describe("community wall-clock guard (clock advanced without firing timers)", () => {
+  const ok = (body: unknown) => ({ ok: true, json: async () => body }) as Response;
+  const run = async (advance: "fetch" | "json", pastOverall: boolean) => {
+    __resetCommunityCache();
+    const real = Date.now; let now = real.call(Date);
+    const spy = (Date as { now: () => number }); spy.now = () => now;
+    try {
+      const song = `Clock${advance}${pastOverall}`;
+      const fetcher = (async (u: URL) => {
+        const body = info("Z", u.searchParams.get("track")!, 7000, ["ballad"]);
+        if (advance === "fetch") { now += pastOverall ? 100000 : 5000; return ok(body); }
+        return { ok: true, json: async () => { now += pastOverall ? 100000 : 5000; return body; } } as Response;
+      }) as never;
+      const r = await runCommunityBatch([{ artist: "Z", song }], "k", fetcher, 60000, 1000);
+      expect(r[0]!.status).toBe("timeout");
+      expect(r[0]!.evidence).toBeUndefined();
+      // next lookup for same key must hit the provider again (no poisoned cache)
+      let calls = 0;
+      const r2 = await runCommunityBatch([{ artist: "Z", song }], "k", (async (u: URL) => { calls++; return ok(info("Z", u.searchParams.get("track")!, 7000, ["dance"])); }) as never, 60000, 1000);
+      expect(calls).toBe(1);
+      expect(r2[0]!.evidence?.upbeatTags).toEqual(["dance"]);
+    } finally { spy.now = real; }
+  };
+  it("late fetch past per-call cutoff", () => run("fetch", false));
+  it("late json past per-call cutoff", () => run("json", false));
+  it("late fetch past overall cutoff", () => run("fetch", true));
+  it("late json past overall cutoff", () => run("json", true));
+});
