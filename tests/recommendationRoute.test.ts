@@ -12,7 +12,7 @@ import * as isolation from '@/lib/workflowIsolation';
 import * as theory from '@/lib/musicTheory';
 import * as revisions from '@/lib/eventRevision';
 const require = createRequire(import.meta.url);
-const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
+const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance: {...dance,catalogueCandidates:()=>[]}, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
 
 // Synthetic, isolated fixtures only.
 const requests = [{ artist: 'Queen', song: 'Radio Ga Ga', fromUpload: true }, { artist: 'ABBA', song: 'Dancing Queen', fromUpload: true }];
