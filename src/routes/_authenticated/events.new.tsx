@@ -126,7 +126,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
 import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
 import { planAddToSection } from "@/lib/prep/addToSection";
-import { resolveSavedSelections, selectionBase } from "@/lib/selectionRestore";
+import { resolveSavedSelections, selectionBase, selectionPaths, matchFromPaths, remapMatches, libraryResolver } from "@/lib/selectionRestore";
 import { prepStore } from "@/lib/prep/prepStore";
 import { attrSource, decodeCacheSource, mergeMeta, metaLabel, strictLimitFailure, withProv, type StrictLimits } from "@/lib/prep/provenance";
 import { sourceLabel } from "@/lib/prep/metaConfidence";
@@ -290,7 +290,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       }) : candidates;
       next[key] = { ...previous, status: "Manually Matched", confidence: 1, confirmed: true, trackIndex: ranked[0].i, alternatives: [], extraTrackIndices: mode === "all" ? ranked.slice(1).map(c => c.i) : [] };
     });
-    if (JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, matchesRef.current))) markPersistedEdit();
+    const before = JSON.stringify(eventSnapshot(result, matchesRef.current)), had = new Set(supersededRows.current);
+    result[section].forEach((song, index) => { const key = songKey(section, index, song); if (next[key] !== matchesRef.current[key]) { supersededRows.current.add(key); if (next[key]) next[key] = { ...next[key], unresolvedPaths: undefined }; } });
+    if (JSON.stringify(eventSnapshot(result, next)) !== before) markPersistedEdit(); else supersededRows.current = had;
     matchesRef.current = next;
     setMatches(next);
   }
@@ -462,7 +464,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setActiveSection("warmUp");
     setSpotifyLink("");
     restoredEvent.current = false;
-    savedSelectionsRef.current = null; resolvedSelectionsRef.current = {}; restorePending.current = false; missingRestore.current = new Set(); restoredMatches.current = new Map();
+    savedSelectionsRef.current = null; resolvedSelectionsRef.current = {}; restorePending.current = false; supersededRows.current = new Set();
     stableCreate.current = autosave.reset();
     snapshotReadOnly.current = false; snapshotExtras.current = { inputs: {}, lists: {} };
     restoredFingerprint.current = null;
@@ -548,6 +550,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     updateMatch(picked.key, {status:"Manually Matched",confidence:1,confirmed:true,trackIndex:index,alternatives:[],extraTrackIndices:[]});
   }, [mergedLibrary]);
 
+  // Library rebuilds re-point matches by case-sensitive file identity (indices are positional).
+  const remapTracks = useRef<VdjLibrary["tracks"] | null>(null);
+  useEffect(() => {
+    const old = remapTracks.current; remapTracks.current = mergedLibrary.tracks;
+    if (!old || old === mergedLibrary.tracks) return;
+    const roots = getFolderRoots();
+    setMatches(prev => { const next = remapMatches(prev, old, mergedLibrary.tracks, roots); matchesRef.current = next; return next; });
+  }, [mergedLibrary]);
   useEffect(() => {
     if (!result || !matcherOn || !mergedLibrary.tracks.length) return;
     setMatches(prev => {
@@ -555,7 +565,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       for (const sec of ["warmUp","transition","peak"] as SectionKey[]) result[sec].forEach((song,i) => {
         const key = songKey(sec,i,song);
         const prevPath = prev[key]?.trackIndex != null ? mergedLibrary.tracks[prev[key].trackIndex]?.filePath : undefined;
-        if (!prev[key] || (prev[key].trackIndex != null && !prevPath)) next[key] = policyMatch(song,mergedLibrary);
+        if (!prev[key] || (prev[key].trackIndex != null && !prevPath && !resolvedSelectionsRef.current[key] && !prev[key].confirmed)) next[key] = policyMatch(song,mergedLibrary);
       });
       return next;
     });
@@ -740,13 +750,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // their identity-validated saved entry until a library match replaces it.
     const selections: Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}> = selectionBase(savedSelectionsRef.current, resolvedSelectionsRef.current, currentKeys);
     for (const sec of ["warmUp","transition","peak"] as SectionKey[]) nextResult[sec].forEach((song,i) => {
-      const key = songKey(sec,i,song), match = nextMatches[key];
+      const key = songKey(sec,i,song), match = nextMatches[key], saved = resolvedSelectionsRef.current[key];
+      // Untouched restored rows keep their complete saved record verbatim (paths, order, approval, exclusion).
+      if (saved && !supersededRows.current.has(key)) { selections[key] = saved; return; }
       if (!match || !mergedLibrary) return;
-      const paths = [match.trackIndex,...(match.extraTrackIndices??[])].filter((v):v is number=>typeof v==="number").map(v=>mergedLibrary.tracks[v]?.filePath).filter((v):v is string=>!!v);
-      const saved = resolvedSelectionsRef.current[key];
-      if(paths.length || match.excludedFromVdj) selections[key]={...selections[key],paths,excluded:match.excludedFromVdj,confirmed:exportApproved({...match,excludedFromVdj:false})};
-      // A saved file that is not (yet) in the library stays saved; it is never swapped for another file.
-      else if (saved?.paths.length && match.trackIndex == null && !saved.paths.some(p => mergedLibrary.tracks.some(t => t.filePath === p))) selections[key]=saved;
+      const paths = selectionPaths(match, mergedLibrary.tracks);
+      if(paths.length || match.excludedFromVdj) selections[key]={...selections[key],paths,excluded:match.excludedFromVdj,confirmed:match.trackIndex==null?match.confirmed===true:exportApproved({...match,excludedFromVdj:false})};
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
@@ -794,38 +803,32 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       // Identity-safe restore: exact current keys win; older dedupe spellings apply only when their
       // identity names the row's song. Raw stored keys are kept untouched (passive loads never write).
       savedSelectionsRef.current=lists.selections??null;
-      resolvedSelectionsRef.current=resolveSavedSelections(lists,lists.selections);restorePending.current=true;missingRestore.current=new Set();restoredMatches.current=new Map();
+      resolvedSelectionsRef.current=resolveSavedSelections(lists,lists.selections);restorePending.current=true;supersededRows.current=new Set();
       resultBoundary.current={eventId:openedEventId};
       restoredEvent.current=true;
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
     }).catch((e)=>{if(!cancelled){snapshotReadOnly.current=true;setSnapshotProblem((e as Error).message);toast.error((e as Error).message)}});
     return ()=>{cancelled=true;autosave.reset();genTokenRef.current+=1};
   },[openedEventId, account]);
+  const supersededRows=useRef<Set<string>>(new Set());
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>|null>(null);
   const resolvedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>>({});
-  const restorePending=useRef(false), missingRestore=useRef<Set<string>>(new Set()), restoredMatches=useRef(new Map<string,SongMatch>()), restoredLibrary=useRef<unknown>(null);
+  const restorePending=useRef(false), restoredLibrary=useRef<unknown>(null);
   useEffect(()=>{
     if(!result || !workspace.library || resultBoundary.current?.eventId!==openedEventId)return;
     const first=restorePending.current, libraryChanged=restoredLibrary.current!==workspace.library;
     if(!first && !libraryChanged)return;
-    if(!first && !restoredMatches.current.size)return;
     restorePending.current=false; restoredLibrary.current=workspace.library;
     const current=new Set<string>();
     for (const sec of ["warmUp","transition","peak"] as SectionKey[]) result[sec].forEach((song,i)=>current.add(songKey(sec,i,song)));
-    const resolved=resolvedSelectionsRef.current, pathIndex=new Map<string,number>();
-    mergedLibrary.tracks.forEach((t,i)=>{ if(t.filePath && !pathIndex.has(t.filePath)) pathIndex.set(t.filePath,i); });
-    const passive=!userEdited.current;
+    const resolved=resolvedSelectionsRef.current, resolve=libraryResolver(mergedLibrary.tracks, getFolderRoots());
     setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(resolved)){
       if(!current.has(key))continue;
-      // Library re-indexes re-resolve saved paths (track indices are positional) — but only for rows the
-      // user has not re-linked since restore. Never by position, basename or a scored substitute.
-      if(!first && !passive && next[key]!==restoredMatches.current.get(key))continue;
-      const indices=value.paths.map(path=>pathIndex.get(path)).filter((i):i is number=>i!==undefined);
-      if(indices.length) missingRestore.current.delete(key); else if(value.paths.length) missingRestore.current.add(key);
-      const base=next[key]??{status:"Missing From Library" as MatchStatus,confidence:0,alternatives:[]};
-      next[key]={...base,...(indices.length?{status:(value.confirmed === true ? "Manually Matched" : "Possible Match") as MatchStatus,confidence:value.confirmed === true ? 1 : 0,confirmed:value.confirmed === true,trackIndex:indices[0],extraTrackIndices:indices.slice(1)}
-        :value.paths.length?{status:"Missing From Library" as MatchStatus,confidence:0,confirmed:false,trackIndex:undefined,extraTrackIndices:[],alternatives:[]}:{}),excludedFromVdj:value.excluded};
-      restoredMatches.current.set(key,next[key]);
+      // Rows explicitly re-selected since restore follow their own (identity-remapped) match. Untouched rows
+      // are rebuilt from the complete saved record: an empty entry stays empty/unapproved, a missing primary
+      // is never replaced by an extra or an automatic candidate.
+      if(supersededRows.current.has(key))continue;
+      next[key]=matchFromPaths(value.paths, resolve, { confirmed: value.confirmed, excluded: value.excluded, alternatives: next[key]?.alternatives });
     }matchesRef.current=next;return next});
   },[result,workspace.library]);
   useEffect(()=>{
@@ -942,7 +945,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       setBuffer(inputs.buffer ?? 2); setVibe(inputs.vibe ?? ""); setEventType(inputs.eventType ?? ""); setPolicies({ ownedOnlyExpansion: inputs.ownedOnlyExpansion, includeSeasonalTracks: inputs.includeSeasonalTracks, requireCleanVersions: inputs.requireCleanVersions }); setHomeKey(inputs.homeKey ?? "");
       setSplitOn(!!inputs.split); setSplit(inputs.split ?? equalSplit(Number(inputs.hours))); setListType(inputs.listType ?? "dance"); setMinutes(inputs.minutes ?? "60");
       setBpmOn(!!inputs.bpmRange); if(inputs.bpmRange)setBpmRange(inputs.bpmRange); setDanceOn(!!inputs.danceRange); if(inputs.danceRange)setDanceRange(inputs.danceRange);
-      savedSelectionsRef.current = snapshot.lists.selections ?? null; resolvedSelectionsRef.current = resolveSavedSelections(snapshot.lists, snapshot.lists.selections); restorePending.current = true; missingRestore.current = new Set(); restoredMatches.current = new Map(); snapshotExtras.current = { inputs, lists: snapshot.lists };
+      savedSelectionsRef.current = snapshot.lists.selections ?? null; resolvedSelectionsRef.current = resolveSavedSelections(snapshot.lists, snapshot.lists.selections); restorePending.current = true; supersededRows.current = new Set(); snapshotExtras.current = { inputs, lists: snapshot.lists };
       const r = generateLists({ uploaded: inputs.songs, hours: Number(inputs.hours), buffer: inputs.buffer ?? 2, split: inputs.split, prefs: { artists: [], genres: [], decades: [], notes: "" }, expand: false });
       const isBackground = inputs.listType === "cocktail" || inputs.listType === "dinner";
       const t = Math.ceil(displayNumber(inputs.minutes ?? "60", MAX_EVENT_MINUTES) / AVG_BACKGROUND_SONG_MIN);
@@ -1547,7 +1550,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     resultBoundary.current={eventId:openedEventId};
     userEdited.current = true;
     // Regeneration starts fresh matching: earlier saved choices must not re-attach by position.
-    resolvedSelectionsRef.current = {}; restorePending.current = false; missingRestore.current = new Set(); restoredMatches.current = new Map();
+    resolvedSelectionsRef.current = {}; restorePending.current = false; supersededRows.current = new Set();
     setResult(r);
     setActiveSection("warmUp");
     setSaveState("saving");
@@ -1719,8 +1722,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const blocked = ids.map(i => cleanReason(mergedLibrary.tracks[i], cleanRequired)).find(Boolean);
       if (blocked) { toast.error(blocked); return; }
     }
-    const next = { ...previous, [key]: { ...previous[key], ...patch } };
-    if (result && JSON.stringify(eventSnapshot(result, next)) !== JSON.stringify(eventSnapshot(result, previous))) markPersistedEdit();
+    // Choosing files supersedes saved paths not in the library; exclusion/approval edits keep them.
+    const picks = "trackIndex" in patch || "extraTrackIndices" in patch;
+    const next = { ...previous, [key]: { ...previous[key], ...patch, ...(picks && !("unresolvedPaths" in patch) ? { unresolvedPaths: undefined } : {}) } };
+    const before = result ? JSON.stringify(eventSnapshot(result, previous)) : "";
+    const had = supersededRows.current.has(key); supersededRows.current.add(key);
+    if (result && JSON.stringify(eventSnapshot(result, next)) !== before) markPersistedEdit(); else if (!had) supersededRows.current.delete(key);
     matchesRef.current = next;
     setMatches(next);
   }
@@ -1748,7 +1755,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const updated = { ...old, artist, song };
     const oldKey = songKey(section, idx, old);
     const newKey = songKey(section, idx, updated);
-    delete resolvedSelectionsRef.current[oldKey]; missingRestore.current.delete(oldKey); restoredMatches.current.delete(oldKey);
+    delete resolvedSelectionsRef.current[oldKey]; supersededRows.current.delete(oldKey);
     const list = [...result[section]];
     list[idx] = updated;
     setResult({ ...result, [section]: list });

@@ -73,6 +73,8 @@ export interface SongMatch {
   excludedFromVdj?: boolean;
   /** Explicit approval persisted separately from candidate paths. */
   confirmed?: boolean;
+  /** Runtime-only: saved file paths not resolvable in the current library (never exported, never substituted). */
+  unresolvedPaths?: string[];
 }
 
 // --- normalization helpers ---
