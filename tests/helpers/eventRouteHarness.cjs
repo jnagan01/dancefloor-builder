@@ -22,6 +22,7 @@ function createEventRouteHarness(actual) {
     if (prepModules[name]) return prepModules[name].exports;
     const m = { exports: {} }; prepModules[name] = m;
     vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/prep/${name}.ts`), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:m,exports:m.exports,setTimeout,clearTimeout,require:k=>k === '../additionIdentity' ? additionModule.exports : k === '../songLibrary' ? songLibraryForPrep() : k.startsWith('./') ? loadPrep(k.slice(2)) : k === '@/lib/virtualDj' ? actual.vdj : k === '@/lib/fileIdentity' ? identityModule.exports : require(k)});
+    if (name === 'recommend' && actual.observeRanking) { const original=m.exports.rankPool; m.exports.rankPool=(...args)=>{const result=original(...args);actual.observeRanking(args,result);return result;}; }
     return m.exports;
   };
   // Real safe-save request contract (zod) so contract-checked harnesses run the server's own validation.
