@@ -17,7 +17,7 @@ function createEventRouteHarness(actual) {
   vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : k === "./fileIdentity" ? identityModule.exports : actual.vdj});
   // Real preparation-knowledge modules (no test seams): transpiled with relative requires resolved inside src/lib/prep.
   const prepModules = {};
-  let songLibMod; const songLibraryForPrep = () => { if (!songLibMod) { songLibMod = { exports: {} }; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/songLibrary.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:songLibMod,exports:songLibMod.exports,require}); } return songLibMod.exports; };
+  let songLibMod; const songLibraryForPrep = () => { if (actual.songLibrary) return actual.songLibrary; if (!songLibMod) { songLibMod = { exports: {} }; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/songLibrary.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:songLibMod,exports:songLibMod.exports,require}); } return songLibMod.exports; };
   const loadPrep = name => {
     if (prepModules[name]) return prepModules[name].exports;
     const m = { exports: {} }; prepModules[name] = m;
