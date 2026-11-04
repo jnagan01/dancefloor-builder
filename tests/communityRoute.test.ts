@@ -83,7 +83,7 @@ it("budget: at most 40 distinct lookups, preliminary-rank priority, unattempted 
 });
 // TEST-ONLY renamed synthetic files: "Weak" has identical-request similarity (match 1) but estimated 6/6 feel; "Up" has
 // weaker similarity and estimated upbeat 8/8. Only the new uncertain-dance bound and community evidence differ.
-const ud=[["TEST UD Weak","W1",6,6,1],["TEST UD Up","U1",8,8,0.3]] as const;
+const ud=[["TEST UD Weak","W1",6,6,1],["TEST UD Up","U1",8,8,0.8]] as const;
 const udLib=vdj.buildLibrary(ud.map(([a,s])=>({artist:a,title:s,filePath:`/synthetic/ud/${s}.mp3`,year:"2006",genre:"Pop"})) as vdj.VdjTrack[]);
 const late=async<T>(v:T)=>{for(let i=0;i<40;i++)await Promise.resolve();return v;};
 async function runUD(community:any){
