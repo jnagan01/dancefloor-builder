@@ -142,7 +142,8 @@ describe('preventAutomaticDuplicates', () => {
   });
 });
 
-const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
+// Identity assertions use a fenced discovered pool, not a competition against unrelated catalogue alternatives.
+const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance: { ...dance, catalogueCandidates: () => [] }, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
 type Row = { artist: string; song: string; fromUpload?: boolean };
 const sug = (artist: string, song: string) => ({ artist, song, energy: 7, danceability: 7, valence: 7, reason: 'synthetic' });
 async function runFull(requests: Row[], suggestions: ReturnType<typeof sug>[], peakRequests: Row[] = []) {

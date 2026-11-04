@@ -775,6 +775,23 @@ function librarySongToResult(lib: LibrarySong, assignedSection: Section, reused 
   };
 }
 
+/** Complete local catalogue candidates, not gap-sized picks. Allocation and final scoring belong to the caller.
+ * This finite catalogue is bounded by its source size; no padding, fabricated years or network discovery. */
+export function catalogueCandidates(input: Pick<GenerationInput, "uploaded" | "prefs" | "expand">, library: readonly LibrarySong[] = SONG_LIBRARY): { row: ResultSong; prefer: SectionKey }[] {
+  if (!input.expand) return [];
+  const requested = new SongKeySet(true);
+  input.uploaded.forEach(s => requested.add(s.artist, s.song));
+  const event = getEventType(input.prefs.eventType);
+  return library.filter(l => l.artist.trim() && l.song.trim() && !requested.has(l.artist, l.song)
+    && !isBlocked(l.artist, l.song, input.prefs.doNotPlay) && libraryAllowedForEventType(l, event)
+    && (!input.prefs.additionAllowed || input.prefs.additionAllowed(l)))
+    .map(l => {
+      const natural = sectionForIntensity(intensityOf(l));
+      const prefer: SectionKey = natural === "Warm Up" ? "warmUp" : natural === "Peak" ? "peak" : "transition";
+      return { row: librarySongToResult(l, natural), prefer };
+    }).sort((a, b) => a.row.artist.localeCompare(b.row.artist) || a.row.song.localeCompare(b.row.song));
+}
+
 function sectionShortfall(result: GenerationResult): GenerationResult["finalShortfall"] {
   const t = (k: SectionKey) => sectionTargetFor(result, k);
   const finalShortfall = {
@@ -934,11 +951,10 @@ export function generateLists(input: GenerationInput): GenerationResult {
 
     // Score library candidates by intensity and pick the section they belong
     // in based on the same band rule used for uploads.
-    const candidates = SONG_LIBRARY
-      .filter((l) => !seen.has(dedupeKey(l.artist, l.song)))
-      .filter((l) => !isBlocked(l.artist, l.song, prefs.doNotPlay))
-      .filter((l) => libraryAllowedForEventType(l, getEventType(prefs.eventType)) && (!prefs.additionAllowed || prefs.additionAllowed(l)))
-      .map((l) => ({ lib: l, score: libraryPreferenceScore(l, prefs), section: sectionForIntensity(intensityOf(l)) }))
+    const eligible = new SongKeySet(true);
+    catalogueCandidates(input).forEach(c => eligible.add(c.row.artist, c.row.song));
+    const candidates = SONG_LIBRARY.filter(l => eligible.has(l.artist, l.song))
+      .map((lib) => ({ lib, score: libraryPreferenceScore(lib, prefs), section: sectionForIntensity(intensityOf(lib)) }))
       .sort((a, b) => b.score - a.score);
 
     const padTo = (bucket: Scored[], section: Section, target: number) => {
@@ -948,14 +964,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
         const k = dedupeKey(lib.artist, lib.song);
         if (seen.has(k)) continue;
         seen.add(k);
-        bucket.push({
-          artist: lib.artist,
-          song: lib.song,
-          fromUpload: false,
-          energy: lib.energy,
-          danceability: lib.danceability,
-          section,
-        });
+        bucket.push({ ...librarySongToResult(lib, section), section });
       }
     };
 
@@ -966,13 +975,7 @@ export function generateLists(input: GenerationInput): GenerationResult {
 
   // Sort each section ascending by intensity for a smooth energy ramp.
   const toResult = (list: Scored[]): ResultSong[] =>
-    sortByIntensity(list).map((s) => ({
-      artist: s.artist,
-      song: s.song,
-      fromUpload: s.fromUpload,
-      energy: s.energy,
-      danceability: s.danceability,
-    }));
+    sortByIntensity(list).map(({ section: _section, ...s }) => s);
 
   return {
     warmUp: toResult(warmUp),

@@ -13,7 +13,7 @@ import * as theory from "@/lib/musicTheory";
 import * as revisions from "@/lib/eventRevision";
 import { REQUESTS } from "./fit/fitComparison";
 import { matrix } from "./fit/slowRiskMatrix";
-const harness = createRequire(import.meta.url)("./helpers/eventRouteHarness.cjs").createEventRouteHarness({vdj,dance,audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions});
+const harness = createRequire(import.meta.url)("./helpers/eventRouteHarness.cjs").createEventRouteHarness({vdj,dance:{...dance,catalogueCandidates:()=>[]},audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions});
 const id="10000000-0000-4000-8000-000000000001";
 const requests=REQUESTS.map(r=>({...r,fromUpload:true}));
 const extras=matrix.slice(0,3);

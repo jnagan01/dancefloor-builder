@@ -12,7 +12,7 @@ import * as isolation from '@/lib/workflowIsolation';
 import * as theory from '@/lib/musicTheory';
 import * as revisions from '@/lib/eventRevision';
 const require = createRequire(import.meta.url);
-const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
+const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance: {...dance,catalogueCandidates:()=>[]}, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
 
 // Synthetic, isolated fixtures only.
 const requests = [{ artist: 'Queen', song: 'Radio Ga Ga', fromUpload: true }, { artist: 'ABBA', song: 'Dancing Queen', fromUpload: true }];
@@ -119,7 +119,8 @@ describe('real event route: Last.fm track evidence and preparation feedback in a
   });
 
   it('AI outage falls back to the ranked built-in catalogue with explanations, never blocked tracks', async () => {
-    const h = harness({ rows: { A: row() }, services: { recommend: async () => { throw Error('AI outage'); } } });
+    const catalogueHarness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
+    const h = catalogueHarness({ rows: { A: row() }, services: { recommend: async () => { throw Error('AI outage'); } } });
     h.setPrep((s: object) => ({ ...s, knowledge: knowledge(h) }));
     await h.flush(); h.library(library); await h.flush();
     await h.current.generate(); await h.flush();

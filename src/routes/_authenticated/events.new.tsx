@@ -14,6 +14,7 @@ import {
   dedupeKey,
   SongKeySet,
   generateLists,
+  catalogueCandidates,
   reorderForEnergyProgression,
   songsToCsv,
   combinedCsv,
@@ -1300,6 +1301,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const taken = new SongKeySet(true);
         for (const s of [...r.warmUp, ...r.transition, ...r.peak]) taken.add(s.artist, s.song);
         const catalogueKeys = new Set(SONG_LIBRARY.map((s) => songIdentity(s.artist, s.song)));
+        const catalogue = catalogueCandidates({ uploaded: uniqueSongs, expand: true, prefs: localPrefs });
+        const eligibleCatalogueKeys = new Set(catalogue.map(c => songIdentity(c.row.artist, c.row.song)));
         const secIdx = (k?: SectionKey) => (k ? sectionOrder.indexOf(k) : 99);
         const ownedRow = (idx: number, reason?: string): PRow => {
           const t = mergedLibrary.tracks[idx];
@@ -1309,7 +1312,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // Credit aliases collapse into one pool entry BEFORE ranking (shared pure helper; arrival-order independent).
         const { offer } = createCandidatePool<PRow, SectionKey>({
           cap: POOL_CAP, taken: (a, so) => taken.has(a, so), identity: songIdentity, ownedRow, sectionRank: secIdx,
-          merge: (a, b) => mergeMeta(a, b, b.metaProv ?? "estimate"), map: pool,
+          admissionKey: row => `${eligibleCatalogueKeys.has(songIdentity(row.artist, row.song)) ? "0" : "1"}:${songIdentity(row.artist, row.song)}`,
+          merge: (a, b) => ({ ...mergeMeta(a, b, b.metaProv ?? "estimate"), ...(b.catalogueDecade && !a.catalogueDecade ? { catalogueDecade: b.catalogueDecade } : {}) }), map: pool,
           exactOwned: (row) => {
             const idx = generationResolver.resolve({ artist: row.artist, song: row.song });
             const t = idx === undefined ? undefined : mergedLibrary.tracks[idx];
@@ -1384,9 +1388,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }),
         );
 
-        // Built-in catalogue candidates (local, no network), ranked alongside every other source.
-        const catalogue = generateLists({ uploaded: uniqueSongs, preserveRequestedRows: true, hours: background ? minutesNum / 60 : hoursNum, averageTrackSeconds: clientCoverage.averageSeconds, expand: true, buffer: background ? 1 : buffer, split: activeSplit && !snapshotReadOnly.current ? activeSplit : undefined, prefs: localPrefs });
-        for (const k of sectionOrder) for (const s of background ? [...catalogue.warmUp, ...catalogue.transition, ...catalogue.peak] : catalogue[k]) if (!s.fromUpload) offer(withProv({ ...s, metaSource: "Library" } as PRow, "catalogue"), k);
+        // Complete eligible finite catalogue: no old preference-score/gap pre-cut. Reserved admission keeps these
+        // alternatives available even when discovered sources saturate the cap; rankPool alone selects final slots.
+        for (const c of catalogue) offer(c.row as PRow, background ? "warmUp" : c.prefer);
 
         // Attach facts BEFORE strict eligibility, ranking and energy ordering: every non-owned candidate (provider years/BPM
         // feed strict limits) and every owned candidate missing facts the active ranking uses,

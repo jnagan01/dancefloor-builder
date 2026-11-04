@@ -2,7 +2,7 @@ const fs = require('node:fs'), vm = require('node:vm'), path = require('node:pat
 const root = path.resolve(__dirname, '../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 function createEventRouteHarness(actual) {
-  let source = fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
+  let source = actual.routeSource ?? fs.readFileSync(path.join(root, 'src/routes/_authenticated/events.new.tsx'), 'utf8');
   // Expose actual closures in the test VM only; no production test seam or replacement logic.
   source = source.replace('  const withFileBpm =', '  capture({ applyReviewMode, updateMatch, toggleExclude, pickLocalFileForMatch, withAnalysis: (sec, songs) => withFileBpm(sec, songs), songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, exportSectionM3u, exportSectionXmlToVdj, previewReadiness, readiness, activeSection, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   source += '\nexport { SectionView };';
@@ -17,11 +17,12 @@ function createEventRouteHarness(actual) {
   vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : k === "./fileIdentity" ? identityModule.exports : actual.vdj});
   // Real preparation-knowledge modules (no test seams): transpiled with relative requires resolved inside src/lib/prep.
   const prepModules = {};
-  let songLibMod; const songLibraryForPrep = () => { if (!songLibMod) { songLibMod = { exports: {} }; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/songLibrary.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:songLibMod,exports:songLibMod.exports,require}); } return songLibMod.exports; };
+  let songLibMod; const songLibraryForPrep = () => { if (actual.songLibrary) return actual.songLibrary; if (!songLibMod) { songLibMod = { exports: {} }; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/songLibrary.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:songLibMod,exports:songLibMod.exports,require}); } return songLibMod.exports; };
   const loadPrep = name => {
     if (prepModules[name]) return prepModules[name].exports;
     const m = { exports: {} }; prepModules[name] = m;
     vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/prep/${name}.ts`), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:m,exports:m.exports,setTimeout,clearTimeout,require:k=>k === '../additionIdentity' ? additionModule.exports : k === '../songLibrary' ? songLibraryForPrep() : k.startsWith('./') ? loadPrep(k.slice(2)) : k === '@/lib/virtualDj' ? actual.vdj : k === '@/lib/fileIdentity' ? identityModule.exports : require(k)});
+    if (name === 'recommend' && actual.observeRanking) { const original=m.exports.rankPool; m.exports.rankPool=(...args)=>{const result=original(...args);actual.observeRanking(args,result);return result;}; }
     return m.exports;
   };
   // Real safe-save request contract (zod) so contract-checked harnesses run the server's own validation.

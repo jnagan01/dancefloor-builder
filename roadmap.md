@@ -1,8 +1,9 @@
 # Workspace rebuild
 ## Complete expansion candidate sourcing
-- [ ] Offer eligible built-in catalogue before final shared ranking, retaining provenance and exact owned promotion without source-order crowding.
-- [ ] Add frozen candidate-stage comparison, pure-helper and real-route/save-reopen regressions; preserve prior artifacts.
-- [ ] Run full unit suite, automatic build and isolated native checks; final macOS workflow acceptance requires external runner.
+- [x] Offer eligible built-in catalogue before final shared ranking, retaining provenance and exact owned promotion without source-order crowding.
+- [x] Add frozen candidate-stage comparison, pure-helper and real-route/save-reopen regressions; preserve prior artifacts.
+- [x] Local gates: 861 units/82 files, automatic build OK, 39 native event, 16 offline, 4 race, 20 prep checks; fenced synthetic profiles only.
+- [ ] Final macOS workflow acceptance requires external GitHub/macOS runner; no GitHub credentials/access here. Workflow unchanged, no publication/release.
 ## Active avoid-slow evidence ranking
 - [x] Strengthen bounded advisory slow-risk ranking and conditional uncertain familiarity; retain neutral/discovery defaults and requests.
 - [x] Freeze current scoring for original reports; add identical-evidence comparison, latest reported profile and held-out matrix.
