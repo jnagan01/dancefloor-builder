@@ -61,7 +61,9 @@ const tracks = [
 ].map(([artist, title, filePath]) => ({ artist, title, filePath }));
 const all = (r: any) => [...r.warmUp, ...r.transition, ...r.peak];
 const rowOf = (selections: object) => ({ id: "A", name: "Test", updated_at: "v1", inputs: { hours: "0.25", buffer: 2, listType: "dance", eventName: "Test", songs: [common, queen, usher] }, lists: { warmUp: [usher], transition: [], peak: [common, queen, usher], selections } });
-const pathOf = (h: any, sec: string, i: number, s: any) => { const m = h.current.matches[`${sec}:${i}:${dance.dedupeKey(s.artist, s.song)}`]; return m?.trackIndex != null ? h.lib.tracks[m.trackIndex].filePath : undefined; };
+// Read paths through the route's own serialization (its merged library), not the test's index order.
+const pathsOf = (h: any, sec: string, i: number, s: any) => { const key = `${sec}:${i}:${dance.dedupeKey(s.artist, s.song)}`; const m = h.current.matches[key]; if (m?.trackIndex == null) return []; return h.current.eventSnapshot(h.current.result, h.current.matches).lists.selections[key]?.paths ?? []; };
+const pathOf = (h: any, sec: string, i: number, s: any) => pathsOf(h, sec, i, s)[0];
 
 describe("real event route reopening", () => {
   const current = { [k("warmUp", 0, usher)]: { paths: ["/lib/usher-live.mp3", "/lib/usher-ext.mp3"], confirmed: true }, [k("peak", 0, common)]: sel("/lib/common-be.mp3"), [k("peak", 1, queen)]: sel("/lib/queen.mp3"), [k("peak", 2, usher)]: { paths: ["/lib/usher.mp3"], confirmed: true, excluded: true } };
@@ -76,7 +78,7 @@ describe("real event route reopening", () => {
         expect(pathOf(h, "peak", 1, queen)).toBe("/lib/queen.mp3");
         expect(pathOf(h, "peak", 2, usher)).toBe("/lib/usher.mp3");
         expect(pathOf(h, "warmUp", 0, usher)).toBe("/lib/usher-live.mp3");
-        expect(h.current.matches[k("warmUp", 0, usher)].extraTrackIndices.map((i: number) => lib.tracks[i].filePath)).toEqual(["/lib/usher-ext.mp3"]);
+        expect(pathsOf(h, "warmUp", 0, usher)).toEqual(["/lib/usher-live.mp3", "/lib/usher-ext.mp3"]);
         expect(h.current.matches[k("peak", 2, usher)].excludedFromVdj).toBe(true);
         await vi.advanceTimersByTimeAsync(2000); expect(h.requests).toHaveLength(0);
         // Actual export artifact: unrelated audio never appears; excluded occurrence omitted.
