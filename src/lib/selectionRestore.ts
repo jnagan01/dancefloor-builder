@@ -89,3 +89,57 @@ export function selectionBase(stored: SelectionMap | null | undefined, resolved:
   for (const [k, v] of Object.entries(resolved)) if (currentKeys.has(k)) out[k] = v;
   return out;
 }
+
+// ---- Runtime file selections (library indices are positional; saved paths are the identity) ----
+import type { SongMatch } from "@/lib/virtualDj";
+import { createIdentityIndex } from "@/lib/fileIdentity";
+
+type TrackLike = { filePath?: string };
+
+/** Case-sensitive identity resolver over a library; duplicates/unknown resolve to undefined (never a guess). */
+export function libraryResolver(tracks: readonly TrackLike[], roots: Record<string, string>): (path: string) => number | undefined {
+  const index = createIdentityIndex(tracks.map((_, i) => i), i => tracks[i]?.filePath ?? "", roots);
+  return path => (path ? index.resolve(path) : undefined);
+}
+
+/** Full ordered selection paths of a runtime match, including saved paths not currently in the library. */
+export function selectionPaths(match: SongMatch | undefined, tracks: readonly TrackLike[]): string[] {
+  if (!match) return [];
+  if (match.trackIndex == null) return [...(match.unresolvedPaths ?? [])];
+  const found = [match.trackIndex, ...(match.extraTrackIndices ?? [])].map(i => tracks[i]?.filePath).filter((p): p is string => !!p);
+  return [...found, ...(match.unresolvedPaths ?? []).filter(p => !found.includes(p))];
+}
+
+/**
+ * Build a runtime match from an ordered saved path list. The primary is never replaced by an extra: a
+ * missing primary leaves the row unlinked (extras are not exported) and keeps every path as unresolved.
+ * Approval/exclusion are carried as saved; an unlinked row can never export.
+ */
+export function matchFromPaths(paths: readonly string[], resolve: (p: string) => number | undefined, opts: { confirmed?: boolean; excluded?: boolean; alternatives?: number[] }): SongMatch {
+  const confirmed = opts.confirmed === true;
+  const found = paths.map(resolve);
+  const primary = found[0];
+  if (primary === undefined) return { status: "Missing From Library", confidence: 0, confirmed: paths.length ? confirmed : false, trackIndex: undefined, extraTrackIndices: [], alternatives: opts.alternatives ?? [], excludedFromVdj: opts.excluded, ...(paths.length ? { unresolvedPaths: [...paths] } : {}) };
+  const extras: number[] = [], lost: string[] = [];
+  found.slice(1).forEach((i, n) => { if (i === undefined) lost.push(paths[n + 1]); else if (i !== primary && !extras.includes(i)) extras.push(i); });
+  return { status: confirmed ? "Manually Matched" : "Possible Match", confidence: confirmed ? 1 : 0, confirmed, trackIndex: primary, extraTrackIndices: extras, alternatives: opts.alternatives ?? [], excludedFromVdj: opts.excluded, ...(lost.length ? { unresolvedPaths: lost } : {}) };
+}
+
+/**
+ * Re-point every match after a library rebuild by file identity (old index → path → new index), never by
+ * position. Files no longer present become unresolved paths; nothing is substituted.
+ */
+export function remapMatches(matches: Record<string, SongMatch>, oldTracks: readonly TrackLike[], newTracks: readonly TrackLike[], roots: Record<string, string>): Record<string, SongMatch> {
+  const resolve = libraryResolver(newTracks, roots);
+  const out: Record<string, SongMatch> = {};
+  for (const [key, m] of Object.entries(matches)) {
+    if (!m) { out[key] = m; continue; }
+    const paths = selectionPaths(m, oldTracks);
+    const alternatives = (m.alternatives ?? []).map(i => oldTracks[i]?.filePath).map(p => (p ? resolve(p) : undefined)).filter((i): i is number => i !== undefined);
+    if (!paths.length) { out[key] = { ...m, alternatives }; continue; }
+    const rebuilt = matchFromPaths(paths, resolve, { confirmed: m.confirmed, excluded: m.excludedFromVdj, alternatives });
+    // Keep the original status/confidence while the primary still resolves (automatic matches stay automatic).
+    out[key] = rebuilt.trackIndex != null && m.trackIndex != null ? { ...m, trackIndex: rebuilt.trackIndex, extraTrackIndices: rebuilt.extraTrackIndices, alternatives, unresolvedPaths: rebuilt.unresolvedPaths } : { ...m, ...rebuilt, ...(rebuilt.unresolvedPaths ? {} : { unresolvedPaths: undefined }) };
+  }
+  return out;
+}
