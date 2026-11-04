@@ -126,6 +126,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { EventPrepPanel } from "@/components/prep/EventPrepPanel";
 import { TrackDetailSheet, type DetailSubject } from "@/components/prep/TrackDetailSheet";
 import { planAddToSection } from "@/lib/prep/addToSection";
+import { resolveSavedSelections, selectionBase } from "@/lib/selectionRestore";
 import { prepStore } from "@/lib/prep/prepStore";
 import { attrSource, decodeCacheSource, mergeMeta, metaLabel, strictLimitFailure, withProv, type StrictLimits } from "@/lib/prep/provenance";
 import { sourceLabel } from "@/lib/prep/metaConfidence";
@@ -461,7 +462,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setActiveSection("warmUp");
     setSpotifyLink("");
     restoredEvent.current = false;
-    savedSelectionsRef.current = null;
+    savedSelectionsRef.current = null; resolvedSelectionsRef.current = {}; restorePending.current = false; missingRestore.current = new Set();
     stableCreate.current = autosave.reset();
     snapshotReadOnly.current = false; snapshotExtras.current = { inputs: {}, lists: {} };
     restoredFingerprint.current = null;
@@ -733,12 +734,19 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
 
   function eventSnapshot(nextResult: GenerationResult, nextMatches: Record<string,SongMatch>) {
-    const selections: Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}> = { ...savedSelectionsRef.current };
+    const currentKeys = new Set<string>();
+    for (const sec of ["warmUp","transition","peak"] as SectionKey[]) nextResult[sec].forEach((song,i) => currentKeys.add(songKey(sec,i,song)));
+    // Identity-safe base: stale positional keys are dropped (only explicit edits write), current rows keep
+    // their identity-validated saved entry until a library match replaces it.
+    const selections: Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}> = selectionBase(savedSelectionsRef.current, resolvedSelectionsRef.current, currentKeys);
     for (const sec of ["warmUp","transition","peak"] as SectionKey[]) nextResult[sec].forEach((song,i) => {
       const key = songKey(sec,i,song), match = nextMatches[key];
       if (!match || !mergedLibrary) return;
       const paths = [match.trackIndex,...(match.extraTrackIndices??[])].filter((v):v is number=>typeof v==="number").map(v=>mergedLibrary.tracks[v]?.filePath).filter((v):v is string=>!!v);
+      const saved = resolvedSelectionsRef.current[key];
       if(paths.length || match.excludedFromVdj) selections[key]={...selections[key],paths,excluded:match.excludedFromVdj,confirmed:exportApproved({...match,excludedFromVdj:false})};
+      // A saved file that is not (yet) in the library stays saved; it is never swapped for another file.
+      else if (saved?.paths.length && match.trackIndex == null && !saved.paths.some(p => mergedLibrary.tracks.some(t => t.filePath === p))) selections[key]=saved;
       else if (mergedLibrary.tracks.length) delete selections[key];
     });
     return { name:(eventName.trim() || `Event — ${new Date().toLocaleDateString()}`).slice(0,200),
@@ -783,15 +791,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         shortfall.total=shortfall.warmUp+shortfall.transition+shortfall.peak;
         setResult({...target,warmUp:lists.warmUp,transition:lists.transition,peak:lists.peak,shortfall,finalShortfall:shortfall});
       }
-      // Re-key saved selections by section+position so snapshots written with an
-      // older dedupeKey format (e.g. "the weeknd|…") still land on their song.
-      const rekeyed:Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>={};
-      for(const [k,v] of Object.entries(lists.selections??{})){
-        const m=k.match(/^(warmUp|transition|peak):(\d+):/);
-        const s=m?(lists[m[1] as SectionKey]??[])[Number(m[2])]:undefined;
-        rekeyed[s&&m?songKey(m[1] as SectionKey,Number(m[2]),s):k]=v;
-      }
-      savedSelectionsRef.current=lists.selections?rekeyed:null;
+      // Identity-safe restore: exact current keys win; older dedupe spellings apply only when their
+      // identity names the row's song. Raw stored keys are kept untouched (passive loads never write).
+      savedSelectionsRef.current=lists.selections??null;
+      resolvedSelectionsRef.current=resolveSavedSelections(lists,lists.selections);restorePending.current=true;missingRestore.current=new Set();
       resultBoundary.current={eventId:openedEventId};
       restoredEvent.current=true;
       setSavedEventId(openedEventId);setSaveState("saved");setActiveSection("warmUp");
@@ -799,13 +802,27 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     return ()=>{cancelled=true;autosave.reset();genTokenRef.current+=1};
   },[openedEventId, account]);
   const savedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>|null>(null);
+  const resolvedSelectionsRef=useRef<Record<string,{paths:string[];excluded?:boolean;confirmed?:boolean}>>({});
+  const restorePending=useRef(false), missingRestore=useRef<Set<string>>(new Set());
   useEffect(()=>{
-    if(!result || !workspace.library || !savedSelectionsRef.current || resultBoundary.current?.eventId!==openedEventId)return;
-    const selections=savedSelectionsRef.current;
-    setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(selections)){
-      const indices=value.paths.map(path=>mergedLibrary.tracks.findIndex(t=>t.filePath===path)).filter(i=>i>=0);
-      next[key]={...(next[key]??{status:"Missing From Library",confidence:0,alternatives:[]}),...(indices.length?{status:(value.confirmed === true ? "Manually Matched" : "Possible Match") as MatchStatus,confidence:value.confirmed === true ? 1 : 0,confirmed:value.confirmed === true,trackIndex:indices[0],extraTrackIndices:indices.slice(1)}:{}),excludedFromVdj:value.excluded};
-    }return next});
+    if(!result || !workspace.library || resultBoundary.current?.eventId!==openedEventId)return;
+    const first=restorePending.current;
+    if(!first && !missingRestore.current.size)return;
+    restorePending.current=false;
+    const current=new Map<string,true>();
+    for (const sec of ["warmUp","transition","peak"] as SectionKey[]) result[sec].forEach((song,i)=>current.set(songKey(sec,i,song),true));
+    const resolved=resolvedSelectionsRef.current, pathIndex=new Map<string,number>();
+    mergedLibrary.tracks.forEach((t,i)=>{ if(t.filePath && !pathIndex.has(t.filePath)) pathIndex.set(t.filePath,i); });
+    setMatches(prev=>{const next={...prev};for(const [key,value] of Object.entries(resolved)){
+      if(!current.has(key))continue;
+      // Later library loads only fill rows whose saved file was missing and that nobody has re-linked.
+      if(!first && (!missingRestore.current.has(key) || next[key]?.trackIndex!=null))continue;
+      const indices=value.paths.map(path=>pathIndex.get(path)).filter((i):i is number=>i!==undefined);
+      if(indices.length) missingRestore.current.delete(key); else if(value.paths.length) missingRestore.current.add(key);
+      const base=next[key]??{status:"Missing From Library" as MatchStatus,confidence:0,alternatives:[]};
+      next[key]={...base,...(indices.length?{status:(value.confirmed === true ? "Manually Matched" : "Possible Match") as MatchStatus,confidence:value.confirmed === true ? 1 : 0,confirmed:value.confirmed === true,trackIndex:indices[0],extraTrackIndices:indices.slice(1)}
+        :value.paths.length?{status:"Missing From Library" as MatchStatus,confidence:0,confirmed:false,trackIndex:undefined,extraTrackIndices:[],alternatives:[]}:{}),excludedFromVdj:value.excluded};
+    }matchesRef.current=next;return next});
   },[result,workspace.library]);
   useEffect(()=>{
     if (result && !userEdited.current) {
@@ -921,7 +938,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       setBuffer(inputs.buffer ?? 2); setVibe(inputs.vibe ?? ""); setEventType(inputs.eventType ?? ""); setPolicies({ ownedOnlyExpansion: inputs.ownedOnlyExpansion, includeSeasonalTracks: inputs.includeSeasonalTracks, requireCleanVersions: inputs.requireCleanVersions }); setHomeKey(inputs.homeKey ?? "");
       setSplitOn(!!inputs.split); setSplit(inputs.split ?? equalSplit(Number(inputs.hours))); setListType(inputs.listType ?? "dance"); setMinutes(inputs.minutes ?? "60");
       setBpmOn(!!inputs.bpmRange); if(inputs.bpmRange)setBpmRange(inputs.bpmRange); setDanceOn(!!inputs.danceRange); if(inputs.danceRange)setDanceRange(inputs.danceRange);
-      savedSelectionsRef.current = snapshot.lists.selections ?? null; snapshotExtras.current = { inputs, lists: snapshot.lists };
+      savedSelectionsRef.current = snapshot.lists.selections ?? null; resolvedSelectionsRef.current = resolveSavedSelections(snapshot.lists, snapshot.lists.selections); restorePending.current = true; missingRestore.current = new Set(); snapshotExtras.current = { inputs, lists: snapshot.lists };
       const r = generateLists({ uploaded: inputs.songs, hours: Number(inputs.hours), buffer: inputs.buffer ?? 2, split: inputs.split, prefs: { artists: [], genres: [], decades: [], notes: "" }, expand: false });
       const isBackground = inputs.listType === "cocktail" || inputs.listType === "dinner";
       const t = Math.ceil(displayNumber(inputs.minutes ?? "60", MAX_EVENT_MINUTES) / AVG_BACKGROUND_SONG_MIN);
@@ -1525,6 +1542,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
     resultBoundary.current={eventId:openedEventId};
     userEdited.current = true;
+    // Regeneration starts fresh matching: earlier saved choices must not re-attach by position.
+    resolvedSelectionsRef.current = {}; restorePending.current = false; missingRestore.current = new Set();
     setResult(r);
     setActiveSection("warmUp");
     setSaveState("saving");
@@ -1725,7 +1744,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const updated = { ...old, artist, song };
     const oldKey = songKey(section, idx, old);
     const newKey = songKey(section, idx, updated);
-    if (savedSelectionsRef.current) delete savedSelectionsRef.current[oldKey];
+    delete resolvedSelectionsRef.current[oldKey]; missingRestore.current.delete(oldKey);
     const list = [...result[section]];
     list[idx] = updated;
     setResult({ ...result, [section]: list });
