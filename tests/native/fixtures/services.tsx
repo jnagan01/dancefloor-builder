@@ -35,3 +35,6 @@ export const MATCH_LIMIT_KEY='test:limit',MATCH_AUTO_KEY='test:auto',DJ_SOFTWARE
 export function pageHead(){return {};}
 export async function loadDirHandle(){return {name:'isolated-exports',getFileHandle:async(name:string)=>({createWritable:async()=>({write:async(data:string)=>{const r=await w.testBackend.export(name,data);if(!r.ok)throw Error(r.error);},close:async()=>{}})})};}
 export const loadDirHandleMeta=async()=>null,saveDirHandle=async()=>{},clearDirHandle=async()=>{},verifyReadWrite=async()=>true,saveDirHandleMeta=async()=>{},clearDirHandleMeta=async()=>{};
+
+export const COMMUNITY_BATCH=20;
+export const lookupCommunityBatch=async(r:any)=>r.data.songs.map((x:any)=>{const e=(w.__fixture.community??{})[`${x.artist}||${x.song}`];return e?{...x,status:'found',evidence:e}:{...x,status:'disabled'};});

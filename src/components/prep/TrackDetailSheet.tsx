@@ -15,6 +15,7 @@ import { noteDrafts, type DraftField } from "@/lib/prep/noteDrafts";
 import { prepStore } from "@/lib/prep/prepStore";
 import type { Evidence } from "@/lib/prep/recommend";
 import { usePrep } from "./usePrep";
+import { classifyVersions } from "@/lib/prep/versionIdentity";
 
 export interface DetailSubject {
   artist: string; song: string;
@@ -101,7 +102,8 @@ export function TrackDetailSheet({ subject, onClose, onPreview }: { subject: Det
     set(r.ok ? { busy: false, result: r.items } : { busy: false, error: r.error });
   }
   const args = { data: { artist: subject.artist, title: subject.song } };
-  const versions = t ? [t, ...(subject.alternatives ?? []).filter(a => a.filePath !== t.filePath)] : subject.alternatives ?? [];
+  const view = classifyVersions(subject.artist, subject.song, t, subject.alternatives ?? []);
+  const versions = [...(view.selected ? [{ track: view.selected.track, variant: false, shown: true }] : []), ...view.versions.map(v => ({ ...v, shown: false }))];
   return <Sheet open onOpenChange={o => { if (!o) onClose(); }}>
     <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-xl">
       <SheetHeader>
@@ -125,13 +127,18 @@ export function TrackDetailSheet({ subject, onClose, onPreview }: { subject: Det
             <Field label="Plays" value={t.playCount != null ? String(t.playCount) : undefined} source="your VirtualDJ history" />
           </dl>
         </section>}
-        {versions.length > 1 && <section aria-label="Version comparison">
+        {view.selected && !view.selected.sameWork && <p className="rounded border border-destructive/40 bg-destructive/5 p-2 text-xs" data-testid="detail-selection-mismatch">
+          The linked file ({view.selected.track.artist || "unknown artist"} – {view.selected.track.title || "unknown title"}) doesn't look like this song. It stays linked until you change it in the event row; it isn't treated as a version.
+        </p>}
+        {(view.versions.length > 0 || view.hidden > 0) && <section aria-label="Version comparison">
           <h3 className="mb-1 text-sm font-semibold">Versions in your library</h3>
-          <p className="mb-2 text-xs text-muted-foreground">Different files are different tracks; remixes and clean edits are never merged.</p>
-          <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-muted-foreground"><th className="py-1 pr-2">File</th><th className="pr-2">Version</th><th className="pr-2">BPM</th><th className="pr-2">Length</th><th>Clean</th></tr></thead>
-            <tbody>{versions.map((v, i) => { const f = trackFacts(v); return <tr key={v.filePath} className="border-t border-border align-top">
-              <td className="break-all py-1 pr-2">{fileName(v.filePath)}{i === 0 && t && <span className="ml-1 rounded bg-primary/15 px-1 text-[10px] text-primary">shown</span>}</td>
+          <p className="mb-2 text-xs text-muted-foreground">Only files with the same artist and song title are listed. Different files are different tracks; remixes, live and clean edits are never merged.</p>
+          {view.versions.length > 0 ? <div className="overflow-x-auto"><table className="w-full text-xs"><thead><tr className="text-left text-muted-foreground"><th className="py-1 pr-2">File</th><th className="pr-2">Version</th><th className="pr-2">BPM</th><th className="pr-2">Length</th><th>Clean</th></tr></thead>
+            <tbody>{versions.map(({ track: v, variant, shown }) => { const f = trackFacts(v); return <tr key={v.filePath} className="border-t border-border align-top" data-testid="detail-version-row">
+              <td className="break-all py-1 pr-2">{fileName(v.filePath)}{shown && <span className="ml-1 rounded bg-primary/15 px-1 text-[10px] text-primary">shown</span>}{variant && <span className="ml-1 rounded bg-muted px-1 text-[10px]">different version</span>}</td>
               <td className="pr-2">{v.remix || "—"}</td><td className="pr-2">{cleanBpm(v.bpm) || "?"}</td><td className="pr-2">{f.durationSec ? fmtDur(f.durationSec) : "?"}</td><td>{f.clean ?? "?"}</td></tr>; })}</tbody></table></div>
+            : <p className="text-xs text-muted-foreground">No other files of this song were found.</p>}
+          {view.hidden > 0 && <p className="mt-1 text-[11px] text-muted-foreground" data-testid="detail-versions-hidden">{view.hidden} other possible match{view.hidden === 1 ? "" : "es"} with different artists or titles {view.hidden === 1 ? "is" : "are"} not versions; review {view.hidden === 1 ? "it" : "them"} in the event row's file picker.</p>}
         </section>}
         {subject.evidence && <section aria-label="Why recommended">
           <h3 className="mb-1 text-sm font-semibold">Why it's recommended</h3>

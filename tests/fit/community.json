@@ -1,0 +1,4655 @@
+{
+ "beforeSource": "110eb351f30ecd03e61f830cbdf52666f16e8746",
+ "publishedProfile": "web 1020df6f / native 1.2.49, Nov 4 (user-reported)",
+ "conditions": {
+  "durationMinutes": 90,
+  "buffer": 1,
+  "requests": [
+   {
+    "artist": "Earth, Wind & Fire",
+    "song": "September"
+   },
+   {
+    "artist": "Mark Ronson feat. Bruno Mars",
+    "song": "Uptown Funk"
+   },
+   {
+    "artist": "Whitney Houston",
+    "song": "I Wanna Dance With Somebody"
+   },
+   {
+    "artist": "Usher feat. Lil Jon & Ludacris",
+    "song": "Yeah!"
+   },
+   {
+    "artist": "The Killers",
+    "song": "Mr. Brightside"
+   },
+   {
+    "artist": "Walk The Moon",
+    "song": "Shut Up and Dance"
+   },
+   {
+    "artist": "Dua Lipa",
+    "song": "Levitating"
+   },
+   {
+    "artist": "Queen",
+    "song": "Don't Stop Me Now"
+   },
+   {
+    "artist": "Outkast",
+    "song": "Hey Ya!"
+   },
+   {
+    "artist": "ABBA",
+    "song": "Dancing Queen"
+   }
+  ],
+  "fit": {
+   "familiarity": "familiar",
+   "avoidSlow": true
+  },
+  "ownedOnly": false,
+  "cleanRequired": false,
+  "seasonal": false,
+  "dnp": [
+   "Village People|YMCA",
+   "DJ Casper|Cha Cha Slide",
+   "Cupid|Cupid Shuffle"
+  ],
+  "similarity": "unchanged synthetic artist links (SYNTHETIC_SIMILAR)"
+ },
+ "limitations": [
+  "Controlled scoring fixture, not live/native generation and not the original candidate pool (the full pool was never captured).",
+  "No real Last.fm responses are included: none were fetched for this report (no live provider or user data used). Real community tags/listeners for Chasing Cars, Stayin' Alive (Clean) (Radio Edit), Ava Max or any rated track are UNKNOWN here, so archived31/latest14 carry no community evidence and BEFORE equals AFTER by construction.",
+  "Community evidence only changes rankings when a real exact-track response contains explicit slow/ballad or dance/party top tags or ≥250k listeners; it can never exclude, never overwrite energy/danceability, and is absent when the provider is disabled, times out or answers a different track/version.",
+  "Ratings are reporting-only and never supplied to the scorer. Ava Max (Unfamiliar) replacing Let It Be (Poor) in the published run is not counted as an improvement.",
+  "Existing reports (comparison, timing, timeout, slow-risk) are unchanged; this report uses the exact saved spelling 'Bee Gees|Stayin' Alive (Clean) (Radio Edit)'."
+ ],
+ "noFitUnchanged": {
+  "archived31": true,
+  "heldOut": true
+ },
+ "archived31": {
+  "before": [
+   {
+    "rank": 1,
+    "track": "ABBA|Take a Chance on Me",
+    "score": 1.36,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 7,
+     "energySource": "estimate",
+     "danceability": 7,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     },
+     {
+      "kind": "variety",
+      "text": "ABBA already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 2,
+    "track": "Whitney Houston|How Will I Know",
+    "score": 1.36,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 8,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     },
+     {
+      "kind": "variety",
+      "text": "Whitney Houston already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 3,
+    "track": "Bill Withers|Lovely Day",
+    "score": 1.26,
+    "fit": {
+     "energy": 4,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "1990s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+      "points": 1
+     }
+    ],
+    "uncertain": [
+     "Energy 4/10 (AI estimate) and danceability 8/10 (AI estimate) conflict for slow avoidance: a groove is possible; not classified slow or penalised",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1990s (AI estimate) is a preferred decade for this event · Energy 4/10 (AI estimate) and danceability 8/10 (AI estimate) conflict for slow avoidance: a groove is possible; not classified slow or penalised · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 4,
+    "track": "Journey|Don't Stop Believin'",
+    "score": 1.26,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 5,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+      "points": 1
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 5,
+    "track": "Van Morrison|Brown Eyed Girl",
+    "score": 1.26,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 5,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "1990s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+      "points": 1
+     }
+    ],
+    "uncertain": [
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1990s (estimate) is a preferred decade for this event · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 6,
+    "track": "Big Boi|All Night (Dirty)",
+    "score": 1.16,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 9,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Big Boi as similar to Outkast (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.9
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Big Boi as similar to Outkast (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 7,
+    "track": "American Authors|Best Day Of My Life",
+    "score": 1.11,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.85
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 8,
+    "track": "The Pussycat Dolls|Buttons",
+    "score": 1.11,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 8,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2000s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 9,
+    "track": "Grouplove|Tongue Tied",
+    "score": 1.06,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 6,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 10,
+    "track": "Mariah Carey|A No No",
+    "score": 1.06,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 11,
+    "track": "Ava Max|Freaking Me Out",
+    "score": 1.01,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.75
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 12,
+    "track": "Zara Larsson|Don't Let Me Be Yours",
+    "score": 0.96,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 6,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.7
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 13,
+    "track": "Toni Braxton|Another Sad Love Song",
+    "score": 0.86,
+    "fit": {
+     "energy": 5,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.6
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1990s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 1990s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 14,
+    "track": "The Beatles|Here Comes the Sun",
+    "score": 0.81,
+    "fit": {
+     "energy": 5,
+     "energySource": "ai",
+     "danceability": 6,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.55
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2020s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 2020s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 15,
+    "track": "KISS|I Was Made For Lovin' You",
+    "score": 0.76,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1970s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 1970s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 16,
+    "track": "Tones and I|Dance Monkey",
+    "score": 0.75,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 8,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.4
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 17,
+    "track": "Kool & The Gang|Get Down On It",
+    "score": 0.61,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 5,
+     "energySource": "estimate",
+     "danceability": 9,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 18,
+    "track": "Snow Patrol|Chasing Cars",
+    "score": 0.6,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.6
+     }
+    ],
+    "uncertain": [
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 8/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+    "ratingReportOnly": "Poor"
+   },
+   {
+    "rank": 19,
+    "track": "Mariah Carey|Fantasy",
+    "score": 0.31,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2000s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "Mariah Carey already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 20,
+    "track": "ABBA|Honey Honey",
+    "score": 0.26,
+    "fit": {
+     "popularity": 6,
+     "popularitySource": "estimate",
+     "energy": 8,
+     "energySource": "estimate",
+     "danceability": 5,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1970s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "ABBA already appears 2 times in this event or above",
+      "points": -1.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 6/10 is an estimate"
+    ],
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1970s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 21,
+    "track": "Whitney Houston|I'm Every Woman",
+    "score": 0.26,
+    "fit": {
+     "popularity": 6,
+     "popularitySource": "estimate",
+     "energy": 9,
+     "energySource": "estimate",
+     "danceability": 7,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1990s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "Whitney Houston already appears 2 times in this event or above",
+      "points": -1.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 6/10 is an estimate"
+    ],
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 22,
+    "track": "T.I.|Live Your Life",
+    "score": 0.26,
+    "fit": {
+     "popularity": 1,
+     "popularitySource": "estimate",
+     "energy": 3,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 1/10 is an estimate"
+    ],
+    "reasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 1/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 23,
+    "track": "The O'Jays|Love Train",
+    "score": 0.26,
+    "fit": {
+     "popularity": 6,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 8,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 6/10 is an estimate"
+    ],
+    "reasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 24,
+    "track": "Tracy Chapman|Fast Car",
+    "score": 0.26,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 4,
+     "energySource": "estimate",
+     "danceability": 7,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "1990s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Energy 4/10 (estimate) and danceability 7/10 (estimate) conflict for slow avoidance: a groove is possible; not classified slow or penalised",
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 8/10 is an estimate"
+    ],
+    "reasons": "1990s (estimate) is a preferred decade for this event · Energy 4/10 (estimate) and danceability 7/10 (estimate) conflict for slow avoidance: a groove is possible; not classified slow or penalised · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 25,
+    "track": "Zach Bryan|Revival",
+    "score": 0.26,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 4,
+     "energySource": "estimate",
+     "danceability": 5,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2020s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 8/10 is an estimate"
+    ],
+    "reasons": "2020s (estimate) is a preferred decade for this event · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 26,
+    "track": "ABBA|Mamma Mia",
+    "score": -0.49,
+    "fit": {
+     "energy": 8,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1990s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "ABBA already appears 3 times in this event or above",
+      "points": -2.25
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 27,
+    "track": "Kool & The Gang|Celebration",
+    "score": -0.49,
+    "fit": {
+     "energy": 8,
+     "energySource": "ai",
+     "danceability": 9,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "Kool & The Gang already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 28,
+    "track": "Mariah Carey|8th Grade",
+    "score": -0.7,
+    "fit": {
+     "popularity": 3,
+     "popularitySource": "estimate",
+     "energy": 5,
+     "energySource": "estimate",
+     "danceability": 8,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     },
+     {
+      "kind": "variety",
+      "text": "Mariah Carey already appears 2 times in this event or above",
+      "points": -1.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 3/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 3/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 29,
+    "track": "Journey|Faithfully",
+    "score": -0.75,
+    "fit": {
+     "popularity": 5,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 5,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "variety",
+      "text": "Journey already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 5/10 is an estimate"
+    ],
+    "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 30,
+    "track": "Kool & The Gang|Cherish",
+    "score": -1.5,
+    "fit": {
+     "popularity": 5,
+     "popularitySource": "estimate",
+     "energy": 3,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "variety",
+      "text": "Kool & The Gang already appears 2 times in this event or above",
+      "points": -1.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 5/10 is an estimate"
+    ],
+    "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 31,
+    "track": "The Beatles|Let It Be",
+    "score": -2.94,
+    "fit": {
+     "energy": 4,
+     "energySource": "ai",
+     "danceability": 4,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.55
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1970s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "slowEstimate",
+      "text": "Energy 4/10 (AI estimate) and danceability 4/10 (AI estimate) suggest low-both slow risk — ranked lower, not confirmed slow (advisory)",
+      "points": -3
+     },
+     {
+      "kind": "variety",
+      "text": "The Beatles already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 1970s (estimate) is a preferred decade for this event · Energy 4/10 (AI estimate) and danceability 4/10 (AI estimate) suggest low-both slow risk — ranked lower, not confirmed slow (advisory) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Poor"
+   }
+  ],
+  "after": [
+   {
+    "rank": 1,
+    "track": "ABBA|Take a Chance on Me",
+    "score": 1.36,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 7,
+     "energySource": "estimate",
+     "danceability": 7,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     },
+     {
+      "kind": "variety",
+      "text": "ABBA already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 2,
+    "track": "Whitney Houston|How Will I Know",
+    "score": 1.36,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 8,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     },
+     {
+      "kind": "variety",
+      "text": "Whitney Houston already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 3,
+    "track": "Bill Withers|Lovely Day",
+    "score": 1.26,
+    "fit": {
+     "energy": 4,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "1990s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+      "points": 1
+     }
+    ],
+    "uncertain": [
+     "Energy 4/10 (AI estimate) and danceability 8/10 (AI estimate) conflict for slow avoidance: a groove is possible; not classified slow or penalised",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1990s (AI estimate) is a preferred decade for this event · Energy 4/10 (AI estimate) and danceability 8/10 (AI estimate) conflict for slow avoidance: a groove is possible; not classified slow or penalised · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 4,
+    "track": "Journey|Don't Stop Believin'",
+    "score": 1.26,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 5,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+      "points": 1
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 5,
+    "track": "Van Morrison|Brown Eyed Girl",
+    "score": 1.26,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 5,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "1990s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data)",
+      "points": 1
+     }
+    ],
+    "uncertain": [
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) · 1990s (estimate) is a preferred decade for this event · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 6,
+    "track": "Big Boi|All Night (Dirty)",
+    "score": 1.16,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 9,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Big Boi as similar to Outkast (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.9
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Big Boi as similar to Outkast (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 7,
+    "track": "American Authors|Best Day Of My Life",
+    "score": 1.11,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.85
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 8,
+    "track": "The Pussycat Dolls|Buttons",
+    "score": 1.11,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 8,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2000s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists The Pussycat Dolls as similar to Usher (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 9,
+    "track": "Grouplove|Tongue Tied",
+    "score": 1.06,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 6,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · 2010s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 10,
+    "track": "Mariah Carey|A No No",
+    "score": 1.06,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 11,
+    "track": "Ava Max|Freaking Me Out",
+    "score": 1.01,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.75
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 12,
+    "track": "Zara Larsson|Don't Let Me Be Yours",
+    "score": 0.96,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 6,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.7
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2010s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Zara Larsson as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · 2010s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 13,
+    "track": "Toni Braxton|Another Sad Love Song",
+    "score": 0.86,
+    "fit": {
+     "energy": 5,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.6
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1990s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Toni Braxton as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 1990s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 14,
+    "track": "The Beatles|Here Comes the Sun",
+    "score": 0.81,
+    "fit": {
+     "energy": 5,
+     "energySource": "ai",
+     "danceability": 6,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.55
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2020s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 2020s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 15,
+    "track": "KISS|I Was Made For Lovin' You",
+    "score": 0.76,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1970s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 1970s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 16,
+    "track": "Tones and I|Dance Monkey",
+    "score": 0.75,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 8,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.4
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists Tones and I as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 17,
+    "track": "Kool & The Gang|Get Down On It",
+    "score": 0.61,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 5,
+     "energySource": "estimate",
+     "danceability": 9,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate)",
+      "points": 0.35
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) · 2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 18,
+    "track": "Snow Patrol|Chasing Cars",
+    "score": 0.6,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.6
+     }
+    ],
+    "uncertain": [
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 8/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+    "ratingReportOnly": "Poor"
+   },
+   {
+    "rank": 19,
+    "track": "Mariah Carey|Fantasy",
+    "score": 0.31,
+    "fit": {
+     "energy": 7,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     },
+     {
+      "kind": "prefDecade",
+      "text": "2000s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "Mariah Carey already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · 2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 20,
+    "track": "ABBA|Honey Honey",
+    "score": 0.26,
+    "fit": {
+     "popularity": 6,
+     "popularitySource": "estimate",
+     "energy": 8,
+     "energySource": "estimate",
+     "danceability": 5,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1970s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "ABBA already appears 2 times in this event or above",
+      "points": -1.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 6/10 is an estimate"
+    ],
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1970s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 21,
+    "track": "Whitney Houston|I'm Every Woman",
+    "score": 0.26,
+    "fit": {
+     "popularity": 6,
+     "popularitySource": "estimate",
+     "energy": 9,
+     "energySource": "estimate",
+     "danceability": 7,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1990s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "Whitney Houston already appears 2 times in this event or above",
+      "points": -1.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 6/10 is an estimate"
+    ],
+    "reasons": "Same artist as client request “Whitney Houston – I Wanna Dance With Somebody” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 22,
+    "track": "T.I.|Live Your Life",
+    "score": 0.26,
+    "fit": {
+     "popularity": 1,
+     "popularitySource": "estimate",
+     "energy": 3,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 1/10 is an estimate"
+    ],
+    "reasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 1/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 23,
+    "track": "The O'Jays|Love Train",
+    "score": 0.26,
+    "fit": {
+     "popularity": 6,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 8,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 6/10 is an estimate"
+    ],
+    "reasons": "2000s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 6/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 24,
+    "track": "Tracy Chapman|Fast Car",
+    "score": 0.26,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 4,
+     "energySource": "estimate",
+     "danceability": 7,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "1990s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Energy 4/10 (estimate) and danceability 7/10 (estimate) conflict for slow avoidance: a groove is possible; not classified slow or penalised",
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 8/10 is an estimate"
+    ],
+    "reasons": "1990s (estimate) is a preferred decade for this event · Energy 4/10 (estimate) and danceability 7/10 (estimate) conflict for slow avoidance: a groove is possible; not classified slow or penalised · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 25,
+    "track": "Zach Bryan|Revival",
+    "score": 0.26,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 4,
+     "energySource": "estimate",
+     "danceability": 5,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2020s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     }
+    ],
+    "uncertain": [
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 8/10 is an estimate"
+    ],
+    "reasons": "2020s (estimate) is a preferred decade for this event · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 26,
+    "track": "ABBA|Mamma Mia",
+    "score": -0.49,
+    "fit": {
+     "energy": 8,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1990s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "ABBA already appears 3 times in this event or above",
+      "points": -2.25
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · 1990s (estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 27,
+    "track": "Kool & The Gang|Celebration",
+    "score": -0.49,
+    "fit": {
+     "energy": 8,
+     "energySource": "ai",
+     "danceability": 9,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "prefDecade",
+      "text": "2000s (AI estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "variety",
+      "text": "Kool & The Gang already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "2000s (AI estimate) is a preferred decade for this event · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 28,
+    "track": "Mariah Carey|8th Grade",
+    "score": -0.7,
+    "fit": {
+     "popularity": 3,
+     "popularitySource": "estimate",
+     "energy": 5,
+     "energySource": "estimate",
+     "danceability": 8,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     },
+     {
+      "kind": "variety",
+      "text": "Mariah Carey already appears 2 times in this event or above",
+      "points": -1.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 3/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists Mariah Carey as similar to Whitney Houston (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 3/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 29,
+    "track": "Journey|Faithfully",
+    "score": -0.75,
+    "fit": {
+     "popularity": 5,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 5,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "variety",
+      "text": "Journey already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 5/10 is an estimate"
+    ],
+    "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 30,
+    "track": "Kool & The Gang|Cherish",
+    "score": -1.5,
+    "fit": {
+     "popularity": 5,
+     "popularitySource": "estimate",
+     "energy": 3,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "variety",
+      "text": "Kool & The Gang already appears 2 times in this event or above",
+      "points": -1.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 5/10 is an estimate"
+    ],
+    "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 5/10 is an estimate",
+    "ratingReportOnly": null
+   },
+   {
+    "rank": 31,
+    "track": "The Beatles|Let It Be",
+    "score": -2.94,
+    "fit": {
+     "energy": 4,
+     "energySource": "ai",
+     "danceability": 4,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.55
+     },
+     {
+      "kind": "prefDecade",
+      "text": "1970s (estimate) is a preferred decade for this event",
+      "points": 0.26
+     },
+     {
+      "kind": "slowEstimate",
+      "text": "Energy 4/10 (AI estimate) and danceability 4/10 (AI estimate) suggest low-both slow risk — ranked lower, not confirmed slow (advisory)",
+      "points": -3
+     },
+     {
+      "kind": "variety",
+      "text": "The Beatles already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists The Beatles as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · 1970s (estimate) is a preferred decade for this event · Energy 4/10 (AI estimate) and danceability 4/10 (AI estimate) suggest low-both slow risk — ranked lower, not confirmed slow (advisory) · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Poor"
+   }
+  ],
+  "hidden": {
+   "before": {
+    "dismissed": 0,
+    "never": 0,
+    "inEvent": 0,
+    "filtered": 0,
+    "notOwned": 0,
+    "slow": 0
+   },
+   "after": {
+    "dismissed": 0,
+    "never": 0,
+    "inEvent": 0,
+    "filtered": 0,
+    "notOwned": 0,
+    "slow": 0
+   }
+  },
+  "beforeTop14": [
+   "ABBA|Take a Chance on Me",
+   "Whitney Houston|How Will I Know",
+   "Bill Withers|Lovely Day",
+   "Journey|Don't Stop Believin'",
+   "Van Morrison|Brown Eyed Girl",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "The Pussycat Dolls|Buttons",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun"
+  ],
+  "afterTop14": [
+   "ABBA|Take a Chance on Me",
+   "Whitney Houston|How Will I Know",
+   "Bill Withers|Lovely Day",
+   "Journey|Don't Stop Believin'",
+   "Van Morrison|Brown Eyed Girl",
+   "Big Boi|All Night (Dirty)",
+   "American Authors|Best Day Of My Life",
+   "The Pussycat Dolls|Buttons",
+   "Grouplove|Tongue Tied",
+   "Mariah Carey|A No No",
+   "Ava Max|Freaking Me Out",
+   "Zara Larsson|Don't Let Me Be Yours",
+   "Toni Braxton|Another Sad Love Song",
+   "The Beatles|Here Comes the Sun"
+  ],
+  "changed": {
+   "removed": [],
+   "added": []
+  },
+  "retention": {
+   "top14Retained": 14
+  },
+  "unknownTop14": {
+   "before": {
+    "noEnergyDance": 0,
+    "noPopularity": 10,
+    "noCommunity": 14
+   },
+   "after": {
+    "noEnergyDance": 0,
+    "noPopularity": 10,
+    "noCommunity": 14
+   }
+  },
+  "ratingsReportOnly": {
+   "before": {
+    "Good": 3,
+    "Fair": 1,
+    "Poor": 0,
+    "Unfamiliar": 5,
+    "Unrated": 5
+   },
+   "after": {
+    "Good": 3,
+    "Fair": 1,
+    "Poor": 0,
+    "Unfamiliar": 5,
+    "Unrated": 5
+   }
+  }
+ },
+ "latest14Exact": {
+  "before": [
+   {
+    "rank": 1,
+    "track": "Harry Styles|As It Was",
+    "score": 1.5,
+    "fit": {
+     "popularity": 9,
+     "popularitySource": "provider",
+     "energy": 8,
+     "energySource": "provider",
+     "danceability": 6,
+     "danceabilitySource": "provider"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+      "points": 1
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Verified popularity supports recognition, not slow/ballad or dance suitability"
+    ],
+    "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 2,
+    "track": "American Authors|Best Day Of My Life (Clean)",
+    "score": 0.85,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.85
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 3,
+    "track": "Grouplove|Tongue Tied",
+    "score": 0.8,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 6,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 4,
+    "track": "ABBA|Mamma Mia",
+    "score": 0.75,
+    "fit": {
+     "energy": 8,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "variety",
+      "text": "ABBA already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 5,
+    "track": "Ava Max|Freaking Me Out (Clean)",
+    "score": 0.75,
+    "fit": null,
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unknown: no energy or danceability data",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unknown: no energy or danceability data · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 6,
+    "track": "The Jackson 5|I Want You Back",
+    "score": 0.68,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "catalogue",
+     "danceability": 8,
+     "danceabilitySource": "catalogue"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 8/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences",
+      "points": 0.18
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 8/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 7,
+    "track": "Snow Patrol|Chasing Cars",
+    "score": 0.6,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.6
+     }
+    ],
+    "uncertain": [
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 8/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+    "ratingReportOnly": "Poor"
+   },
+   {
+    "rank": 8,
+    "track": "Bee Gees|Stayin' Alive (Clean) (Radio Edit)",
+    "score": 0.5,
+    "fit": null,
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unknown: no energy or danceability data"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Slow/ballad status unknown: no energy or danceability data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 9,
+    "track": "Bill Withers|Lovely Day",
+    "score": 0.5,
+    "fit": {
+     "energy": 5,
+     "energySource": "catalogue",
+     "danceability": 6,
+     "danceabilitySource": "catalogue"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 10,
+    "track": "Journey|Don't Stop Believin'",
+    "score": 0.5,
+    "fit": {
+     "energy": 7,
+     "energySource": "catalogue",
+     "danceability": 6,
+     "danceabilitySource": "catalogue"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 11,
+    "track": "KISS|I Was Made For Lovin' You",
+    "score": 0.5,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 12,
+    "track": "Stevie Wonder|Signed, Sealed, Delivered I'm Yours",
+    "score": 0.5,
+    "fit": {
+     "popularity": 4,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "catalogue",
+     "danceability": 8,
+     "danceabilitySource": "catalogue"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 13,
+    "track": "A Tribe Called Quest|Can I Kick It (Intro Clean)",
+    "score": 0.18,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 7,
+     "energySource": "estimate",
+     "danceability": 9,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences",
+      "points": 0.18
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 14,
+    "track": "Kool & The Gang|Get Down On It (Calvo Remix) (Clean)",
+    "score": 0.18,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 5,
+     "energySource": "estimate",
+     "danceability": 9,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences",
+      "points": 0.18
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": "Good"
+   }
+  ],
+  "after": [
+   {
+    "rank": 1,
+    "track": "Harry Styles|As It Was",
+    "score": 1.5,
+    "fit": {
+     "popularity": 9,
+     "popularitySource": "provider",
+     "energy": 8,
+     "energySource": "provider",
+     "danceability": 6,
+     "danceabilitySource": "provider"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences",
+      "points": 1
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Verified popularity supports recognition, not slow/ballad or dance suitability"
+    ],
+    "reasons": "Track popularity 9/10 (music data provider, audience-wide) supports guest familiarity — counted half: no link to this event's requests or preferences · In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Verified popularity supports recognition, not slow/ballad or dance suitability",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 2,
+    "track": "American Authors|Best Day Of My Life (Clean)",
+    "score": 0.85,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 7,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.85
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists American Authors as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 3,
+    "track": "Grouplove|Tongue Tied",
+    "score": 0.8,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 6,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.8
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Grouplove as similar to Walk The Moon (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 4,
+    "track": "ABBA|Mamma Mia",
+    "score": 0.75,
+    "fit": {
+     "energy": 8,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "artist",
+      "text": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence",
+      "points": 1.5
+     },
+     {
+      "kind": "variety",
+      "text": "ABBA already appears 1 time in this event or above",
+      "points": -0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Same artist as client request “ABBA – Dancing Queen” — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 5,
+    "track": "Ava Max|Freaking Me Out (Clean)",
+    "score": 0.75,
+    "fit": null,
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.75
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unknown: no energy or danceability data",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists Ava Max as similar to Dua Lipa (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unknown: no energy or danceability data · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Unfamiliar"
+   },
+   {
+    "rank": 6,
+    "track": "The Jackson 5|I Want You Back",
+    "score": 0.68,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "catalogue",
+     "danceability": 8,
+     "danceabilitySource": "catalogue"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 8/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences",
+      "points": 0.18
+     },
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Track popularity 8/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 7,
+    "track": "Snow Patrol|Chasing Cars",
+    "score": 0.6,
+    "fit": {
+     "popularity": 8,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "estimate",
+     "danceability": 6,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.6
+     }
+    ],
+    "uncertain": [
+     "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 8/10 is an estimate"
+    ],
+    "reasons": "Last.fm lists Snow Patrol as similar to The Killers (artist-level) — counted half: no track-level familiarity evidence · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+    "ratingReportOnly": "Poor"
+   },
+   {
+    "rank": 8,
+    "track": "Bee Gees|Stayin' Alive (Clean) (Radio Edit)",
+    "score": 0.5,
+    "fit": null,
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unknown: no energy or danceability data"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Slow/ballad status unknown: no energy or danceability data",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 9,
+    "track": "Bill Withers|Lovely Day",
+    "score": 0.5,
+    "fit": {
+     "energy": 5,
+     "energySource": "catalogue",
+     "danceability": 6,
+     "danceabilitySource": "catalogue"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 10,
+    "track": "Journey|Don't Stop Believin'",
+    "score": 0.5,
+    "fit": {
+     "energy": 7,
+     "energySource": "catalogue",
+     "danceability": 6,
+     "danceabilitySource": "catalogue"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 11,
+    "track": "KISS|I Was Made For Lovin' You",
+    "score": 0.5,
+    "fit": {
+     "energy": 9,
+     "energySource": "ai",
+     "danceability": 8,
+     "danceabilitySource": "ai"
+    },
+    "evidence": [
+     {
+      "kind": "lastfm",
+      "text": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unknown: no track popularity data"
+    ],
+    "reasons": "Last.fm lists KISS as similar to Queen (artist-level) — counted half: no track-level familiarity evidence · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 12,
+    "track": "Stevie Wonder|Signed, Sealed, Delivered I'm Yours",
+    "score": 0.5,
+    "fit": {
+     "popularity": 4,
+     "popularitySource": "estimate",
+     "energy": 6,
+     "energySource": "catalogue",
+     "danceability": 8,
+     "danceabilitySource": "catalogue"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences",
+      "points": 0.5
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+    ],
+    "reasons": "In the built-in crowd-standards catalogue (app curation, not chart data) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+    "ratingReportOnly": "Good"
+   },
+   {
+    "rank": 13,
+    "track": "A Tribe Called Quest|Can I Kick It (Intro Clean)",
+    "score": 0.18,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 7,
+     "energySource": "estimate",
+     "danceability": 9,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences",
+      "points": 0.18
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": "Fair"
+   },
+   {
+    "rank": 14,
+    "track": "Kool & The Gang|Get Down On It (Calvo Remix) (Clean)",
+    "score": 0.18,
+    "fit": {
+     "popularity": 7,
+     "popularitySource": "estimate",
+     "energy": 5,
+     "energySource": "estimate",
+     "danceability": 9,
+     "danceabilitySource": "estimate"
+    },
+    "evidence": [
+     {
+      "kind": "familiarTrack",
+      "text": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences",
+      "points": 0.18
+     }
+    ],
+    "uncertain": [
+     "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "Guest familiarity unverified: popularity 7/10 is an estimate"
+    ],
+    "reasons": "Track popularity 7/10 (estimate, audience-wide) (advisory estimate) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 7/10 is an estimate",
+    "ratingReportOnly": "Good"
+   }
+  ],
+  "hidden": {
+   "before": {
+    "dismissed": 0,
+    "never": 0,
+    "inEvent": 0,
+    "filtered": 0,
+    "notOwned": 0,
+    "slow": 0
+   },
+   "after": {
+    "dismissed": 0,
+    "never": 0,
+    "inEvent": 0,
+    "filtered": 0,
+    "notOwned": 0,
+    "slow": 0
+   }
+  },
+  "beforeTop14": [
+   "Harry Styles|As It Was",
+   "American Authors|Best Day Of My Life (Clean)",
+   "Grouplove|Tongue Tied",
+   "ABBA|Mamma Mia",
+   "Ava Max|Freaking Me Out (Clean)",
+   "The Jackson 5|I Want You Back",
+   "Snow Patrol|Chasing Cars",
+   "Bee Gees|Stayin' Alive (Clean) (Radio Edit)",
+   "Bill Withers|Lovely Day",
+   "Journey|Don't Stop Believin'",
+   "KISS|I Was Made For Lovin' You",
+   "Stevie Wonder|Signed, Sealed, Delivered I'm Yours",
+   "A Tribe Called Quest|Can I Kick It (Intro Clean)",
+   "Kool & The Gang|Get Down On It (Calvo Remix) (Clean)"
+  ],
+  "afterTop14": [
+   "Harry Styles|As It Was",
+   "American Authors|Best Day Of My Life (Clean)",
+   "Grouplove|Tongue Tied",
+   "ABBA|Mamma Mia",
+   "Ava Max|Freaking Me Out (Clean)",
+   "The Jackson 5|I Want You Back",
+   "Snow Patrol|Chasing Cars",
+   "Bee Gees|Stayin' Alive (Clean) (Radio Edit)",
+   "Bill Withers|Lovely Day",
+   "Journey|Don't Stop Believin'",
+   "KISS|I Was Made For Lovin' You",
+   "Stevie Wonder|Signed, Sealed, Delivered I'm Yours",
+   "A Tribe Called Quest|Can I Kick It (Intro Clean)",
+   "Kool & The Gang|Get Down On It (Calvo Remix) (Clean)"
+  ],
+  "changed": {
+   "removed": [],
+   "added": []
+  },
+  "retention": {
+   "top14Retained": 14
+  },
+  "unknownTop14": {
+   "before": {
+    "noEnergyDance": 2,
+    "noPopularity": 8,
+    "noCommunity": 14
+   },
+   "after": {
+    "noEnergyDance": 2,
+    "noPopularity": 8,
+    "noCommunity": 14
+   }
+  },
+  "ratingsReportOnly": {
+   "before": {
+    "Good": 7,
+    "Fair": 5,
+    "Poor": 1,
+    "Unfamiliar": 1,
+    "Unrated": 0
+   },
+   "after": {
+    "Good": 7,
+    "Fair": 5,
+    "Poor": 1,
+    "Unfamiliar": 1,
+    "Unrated": 0
+   }
+  }
+ },
+ "heldOut": {
+  "cases": [
+   {
+    "id": "slow-tag + estimated 6/6 + est pop 8",
+    "track": "HO North|Lantern",
+    "parsedCommunity": {
+     "source": "lastfm",
+     "listeners": 400000,
+     "slowTags": [
+      "ballad"
+     ],
+     "upbeatTags": []
+    }
+   },
+   {
+    "id": "same feel, no community data (provider disabled)",
+    "track": "HO East|Harbor",
+    "parsedCommunity": null
+   },
+   {
+    "id": "slow tag + party tag conflict",
+    "track": "HO South|Signal",
+    "parsedCommunity": {
+     "source": "lastfm",
+     "listeners": 300000,
+     "slowTags": [
+      "slow"
+     ],
+     "upbeatTags": [
+      "party"
+     ]
+    }
+   },
+   {
+    "id": "slow tag vs verified upbeat 8/7",
+    "track": "HO West|Meridian",
+    "parsedCommunity": {
+     "source": "lastfm",
+     "listeners": 300000,
+     "slowTags": [
+      "ballad"
+     ],
+     "upbeatTags": []
+    }
+   },
+   {
+    "id": "wrong version answered (live) — rejected",
+    "track": "HO Peak|Summit",
+    "parsedCommunity": null
+   },
+   {
+    "id": "artist-only/wrong title — rejected",
+    "track": "HO Vale|Ridge",
+    "parsedCommunity": null
+   },
+   {
+    "id": "generic sad/love/rock tags only",
+    "track": "HO Glen|Ember",
+    "parsedCommunity": {
+     "source": "lastfm",
+     "listeners": 900000,
+     "slowTags": [],
+     "upbeatTags": []
+    }
+   },
+   {
+    "id": "tiny listener sample with ballad tag",
+    "track": "HO Moor|Drift",
+    "parsedCommunity": {
+     "source": "lastfm",
+     "listeners": 1200,
+     "slowTags": [],
+     "upbeatTags": []
+    }
+   },
+   {
+    "id": "3M listeners + supported upbeat 7/8 est",
+    "track": "HO Dune|Pulse",
+    "parsedCommunity": {
+     "source": "lastfm",
+     "listeners": 3000000,
+     "slowTags": [],
+     "upbeatTags": [
+      "dance"
+     ]
+    }
+   },
+   {
+    "id": "3M listeners, unknown feel",
+    "track": "HO Fjord|Echo",
+    "parsedCommunity": {
+     "source": "lastfm",
+     "listeners": 3000000,
+     "slowTags": [],
+     "upbeatTags": []
+    }
+   },
+   {
+    "id": "supported upbeat 7/8 est, no community data",
+    "track": "HO Cove|Spark",
+    "parsedCommunity": null
+   }
+  ],
+  "familiarAvoidSlow": {
+   "before": [
+    {
+     "rank": 1,
+     "track": "HO Cove|Spark",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 2,
+     "track": "HO Dune|Pulse",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai",
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": [
+        "dance"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 3,
+     "track": "HO East|Harbor",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unverified: popularity 8/10 is an estimate"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 4,
+     "track": "HO Fjord|Echo",
+     "score": 0,
+     "fit": {
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unknown: no energy or danceability data",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unknown: no energy or danceability data · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 5,
+     "track": "HO Glen|Ember",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 900000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 6,
+     "track": "HO Moor|Drift",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 1200,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 7,
+     "track": "HO North|Lantern",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 400000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unverified: popularity 8/10 is an estimate"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 8,
+     "track": "HO Peak|Summit",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 9,
+     "track": "HO South|Signal",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "slow"
+       ],
+       "upbeatTags": [
+        "party"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 10,
+     "track": "HO Vale|Ridge",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 11,
+     "track": "HO West|Meridian",
+     "score": 0,
+     "fit": {
+      "energy": 8,
+      "energySource": "provider",
+      "danceability": 7,
+      "danceabilitySource": "provider",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    }
+   ],
+   "after": [
+    {
+     "rank": 1,
+     "track": "HO Dune|Pulse",
+     "score": 0.25,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai",
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": [
+        "dance"
+       ]
+      }
+     },
+     "evidence": [
+      {
+       "kind": "familiarTrack",
+       "text": "Last.fm listeners 3.0M for this exact track (community count, advisory — not proof this crowd knows it) — counted half: no link to this event's requests or preferences",
+       "points": 0.25
+      }
+     ],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "Last.fm listeners 3.0M for this exact track (community count, advisory — not proof this crowd knows it) — counted half: no link to this event's requests or preferences · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 2,
+     "track": "HO Cove|Spark",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 3,
+     "track": "HO East|Harbor",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unverified: popularity 8/10 is an estimate"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 4,
+     "track": "HO Fjord|Echo",
+     "score": 0,
+     "fit": {
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported",
+      "Slow/ballad status unknown: no energy or danceability data",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unknown: no energy or danceability data · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 5,
+     "track": "HO Glen|Ember",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 900000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported",
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 6,
+     "track": "HO Moor|Drift",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 1200,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 7,
+     "track": "HO Peak|Summit",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 8,
+     "track": "HO South|Signal",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "slow"
+       ],
+       "upbeatTags": [
+        "party"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Last.fm community tags \"slow\" conflict with tags \"party\": not classified slow or penalised",
+      "Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported",
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Last.fm community tags \"slow\" conflict with tags \"party\": not classified slow or penalised · Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 9,
+     "track": "HO Vale|Ridge",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 10,
+     "track": "HO West|Meridian",
+     "score": 0,
+     "fit": {
+      "energy": 8,
+      "energySource": "provider",
+      "danceability": 7,
+      "danceabilitySource": "provider",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Last.fm community tags \"ballad\" conflict with verified energy 8/10 and danceability 7/10: not classified slow or penalised",
+      "Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported",
+      "Guest familiarity unknown: no track popularity data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Last.fm community tags \"ballad\" conflict with verified energy 8/10 and danceability 7/10: not classified slow or penalised · Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported · Guest familiarity unknown: no track popularity data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 11,
+     "track": "HO North|Lantern",
+     "score": -2,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 400000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [
+      {
+       "kind": "slowEstimate",
+       "text": "Last.fm community tags \"ballad\" for this exact track — ranked lower, not confirmed slow (advisory)",
+       "points": -2
+      }
+     ],
+     "uncertain": [
+      "Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported",
+      "Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported",
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+      "Guest familiarity unverified: popularity 8/10 is an estimate"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Last.fm community tags \"ballad\" for this exact track — ranked lower, not confirmed slow (advisory) · Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported · Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported · Slow/ballad status unverified: energy/danceability are estimates or incomplete · Guest familiarity unverified: popularity 8/10 is an estimate",
+     "ratingReportOnly": null
+    }
+   ],
+   "hidden": {
+    "before": {
+     "dismissed": 0,
+     "never": 0,
+     "inEvent": 0,
+     "filtered": 0,
+     "notOwned": 0,
+     "slow": 0
+    },
+    "after": {
+     "dismissed": 0,
+     "never": 0,
+     "inEvent": 0,
+     "filtered": 0,
+     "notOwned": 0,
+     "slow": 0
+    }
+   },
+   "beforeTop14": [
+    "HO Cove|Spark",
+    "HO Dune|Pulse",
+    "HO East|Harbor",
+    "HO Fjord|Echo",
+    "HO Glen|Ember",
+    "HO Moor|Drift",
+    "HO North|Lantern",
+    "HO Peak|Summit",
+    "HO South|Signal",
+    "HO Vale|Ridge",
+    "HO West|Meridian"
+   ],
+   "afterTop14": [
+    "HO Dune|Pulse",
+    "HO Cove|Spark",
+    "HO East|Harbor",
+    "HO Fjord|Echo",
+    "HO Glen|Ember",
+    "HO Moor|Drift",
+    "HO Peak|Summit",
+    "HO South|Signal",
+    "HO Vale|Ridge",
+    "HO West|Meridian",
+    "HO North|Lantern"
+   ],
+   "changed": {
+    "removed": [],
+    "added": []
+   },
+   "retention": {
+    "top14Retained": 11
+   },
+   "unknownTop14": {
+    "before": {
+     "noEnergyDance": 1,
+     "noPopularity": 9,
+     "noCommunity": 4
+    },
+    "after": {
+     "noEnergyDance": 1,
+     "noPopularity": 9,
+     "noCommunity": 4
+    }
+   },
+   "ratingsReportOnly": {
+    "before": {
+     "Good": 0,
+     "Fair": 0,
+     "Poor": 0,
+     "Unfamiliar": 0,
+     "Unrated": 11
+    },
+    "after": {
+     "Good": 0,
+     "Fair": 0,
+     "Poor": 0,
+     "Unfamiliar": 0,
+     "Unrated": 11
+    }
+   }
+  },
+  "avoidSlowOnly": {
+   "before": [
+    {
+     "rank": 1,
+     "track": "HO Cove|Spark",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 2,
+     "track": "HO Dune|Pulse",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai",
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": [
+        "dance"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 3,
+     "track": "HO East|Harbor",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 4,
+     "track": "HO Fjord|Echo",
+     "score": 0,
+     "fit": {
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unknown: no energy or danceability data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unknown: no energy or danceability data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 5,
+     "track": "HO Glen|Ember",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 900000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 6,
+     "track": "HO Moor|Drift",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 1200,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 7,
+     "track": "HO North|Lantern",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 400000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 8,
+     "track": "HO Peak|Summit",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 9,
+     "track": "HO South|Signal",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "slow"
+       ],
+       "upbeatTags": [
+        "party"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 10,
+     "track": "HO Vale|Ridge",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 11,
+     "track": "HO West|Meridian",
+     "score": 0,
+     "fit": {
+      "energy": 8,
+      "energySource": "provider",
+      "danceability": 7,
+      "danceabilitySource": "provider",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    }
+   ],
+   "after": [
+    {
+     "rank": 1,
+     "track": "HO Cove|Spark",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 2,
+     "track": "HO Dune|Pulse",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai",
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": [
+        "dance"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 3,
+     "track": "HO East|Harbor",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 4,
+     "track": "HO Fjord|Echo",
+     "score": 0,
+     "fit": {
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unknown: no energy or danceability data"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unknown: no energy or danceability data",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 5,
+     "track": "HO Glen|Ember",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 900000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 6,
+     "track": "HO Moor|Drift",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 1200,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 7,
+     "track": "HO Peak|Summit",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 8,
+     "track": "HO South|Signal",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "slow"
+       ],
+       "upbeatTags": [
+        "party"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Last.fm community tags \"slow\" conflict with tags \"party\": not classified slow or penalised",
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Last.fm community tags \"slow\" conflict with tags \"party\": not classified slow or penalised · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 9,
+     "track": "HO Vale|Ridge",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 10,
+     "track": "HO West|Meridian",
+     "score": 0,
+     "fit": {
+      "energy": 8,
+      "energySource": "provider",
+      "danceability": 7,
+      "danceabilitySource": "provider",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [
+      "Last.fm community tags \"ballad\" conflict with verified energy 8/10 and danceability 7/10: not classified slow or penalised"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Last.fm community tags \"ballad\" conflict with verified energy 8/10 and danceability 7/10: not classified slow or penalised",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 11,
+     "track": "HO North|Lantern",
+     "score": -2,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 400000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [
+      {
+       "kind": "slowEstimate",
+       "text": "Last.fm community tags \"ballad\" for this exact track — ranked lower, not confirmed slow (advisory)",
+       "points": -2
+      }
+     ],
+     "uncertain": [
+      "Slow/ballad status unverified: energy/danceability are estimates or incomplete"
+     ],
+     "reasons": "No specific evidence beyond your event rules. · Last.fm community tags \"ballad\" for this exact track — ranked lower, not confirmed slow (advisory) · Slow/ballad status unverified: energy/danceability are estimates or incomplete",
+     "ratingReportOnly": null
+    }
+   ],
+   "hidden": {
+    "before": {
+     "dismissed": 0,
+     "never": 0,
+     "inEvent": 0,
+     "filtered": 0,
+     "notOwned": 0,
+     "slow": 0
+    },
+    "after": {
+     "dismissed": 0,
+     "never": 0,
+     "inEvent": 0,
+     "filtered": 0,
+     "notOwned": 0,
+     "slow": 0
+    }
+   },
+   "beforeTop14": [
+    "HO Cove|Spark",
+    "HO Dune|Pulse",
+    "HO East|Harbor",
+    "HO Fjord|Echo",
+    "HO Glen|Ember",
+    "HO Moor|Drift",
+    "HO North|Lantern",
+    "HO Peak|Summit",
+    "HO South|Signal",
+    "HO Vale|Ridge",
+    "HO West|Meridian"
+   ],
+   "afterTop14": [
+    "HO Cove|Spark",
+    "HO Dune|Pulse",
+    "HO East|Harbor",
+    "HO Fjord|Echo",
+    "HO Glen|Ember",
+    "HO Moor|Drift",
+    "HO Peak|Summit",
+    "HO South|Signal",
+    "HO Vale|Ridge",
+    "HO West|Meridian",
+    "HO North|Lantern"
+   ],
+   "changed": {
+    "removed": [],
+    "added": []
+   },
+   "retention": {
+    "top14Retained": 11
+   },
+   "unknownTop14": {
+    "before": {
+     "noEnergyDance": 1,
+     "noPopularity": 9,
+     "noCommunity": 4
+    },
+    "after": {
+     "noEnergyDance": 1,
+     "noPopularity": 9,
+     "noCommunity": 4
+    }
+   },
+   "ratingsReportOnly": {
+    "before": {
+     "Good": 0,
+     "Fair": 0,
+     "Poor": 0,
+     "Unfamiliar": 0,
+     "Unrated": 11
+    },
+    "after": {
+     "Good": 0,
+     "Fair": 0,
+     "Poor": 0,
+     "Unfamiliar": 0,
+     "Unrated": 11
+    }
+   }
+  },
+  "discovery": {
+   "before": [
+    {
+     "rank": 1,
+     "track": "HO Cove|Spark",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai"
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 2,
+     "track": "HO Dune|Pulse",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai",
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": [
+        "dance"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 3,
+     "track": "HO East|Harbor",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 4,
+     "track": "HO Fjord|Echo",
+     "score": 0,
+     "fit": {
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 5,
+     "track": "HO Glen|Ember",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 900000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 6,
+     "track": "HO Moor|Drift",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 1200,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 7,
+     "track": "HO North|Lantern",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 400000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 8,
+     "track": "HO Peak|Summit",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 9,
+     "track": "HO South|Signal",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "slow"
+       ],
+       "upbeatTags": [
+        "party"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 10,
+     "track": "HO Vale|Ridge",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 11,
+     "track": "HO West|Meridian",
+     "score": 0,
+     "fit": {
+      "energy": 8,
+      "energySource": "provider",
+      "danceability": 7,
+      "danceabilitySource": "provider",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    }
+   ],
+   "after": [
+    {
+     "rank": 1,
+     "track": "HO Cove|Spark",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai"
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 2,
+     "track": "HO Dune|Pulse",
+     "score": 0,
+     "fit": {
+      "energy": 7,
+      "energySource": "ai",
+      "danceability": 8,
+      "danceabilitySource": "ai",
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": [
+        "dance"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 3,
+     "track": "HO East|Harbor",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 4,
+     "track": "HO Fjord|Echo",
+     "score": 0,
+     "fit": {
+      "community": {
+       "source": "lastfm",
+       "listeners": 3000000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 5,
+     "track": "HO Glen|Ember",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 900000,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 6,
+     "track": "HO Moor|Drift",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 1200,
+       "slowTags": [],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 7,
+     "track": "HO North|Lantern",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "popularity": 8,
+      "popularitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 400000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 8,
+     "track": "HO Peak|Summit",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 9,
+     "track": "HO South|Signal",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "slow"
+       ],
+       "upbeatTags": [
+        "party"
+       ]
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 10,
+     "track": "HO Vale|Ridge",
+     "score": 0,
+     "fit": {
+      "energy": 6,
+      "energySource": "estimate",
+      "danceability": 6,
+      "danceabilitySource": "estimate"
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    },
+    {
+     "rank": 11,
+     "track": "HO West|Meridian",
+     "score": 0,
+     "fit": {
+      "energy": 8,
+      "energySource": "provider",
+      "danceability": 7,
+      "danceabilitySource": "provider",
+      "community": {
+       "source": "lastfm",
+       "listeners": 300000,
+       "slowTags": [
+        "ballad"
+       ],
+       "upbeatTags": []
+      }
+     },
+     "evidence": [],
+     "uncertain": [],
+     "reasons": "No specific evidence beyond your event rules.",
+     "ratingReportOnly": null
+    }
+   ],
+   "hidden": {
+    "before": {
+     "dismissed": 0,
+     "never": 0,
+     "inEvent": 0,
+     "filtered": 0,
+     "notOwned": 0
+    },
+    "after": {
+     "dismissed": 0,
+     "never": 0,
+     "inEvent": 0,
+     "filtered": 0,
+     "notOwned": 0
+    }
+   },
+   "beforeTop14": [
+    "HO Cove|Spark",
+    "HO Dune|Pulse",
+    "HO East|Harbor",
+    "HO Fjord|Echo",
+    "HO Glen|Ember",
+    "HO Moor|Drift",
+    "HO North|Lantern",
+    "HO Peak|Summit",
+    "HO South|Signal",
+    "HO Vale|Ridge",
+    "HO West|Meridian"
+   ],
+   "afterTop14": [
+    "HO Cove|Spark",
+    "HO Dune|Pulse",
+    "HO East|Harbor",
+    "HO Fjord|Echo",
+    "HO Glen|Ember",
+    "HO Moor|Drift",
+    "HO North|Lantern",
+    "HO Peak|Summit",
+    "HO South|Signal",
+    "HO Vale|Ridge",
+    "HO West|Meridian"
+   ],
+   "changed": {
+    "removed": [],
+    "added": []
+   },
+   "retention": {
+    "top14Retained": 11
+   },
+   "unknownTop14": {
+    "before": {
+     "noEnergyDance": 1,
+     "noPopularity": 9,
+     "noCommunity": 4
+    },
+    "after": {
+     "noEnergyDance": 1,
+     "noPopularity": 9,
+     "noCommunity": 4
+    }
+   },
+   "ratingsReportOnly": {
+    "before": {
+     "Good": 0,
+     "Fair": 0,
+     "Poor": 0,
+     "Unfamiliar": 0,
+     "Unrated": 11
+    },
+    "after": {
+     "Good": 0,
+     "Fair": 0,
+     "Poor": 0,
+     "Unfamiliar": 0,
+     "Unrated": 11
+    }
+   }
+  }
+ }
+}

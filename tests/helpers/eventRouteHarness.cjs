@@ -69,6 +69,7 @@ function createEventRouteHarness(actual) {
       '@/lib/freshEvent': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/freshEvent.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:k=>k === './inputSafety' ? actual.input : k === './danceFloor' ? actual.dance : k === './fileIdentity' ? identityModule.exports : require(path.join(root,'desktop/offline/policy.cjs'))});return m.exports; })(),
       '@/lib/preparationCapability': (() => { const m={exports:{}}; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/preparationCapability.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,require:()=>require(path.join(root,'desktop/offline/policy.cjs')),get window(){return testWindow;}});return m.exports; })(),
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
+      '@/lib/prep/community.functions':{COMMUNITY_BATCH:20,lookupCommunityBatch:services.community ?? (async r=>r.data.songs.map(x=>({...x,status:'disabled'})))},
       '@/lib/enrich.functions':{enrichSongs:services.enrich ?? (async()=>({results:[]}))},
       '@/lib/neighbors.functions':{getArtistNeighbors:services.neighbors ?? (async()=>({clusters:[]}))},
       '@/lib/recommend.functions':{recommendSongsForSection:services.recommend ?? (async()=>({suggestions:[]}))},

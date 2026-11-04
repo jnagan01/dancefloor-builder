@@ -6,7 +6,7 @@ import fs from 'node:fs';import path from 'node:path';import os from 'node:os';i
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'setarchitect-native-')),bundle=path.join(temp,'bundle');fs.mkdirSync(bundle);fs.writeFileSync(path.join(temp,'ISOLATED'),'synthetic only');
 const stub=path.join(root,'tests/native/fixtures/services.tsx');
-const names=['prep/lookup.functions','history.functions','recommend.functions','neighbors.functions','lastfm.functions','enrich.functions','spotify.functions','pageHead','appVersion','dirHandleStore','libraryStore'];
+const names=['prep/lookup.functions','prep/community.functions','history.functions','recommend.functions','neighbors.functions','lastfm.functions','enrich.functions','spotify.functions','pageHead','appVersion','dirHandleStore','libraryStore'];
 await build({entryPoints:[path.join(root,'tests/native/fixtures/entry.tsx')],bundle:true,platform:'browser',format:'esm',outfile:path.join(bundle,'app.js'),jsx:'automatic',alias:{'@':path.join(root,'src')},plugins:[{name:'isolated-services',setup(b){b.onResolve({filter:/.*/},args=>{if(names.some(n=>args.path===`@/lib/${n}`)||['react-start','react-router'].some(n=>args.path===`@tanstack/${n}`)||['@/hooks/useAuth','@/hooks/useDebounce','@/hooks/useProfileSettings','@/integrations/supabase/client','sonner','@/components/HistoryPanel','@/components/ProfileSettingsDialog','@/components/SpotifyExportDialog','@/components/workspace/WaveformPlayer','@/components/ui/sonner','./settings'].includes(args.path))return {path:stub};});}}]});
 const css=await compile(fs.readFileSync(path.join(root,'src/styles.css'),'utf8'),{base:path.join(root,'src'),onDependency:()=>{}});fs.writeFileSync(path.join(bundle,'app.css'),css.build(new Scanner({sources:[{base:root,pattern:'src/**/*.{tsx,ts}',negated:false}]}).scan()));
 fs.writeFileSync(path.join(bundle,'index.html'),`<link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module">window.__fixture=await window.testBackend.fixture();window.__errors=[];window.__warnings=[];window.__success=[];await import('/app.js');</script>`);
@@ -428,6 +428,31 @@ try{
    await page.getByRole('button',{name:'Fixture VirtualDJ refresh',exact:true}).click();
    await expect.poll(()=>page.evaluate(()=>window.__success.length),{timeout:15000}).toBe(2);
    expect(lengths()).toEqual(expected);
+ });
+
+ await check('versions drawer: only same-work files listed; fuzzy title matches hidden; exact selection kept',async()=>{
+   await app.close();
+   const dir=path.join(library,'versions');fs.mkdirSync(path.join(dir,'b'),{recursive:true});
+   const lib=[{filePath:path.join(dir,'Snow Patrol - Chasing Cars.mp3'),artist:'Snow Patrol',title:'Chasing Cars'},{filePath:path.join(dir,'b','Snow Patrol - Chasing Cars.mp3'),artist:'Snow Patrol',title:'Chasing Cars (Live)'},{filePath:path.join(dir,'Tiesto - Chasing Summers.mp3'),artist:'Tiësto',title:'Chasing Summers'},{filePath:path.join(dir,'Walking On Cars - Speeding Cars.mp3'),artist:'Walking On Cars',title:'Speeding Cars'},{filePath:path.join(dir,'ALMA - Chasing Highs.mp3'),artist:'ALMA',title:'Chasing Highs'}];
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib}));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const request={artist:'Snow Patrol',song:'Chasing Cars',fromUpload:true};
+   const backendBefore={A:{id:'A',name:'Versions',updated_at:'2026-11-04T10:00:00Z',inputs:{eventName:'Versions',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[`warmUp:0:${dedupeKey(request.artist,request.song)}`]:{paths:[lib[0].filePath],confirmed:true}}}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(backendBefore));
+   await launch();
+   await page.getByRole('button',{name:'Details for Snow Patrol – Chasing Cars'}).first().click();
+   await expect(page.getByTestId('detail-exact-file')).toHaveText(lib[0].filePath);
+   const region=page.getByRole('region',{name:'Version comparison'});
+   await expect(region).toBeVisible();
+   await expect(region).not.toContainText('Chasing Summers');await expect(region).not.toContainText('Speeding Cars');await expect(region).not.toContainText('Chasing Highs');
+   const rows=await page.getByTestId('detail-version-row').allTextContents();
+   expect(rows.length).toBeLessThanOrEqual(2);expect(rows[0]).toContain('shown');
+   if(rows.length===2) expect(rows[1]).toContain('different version');
+   await expect(page.getByTestId('detail-selection-mismatch')).toHaveCount(0);
+   await page.keyboard.press('Escape');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections).toEqual(backendBefore.A.lists.selections); // drawer never changes the saved selection
  });
 
  await check('preparation policies: 31,250 library, wrong AI artists and holiday additions filtered, requests retained, exact clean versions and honest gaps',async()=>{
