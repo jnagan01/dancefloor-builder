@@ -22,6 +22,30 @@ def evidence(**overrides):
 
 
 class Decisions(unittest.TestCase):
+    def test_default_seed_rotates_by_central_tuesday_with_dst(self):
+        for instant, expected in [("2026-03-10T08:00:00+00:00", "20260310"), ("2026-11-03T09:00:00+00:00", "20261103"), ("2026-11-10T09:00:00+00:00", "20261110"), ("2026-11-03T05:30:00+00:00", "20261027"), ("2026-11-05T02:44:00+00:00", "20261103")]:
+            with self.subTest(instant=instant):
+                self.assertEqual(run_tests.resolve_seed("", now(instant)), expected)
+
+    def test_explicit_seed_exact_independent_of_date(self):
+        for seed in ["0", "000123", "20261105", "4294967295"]:
+            self.assertEqual(run_tests.resolve_seed(seed, now()), seed)
+            self.assertEqual(run_tests.initial_result(seed)["seed"], seed)
+        for seed in ["-1", "4294967296", "１２", "12\n", "no"]:
+            with self.subTest(seed=seed), self.assertRaises(ValueError):
+                run_tests.resolve_seed(seed, now())
+
+    def test_initialize_records_seed_before_tests_and_carries_exact_value(self):
+        with patch.object(run_tests, "Path") as path, patch.object(run_tests, "resolve_seed", return_value="20261103"), patch("builtins.open", unittest.mock.mock_open()) as opened, patch.dict("os.environ", {"GITHUB_ENV": "/synthetic/env"}):
+            run_tests.initialize()
+            payload = path.return_value.__truediv__.return_value.write_text.call_args.args[0]
+            self.assertEqual(__import__('json').loads(payload)["seed"], "20261103")
+            opened().write.assert_called_once_with("WEEKLY_SEED=20261103\n")
+
+    def test_safe_decision_prints_only_status_id_and_count(self):
+        self.assertEqual(report.safe_decision({"status": "dry-run", "run_id": 41956719820, "findings": [("private",)]}), "Weekly report: status=dry-run; runID=41956719820; findings=1")
+        self.assertEqual(report.safe_decision({"status": "unexpected raw text", "run_id": "unsafe\ntext", "findings": []}), "Weekly report: status=failed; runID=none; findings=0")
+
     def test_explicit_completed_manual_run_dry_run_is_read_only(self):
         api = MagicMock()
         api.repo = "synthetic/repo"

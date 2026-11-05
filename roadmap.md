@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Weekly hosted CI migration
+- [x] Default seed rotates by Central Tuesday; explicit seeds stay exact, safe decisions print; 28 reporting tests pass.
 - [x] Saved secret alias, authentication-only manual check and identity-validated explicit-run manual dry-run; 24 reporting tests pass.
 - [x] Separate Central-time Tuesday hosted synthetic test/report workflows; existing automations unchanged.
 - [x] Bounded seeded coverage, structured outcomes, issue/mail deduplication and secure setup docs.
