@@ -33,7 +33,7 @@ Issues deduplicate by a stable hidden category/suite fingerprint, with classific
 
 **Delivery limitation:** sent-state comments are written only after Gmail SMTP accepts every recipient. SMTP acceptance is not proof of inbox delivery. There is no atomic transaction between SMTP and GitHub: disconnect after acceptance, or runner/API failure before the sent marker is durable, can leave uncertain delivery and cause a duplicate on retry. Check the report artifact and mailbox before retrying uncertain delivery. We do not mark failed/uncertain SMTP as sent. A marker written to any issue suppresses rerun delivery of that exact finding-set; artifact says `smtp-accepted` only after confirmed SMTP success.
 
-Minimal permissions: tests `contents:read`; reporting `contents:read`, `actions:read`, `issues:write`. No deployment permission and no connected Gmail credentials. GitHub Actions execution, macOS timing, repository Issues permissions and real SMTP delivery must be validated in GitHub; local tests mock these boundaries.
+Minimal permissions: tests `contents:read`; reporting `contents:read`, `actions:read`, `issues:write`. No deployment permission and no connected Gmail credentials. Artifact redirects never forward the GitHub token off-origin. GitHub Actions execution, macOS timing, repository Issues permissions and real SMTP delivery must be validated in GitHub; local tests mock these boundaries.
 
 ## Local validation
 

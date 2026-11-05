@@ -10,6 +10,7 @@ from pathlib import Path
 import smtplib
 import ssl
 import urllib.request
+from urllib.parse import urlsplit
 import zipfile
 
 ZONE = ZoneInfo("America/Chicago")
@@ -77,7 +78,7 @@ class GitHub:
                                          method=method, headers={"Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
                                          "Accept": "application/vnd.github+json", "Content-Type": "application/json",
                                          "X-GitHub-Api-Version": "2022-11-28"})
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.build_opener(SafeRedirect()).open(request, timeout=30) as response:
             content = response.read(20 * 1024 * 1024 + 1)
         if len(content) > 20 * 1024 * 1024:
             raise ValueError("API response exceeds bounded limit")
@@ -111,6 +112,17 @@ class GitHub:
             if len(names) != 1 or archive.getinfo(names[0]).file_size > 1024 * 1024:
                 raise ValueError("Missing or oversized structured result")
             return json.loads(archive.read(names[0]))
+
+
+class SafeRedirect(urllib.request.HTTPRedirectHandler):
+    """Signed artifact downloads redirect outside GitHub; do not forward the token."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urlsplit(newurl).scheme != "https":
+            raise ValueError("Refusing non-TLS artifact redirect")
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected and urlsplit(req.full_url).netloc != urlsplit(newurl).netloc:
+            redirected.remove_header("Authorization")
+        return redirected
 
 
 def send_mail(body):

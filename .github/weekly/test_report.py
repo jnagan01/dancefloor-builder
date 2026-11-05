@@ -1,6 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
+import urllib.request
 import report
 import run_tests
 
@@ -92,6 +93,54 @@ class Decisions(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 report.send_mail("synthetic")
             smtp.return_value.__enter__.return_value.starttls.assert_called_once()
+
+    def test_artifact_redirect_does_not_forward_token(self):
+        request = urllib.request.Request("https://api.github.com/artifact", headers={"Authorization": "Bearer synthetic-test"})
+        redirected = report.SafeRedirect().redirect_request(request, None, 302, "", {}, "https://example.invalid/signed-archive")
+        self.assertIsNotNone(redirected)
+        self.assertIsNone(redirected.get_header("Authorization"))
+
+    def test_real_report_rerun_deduplicates_after_acceptance(self):
+        stored = []
+        comments = []
+        api = MagicMock()
+        api.repo = "synthetic/repo"
+        api.evidence.return_value = None
+        def request(path, data=None, method=None):
+            if path == "":
+                return {"default_branch": "main"}
+            if path == "/issues":
+                issue = {"number": 1, "html_url": "https://github.com/synthetic/repo/issues/1", **data}
+                stored.append(issue)
+                return issue
+            if path.endswith("/comments"):
+                comments.append(data)
+                return data
+            stored[0].update(data)
+            return stored[0]
+        def pages(path, key=None):
+            if "workflow" in path:
+                return []
+            return comments if path.endswith("/comments") else stored
+        api.request.side_effect = request
+        api.pages.side_effect = pages
+        with patch.object(report, "GitHub", return_value=api), patch.object(report, "Path"), patch.object(report, "send_mail") as mail, patch.dict("os.environ", {"WEEKLY_DRY_RUN": "false", "WEEKLY_REPORT_GMAIL_APP_PASSWORD": "synthetic"}):
+            self.assertEqual(report.main(), 0)
+            self.assertEqual(report.main(), 0)
+            self.assertEqual(len(stored), 1)
+            mail.assert_called_once()
+            self.assertEqual(len(comments), 1)
+
+    def test_missing_secret_main_fails_without_mail_or_sent_marker(self):
+        api = MagicMock()
+        api.repo = "synthetic/repo"
+        api.request.side_effect = [{"default_branch": "main"}, {"number": 1, "html_url": "https://github.com/synthetic/repo/issues/1"}]
+        api.pages.return_value = []
+        api.evidence.return_value = None
+        with patch.object(report, "GitHub", return_value=api), patch.object(report, "Path"), patch.object(report, "send_mail") as mail, patch.dict("os.environ", {"WEEKLY_DRY_RUN": "false", "WEEKLY_REPORT_GMAIL_APP_PASSWORD": ""}):
+            self.assertEqual(report.main(), 1)
+            mail.assert_not_called()
+            self.assertEqual(api.request.call_count, 2)
 
 
 if __name__ == "__main__":
