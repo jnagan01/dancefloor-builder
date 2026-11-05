@@ -17,6 +17,7 @@ jobs:
     timeout-minutes: 45
     env:
       WEEKLY_SEED: ${{ inputs.seed || '20261105' }}
+      PYTHONDONTWRITEBYTECODE: '1'
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -28,7 +29,7 @@ jobs:
       - name: Initialize interruption evidence
         run: |
           mkdir -p test-results/weekly
-          python3 -c 'import json,os; json.dump({"schema":1,"commit":os.environ["GITHUB_SHA"],"run_id":os.environ["GITHUB_RUN_ID"],"run_attempt":os.environ["GITHUB_RUN_ATTEMPT"],"seed":os.environ["WEEKLY_SEED"],"suites":{}},open("test-results/weekly/result.json","w"))'
+          python3 -c 'import json,os,sys; sys.path.insert(0,".github/weekly"); from run_tests import SUITES; json.dump({"schema":1,"commit":os.environ["GITHUB_SHA"],"run_id":os.environ["GITHUB_RUN_ID"],"run_attempt":os.environ["GITHUB_RUN_ATTEMPT"],"seed":os.environ["WEEKLY_SEED"],"suites":{name:{"status":"not_run"} for name in SUITES}},open("test-results/weekly/result.json","w"))'
       - name: Frozen root install
         run: bun install --frozen-lockfile
       - name: Frozen desktop install

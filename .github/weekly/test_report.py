@@ -142,6 +142,16 @@ class Decisions(unittest.TestCase):
             mail.assert_not_called()
             self.assertEqual(api.request.call_count, 2)
 
+    def test_run_discovery_outage_is_reportable(self):
+        api = MagicMock()
+        api.repo = "synthetic/repo"
+        api.request.side_effect = [RuntimeError("synthetic outage"), {"number": 1, "html_url": "https://github.com/synthetic/repo/issues/1"}, {}]
+        api.pages.return_value = []
+        api.evidence.return_value = None
+        with patch.object(report, "GitHub", return_value=api), patch.object(report, "Path"), patch.object(report, "send_mail") as mail, patch.dict("os.environ", {"WEEKLY_DRY_RUN": "false", "WEEKLY_REPORT_GMAIL_APP_PASSWORD": "synthetic"}):
+            self.assertEqual(report.main(), 0)
+            mail.assert_called_once()
+
 
 if __name__ == "__main__":
     unittest.main()

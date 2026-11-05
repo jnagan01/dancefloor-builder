@@ -151,12 +151,17 @@ def main():
         api = GitHub()
         now = datetime.now(timezone.utc)
         day = tuesday(now)
-        branch = api.request("")["default_branch"]
-        runs = api.pages("/actions/workflows/weekly-break-tests.yml/runs?event=schedule", "workflow_runs")
-        run = select_run(runs, now, branch)
+        try:
+            branch = api.request("")["default_branch"]
+            runs = api.pages("/actions/workflows/weekly-break-tests.yml/runs?event=schedule", "workflow_runs")
+            run = select_run(runs, now, branch)
+        except Exception:
+            run = None
+            findings = [("run-discovery-unavailable", "incomplete", "Could not locate this Tuesday's scheduled tests through GitHub Actions")]
         try:
             evidence = api.evidence(run)
-            findings = problems(run, evidence)
+            if "findings" not in locals():
+                findings = problems(run, evidence)
         except Exception:
             evidence = None
             findings = [("evidence-unavailable", "incomplete", "Could not read current run evidence")]

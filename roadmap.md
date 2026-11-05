@@ -2,7 +2,7 @@
 ## Weekly hosted CI migration
 - [x] Separate Central-time Tuesday hosted synthetic test/report workflows; existing automations unchanged.
 - [x] Bounded seeded coverage, structured outcomes, issue/mail deduplication and secure setup docs.
-- [ ] Local full unit/report tests and automatic build verification.
+- [x] Local 866 Vitest tests/83 files, reporting decision tests and automatic build OK; no hosted/SMTP claims.
 - [ ] GitHub hosted/manual validation and Gmail Actions secret setup require repository access/user configuration; no live operations here.
 ## Complete expansion candidate sourcing
 - [x] Offer eligible built-in catalogue before final shared ranking, retaining provenance and exact owned promotion without source-order crowding.

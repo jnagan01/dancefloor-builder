@@ -25,6 +25,7 @@ jobs:
       - name: Inspect this Tuesday and report only problems
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          PYTHONDONTWRITEBYTECODE: '1'
           WEEKLY_REPORT_GMAIL_APP_PASSWORD: ${{ secrets.WEEKLY_REPORT_GMAIL_APP_PASSWORD }}
           WEEKLY_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
         run: python3 .github/weekly/report.py
