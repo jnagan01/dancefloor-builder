@@ -9,6 +9,14 @@ on:
         description: Inspect only; no issues, email or delivery-state changes
         type: boolean
         default: true
+      test_run_id:
+        description: Optional completed weekly test run ID (manual dry-run only)
+        type: string
+        default: ''
+      auth_only:
+        description: TLS/login/quit only; no email, issues, artifacts or state writes
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -17,7 +25,21 @@ concurrency:
   group: weekly-synthetic-report
   cancel-in-progress: false
 jobs:
+  authenticate:
+    if: github.event_name == 'workflow_dispatch' && inputs.auth_only
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - name: Gmail TLS authentication only
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+          WEEKLY_REPORT_GMAIL_APP_PASSWORD: ${{ secrets.WEEKLY_REPORT_GMAIL_APP_PASSWORD || secrets.WEEKLY_REPORT_GMAIL_APP_PASSOWRD }}
+        run: python3 .github/weekly/auth_check.py
   report:
+    if: github.event_name != 'workflow_dispatch' || !inputs.auth_only
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -26,8 +48,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PYTHONDONTWRITEBYTECODE: '1'
-          WEEKLY_REPORT_GMAIL_APP_PASSWORD: ${{ secrets.WEEKLY_REPORT_GMAIL_APP_PASSWORD }}
+          WEEKLY_REPORT_GMAIL_APP_PASSWORD: ${{ secrets.WEEKLY_REPORT_GMAIL_APP_PASSWORD || secrets.WEEKLY_REPORT_GMAIL_APP_PASSOWRD }}
           WEEKLY_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+          WEEKLY_TEST_RUN_ID: ${{ inputs.test_run_id || '' }}
         run: python3 .github/weekly/report.py
       - name: Persist report decision
         if: always()
