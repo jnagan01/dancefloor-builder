@@ -48,7 +48,7 @@ export const listWorkflows = createServerFn({ method: "GET" })
 
 export const getWorkflow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
+  .inputValidator((data: { id: string }) => z.object({ id: z.guid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { supabase } = context;
     const { data: row, error } = await supabase
@@ -90,7 +90,7 @@ export const saveWorkflow = createServerFn({ method: "POST" })
 export const updateWorkflow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { id: string; name: string; inputs: unknown; lists: unknown }) => z.object({
-    id: z.string().uuid(), name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
+    id: z.guid(), name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
   }).parse(data))
   .handler(async ({ data, context }) => {
     // Obsolete endpoint has no expected revision; never allow it to bypass the safe writer.
@@ -100,7 +100,7 @@ export const updateWorkflow = createServerFn({ method: "POST" })
 export const renameWorkflow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { id: string; name: string }) =>
-    z.object({ id: z.string().uuid(), name: z.string().min(1).max(200) }).parse(data),
+    z.object({ id: z.guid(), name: z.string().min(1).max(200) }).parse(data),
   )
   .handler(async ({ data, context }) => {
     await renameEventConditionally(context.supabase, context.userId, data.id, data.name);
@@ -109,7 +109,7 @@ export const renameWorkflow = createServerFn({ method: "POST" })
 
 export const deleteWorkflow = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: { id: string }) => z.object({ id: z.string().uuid() }).parse(data))
+  .inputValidator((data: { id: string }) => z.object({ id: z.guid() }).parse(data))
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase.from("workflow_history").delete().eq("id", data.id);
     if (error) throw dbError("deleteWorkflow", error);

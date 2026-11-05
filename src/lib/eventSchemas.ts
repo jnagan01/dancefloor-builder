@@ -54,8 +54,8 @@ export const listsSchema = z.object({
 }).passthrough();
 
 export const safeSaveRequestSchema = z.object({
-  id: z.string().uuid(), create: z.boolean(), expectedUpdatedAt: z.string().nullable(),
-  expectedRevision: z.string().uuid().nullable(), writeRevision: z.string().uuid(),
+  id: z.guid(), create: z.boolean(), expectedUpdatedAt: z.string().nullable(),
+  expectedRevision: z.guid().nullable(), writeRevision: z.guid(),
   name: z.string().min(1).max(200), inputs: inputsSchema, lists: listsSchema,
 });
 
