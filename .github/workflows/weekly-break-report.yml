@@ -1,0 +1,38 @@
+name: Weekly synthetic issue report
+on:
+  schedule:
+    - cron: '0 8 * * 2'
+      timezone: America/Chicago
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Inspect only; no issues, email or delivery-state changes
+        type: boolean
+        default: true
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: weekly-synthetic-report
+  cancel-in-progress: false
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Inspect this Tuesday and report only problems
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WEEKLY_REPORT_GMAIL_APP_PASSWORD: ${{ secrets.WEEKLY_REPORT_GMAIL_APP_PASSWORD }}
+          WEEKLY_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: python3 .github/weekly/report.py
+      - name: Persist report decision
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: weekly-report-decision
+          path: test-results/weekly-report/
+          if-no-files-found: error
+          retention-days: 30

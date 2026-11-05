@@ -1,0 +1,49 @@
+name: Weekly synthetic break tests
+on:
+  schedule:
+    - cron: '0 3 * * 2'
+      timezone: America/Chicago
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: Reproducible uint32 synthetic seed
+        default: '20261105'
+        type: string
+permissions:
+  contents: read
+jobs:
+  synthetic:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      WEEKLY_SEED: ${{ inputs.seed || '20261105' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+      - name: Initialize interruption evidence
+        run: |
+          mkdir -p test-results/weekly
+          python3 -c 'import json,os; json.dump({"schema":1,"commit":os.environ["GITHUB_SHA"],"run_id":os.environ["GITHUB_RUN_ID"],"seed":os.environ["WEEKLY_SEED"],"suites":{}},open("test-results/weekly/result.json","w"))'
+      - name: Frozen root install
+        run: bun install --frozen-lockfile
+      - name: Frozen desktop install
+        working-directory: desktop
+        run: bun install --frozen-lockfile
+      - name: All bounded synthetic suites
+        run: python3 .github/weekly/run_tests.py
+      - name: Persist synthetic diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: weekly-synthetic-results
+          path: |
+            test-results/weekly/
+            test-results/native/
+            test-results/native-offline/
+          if-no-files-found: error
+          retention-days: 30
