@@ -1,9 +1,10 @@
 # Workspace rebuild
 ## Weekly hosted CI migration
+- [x] Saved secret alias, authentication-only manual check and identity-validated explicit-run manual dry-run; 24 reporting tests pass.
 - [x] Separate Central-time Tuesday hosted synthetic test/report workflows; existing automations unchanged.
 - [x] Bounded seeded coverage, structured outcomes, issue/mail deduplication and secure setup docs.
 - [x] Local 866 Vitest tests/83 files, reporting decision tests and automatic build OK; no hosted/SMTP claims.
-- [ ] GitHub hosted/manual validation and Gmail Actions secret setup require repository access/user configuration; no live operations here.
+- [ ] GitHub hosted/manual validation requires repository access; user confirms mail secret saved under compatibility alias, no live checks here.
 ## Complete expansion candidate sourcing
 - [x] Offer eligible built-in catalogue before final shared ranking, retaining provenance and exact owned promotion without source-order crowding.
 - [x] Add frozen candidate-stage comparison, pure-helper and real-route/save-reopen regressions; preserve prior artifacts.

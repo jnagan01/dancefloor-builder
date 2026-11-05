@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 import urllib.request
 import report
 import run_tests
+import auth_check
 
 
 def now(value="2026-11-03T14:00:00+00:00"):
@@ -21,6 +22,60 @@ def evidence(**overrides):
 
 
 class Decisions(unittest.TestCase):
+    def test_explicit_completed_manual_run_dry_run_is_read_only(self):
+        api = MagicMock()
+        api.repo = "synthetic/repo"
+        candidate = run(repository={"full_name": api.repo}, workflow_id=42, path=".github/workflows/weekly-break-tests.yml", event="workflow_dispatch")
+        api.request.side_effect = [{"id": 42, "path": ".github/workflows/weekly-break-tests.yml"}, candidate]
+        api.evidence.return_value = evidence()
+        with patch.object(report, "GitHub", return_value=api), patch.object(report, "Path"), patch.object(report, "send_mail") as mail, patch.dict("os.environ", {"WEEKLY_TEST_RUN_ID": "12", "GITHUB_EVENT_NAME": "workflow_dispatch", "WEEKLY_DRY_RUN": "true"}):
+            self.assertEqual(report.main(), 0)
+            mail.assert_not_called()
+            api.pages.assert_not_called()
+            self.assertEqual([c.args[0] for c in api.request.call_args_list], ["/actions/workflows/weekly-break-tests.yml", "/actions/runs/12"])
+
+    def test_explicit_run_override_rejected_outside_manual_dry_run(self):
+        for event, dry in [("schedule", True), ("workflow_dispatch", False), (None, True)]:
+            api = MagicMock()
+            with self.subTest(event=event, dry=dry), self.assertRaises(ValueError):
+                report.explicit_dry_run(api, "12", event, dry)
+            api.request.assert_not_called()
+
+    def test_explicit_run_identity_completion_and_id_validated(self):
+        base = run(repository={"full_name": "synthetic/repo"}, workflow_id=42, path=".github/workflows/weekly-break-tests.yml")
+        for change in [{"repository": {"full_name": "other/repo"}}, {"workflow_id": 43}, {"path": ".github/workflows/native-regression.yml"}, {"status": "queued"}, {"id": 13}]:
+            api = MagicMock()
+            api.repo = "synthetic/repo"
+            api.request.side_effect = [{"id": 42, "path": ".github/workflows/weekly-break-tests.yml"}, {**base, **change}]
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                report.explicit_dry_run(api, "12", "workflow_dispatch", True)
+        for invalid in ["../12", "0", "abc", "１２"]:
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                report.explicit_dry_run(MagicMock(), invalid, "workflow_dispatch", True)
+
+    def test_rejected_override_main_never_reports_or_sends(self):
+        api = MagicMock()
+        with patch.object(report, "GitHub", return_value=api), patch.object(report, "Path"), patch.object(report, "send_mail") as mail, patch.dict("os.environ", {"WEEKLY_TEST_RUN_ID": "12", "GITHUB_EVENT_NAME": "schedule", "WEEKLY_DRY_RUN": "false"}):
+            self.assertEqual(report.main(), 1)
+            api.request.assert_not_called()
+            api.pages.assert_not_called()
+            mail.assert_not_called()
+
+    def test_authentication_only_tls_login_quit_no_email_or_writes(self):
+        with patch.object(auth_check.smtplib, "SMTP") as smtp, patch.dict("os.environ", {"GITHUB_EVENT_NAME": "workflow_dispatch", "WEEKLY_REPORT_GMAIL_APP_PASSWORD": "synthetic"}):
+            self.assertEqual(auth_check.main(), 0)
+            client = smtp.return_value.__enter__.return_value
+            self.assertEqual([call[0] for call in client.method_calls], ["ehlo", "starttls", "ehlo", "login"])
+            smtp.return_value.__exit__.assert_called_once()
+            client.send_message.assert_not_called()
+            client.sendmail.assert_not_called()
+
+    def test_authentication_only_missing_secret_failure_and_schedule_denied(self):
+        for event, password in [("schedule", "synthetic"), ("workflow_dispatch", "")]:
+            with patch.object(auth_check.smtplib, "SMTP") as smtp, patch.dict("os.environ", {"GITHUB_EVENT_NAME": event, "WEEKLY_REPORT_GMAIL_APP_PASSWORD": password}):
+                self.assertEqual(auth_check.main(), 1)
+                smtp.assert_not_called()
+
     def test_healthy_silent(self):
         self.assertEqual(report.problems(run(), evidence()), [])
         self.assertEqual(report.delivery_decision([], False, False, False), "silent")

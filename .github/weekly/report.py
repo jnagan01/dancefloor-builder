@@ -33,6 +33,23 @@ def select_run(runs, now, branch):
     return max(eligible, key=lambda r: (r["created_at"], r.get("run_attempt", 1)), default=None)
 
 
+def explicit_dry_run(api, run_id, event, dry):
+    if event != "workflow_dispatch" or not dry:
+        raise ValueError("Explicit run ID requires manual dry-run")
+    if not run_id.isascii() or not run_id.isdecimal() or not 0 < int(run_id) < 10**20:
+        raise ValueError("Invalid run ID")
+    workflow = api.request("/actions/workflows/weekly-break-tests.yml")
+    run = api.request(f"/actions/runs/{int(run_id)}")
+    if (str(run.get("id")) != str(int(run_id))
+            or run.get("repository", {}).get("full_name", "").lower() != api.repo.lower()
+            or run.get("workflow_id") != workflow.get("id")
+            or workflow.get("path") != ".github/workflows/weekly-break-tests.yml"
+            or run.get("path", "").split("@", 1)[0] != ".github/workflows/weekly-break-tests.yml"
+            or run.get("status") != "completed"):
+        raise ValueError("Run is not a completed weekly test run in this repository")
+    return run
+
+
 def problems(run, evidence=None):
     if run is None:
         return [("run-absent", "incomplete", "No scheduled test run for this Central-time Tuesday")]
@@ -151,13 +168,20 @@ def main():
         api = GitHub()
         now = datetime.now(timezone.utc)
         day = tuesday(now)
-        try:
-            branch = api.request("")["default_branch"]
-            runs = api.pages("/actions/workflows/weekly-break-tests.yml/runs?event=schedule", "workflow_runs")
-            run = select_run(runs, now, branch)
-        except Exception:
-            run = None
-            findings = [("run-discovery-unavailable", "incomplete", "Could not locate this Tuesday's scheduled tests through GitHub Actions")]
+        dry = os.environ.get("WEEKLY_DRY_RUN", "true") == "true"
+        run_id = os.environ.get("WEEKLY_TEST_RUN_ID", "").strip()
+        if run_id:
+            # Fail closed outside discovery-error reporting: a rejected override must never create issues or email.
+            run = explicit_dry_run(api, run_id, os.environ.get("GITHUB_EVENT_NAME"), dry)
+            diagnostic["mode"] = "explicit-run-dry-run"
+        else:
+            try:
+                branch = api.request("")["default_branch"]
+                runs = api.pages("/actions/workflows/weekly-break-tests.yml/runs?event=schedule", "workflow_runs")
+                run = select_run(runs, now, branch)
+            except Exception:
+                run = None
+                findings = [("run-discovery-unavailable", "incomplete", "Could not locate this Tuesday's scheduled tests through GitHub Actions")]
         try:
             evidence = api.evidence(run)
             if "findings" not in locals():
@@ -168,7 +192,6 @@ def main():
         diagnostic.update(tuesday=str(day), commit=run.get("head_sha") if run else None,
                           seed=(evidence or {}).get("seed"), run_id=run.get("id") if run else None,
                           findings=findings)
-        dry = os.environ.get("WEEKLY_DRY_RUN", "true") == "true"
         if not findings or dry:
             diagnostic["status"] = "silent" if not findings else "dry-run"
             persist()
