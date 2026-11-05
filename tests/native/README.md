@@ -3,6 +3,7 @@
 ## Reproduce
 
 CI uses Node 24, Bun 1.3.5, Electron 43.8.7 and Playwright 1.56.1.
+On Linux under Xvfb, use a full-size screen (for example `xvfb-run -s "-screen 0 1920x2000x24"`): Electron 43 clamps windows to the 640x480 default screen, which hides the header status the harness waits for.
 
 ```sh
 bun install --frozen-lockfile
