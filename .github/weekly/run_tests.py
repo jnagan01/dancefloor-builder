@@ -6,6 +6,9 @@ import signal
 import subprocess
 import time
 import re
+import sys
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 SUITES = {
     "reporting": ["python3", "-m", "unittest", "discover", "-s", ".github/weekly", "-p", "test_*.py", "-v"],
@@ -24,17 +27,40 @@ def valid_vitest(data):
             and data.get("numPendingTests", 0) == 0 and data.get("numTodoTests", 0) == 0)
 
 
+def resolve_seed(explicit=None, now=None):
+    if explicit is not None and explicit != "":
+        if not explicit.isascii() or not explicit.isdecimal() or not 0 <= int(explicit) <= 4294967295:
+            raise ValueError("seed must be uint32")
+        return explicit
+    local = (now or datetime.now(timezone.utc)).astimezone(ZoneInfo("America/Chicago"))
+    return (local - timedelta(days=(local.weekday() - 1) % 7)).strftime("%Y%m%d")
+
+
+def initial_result(seed):
+    return {"schema": 1, "commit": os.environ.get("GITHUB_SHA", "local"),
+            "run_id": os.environ.get("GITHUB_RUN_ID", "local"), "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "1"), "seed": seed,
+            "limits": {"records": 100000, "import_bytes": 5242880, "minutes": 45},
+            "suites": {name: {"status": "not_run"} for name in SUITES}}
+
+
+def initialize():
+    seed = resolve_seed(os.environ.get("WEEKLY_SEED"))
+    output = Path("test-results/weekly")
+    output.mkdir(parents=True, exist_ok=True)
+    (output / "result.json").write_text(json.dumps(initial_result(seed), indent=2))
+    # Capture once before installs; later steps use the exact same seed even across midnight.
+    env_file = os.environ.get("GITHUB_ENV")
+    if env_file:
+        with open(env_file, "a") as stream:
+            stream.write(f"WEEKLY_SEED={seed}\n")
+
+
 def main():
     output = Path("test-results/weekly")
     output.mkdir(parents=True, exist_ok=True)
-    seed = os.environ.get("WEEKLY_SEED", "20261105")
-    if not seed.isdigit() or not 0 <= int(seed) <= 4294967295:
-        raise ValueError("seed must be uint32")
+    seed = resolve_seed(os.environ.get("WEEKLY_SEED"))
     os.environ["WEEKLY_SEED"] = seed
-    result = {"schema": 1, "commit": os.environ.get("GITHUB_SHA", "local"),
-              "run_id": os.environ.get("GITHUB_RUN_ID", "local"), "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "1"), "seed": seed,
-              "limits": {"records": 100000, "import_bytes": 5242880, "minutes": 45},
-              "suites": {name: {"status": "not_run"} for name in SUITES}}
+    result = initial_result(seed)
     def persist():
         temp = output / "result.tmp"
         temp.write_text(json.dumps(result, indent=2))
@@ -83,4 +109,7 @@ def main():
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    if sys.argv[1:] == ["--initialize"]:
+        initialize()
+    else:
+        raise SystemExit(main())

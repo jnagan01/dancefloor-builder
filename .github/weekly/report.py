@@ -85,6 +85,15 @@ def delivery_decision(findings, dry_run, already_sent, secret_available):
     return "send" if secret_available else "missing-secret"
 
 
+def safe_decision(diagnostic):
+    allowed = {"silent", "dry-run", "started", "send", "already-sent", "missing-secret", "smtp-accepted", "failed"}
+    status = diagnostic.get("status")
+    status = status if status in allowed else "failed"
+    run_id = str(diagnostic.get("run_id", ""))
+    run_id = run_id if run_id.isascii() and run_id.isdecimal() and len(run_id) <= 20 else "none"
+    return f"Weekly report: status={status}; runID={run_id}; findings={len(diagnostic.get('findings', []))}"
+
+
 class GitHub:
     def __init__(self):
         self.repo = os.environ["GITHUB_REPOSITORY"]
@@ -209,7 +218,7 @@ def main():
             body = (f"{tag}\nClassification: {classification}\nSeverity: {'high' if classification == 'failure' else 'medium'}\n"
                     f"Expected: full unit, reporting, adversarial and four native suites pass with complete evidence.\nActual: {actual}\n"
                     f"First seen: {str(day) if issue is None else (issue.get('body') or '').split('First seen: ')[-1].splitlines()[0]}\n"
-                    f"Last seen: {day}\nRepro: dispatch Weekly synthetic break tests with seed {(evidence or {}).get('seed', '20261105')}.\n"
+                    f"Last seen: {day}\nRepro: dispatch Weekly synthetic break tests with seed {(evidence or {}).get('seed') or day.strftime('%Y%m%d')}.\n"
                     f"Commit: {run.get('head_sha', 'unavailable') if run else 'unavailable'}\nRun/artifacts: {run_url}\n"
                     "Synthetic evidence only; no automatic fix or deployment.")
             if issue:
@@ -235,10 +244,14 @@ def main():
                 api.request(f"/issues/{issue['number']}/comments", {"body": f"{marker}\nSMTP accepted the weekly summary for {day}. Inbox delivery is not guaranteed."})
         return 0
     except Exception:
+        if diagnostic["status"] not in ("missing-secret", "smtp-accepted"):
+            diagnostic["status"] = "failed"
         diagnostic["error"] = "Report did not complete; inspect configuration/API/SMTP availability. Secret values are never logged."
         persist()
         print(diagnostic["error"])
         return 1
+    finally:
+        print(safe_decision(diagnostic))
 
 
 if __name__ == "__main__":
