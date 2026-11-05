@@ -43,7 +43,9 @@ def problems(run, evidence=None):
         found = [(f"suite-{name}", "failure", f"{name}: {item.get('status', 'unknown')}")
                  for name, item in (evidence or {}).get("suites", {}).items()
                  if name in REQUIRED and item.get("status") != "passed"]
-        return found or [(f"run-{conclusion}", "incomplete" if conclusion in ("cancelled", "timed_out", None) else "failure", f"Test run concluded {conclusion}")]
+        missing = [(f"suite-{name}", "incomplete", f"{name}: no completed suite evidence")
+                   for name in REQUIRED if name not in (evidence or {}).get("suites", {})]
+        return [(f"run-{conclusion}", "incomplete" if conclusion in ("cancelled", "timed_out", None) else "failure", f"Test run concluded {conclusion}")] + found + missing
     if not evidence or evidence.get("schema") != 1 or evidence.get("commit") != run.get("head_sha") or str(evidence.get("run_id")) != str(run["id"]) or str(evidence.get("run_attempt")) != str(run.get("run_attempt", 1)):
         return [("evidence-missing", "incomplete", "Successful job lacks matching structured evidence")]
     return [(f"suite-{name}", "incomplete", f"{name} did not pass with complete evidence")

@@ -70,6 +70,7 @@ class Decisions(unittest.TestCase):
         api = MagicMock()
         api.request.return_value = {"default_branch": "main"}
         api.pages.return_value = []
+        api.evidence.return_value = None
         with patch.object(report, "GitHub", return_value=api), patch.object(report, "send_mail") as mail, patch.dict("os.environ", {"WEEKLY_DRY_RUN": "true"}), patch.object(report, "Path") as path:
             self.assertEqual(report.main(), 0)
             mail.assert_not_called()
