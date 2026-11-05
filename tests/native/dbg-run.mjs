@@ -1,0 +1,914 @@
+import {build} from 'esbuild';import {_electron as electron,expect} from '@playwright/test';
+import {compile} from '@tailwindcss/node';
+import {Scanner} from '@tailwindcss/oxide';
+import {malformedVdjFixture} from './fixtures/malformed-vdj.mjs';
+import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'setarchitect-native-')),bundle=path.join(temp,'bundle');fs.mkdirSync(bundle);fs.writeFileSync(path.join(temp,'ISOLATED'),'synthetic only');
+const stub=path.join(root,'tests/native/fixtures/services.tsx');
+const names=['prep/lookup.functions','prep/community.functions','history.functions','recommend.functions','neighbors.functions','lastfm.functions','enrich.functions','spotify.functions','pageHead','appVersion','dirHandleStore','libraryStore'];
+await build({entryPoints:[path.join(root,'tests/native/fixtures/entry.tsx')],bundle:true,platform:'browser',format:'esm',outfile:path.join(bundle,'app.js'),jsx:'automatic',alias:{'@':path.join(root,'src')},plugins:[{name:'isolated-services',setup(b){b.onResolve({filter:/.*/},args=>{if(names.some(n=>args.path===`@/lib/${n}`)||['react-start','react-router'].some(n=>args.path===`@tanstack/${n}`)||['@/hooks/useAuth','@/hooks/useDebounce','@/hooks/useProfileSettings','@/integrations/supabase/client','sonner','@/components/HistoryPanel','@/components/ProfileSettingsDialog','@/components/SpotifyExportDialog','@/components/workspace/WaveformPlayer','@/components/ui/sonner','./settings'].includes(args.path))return {path:stub};});}}]});
+const css=await compile(fs.readFileSync(path.join(root,'src/styles.css'),'utf8'),{base:path.join(root,'src'),onDependency:()=>{}});fs.writeFileSync(path.join(bundle,'app.css'),css.build(new Scanner({sources:[{base:root,pattern:'src/**/*.{tsx,ts}',negated:false}]}).scan()));
+fs.writeFileSync(path.join(bundle,'index.html'),`<link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module">window.__fixture=await window.testBackend.fixture();window.__errors=[];window.__warnings=[];window.__success=[];await import('/app.js');</script>`);
+const library=path.join(temp,'library');fs.mkdirSync(library);const song={artist:'Test Artist',song:'Test Song - Live'};const tracks=[{filePath:path.join(library,'wrong.mp3'),artist:'Unrelated Artist',title:'Wrong Song',bpm:'190',key:'1A',playCount:100},{filePath:path.join(library,'correct.mp3'),artist:song.artist,title:song.song,bpm:'120',key:'8A',playCount:1},{filePath:path.join(library,'most.mp3'),artist:song.artist,title:song.song+' Remix',bpm:'125',key:'9A',playCount:20}];tracks.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes, never played'));
+const key='warmUp:0:test artist|test song live';
+fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));
+fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Test',updated_at:'2026-10-31T01:59:00Z',inputs:{eventName:'Test',songs:[song],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[],selections:{[key]:{paths:[tracks[0].filePath],confirmed:false}}}}}));
+let app,page,count=0;const diagnostics=path.join(root,'test-results/native');fs.mkdirSync(diagnostics,{recursive:true});
+async function launch(){app=await electron.launch({executablePath:process.env.ELECTRON_BIN||path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text().slice(0,2000));});try{await page.locator('[role="status"], #backups').first().waitFor({timeout:15000});}catch(e){await page.screenshot({path:'/tmp/browser/n/fail.png'});console.log('BODY',(await page.locator('body').innerText()).slice(0,1500));console.log('SIZE',JSON.stringify(await page.evaluate(()=>[innerWidth,innerHeight,document.visibilityState])));throw e;}await page.waitForTimeout(800);}
+async function check(name,f){await f();count++;await page.screenshot({path:path.join(diagnostics,`check-${count}.png`)});console.log(`PASS ${name}`);}
+try{
+ await launch();
+ await check('wrong-song omitted; reference ZIP artifact inspected',async()=>{await page.getByRole('button',{name:'Export All Files as ZIP',exact:false}).first().click();await page.waitForTimeout(400);const paths=await page.evaluate(()=>({errors:window.__errors}));expect(paths.errors).toEqual([]);const archive=(await import('jszip')).default;const zipFile=fs.readdirSync(path.join(temp,'exports')).find(n=>n.endsWith('.zip'));expect(zipFile).toBeTruthy();const zip=await archive.loadAsync(fs.readFileSync(path.join(temp,'exports',zipFile)));const dj=Object.values(zip.files).filter(f=>f.name.endsWith('.m3u'));for(const f of dj)expect(await f.async('string')).not.toContain(tracks[0].filePath);expect(Object.keys(zip.files).some(n=>n.endsWith('readiness.txt'))).toBe(true);const txt=Object.values(zip.files).find(f=>f.name.endsWith('.txt')&&!f.name.endsWith('readiness.txt'));expect(await txt.async('string')).toContain(song.song);});
+ await check('explicit bulk most selects relevant recording, never unrelated most-played',async()=>{await page.getByRole('button',{name:'Select most played',exact:true}).first().click();await page.waitForTimeout(2200);const rows=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'));const selection=Object.values(rows.A.lists.selections)[0];expect(selection.confirmed).toBe(true);expect(selection.paths).toContain(tracks[2].filePath);expect(selection.paths).not.toContain(tracks[0].filePath);});
+ await check('direct exported artifacts and readiness report',async()=>{await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();await page.waitForTimeout(500);const names=fs.readdirSync(path.join(temp,'exports'));const m3u=names.filter(n=>n.endsWith('.m3u')).map(n=>fs.readFileSync(path.join(temp,'exports',n),'utf8')).join('');expect(m3u).toContain(tracks[2].filePath);expect(m3u).not.toContain(tracks[0].filePath);expect(names.some(n=>n.endsWith('readiness.txt'))).toBe(true);});
+ await check('approval reload and quarter-hour 2x targets',async()=>{await page.reload();await page.waitForTimeout(600);await expect(page.getByText('15:00 event baseline · 2× preparation 30:00 · expansion off',{exact:true}).first()).toBeVisible();expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.buffer).toBe(2);});
+ await check('offline real Electron storage survives process restart and reconnect',async()=>{fs.writeFileSync(path.join(temp,'fault'),'offline');await page.getByRole('button',{name:/Dance floor/i}).first().click();await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Offline retained');await page.waitForTimeout(1200);expect(await page.getByText('Event not saved',{exact:false}).count()).toBeGreaterThan(0);await page.waitForTimeout(500);process.kill(app.process().pid,'SIGKILL');await new Promise(resolve=>setTimeout(resolve,800));fs.unlinkSync(path.join(temp,'fault'));await launch();expect(await page.getByText('Unsaved recovery copy',{exact:false}).count()).toBeGreaterThan(0);await page.getByRole('button',{name:'Restore recovery copy',exact:true}).click();await page.waitForTimeout(2200);expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Offline retained');expect(Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')))).toEqual(['A']);});
+ await check('disk-full backup refusal, last good preserved',async()=>{const b={format:'setarchitect-backup',version:1,account:'synthetic-owner',createdAt:new Date().toISOString(),events:[],sources:[],roots:{}};expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),b)).ok).toBe(true);const last=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);fs.writeFileSync(path.join(temp,'fault'),'ENOSPC');expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),b)).ok).toBe(false);expect(await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw)).toBe(last);fs.unlinkSync(path.join(temp,'fault'));});
+ await check('write-denied export never reports success',async()=>{fs.writeFileSync(path.join(temp,'fault'),'EACCES');const before=await page.evaluate(()=>window.__success.length);await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();await page.waitForTimeout(400);expect(await page.evaluate(()=>window.__success.length)).toBe(before);expect(await page.evaluate(()=>window.__errors.some(e=>e.includes('could not be written')))).toBe(true);fs.unlinkSync(path.join(temp,'fault'));});
+
+ await check('partial native export reports exact batch failures and never success',async()=>{
+   fs.writeFileSync(path.join(temp,'fault'),'PARTIAL'); const before=await page.evaluate(()=>window.__success.length);
+   await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();await page.waitForTimeout(500);
+   expect(await page.evaluate(()=>window.__success.length)).toBe(before);
+   expect(await page.evaluate(()=>window.__errors.at(-1))).toMatch(/^Saved 1, failed 1/);
+   fs.unlinkSync(path.join(temp,'fault'));
+ });
+ await check('late-save navigation away/back reconciles exact recovery',async()=>{
+   await page.evaluate(()=>window.testBackend.lateWrite('arm','A'));await page.getByRole('button',{name:/Dance floor/i}).first().click();
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Late native save');
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName,{timeout:15000}).toBe('Late native save');
+   const held=await page.evaluate(()=>window.testBackend.lateWrite('status','A'));
+   expect(held).toMatchObject({armed:false,held:true,replied:false,name:'Late native save'});
+   expect(held.revision).toBe(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.__setarchitect_write_revision_v1);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Late native save');
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await expect(page.getByRole('heading',{name:'Backups',exact:true})).toBeVisible({timeout:15000});
+   expect(await page.evaluate(()=>window.testBackend.lateWrite('status','A'))).toMatchObject({held:true,replied:false,revision:held.revision});
+   const pending=await page.evaluate(()=>JSON.parse(window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A')));
+   expect(pending.snapshot.inputs.eventName).toBe('Late native save');expect(pending.writeRevision).toBe(held.revision);
+   await page.evaluate(()=>window.testBackend.lateWrite('release','A'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.lateWrite('status','A')),{timeout:15000}).toMatchObject({held:false,replied:true,revision:held.revision});
+   await page.evaluate(()=>{window.__testState.page='event';window.__testState.eventId='A';window.__rerender();});
+   await expect(page.getByText('Event saved automatically',{exact:false})).toBeVisible({timeout:15000});
+   expect(await page.getByText('Unsaved recovery copy',{exact:false}).count()).toBe(0);
+   expect(await page.getByText('Event saved automatically',{exact:false}).count()).toBe(1);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Late native save');
+   expect(Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')))).toEqual(['A']);
+ });
+ await check('production backup UI previews single-event restore and preserves additive conflicts',async()=>{
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await page.getByRole('button',{name:'Back up now',exact:true}).click();
+   await expect(page.getByRole('combobox',{name:'Event to restore'})).toBeVisible({timeout:15000});await expect(page.getByRole('button',{name:'Back up now',exact:true})).toBeEnabled({timeout:15000});
+   const raw=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw); const b=JSON.parse(raw);
+   const original=JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8'));
+   b.sources[0].tracks[0].title='Conflicting title';b.sources.push({label:'Added source',tracks:[{filePath:'Added source/new.mp3',artist:'Added',title:'New'}]});
+   b.roots['Added source']=path.join(library,'added');
+   const imported=path.join(temp,'import-backup.json');fs.writeFileSync(imported,JSON.stringify(b));
+   await page.locator('input[type=file]').setInputFiles(imported);
+   await expect(page.getByText('Library restore: 1 new sources · 1 conflicts left unchanged',{exact:false})).toBeVisible({timeout:15000});
+   await page.getByRole('button',{name:'Add non-conflicting metadata sources',exact:true}).click();await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8')).at(-1).label,{timeout:15000}).toBe('Added source');await expect(page.getByRole('button',{name:'Back up now',exact:true})).toBeEnabled({timeout:15000});
+   const restored=JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8'));
+   expect(restored[0]).toEqual(original[0]);expect(restored.at(-1).label).toBe('Added source');
+   // Only the fsynced native journal contains these drafts, as after Chromium loss.
+   for (const slot of ['new','new:pending-edit']) {
+     const recoveryKey=`setarchitect:recovery:synthetic-owner:${encodeURIComponent(slot)}`;
+     const rawDraft=JSON.stringify({version:1,account:'synthetic-owner',event:slot,token:'native-pending',createId:'native-only',baseVersion:null,snapshot:b.events[0].snapshot,savedAt:1});
+     const beforeRows=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+     await page.evaluate(({key,raw})=>{localStorage.removeItem(key);window.electronRecovery.set(key,raw);},{key:recoveryKey,raw:rawDraft});
+     const errorsBefore=await page.evaluate(()=>window.__errors.length);await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await expect.poll(()=>page.evaluate(()=>window.__errors.length),{timeout:15000}).toBe(errorsBefore+1);
+     expect(await page.evaluate(key=>localStorage.getItem(key),recoveryKey)).toBe(null);
+     expect(await page.evaluate(key=>window.electronRecovery.get(key),recoveryKey)).toBe(rawDraft);
+     expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(beforeRows);
+     expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('Resolve it first');
+     await page.evaluate(key=>window.electronRecovery.remove(key),recoveryKey);
+   }
+   await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await expect(page.getByRole('button',{name:'Restore recovery copy',exact:true})).toBeVisible({timeout:15000});
+   await page.getByRole('button',{name:'Restore recovery copy',exact:true}).click();await expect.poll(()=>Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).length,{timeout:15000}).toBe(2);await expect(page.getByText('Event saved automatically',{exact:false})).toBeVisible({timeout:15000});
+   const rows=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'));expect(Object.keys(rows)).toHaveLength(2);
+   expect(rows.A.inputs.eventName).toBe('Late native save');const newId=Object.keys(rows).find(id=>id!=='A');expect(rows[newId].lists.warmUp).toEqual(b.events[0].snapshot.lists.warmUp);
+ });
+ await check('update handoff captures fresh production workspace state and aborts on backup rename failure',async()=>{
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await expect(page.getByRole('button',{name:'Back up now',exact:true})).toBeEnabled({timeout:15000});
+   const prior=await page.evaluate(async()=>JSON.parse((await window.electronBackups.latest('synthetic-owner')).raw));
+   await expect.poll(()=>Date.now(),{timeout:15000}).toBeGreaterThan(Date.parse(prior.createdAt));const outcome=await page.evaluate(()=>window.testBackend.update());expect(outcome.ok).toBe(true);
+   const fresh=await page.evaluate(async()=>JSON.parse((await window.electronBackups.latest('synthetic-owner')).raw));
+   expect(Date.parse(fresh.createdAt)).toBeGreaterThan(Date.parse(prior.createdAt));expect(fresh.sources.some(source=>source.label==='Added source')).toBe(true);expect(fresh.events).toHaveLength(2);
+   fs.unlinkSync(path.join(temp,'handoff'));fs.writeFileSync(path.join(temp,'fault'),'RENAME_EACCES');
+   expect((await page.evaluate(()=>window.testBackend.update())).ok).toBe(false);expect(fs.existsSync(path.join(temp,'handoff'))).toBe(false);
+   const after=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);expect(after).toBe(JSON.stringify(fresh));fs.unlinkSync(path.join(temp,'fault'));
+ });
+ await check('Electron six-row upload blocks missing title then corrects and generates all intended rows',async()=>{
+   await page.evaluate(()=>{window.__testState.page='event';window.__testState.eventId=undefined;window.__rerender();});await page.waitForTimeout(400);
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('3');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const upload=path.join(temp,'six.csv');fs.writeFileSync(upload,'Artist,Song\nOne,Song One\nTwo,Song Two\nThree,Song Three\nFour,Song Four\nFive,Song Five\nArtist Only,\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);await page.waitForTimeout(400);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   const rows=page.locator('tbody tr');expect(await rows.count()).toBe(6);
+   await page.getByRole('button',{name:'Continue',exact:false}).click();await page.locator('#buffer').selectOption('2');await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(300);
+   expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('missing a song title');expect(await rows.count()).toBe(6);
+   await rows.nth(5).locator('input').nth(1).fill('Corrected Song');await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(1800);
+   expect(await page.getByRole('button',{name:'Export All Files as ZIP',exact:false}).count()).toBe(1);
+   await page.getByRole('button',{name:'Export All Files as ZIP',exact:false}).click();await page.waitForTimeout(700);
+   const zipName=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.endsWith('.zip')).sort((a,b)=>fs.statSync(path.join(temp,'exports',b)).mtimeMs-fs.statSync(path.join(temp,'exports',a)).mtimeMs)[0];
+   const zip=await (await import('jszip')).default.loadAsync(fs.readFileSync(path.join(temp,'exports',zipName)));
+   const text=(await Promise.all(Object.values(zip.files).filter(f=>f.name.endsWith('.csv')).map(f=>f.async('string')))).join('\n');
+   for(const title of ['Song One','Song Two','Song Three','Song Four','Song Five','Corrected Song'])expect(text).toContain(title);
+ });
+ await check('fresh 1x six distinct requests: review shows no duplicate, generation save is confirmed by the real contract',async()=>{
+   await page.evaluate(()=>{window.__testState.page='event';window.__testState.eventId=undefined;window.__errors=[];window.__rerender();});await page.waitForTimeout(400);
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('1');
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('TEST ONLY 1x');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const upload=path.join(temp,'six-distinct.csv');fs.writeFileSync(upload,'Artist,Song\nMark Ronson feat. Bruno Mars,Uptown Funk\nMark Ronson,Valerie\nMark Ronson,Valerie (Live)\nAdele,Hello\nLionel Richie,Hello\n"Earth, Wind & Fire",September\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);await page.waitForTimeout(400);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   expect(await page.locator('tbody tr').count()).toBe(6);
+   expect(await page.getByRole('button',{name:/Remove \d+ duplicate/}).count()).toBe(0);
+   await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks'}).click();
+   expect(await page.locator('#buffer').inputValue()).toBe('1');
+   const before=Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')));
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   await expect.poll(()=>{const rows=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'));return Object.values(rows).filter(r=>!before.includes(r.id)&&r.inputs.eventName==='TEST ONLY 1x'&&(r.lists.warmUp.length+r.lists.transition.length+r.lists.peak.length)>=6).length;},{timeout:15000}).toBe(1);
+   const created=Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY 1x');
+   expect(created.inputs.buffer).toBe(1);expect(created.inputs.expand).toBe(true);
+   expect([...created.lists.warmUp,...created.lists.transition,...created.lists.peak].filter(r=>r.fromUpload).length).toBe(6);
+   expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
+   expect((await page.evaluate(()=>window.__errors)).filter(e=>/save/i.test(e))).toEqual([]);
+ });
+ await check('wedding brief: notes suggestion applied explicitly, fit choices saved, requests kept, synthetic batch recorded',async()=>{
+   // SYNTHETIC real-route batch: real event screen + real ranking/save contract; AI suggestions and online details come from
+   // tests/fit/realCacheRows.json (read-only metadata-cache snapshot). Not live native generation, not the original candidate pool.
+   const cache=JSON.parse(fs.readFileSync(path.join(root,'tests/fit/realCacheRows.json'),'utf8'));
+   await page.evaluate(cache=>{window.__fixture.enrichRequests=[];window.__fixture.aiSuggestions=cache.map(r=>({artist:r.artist,song:r.song,reason:'synthetic fixture suggestion'}));
+     window.__fixture.enrichResults=cache.map(r=>({artist:r.artist,song:r.song,energy:r.energy,danceability:r.danceability,...(r.popularity!==undefined?{popularity:r.popularity}:{}),...(r.year!==undefined?{year:r.year}:{}),source:String(r.rawCacheSource??'').startsWith('ReccoBeats')?'ReccoBeats':'AI',prov:r.metaProv}));
+     window.__testState.page='event';window.__testState.eventId=undefined;window.__errors=[];window.__rerender();},cache);
+   await page.waitForTimeout(400);
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('1.5');
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('TEST ONLY Wedding Fit');
+   await page.getByRole('button',{name:'Traditional Wedding',exact:true}).click();
+   await page.locator('#notes').fill("Fictional client brief: mixed-age wedding guests, ages 25–70. Familiar upbeat pop, funk, disco and 2000s party favorites. Build from approachable classics into a lively finish. No line dances, slow ballads, or hard EDM. Preserve every client request.");
+   await page.locator('textarea').filter({hasNot:page.locator('#notes')}).last().fill('Village People - YMCA\nDJ Casper - Cha Cha Slide\nCupid - Cupid Shuffle');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const upload=path.join(temp,'wedding.csv');fs.writeFileSync(upload,'Artist,Song\n"Earth, Wind & Fire",September\nMark Ronson feat. Bruno Mars,Uptown Funk\nWhitney Houston,I Wanna Dance With Somebody\nUsher feat. Lil Jon & Ludacris,Yeah!\nThe Killers,Mr. Brightside\nWalk The Moon,Shut Up and Dance\nDua Lipa,Levitating\nQueen,Don\'t Stop Me Now\nOutkast,Hey Ya!\nABBA,Dancing Queen\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);await page.waitForTimeout(400);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   expect(await page.locator('tbody tr').count()).toBe(10);
+   await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks'}).click();
+   expect(await page.locator('#fit-familiarity').inputValue()).toBe('');
+   expect(await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).getAttribute('aria-checked')).toBe('false');
+   await page.getByRole('button',{name:'Apply to additions',exact:true}).click();
+   expect(await page.locator('#fit-familiarity').inputValue()).toBe('familiar');
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   const find=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY Wedding Fit');
+   // Honest legacy provenance: cache years decode as estimates, so the unchanged strict decade policy leaves zero eligible
+   // additions. Wait for the saved generation (lists present + fit persisted), not for a row count above the requests.
+   await expect.poll(()=>{const r=find();return r&&r.lists&&r.inputs.eventFit?'saved':'pending';},{timeout:30000}).toBe('saved').catch(e=>{fs.writeFileSync(path.join(diagnostics,'wedding-row.json'),JSON.stringify({row:find()},null,1));throw e;});
+   await expect.poll(()=>{const r=find();return r&&['warmUp','transition','peak'].flatMap(k=>r.lists[k]).filter(s=>!s.fromUpload).length;},{timeout:15000}).toBe(14);
+   await page.waitForTimeout(1500);
+   const created=find();
+   expect(created.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});expect(created.inputs.buffer).toBe(1);
+   const all=['warmUp','transition','peak'].flatMap(k=>created.lists[k].map(r=>({...r,section:k})));
+   const rk=r=>`${r.artist}|${r.song}`;
+   expect(all.filter(r=>r.fromUpload).map(rk).sort()).toEqual(['Earth, Wind & Fire|September','Mark Ronson feat. Bruno Mars|Uptown Funk','Whitney Houston|I Wanna Dance With Somebody','Usher feat. Lil Jon & Ludacris|Yeah!','The Killers|Mr. Brightside','Walk The Moon|Shut Up and Dance','Dua Lipa|Levitating','Queen|Don\'t Stop Me Now','Outkast|Hey Ya!','ABBA|Dancing Queen'].sort());
+   const additions=all.filter(r=>!r.fromUpload);
+   expect(additions).toHaveLength(14);
+   expect(created.inputs.decades).toEqual(['1970s','1980s','1990s','2000s','2010s','2020s']);
+   expect(additions.every(r=>created.inputs.decades.includes(r.catalogueDecade))).toBe(true);
+   expect(additions.every(r=>r.catalogueDecade&&r.metaProv?.genre==='catalogue')).toBe(true);
+   expect(additions.every(r=>r.year===undefined||r.metaProv?.year==='provider')).toBe(true);
+   const lookupRequests=await page.evaluate(()=>window.__fixture.enrichRequests);
+   expect(new Set(lookupRequests.map(s=>`${s.artist}|${s.song}`)).size).toBeGreaterThan(24);
+   expect(all.some(r=>/YMCA|Cha Cha Slide|Cupid Shuffle/i.test(r.song))).toBe(false);
+   fs.writeFileSync(path.join(diagnostics,'wedding-candidate-stage.json'),JSON.stringify({conditions:'CONTROLLED isolated Electron event route, not original native outcome. Frozen cache guesses cannot pass strict decades; complete catalogue alternatives retain known decade/genre and compete through rankPool. Last.fm unavailable; synthetic library.',additions},null,1));
+   // Reopen the saved event through the route: the fit choices must restore from the persisted snapshot.
+   await page.evaluate(id=>{window.__testState.page='event';window.__testState.eventId=id;window.__rerender();},created.id);await page.waitForTimeout(1500);
+   await page.getByRole('button',{name:/Track expansion/}).first().click();await page.waitForTimeout(300);
+   expect(await page.locator('#fit-familiarity').inputValue()).toBe('familiar');
+   expect(await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).getAttribute('aria-checked')).toBe('true');
+   expect(all.filter(r=>r.fromUpload).length).toBe(10);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))[created.id].lists).toEqual(created.lists);
+   expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
+ });
+ await check('held-out slow risk: exact similarity bounded, estimates retained, strong low both excluded, save/reopen preserves requests',async()=>{
+   const additions=[{artist:'TEST Native Risk',song:'A',energy:4,danceability:4,popularity:10,src:'ai'},
+     {artist:'TEST Native Supported',song:'B',energy:7,danceability:7,src:'provider'},
+     {artist:'TEST Native Strong',song:'C',energy:4,danceability:4,src:'provider'},
+     {artist:'TEST Native Weak',song:'D',energy:6,danceability:6,src:'estimate'}];
+   await page.evaluate(additions=>{window.__fixture.aiSuggestions=additions.map(r=>({artist:r.artist,song:r.song}));
+     window.__fixture.enrichResults=additions.map(r=>({...r,year:1985,source:'AI',prov:{year:'provider',energy:r.src,danceability:r.src,popularity:'estimate'}}));
+     window.__fixture.similarTracks={availability:'ok',seeds:['One','Two','Three','Four'].map((song,i)=>({seed:{artist:'TEST Native Client',title:song},status:'ok',similar:additions.filter(r=>i===0||r.song==='A'||r.song==='D').map(r=>({artist:r.artist,title:r.song,match:r.song==='B'?0.5:1}))}))};
+     window.__testState.eventId=undefined;window.__testState.page='event';window.__errors=[];window.__rerender();},additions);
+   // Keep this evidence-propagation fixture unsaturated now that the complete catalogue also competes.
+   await page.waitForTimeout(400);await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('6');
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('TEST ONLY Native Slow Risk');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const file=path.join(temp,'held-out-risk.csv');fs.writeFileSync(file,'Artist,Song\nTEST Native Client,One\nTEST Native Client,Two\nTEST Native Client,Three\nTEST Native Client,Four\nTEST Native Request,Keep (Live)\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(file);await page.getByRole('button',{name:'Review songs',exact:false}).first().click();await page.getByRole('button',{name:'Continue',exact:false}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks'}).click();await page.locator('#fit-familiarity').selectOption('familiar');await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).click();
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   const find=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY Native Slow Risk');
+   await expect.poll(()=>find()?.lists?.warmUp?.length,{timeout:30000}).toBeGreaterThan(0);await page.waitForTimeout(1500);
+   const saved=find(), all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
+   expect(all.filter(r=>r.fromUpload).map(r=>r.song).sort()).toEqual(['One','Two','Three','Four','Keep (Live)'].sort());
+   const risk=all.find(r=>r.artist==='TEST Native Risk');expect(risk).toBeTruthy();expect(risk.rankWhy).toContain('ranked lower, not confirmed slow');expect(risk.rankWhy).toContain('similarity bounded');
+   expect(all.some(r=>r.artist==='TEST Native Supported')).toBe(true);expect(all.some(r=>r.artist==='TEST Native Strong')).toBe(false);
+   const weak=all.find(r=>r.artist==='TEST Native Weak');expect(weak).toBeTruthy();expect(weak.rankWhy).toContain('similarity bounded: dance suitability uncertain (not confirmed slow)');expect([weak.energy,weak.danceability]).toEqual([6,6]);
+   expect(all.find(r=>r.artist==='TEST Native Supported').rankWhy??'').not.toContain('dance suitability uncertain');
+   expect(JSON.stringify(saved)).not.toMatch(/lookupPriority|similarityCap|upbeatTags/);
+   expect(saved.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});
+   await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},saved.id);await page.waitForTimeout(1200);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))[saved.id].lists).toEqual(saved.lists);
+   await page.getByRole('button',{name:/Track expansion/}).first().click();expect(await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).getAttribute('aria-checked')).toBe('true');
+   await page.evaluate(()=>{delete window.__fixture.similarTracks;window.__fixture.aiSuggestions=[];window.__fixture.enrichResults=[];});
+ });
+ await check('section-local Transition issue targets Transition and exports only captured checked mapping',async()=>{
+   await app.close();
+   const transitionSong={artist:'Missing Transition',song:'Omitted Transition'};
+   const relativeTracks=tracks.map(t=>({...t,filePath:'Synthetic/'+path.basename(t.filePath)}));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:relativeTracks}));
+   const row={id:'A',name:'Mapping',updated_at:'2026-10-31T01:59:00Z',inputs:{eventName:'Mapping',songs:[song,transitionSong],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[song,transitionSong],peak:[],selections:{[key]:{paths:[relativeTracks[2].filePath],confirmed:true},'transition:0:test artist|test song live':{paths:[relativeTracks[2].filePath],confirmed:true}}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:row}));
+   await launch();
+   await page.evaluate(root=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({Synthetic:root})),library);
+   await page.getByRole('tab',{name:/Transition/}).click();
+   fs.writeFileSync(path.join(temp,'fault'),'availability-delay');
+   await page.getByRole('button',{name:/Download M3U Transition Playlist/}).click();
+   await page.waitForTimeout(200);
+   await page.evaluate(root=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({Synthetic:root+'/unchecked'})),library);
+   await page.waitForTimeout(1200);fs.unlinkSync(path.join(temp,'fault'));
+   const emitted=fs.readFileSync(path.join(temp,'exports','mapping-transition.m3u'),'utf8');
+   expect(emitted).toContain(tracks[2].filePath);expect(emitted).not.toContain('/unchecked/');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual([tracks[2].filePath]);
+   await page.getByRole('tab',{name:/Warm/}).click();
+   await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed track',exact:true}).click();
+   expect(await page.getByRole('tab',{name:/Transition/}).getAttribute('data-state')).toBe('active');
+   await page.getByRole('button',{name:'Unselect all',exact:true}).click();
+   await page.waitForTimeout(100);expect(await page.getByRole('button',{name:'Missing Transition — Omitted Transition — No confirmed track',exact:true}).count()).toBe(0);
+ });
+ await check('build26 identifiers survive actual startup/rescan backup, Settings preview and restore',async()=>{
+   await app.close();
+   const exact='transition:32:the allamerican rejects|the allamerican rejects dirty little secret';
+   const songs=['Secrets','Password','Session'].map(song=>({artist:'The Secret Session',song}));
+   const label='Secret Session Password';
+   const selected={[exact]:{paths:[label+'/most.mp3'],confirmed:true},'warmUp:1:the secret session|password':{paths:[label+'/correct.mp3'],confirmed:false}};
+   const snapshot={name:'Secret Session',inputs:{songs,eventName:'Secret Session',hours:'0.25',buffer:2,expand:false,songMetadata:{Secrets:{energy:7},Password:{bpm:120},Session:{comment:'kept'}},sessionNotes:'ordinary saved notes'},lists:{warmUp:songs,transition:[{artist:'The All-American Rejects',song:'Dirty Little Secret'}],peak:[],selections:selected,metadata:{Secrets:{comment:'unknown retained'}}}};
+   const rows={A:{id:'A',name:snapshot.name,inputs:snapshot.inputs,lists:snapshot.lists,updated_at:'2026-10-31T02:51:00Z'}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(rows));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({startBackups:true,sources:[{label,tracks:tracks.map(t=>({...t,filePath:label+'/'+path.basename(t.filePath)}))}]}));
+   await launch();await page.evaluate(({label,root})=>localStorage.setItem('dancefloor:musicFolderRoots',JSON.stringify({[label]:root})),{label,root:library});
+   await page.reload();await expect.poll(()=>fs.existsSync(path.join(temp,'scan-count'))?fs.readFileSync(path.join(temp,'scan-count'),'utf8'):null,{timeout:15000}).toBe('1');
+   const originalRows=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   const startup=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);
+   expect(JSON.parse(startup).events[0].snapshot).toEqual(snapshot);
+   expect(await page.evaluate(()=>window.__errors)).toEqual([]);
+   await page.getByRole('button',{name:'Fixture rescan',exact:true}).click();await expect.poll(()=>fs.readFileSync(path.join(temp,'scan-count'),'utf8'),{timeout:15000}).toBe('2');
+   expect(fs.readFileSync(path.join(temp,'scan-count'),'utf8')).toBe('2');
+   await page.getByRole('button',{name:'Back up now',exact:true}).click();await expect(page.getByRole('combobox',{name:'Event to restore'})).toHaveValue('A',{timeout:15000});await expect(page.getByRole('button',{name:'Back up now',exact:true})).toBeEnabled({timeout:15000});
+   expect(await page.getByRole('combobox',{name:'Event to restore'}).inputValue()).toBe('A');
+   const raw=await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw);
+   expect(JSON.parse(raw).events[0].snapshot).toEqual(snapshot);
+   const existingArtifacts=new Set(fs.readdirSync(path.join(temp,'exports')));
+   await page.getByRole('button',{name:'Download backup',exact:true}).click();
+   let artifact;
+   await expect.poll(()=>{
+     const candidate=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('setarchitect-backup-')&&!existingArtifacts.has(n)).sort().at(-1);
+     if(!candidate)return undefined;
+     // Electron creates the destination before streaming finishes. Retry incomplete reads,
+     // and wait for the exact snapshot rather than filename existence or an arbitrary delay.
+     try { const parsed=JSON.parse(fs.readFileSync(path.join(temp,'exports',candidate),'utf8'));artifact=candidate;return parsed.events?.[0]?.snapshot; }
+     catch { return undefined; }
+   },{timeout:15000}).toEqual(snapshot);
+   expect(artifact).toBeTruthy();expect(JSON.parse(fs.readFileSync(path.join(temp,'exports',artifact),'utf8')).events[0].snapshot).toEqual(snapshot);
+   const bad=JSON.parse(raw);bad.events[0].snapshot.inputs.access_token='synthetic credential';
+   expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),bad)).ok).toBe(false);
+   expect(await page.evaluate(async()=> (await window.electronBackups.latest('synthetic-owner')).raw)).toBe(raw);
+   const imported=path.join(temp,'identifier-roundtrip.json');fs.writeFileSync(imported,raw);await page.locator('input[type=file]').setInputFiles(imported);await expect(page.getByRole('button',{name:'Restore selected event as new',exact:true})).toBeEnabled({timeout:15000});
+   await page.getByRole('button',{name:'Restore selected event as new',exact:true}).click();await expect(page.getByRole('button',{name:'Restore recovery copy',exact:true})).toBeVisible({timeout:15000});
+   const queued=await page.evaluate(()=>JSON.parse(window.electronRecovery.get('setarchitect:recovery:synthetic-owner:new')));
+   expect(queued.snapshot).toEqual(snapshot);expect(queued.snapshot.lists.selections).toEqual(selected);
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(originalRows);
+ });
+ await check('automatic updater download latch captures latest editor draft before any Squirrel stage',async()=>{
+   await page.evaluate(()=>{window.__testState.eventId='A';window.__testState.page='event';window.__rerender();});
+   await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible({timeout:15000});
+   await expect(page.getByText('Secret Session',{exact:true}).first()).toBeVisible({timeout:15000});
+   const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.count()){await archive.click();await expect(archive).toHaveCount(0);}
+   await page.getByRole('button',{name:/Dance floor/i}).first().click();
+   const name=page.getByPlaceholder('e.g. Smith Johnson Wedding');await expect(name).toHaveValue('Secret Session',{timeout:15000});
+   await page.evaluate(()=>window.testBackend.autoUpdate('start'));await expect.poll(()=>fs.existsSync(path.join(temp,'download-started'))).toBe(true);
+   expect((await page.evaluate(()=>window.testBackend.autoUpdate('quit'))).blocked).toBe(true);
+   await name.fill('Fresh edit during download');await expect(name).toHaveValue('Fresh edit during download');
+   expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);
+   await page.evaluate(()=>window.testBackend.autoUpdate('release'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'installing'});
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'automatic-stage'),'utf8'))).toEqual({locked:true,backup:true});
+   const draft=await page.evaluate(()=>{const pending=window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A:pending-edit');return JSON.parse(pending||window.electronRecovery.get('setarchitect:recovery:synthetic-owner:A'));});
+   expect(draft.snapshot.name).toBe('Fresh edit during download');expect(draft.writeRevision).toBeTruthy();
+   await page.evaluate(()=>window.testBackend.autoUpdate('unlock'));
+   fs.unlinkSync(path.join(temp,'automatic-stage'));fs.writeFileSync(path.join(temp,'fault'),'RENAME_EACCES');
+   await page.evaluate(()=>window.testBackend.autoUpdate('start'));await page.evaluate(()=>window.testBackend.autoUpdate('release'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'failed'});
+   expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);expect(await page.locator('#update-preservation-lock').count()).toBe(0);
+   fs.unlinkSync(path.join(temp,'fault'));
+   await page.evaluate(()=>window.testBackend.autoUpdate('start'));await page.evaluate(()=>window.testBackend.autoUpdate('cancel'));await page.evaluate(()=>window.testBackend.autoUpdate('release'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'cancelled'});expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);
+ });
+ await check('uncertain staging failure updates the locked overlay without releasing guards',async()=>{
+   fs.writeFileSync(path.join(temp,'fault'),'STAGING_ERROR');
+   await page.evaluate(()=>window.testBackend.autoUpdate('start'));await page.evaluate(()=>window.testBackend.autoUpdate('release'));
+   await expect.poll(()=>page.evaluate(()=>window.testBackend.autoUpdate('status')),{timeout:15000}).toMatchObject({phase:'staging-failed'});
+   const cover=page.locator('#update-preservation-lock');await expect(cover).toHaveAttribute('role','alert');await expect(cover).toContainText('Synthetic uncertain staging');
+   expect(await page.evaluate(()=>Array.from(document.body.children).filter(el=>el.id!=='update-preservation-lock').every(el=>el.inert))).toBe(true);
+   expect((await page.evaluate(()=>window.testBackend.autoUpdate('quit'))).blocked).toBe(true);
+   expect(fs.existsSync(path.join(temp,'automatic-stage'))).toBe(false);
+   await cover.screenshot({path:path.join(root,'test-results/native/staging-failure-overlay.png')});
+   // Test-only cleanup: production controller deliberately exposes no unlock for uncertain staging.
+   await page.evaluate(()=>window.testBackend.autoUpdate('unlock'));fs.unlinkSync(path.join(temp,'fault'));
+ });
+ await check('actual appearance controls follow System only, persist and render both themes',async()=>{
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});
+   const theme=page.getByRole('group',{name:'Appearance'});
+   await page.emulateMedia({colorScheme:'dark'});await theme.getByRole('button',{name:'System',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dark'))).toBe(true);
+   await theme.getByRole('button',{name:'Light',exact:true}).click();await page.emulateMedia({colorScheme:'dark'});
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('light'))).toBe(true);
+   await expect(theme.getByRole('button',{name:'Light',exact:true})).toHaveAttribute('aria-pressed','true');
+   const light=await page.evaluate(()=>({bg:getComputedStyle(document.body).backgroundColor,fg:getComputedStyle(document.body).color}));
+   const contrast=async()=>page.evaluate(()=>{
+     const ctx=document.createElement('canvas').getContext('2d');const style=getComputedStyle(document.documentElement);
+     const luminance=token=>{ctx.clearRect(0,0,1,1);ctx.fillStyle=style.getPropertyValue('--'+token).trim();ctx.fillRect(0,0,1,1);const data=ctx.getImageData(0,0,1,1).data;const rgb=[...data].slice(0,3).map(c=>{const v=c/255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4;});return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;};
+     return ['foreground','muted-foreground','primary','success','warning','info','ai','destructive'].map(token=>{const a=luminance(token),b=luminance('background');return {token,ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};}).concat(['primary','secondary','card','popover','success','warning','info','ai','destructive'].map(token=>{const a=luminance(token),b=luminance(token+'-foreground');return {token:token+' pair',ratio:(Math.max(a,b)+.05)/(Math.min(a,b)+.05)};}));
+   });
+   for(const result of await contrast())expect(result.ratio,`light ${result.token}`).toBeGreaterThanOrEqual(4.5);
+   await page.screenshot({path:path.join(diagnostics,'appearance-light.png')});
+   await theme.getByRole('button',{name:'Dark',exact:true}).click();await page.emulateMedia({colorScheme:'light'});
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dark'))).toBe(true);
+   const dark=await page.evaluate(()=>({bg:getComputedStyle(document.body).backgroundColor,fg:getComputedStyle(document.body).color}));expect(dark.bg).not.toBe(light.bg);expect(dark.fg).not.toBe(light.fg);
+   for(const result of await contrast())expect(result.ratio,`dark ${result.token}`).toBeGreaterThanOrEqual(4.5);
+   await page.screenshot({path:path.join(diagnostics,'appearance-dark.png')});
+   for(const choice of ['Light','Dark']){
+     await theme.getByRole('button',{name:choice,exact:true}).click();
+     await page.evaluate(()=>{window.__testState.page='event';window.__rerender();});
+     await page.getByRole('button',{name:'Review & export',exact:false}).first().click();
+     await expect(page.getByText('Event flow',{exact:true})).toBeVisible({timeout:15000});
+     await page.getByText('Event flow',{exact:true}).locator('..').screenshot({path:path.join(diagnostics,`chart-${choice.toLowerCase()}.png`)});
+     await page.getByRole('button',{name:'Check export readiness',exact:true}).click();
+     await expect(page.getByRole('region',{name:'Export readiness'}).getByText(/requested tracks/)).toBeVisible({timeout:15000});
+     await page.getByRole('region',{name:'Export readiness'}).screenshot({path:path.join(diagnostics,`readiness-${choice.toLowerCase()}.png`)});
+     await page.setViewportSize({width:390,height:844});
+     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+     await page.screenshot({path:path.join(diagnostics,`mobile-${choice.toLowerCase()}.png`)});
+     await page.setViewportSize({width:1280,height:1800});
+     await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});
+   }
+   await page.reload();await expect.poll(()=>page.evaluate(()=>document.documentElement.dataset.appearance),{timeout:15000}).toBe('dark');
+   await page.evaluate(()=>{window.__testState.page='backups';window.__rerender();});await theme.getByRole('button',{name:'System',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('light'))).toBe(true);await page.emulateMedia({colorScheme:'dark'});
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.classList.contains('dark'))).toBe(true);
+ });
+
+ await check('production VDJ read merges lengths, recommendations skip the exact selected file, shortfall follows shortlist add',async()=>{
+   await app.close();
+   const dir=path.join(library,'dsmn'),other=path.join(library,'other');fs.mkdirSync(dir,{recursive:true});fs.mkdirSync(other,{recursive:true});
+   const request={artist:'Queen',song:"Don't Stop Me Now",fromUpload:true};
+   const q=[{filePath:path.join(dir,"Queen - Don't Stop Me Now (Clean).mp3"),artist:'Queen',title:"Don't Stop Me Now (Clean)"},{filePath:path.join(dir,"Queen - Don't Stop Me Now.mp3"),artist:'Queen',title:"Don't Stop Me Now",songLength:'187'},{filePath:path.join(other,"Queen - Don't Stop Me Now (Clean).mp3"),artist:'Queen',title:"Don't Stop Me Now (Clean)"},{filePath:path.join(dir,'Band - Hit.mp3'),artist:'Band',title:'Hit'}];
+   q.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:q}));
+   const esc=s=>s.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+   const len=['215.4','0','abc','200'];
+   fs.writeFileSync(path.join(temp,'vdj.xml'),`<?xml version="1.0"?><VirtualDJ_Database>${q.map((t,i)=>`<Song FilePath="${esc(t.filePath)}"><Tags Author="${esc(t.artist)}" Title="${esc(t.title)}"/><Infos SongLength="${len[i]}"/></Song>`).join('')}</VirtualDJ_Database>`);
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const k=`warmUp:0:${dedupeKey(request.artist,request.song)}`;
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Queen',updated_at:'2026-11-02T01:59:00Z',inputs:{eventName:'Queen',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[k]:{paths:[q[0].filePath],confirmed:true}}}}}));
+   await launch();
+   await page.evaluate(r=>localStorage.setItem('dancefloor:vdjRoot',r),temp);await page.reload();await page.locator('[role="status"], #backups').first().waitFor();
+   const lengths=()=>{try{return Object.fromEntries(JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8')).flatMap(s=>s.tracks).map(t=>[t.filePath,t.songLength??null]));}catch{return {};}};
+   await expect.poll(()=>lengths()[q[0].filePath],{timeout:15000}).toBe('215');
+   expect(lengths()).toEqual({[q[0].filePath]:'215',[q[1].filePath]:'187',[q[2].filePath]:null,[q[3].filePath]:'200'});
+   const prep=page.getByRole('region',{name:'Event preparation'});
+   await prep.getByRole('tab',{name:'Recommendations'}).click();
+   await expect(prep.getByRole('button',{name:"Details for Queen – Don't Stop Me Now (Clean)"})).toHaveCount(1); // other-folder copy stays
+   await expect(prep).toContainText('2 already in event'); // exact selected file + same-title alternative
+   const tab=()=>page.getByRole('tab',{name:/^Warm Up \(/}).first().innerText();
+   const before=(await tab()).match(/Warm Up \((\d+) \/ (\d+), -(\d+)\)/);expect(before).toBeTruthy();
+   const [,n,target,shortBy]=before.map(Number);
+   await prep.getByRole('tab',{name:/Shortlist/}).click();
+   await prep.getByLabel('Shortlist artist').fill('Band');await prep.getByLabel('Shortlist title').fill('Hit');
+   await prep.getByRole('button',{name:'Add',exact:true}).click();
+   await prep.getByLabel('Section to add shortlist songs to').selectOption('warmUp');
+   await prep.locator('li',{hasText:'Band – Hit'}).getByRole('button',{name:'Add to section'}).click();
+   await expect.poll(tab).toContain(`Warm Up (${n+1} / ${target}, -${shortBy-1})`);
+   await expect(page.getByText(`-${shortBy-1} short`,{exact:true}).first()).toBeVisible();
+ });
+ await check('malformed production VDJ XML: ordinary refresh recovers lengths per entry with exact identities, keeps old values, reports skips',async()=>{
+   await app.close();
+   const dir=path.join(library,'malformed');fs.mkdirSync(path.join(dir,'other'),{recursive:true});
+   const fx=malformedVdjFixture(dir),F=fx.files;
+   const lib=[{filePath:F.bill,artist:'Bill Withers',title:"Ain't No Sunshine"},{filePath:F.billOther,artist:'Bill Withers',title:"Ain't No Sunshine"},{filePath:F.simon,artist:'Simon & Garfunkel',title:'Cecilia'},{filePath:F.zero,artist:'Zed',title:'Zero',songLength:'111'},{filePath:F.bad,artist:'Zed',title:'Bad',songLength:'222'},{filePath:F.unclosed,artist:'Unclosed',title:'Quote',songLength:'333',genre:'Kept'},{filePath:F.entity,artist:'Entity',title:'Boom'},{filePath:F.after,artist:'Zed',title:'After'}];
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib,vdjRefresh:true}));
+   const nulXml=fx.xml.replace('\n <Song FilePath="'+dir+'/Zed - After.mp3','\n\u0000 <Song FilePath="'+dir+'/Zed - After.mp3')+'\n\u0000';expect(nulXml).toContain('\u0000 <Song');fs.writeFileSync(path.join(temp,'vdj.xml'),nulXml);const xmlBefore=fs.readFileSync(path.join(temp,'vdj.xml'));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const request={artist:'Bill Withers',song:"Ain't No Sunshine",fromUpload:true};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Bill',updated_at:'2026-11-02T21:00:00Z',inputs:{eventName:'Bill',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[`warmUp:0:${dedupeKey(request.artist,request.song)}`]:{paths:[F.bill],confirmed:true}}}}}));
+   await launch();
+   await page.evaluate(r=>localStorage.setItem('dancefloor:vdjRoot',r),temp);await page.reload();
+   const index=()=>{try{return JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8')).flatMap(s=>s.tracks);}catch{return [];}};
+   const lengths=()=>Object.fromEntries(index().map(t=>[t.filePath,t.songLength??null]));
+   const expected={[F.bill]:'290',[F.billOther]:'120',[F.simon]:'175',[F.zero]:'111',[F.bad]:'222',[F.unclosed]:'333',[F.entity]:'100',[F.after]:'306'};
+   await expect.poll(lengths,{timeout:15000}).toEqual(expected);
+   await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;});
+   await page.getByRole('button',{name:'Fixture VirtualDJ refresh',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toBe('Synced 11 VirtualDJ tracks · 7 matched in your folders · 8 with length');
+   expect(await page.evaluate(()=>window.__warnings)).toEqual(['2 damaged VirtualDJ entries were skipped; those tracks keep their saved details.']);
+   expect(lengths()).toEqual(expected);
+   const saved=index();expect(saved.map(t=>t.filePath)).toEqual(lib.map(t=>t.filePath)); // exact case-sensitive identities, no basename conflation
+   expect(saved.find(t=>t.filePath===F.unclosed)).toMatchObject({genre:'Kept',songLength:'333'});
+   expect(saved.find(t=>t.filePath===F.simon)).toMatchObject({genre:'Folk',playCount:0});
+   expect(fs.readFileSync(path.join(temp,'vdj.xml')).equals(xmlBefore)).toBe(true);
+   await page.getByRole('button',{name:"Details for Bill Withers – Ain't No Sunshine"}).first().click();
+   await expect(page.getByTestId('detail-exact-file')).toHaveText(F.bill);
+   await expect(page.getByRole('region',{name:'Track facts'})).toContainText('4:50');
+   await page.keyboard.press('Escape');
+   // Rewriting the same entry as invalid on the next refresh keeps the last valid length.
+   fs.writeFileSync(path.join(temp,'vdj.xml'),fx.xml.replace('SongLength="290.352086"','SongLength="0"'));
+   await page.getByRole('button',{name:'Fixture VirtualDJ refresh',exact:true}).click();
+   await expect.poll(()=>page.evaluate(()=>window.__success.length),{timeout:15000}).toBe(2);
+   expect(lengths()).toEqual(expected);
+ });
+
+ await check('versions drawer: only same-work files listed; fuzzy title matches hidden; exact selection kept',async()=>{
+   await app.close();
+   const dir=path.join(library,'versions');fs.mkdirSync(path.join(dir,'b'),{recursive:true});
+   const lib=[{filePath:path.join(dir,'Snow Patrol - Chasing Cars.mp3'),artist:'Snow Patrol',title:'Chasing Cars'},{filePath:path.join(dir,'b','Snow Patrol - Chasing Cars.mp3'),artist:'Snow Patrol',title:'Chasing Cars (Live)'},{filePath:path.join(dir,'Tiesto - Chasing Summers.mp3'),artist:'Tiësto',title:'Chasing Summers'},{filePath:path.join(dir,'Walking On Cars - Speeding Cars.mp3'),artist:'Walking On Cars',title:'Speeding Cars'},{filePath:path.join(dir,'ALMA - Chasing Highs.mp3'),artist:'ALMA',title:'Chasing Highs'}];
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib}));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const request={artist:'Snow Patrol',song:'Chasing Cars',fromUpload:true};
+   const backendBefore={A:{id:'A',name:'Versions',updated_at:'2026-11-04T10:00:00Z',inputs:{eventName:'Versions',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[`warmUp:0:${dedupeKey(request.artist,request.song)}`]:{paths:[lib[0].filePath],confirmed:true}}}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(backendBefore));
+   await launch();
+   await page.getByRole('button',{name:'Details for Snow Patrol – Chasing Cars'}).first().click();
+   await expect(page.getByTestId('detail-exact-file')).toHaveText(lib[0].filePath);
+   const region=page.getByRole('region',{name:'Version comparison'});
+   await expect(region).toBeVisible();
+   await expect(region).not.toContainText('Chasing Summers');await expect(region).not.toContainText('Speeding Cars');await expect(region).not.toContainText('Chasing Highs');
+   const rows=await page.getByTestId('detail-version-row').allTextContents();
+   expect(rows.length).toBeLessThanOrEqual(2);expect(rows[0]).toContain('shown');
+   if(rows.length===2) expect(rows[1]).toContain('different version');
+   await expect(page.getByTestId('detail-selection-mismatch')).toHaveCount(0);
+   await page.keyboard.press('Escape');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections).toEqual(backendBefore.A.lists.selections); // drawer never changes the saved selection
+ });
+
+ await check('versions drawer: wrong linked file stays linked/shown but never inside version rows while true variants are listed',async()=>{
+   await app.close();
+   const dir=path.join(library,'versions-wrong');fs.mkdirSync(path.join(dir,'b'),{recursive:true});
+   const lib=[{filePath:path.join(dir,'Tiesto - Chasing Summers.mp3'),artist:'Tiësto',title:'Chasing Summers'},{filePath:path.join(dir,'Snow Patrol - Chasing Cars.mp3'),artist:'Snow Patrol',title:'Chasing Cars'},{filePath:path.join(dir,'b','Snow Patrol - Chasing Cars (Live).mp3'),artist:'Snow Patrol',title:'Chasing Cars (Live)'}];
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib}));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const request={artist:'Snow Patrol',song:'Chasing Cars',fromUpload:true};
+   const backendBefore={A:{id:'A',name:'Wrong link',updated_at:'2026-11-04T11:00:00Z',inputs:{eventName:'Wrong link',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[`warmUp:0:${dedupeKey(request.artist,request.song)}`]:{paths:[lib[0].filePath],confirmed:true}}}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(backendBefore));
+   await launch();
+   await page.getByRole('button',{name:'Details for Snow Patrol – Chasing Cars'}).first().click();
+   await expect(page.getByTestId('detail-exact-file')).toHaveText(lib[0].filePath);
+   await expect(page.getByTestId('detail-selection-mismatch')).toBeVisible();
+   const rows=page.getByTestId('detail-version-row');
+   await expect(rows.first()).toBeVisible();
+   const texts=await rows.allTextContents();
+   expect(texts.length).toBeGreaterThanOrEqual(1);
+   for(const t of texts){expect(t).not.toContain('Chasing Summers');expect(t).not.toContain('shown');}
+   expect(texts.join(' ')).toContain('Chasing Cars');
+   await page.keyboard.press('Escape');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections).toEqual(backendBefore.A.lists.selections);
+ });
+
+ for(const order of ['stale-last','stale-first']) await check(`reopen with colliding stale/current selection keys (${order}): each row keeps its own file, passive open writes nothing`,async()=>{
+   await app.close();
+   const dir=path.join(library,`collide-${order}`);fs.mkdirSync(dir,{recursive:true});
+   const lib=[['Common','Be'],['Bee Gees','Stayin Alive'],['Queen',"Don't Stop Me Now"],['Stevie Wonder','Signed Sealed Delivered'],['Usher','Yeah']].map(([artist,title])=>({filePath:path.join(dir,`${artist} - ${title}.mp3`),artist,title}));
+   lib.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:lib}));
+   const {outputFiles}=await build({entryPoints:[path.join(root,'src/lib/danceFloor.ts')],bundle:true,format:'esm',write:false,platform:'node',alias:{'@':path.join(root,'src')}});
+   const {dedupeKey}=await import('data:text/javascript;base64,'+Buffer.from(outputFiles[0].text).toString('base64'));
+   const [common,bee,queen,stevie,usher]=lib.map(t=>({artist:t.artist,song:t.title,fromUpload:true}));
+   const key=(i,s)=>`warmUp:${i}:${dedupeKey(s.artist,s.song)}`;
+   const current={[key(0,common)]:{paths:[lib[0].filePath],confirmed:true},[key(1,queen)]:{paths:[lib[2].filePath],confirmed:true},[key(2,usher)]:{paths:[lib[4].filePath],confirmed:true}};
+   const stale={[key(0,bee)]:{paths:[lib[1].filePath],confirmed:true},[key(1,stevie)]:{paths:[lib[3].filePath],confirmed:true},[key(3,usher)]:{paths:[lib[4].filePath],confirmed:true}};
+   const selections=order==='stale-last'?{...current,...stale}:{...stale,...current};
+   const backendBefore={A:{id:'A',name:'Collide',updated_at:'2026-11-04T12:00:00Z',inputs:{eventName:'Collide',songs:[common,queen,usher],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[common,queen,usher],transition:[],peak:[],selections}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(backendBefore));
+   await launch();
+   for(const [s,file] of [[common,lib[0]],[queen,lib[2]],[usher,lib[4]]]){
+     await page.getByRole('button',{name:`Details for ${s.artist} – ${s.song}`}).first().click();
+     await expect(page.getByTestId('detail-exact-file')).toHaveText(file.filePath);
+     await expect(page.getByTestId('detail-selection-mismatch')).toHaveCount(0);
+     await page.keyboard.press('Escape');
+   }
+   await page.waitForTimeout(2200);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(backendBefore.A); // passive reopen never rewrites
+ });
+
+ await check('preparation policies: 31,250 library, wrong AI artists and holiday additions filtered, requests retained, exact clean versions and honest gaps',async()=>{
+   await app.close();
+   const defs=[
+    {artist:'Queen',title:'Radio Ga Ga (Dirty)'},{artist:'Queen',title:'Radio Ga Ga (Clean)'},
+    {artist:'Rammstein',title:'Radio (Clean)'},{artist:'Robyn',title:'Honey (Clean)'},
+    {artist:'John Mellencamp',title:'Fire In The Sky (Clean)'},{artist:'Janelle Monae',title:'Queen (Clean)'},
+    {artist:'Wham!',title:'Last Christmas (Clean)'},{artist:'Band',title:'Ordinary (Clean)',genre:'Holiday'}
+   ];
+   const small=defs.map((t,i)=>({...t,filePath:path.join(library,`policy-${i}.mp3`)}));small.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
+   const big=[...small,...Array.from({length:31242},(_,i)=>({artist:`Bulk ${i}`,title:`Filler ${i}`,filePath:path.join(library,`absent-${i}.mp3`)}))];
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:big,aiSuggestions:[{artist:'Queen',song:'Radio Ga Ga',energy:8,danceability:8,popularity:80,valence:50},{artist:'ABBA',song:'Honey Honey',energy:8,danceability:8,popularity:80,valence:50},{artist:'Anderson .Paak',song:'Fire In The Sky',energy:8,danceability:8,popularity:80,valence:50},{artist:'Queen',song:'Killer Queen',energy:8,danceability:8,popularity:80,valence:50},{artist:'Wham!',song:'Last Christmas',energy:8,danceability:8,popularity:80,valence:50}]}));
+   fs.writeFileSync(path.join(temp,'backend.json'),'{}');await launch();
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+   await expect(page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true})).not.toBeChecked();await page.getByRole('switch',{name:'Only expand with tracks in my library',exact:true}).click();
+   await expect(page.getByRole('switch',{name:'Include seasonal/holiday tracks',exact:true})).not.toBeChecked();
+   await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).not.toBeChecked();await page.getByRole('switch',{name:'Require clean versions',exact:true}).click();
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('3');
+   if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
+   await page.getByPlaceholder('e.g. Smith Johnson Wedding').fill('Policy synthetic');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   const upload=path.join(temp,'policies.csv');fs.writeFileSync(upload,'Artist,Song\nWham!,Last Christmas\nClient,Requested Unknown\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   await expect(page.locator('tbody tr')).toHaveCount(2);await page.getByRole('button',{name:'Continue',exact:true}).click();
+   await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();await page.locator('#buffer').selectOption('2');
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   await expect.poll(()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Policy synthetic'),{timeout:30000}).toBeTruthy();
+   const saved=Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Policy synthetic');
+   expect(saved.inputs).toMatchObject({ownedOnlyExpansion:true,includeSeasonalTracks:false,requireCleanVersions:true});
+   const all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
+   expect(all.some(t=>t.song==='Last Christmas'&&t.fromUpload)).toBe(true);expect(all.some(t=>t.song==='Requested Unknown'&&t.fromUpload)).toBe(true);
+   for(const t of all.filter(t=>!t.fromUpload))expect(small.some(f=>f.artist===t.artist&&f.title.replace(' (Clean)','')===t.song.replace(' (Clean)',''))).toBe(true);
+   expect(all.some(t=>t.song==='Honey Honey'||t.song==='Killer Queen'||t.artist==='Anderson .Paak')).toBe(false);
+   expect(all.some(t=>t.song==='Ordinary (Clean)')).toBe(false);
+   await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
+   expect(Object.values(saved.lists.selections).flatMap(v=>v.paths)).not.toContain(small[0].filePath);
+   const holidaySelection=Object.entries(saved.lists.selections).find(([k])=>k.includes('wham')&&k.includes('last christmas'))?.[1];
+   expect(holidaySelection).toMatchObject({confirmed:true,paths:[small[6].filePath]});
+   const policyId=saved.id;await page.reload();await page.waitForFunction(()=>!!window.__testState && typeof window.__rerender==='function');await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},policyId);await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeChecked();
+ });
+ await check('owned clean local refill never bypasses do-not-play and year/genre/BPM constraints',async()=>{
+   await app.close();
+   const banned=[{artist:'Forbidden Artist',title:'Forbidden Track (Clean)',year:'2015',genre:'Pop',bpm:'120'},{artist:'Old Artist',title:'Out Of Range (Clean)',year:'1955',genre:'Metal',bpm:'180'}].map((t,i)=>({...t,filePath:path.join(library,`banned-${i}.mp3`)}));
+   banned.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:banned,aiSuggestions:[]}));
+   const req={artist:'Client',song:'Keep Request',fromUpload:true};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Constrained gap',updated_at:'v1',inputs:{songs:[req],eventName:'Constrained gap',hours:'.25',buffer:2,listType:'dance',expand:true,ownedOnlyExpansion:true,includeSeasonalTracks:false,requireCleanVersions:true,eventType:'school_dance',decades:['2010s'],genresInput:'Pop',doNotPlayInput:'Forbidden Artist - Forbidden Track',bpmRange:[110,128]},lists:{warmUp:[req],transition:[],peak:[]}}}));
+   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.__setarchitect_write_revision_v1,{timeout:15000}).toBeTruthy();
+   const saved=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A;
+   const all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
+   expect(all.filter(t=>!t.fromUpload)).toEqual([]);expect(all.some(t=>t.song==='Keep Request'&&t.fromUpload)).toBe(true);
+ });
+ await check('clean policy toggle retains chosen dirty/extras; actual exported paths and omission reasons agree; save/reopen persists',async()=>{
+   await app.close();const file=path.join(library,'Policy clean.mp3'),dirty=path.join(library,'Policy dirty.mp3'),unknown=path.join(library,'Policy unknown.mp3');
+   const tt=[{filePath:dirty,artist:'Band',title:'Hit (Dirty)'},{filePath:file,artist:'Band',title:'Hit (Clean)'},{filePath:unknown,artist:'Band',title:'Hit'}];tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));const req={artist:'Band',song:'Hit',fromUpload:true};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Clean toggle',updated_at:'v1',inputs:{songs:[req],eventName:'Clean toggle',hours:'.25',buffer:2,listType:'dance'},lists:{warmUp:[req],transition:[],peak:[],selections:{'warmUp:0:band|hit':{paths:[dirty,file,unknown],confirmed:true}}}}}));
+   fs.rmSync(path.join(temp,'exports'),{recursive:true,force:true});await launch();
+   // Earlier tests configured a native folder; use the actual native write bridge, fenced to this profile.
+   await page.evaluate(root=>localStorage.setItem('dancefloor:vdjRoot',root),path.join(temp,'VirtualDJ'));await page.reload();
+   await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
+   await expect(page.getByRole('button',{name:'Archive recovery copy and continue',exact:true})).toHaveCount(0);
+   const toggle=page.getByRole('switch',{name:'Require clean versions',exact:true});await expect(toggle).not.toBeChecked();await toggle.click();
+   await expect(page.getByText('Clean version needed',{exact:true}).first()).toBeVisible();
+   await page.getByRole('button',{name:'Export All to VirtualDJ',exact:false}).first().click();
+   await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toContain('clean-policy blocks');
+   const outputs=fs.readdirSync(path.join(temp,'exports'));const m3u=outputs.filter(n=>n.endsWith('.m3u')).map(n=>fs.readFileSync(path.join(temp,'exports',n),'utf8')).join('');
+   expect(m3u).toContain(file);expect(m3u).not.toContain(dirty);expect(m3u).not.toContain(unknown);
+   expect(fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8')).toContain('clean-toggle-warm-up.m3u');
+   const report=fs.readFileSync(path.join(temp,'exports',outputs.find(n=>n.endsWith('export-readiness.txt'))),'utf8');expect(report).toContain('Clean-policy blocks: 2');expect(report).toContain('Approved tracks (including extras, in playlist order): 1');
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.requireCleanVersions,{timeout:15000}).toBe(true);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections['warmUp:0:band|hit'].paths).toEqual([dirty,file,unknown]);
+   await page.reload();await expect(toggle).toBeChecked();
+ });
+ await check('native per-section M3U/TXT success uses verified availability and exact clean omission counts',async()=>{
+   const accept=dialog=>dialog.accept();page.on('dialog',accept);
+   for(const [button,ext] of [['Warm Up M3U → VirtualDJ','m3u'],['Warm Up .txt → VirtualDJ','txt']]){
+     await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;});
+     await page.getByRole('button',{name:button,exact:true}).click();
+     const fname=`clean-toggle-warm-up.${ext}`;
+     await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toBe(`Saved 1 track · left out: 2 clean-policy blocks to ${path.join(temp,'VirtualDJ','Playlists')} as ${fname}`);
+     expect(await page.evaluate(()=>window.__warnings)).toEqual(['1 track · left out: 2 clean-policy blocks. Reference files retain intended tracks.']);
+     const report=fs.readFileSync(path.join(temp,'exports','clean-toggle-warm-up-readiness.txt'),'utf8');
+     expect(report).toContain('Availability unknown: 0');expect(report).toContain('Clean-policy blocks: 2');
+     expect(report).toContain('Approved tracks (including extras, in playlist order): 1');
+     const written=fs.readFileSync(path.join(temp,'exports',fname),'utf8');
+     if(ext==='m3u'){expect(written).toContain(path.join(library,'Policy clean.mp3'));expect(written).not.toContain(path.join(library,'Policy dirty.mp3'));expect(written).not.toContain(path.join(library,'Policy unknown.mp3'));}
+     else expect(written).toBe('1. Band - Hit (Clean)\r\n');
+     expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual(['Policy dirty.mp3','Policy clean.mp3','Policy unknown.mp3'].map(n=>path.join(library,n)));
+   }
+   page.off('dialog',accept);
+ });
+ await check('native TXT confirms verified five tracks/one clean block; cancel and unavailable checks write nothing',async()=>{
+   await app.close();
+   const tt=Array.from({length:6},(_,i)=>({filePath:path.join(library,`txt-confirm-${i}.mp3`),artist:'TXT Band',title:`Track ${i} (${i===5?'Dirty':'Clean'})`}));
+   tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic TXT confirmation bytes'));
+   const ss=tt.map(t=>({artist:t.artist,song:t.title,fromUpload:true}));
+   const selections=Object.fromEntries(ss.map((s,i)=>[`peak:${i}:txt band|track ${i}`,{paths:[tt[i].filePath],confirmed:true}]));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'TXT confirm',updated_at:'v1',inputs:{songs:ss,eventName:'TXT confirm',hours:'.25',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss,selections}}}));
+   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   await page.getByRole('tab',{name:/Peak \(6/}).click();
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   const filesBefore=()=>Object.fromEntries(fs.readdirSync(path.join(temp,'exports')).map(n=>[n,fs.readFileSync(path.join(temp,'exports',n),'utf8')]));
+   const initialFiles=filesBefore(),initialIpc=fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8');
+   const messages=[];let verifiedAtDialog=false;
+   const answer=async accept=>{
+     fs.rmSync(path.join(temp,'checked-paths.json'),{force:true});
+     const handler=async dialog=>{messages.push(dialog.message());verifiedAtDialog=fs.existsSync(path.join(temp,'checked-paths.json'));await (accept?dialog.accept():dialog.dismiss());};
+     page.once('dialog',handler);
+     await page.getByRole('button',{name:'Peak .txt → VirtualDJ',exact:true}).click();
+     await expect.poll(()=>messages.length,{timeout:15000}).toBe(accept?2:1);
+     expect(verifiedAtDialog).toBe(true);
+     expect(messages.at(-1)).toBe('5 tracks · left out: 1 clean-policy block. Reference files retain intended tracks. Continue?');
+     expect(JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8'))).toEqual(tt.map(t=>t.filePath));
+   };
+   await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;});
+   await answer(false);expect(filesBefore()).toEqual(initialFiles);expect(fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8')).toBe(initialIpc);
+   expect(await page.evaluate(()=>({success:window.__success,warnings:window.__warnings}))).toEqual({success:[],warnings:[]});
+   await answer(true);
+   await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toBe(`Saved 5 tracks · left out: 1 clean-policy block to ${path.join(temp,'VirtualDJ','Playlists')} as txt-confirm-peak.txt`);
+   expect(await page.evaluate(()=>window.__warnings)).toEqual(['5 tracks · left out: 1 clean-policy block. Reference files retain intended tracks.']);
+   expect(fs.readFileSync(path.join(temp,'exports','txt-confirm-peak.txt'),'utf8')).toBe(tt.slice(0,5).map((t,i)=>`${i+1}. ${t.artist} - ${t.title}\r\n`).join(''));
+   const report=fs.readFileSync(path.join(temp,'exports','txt-confirm-peak-readiness.txt'),'utf8');
+   expect(report).toContain('Approved tracks (including extras, in playlist order): 5');expect(report).toContain('Clean-policy blocks: 1');expect(report).toContain('Availability unknown: 0');
+   await expect(page.getByRole('region',{name:'Export readiness'})).not.toContainText('file availability unknown');
+   const written=filesBefore(),ipc=fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8');
+   const unexpected=[];const reject=async dialog=>{unexpected.push(dialog.message());await dialog.dismiss();};page.on('dialog',reject);
+   await page.evaluate(()=>{window.__success.length=0;window.__warnings.length=0;window.__errors.length=0;});
+   fs.unlinkSync(tt[0].filePath);
+   try {
+     await page.getByRole('button',{name:'Peak .txt → VirtualDJ',exact:true}).click();
+     await expect.poll(()=>page.evaluate(()=>window.__errors.at(-1)),{timeout:15000}).toBe('Export stopped: music files unavailable.');
+     expect(unexpected).toEqual([]);expect(filesBefore()).toEqual(written);expect(fs.readFileSync(path.join(temp,'export-ipc.jsonl'),'utf8')).toBe(ipc);
+     expect(await page.evaluate(()=>window.__success)).toEqual([]);
+   }finally{page.off('dialog',reject);fs.writeFileSync(tt[0].filePath,'synthetic TXT confirmation bytes');}
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
+ });
+ await check('policy-aware six-row counts, filters, exclusions and mixed extras update on toggle and reopen without replacing selections',async()=>{
+   await app.close();
+   const titles=['Ready (Clean)','Blocked (Dirty)','Excluded (Clean)','Mixed (Clean)','Unknown','Conflict Clean Dirty','Mixed (Dirty)'];
+   const tt=titles.map((title,i)=>({filePath:path.join(library,`display-${i}.mp3`),artist:'Display Band',title,songLength:180}));
+   tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic'));
+   const ss=tt.slice(0,6).map(t=>({artist:t.artist,song:t.title,fromUpload:true}));
+   const kk=ss.map((t,i)=>`peak:${i}:display band|${t.song.toLowerCase().replace(/\([^)]*\)/g,'').replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim()}`);
+   const selected=Object.fromEntries(kk.map((k,i)=>[k,{paths:[tt[i].filePath,...(i===3?[tt[6].filePath]:[])],confirmed:true,...(i===2?{excluded:true}:{})}]));
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Display policy',updated_at:'v1',inputs:{songs:ss,eventName:'Display policy',hours:'.25',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss,selections:selected}}}));
+   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   await page.getByRole('tab',{name:/Peak \(6/}).click();
+   const toolbar=page.locator('.panel-quiet').filter({hasText:'Track matcher options'});
+   await expect(toolbar).toContainText('1 / 6 matched rows · 2 eligible tracks');
+   await expect(page.getByRole('tab',{name:/Peak \(6/})).toContainText('4 need attention');
+   await toolbar.getByRole('button',{name:/^Matched/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(1);
+   await toolbar.getByRole('button',{name:/^Review/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(4);
+   await expect(page.locator('#song-peak-3')).toContainText('2 files selected · 1 eligible track');
+   await toolbar.getByRole('button',{name:/^Excluded/}).click();await expect(page.locator('[id^="song-peak-"]')).toHaveCount(1);
+   await expect(page.locator('#song-peak-2')).toContainText('Excluded from DJ export');
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
+   await toolbar.getByRole('button',{name:/^All/}).click();
+   await page.getByRole('switch',{name:'Require clean versions',exact:true}).click();
+   await expect(toolbar).toContainText('5 / 6 matched rows · 6 eligible tracks');
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.requireCleanVersions,{timeout:15000}).toBe(false);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections).toEqual(selected);
+   await page.reload();await page.getByRole('tab',{name:/Peak \(6/}).click();await expect(toolbar).toContainText('5 / 6 matched rows · 6 eligible tracks');
+   await page.getByRole('switch',{name:'Require clean versions',exact:true}).click();await expect(toolbar).toContainText('1 / 6 matched rows · 2 eligible tracks');
+   await page.getByRole('button',{name:'Check export readiness',exact:true}).click();
+   const readiness=page.getByRole('region',{name:'Export readiness'});
+   await readiness.getByRole('button',{name:/Display Band — Blocked/}).click();await expect(page.locator('#song-peak-1')).toBeVisible();
+ });
+ await check('saved punctuation duplicates block combined writes, unique custom duration and explicit exclusion survives CAS/reopen with requests retained',async()=>{
+   await app.close();
+   const a={artist:'Stevie Wonder',song:"Signed, Sealed, Delivered I'm Yours",fromUpload:true};
+   const b={...a,song:"Signed, Sealed, Delivered (I'm Yours)"};
+   const tt=[{artist:a.artist,title:a.song+' (Clean)',filePath:path.join(library,'duplicate-Clean.mp3'),songLength:'200'},{artist:a.artist,title:a.song+' (Extended Clean)',filePath:path.join(library,'duplicate-Extended.mp3'),songLength:'300'}];
+   tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic duplicate bytes'));
+   const selections={'warmUp:0:stevie wonder|signed sealed delivered im yours':{paths:[tt[0].filePath],confirmed:true},'transition:0:stevie wonder|signed sealed delivered':{paths:[tt[0].filePath,tt[1].filePath],confirmed:true}};
+   const original={id:'A',name:'Duplicate trial',updated_at:'v1',inputs:{songs:[a,b],eventName:'Duplicate trial',hours:'1',buffer:2,listType:'dance',split:{warmUp:10,transition:20,peak:30},splitOn:true,requireCleanVersions:true},lists:{warmUp:[a],transition:[b],peak:[],selections}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:original}));fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
+   await launch();
+   // Earlier failure/recovery scenarios deliberately leave an owned local draft in this profile.
+   const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});
+   if(await archive.isVisible())await archive.click();
+   await expect(page.getByRole('region',{name:'Repeated files'})).toContainText('1 repeated selected file');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(original);
+   await expect(page.getByRole('tab',{name:/Warm Up/})).toContainText('3:20 usable unique');
+   await expect(page.getByRole('tab',{name:/Transition/})).toContainText('5:00 usable unique');
+   const filesBefore=fs.readdirSync(path.join(temp,'exports')).sort();
+   await page.getByRole('button',{name:/Export All to VirtualDJ/}).first().click();
+   await expect.poll(()=>page.evaluate(()=>window.__errors.at(-1))).toContain('repeated selected files');
+   expect(fs.readdirSync(path.join(temp,'exports')).sort()).toEqual(filesBefore);
+   await page.getByRole('button',{name:/Export All Files as ZIP/}).first().click();
+   await expect.poll(()=>page.evaluate(()=>window.__errors.at(-1))).toContain('repeated selected files');
+   expect(fs.readdirSync(path.join(temp,'exports')).sort()).toEqual(filesBefore);
+   await page.getByRole('button',{name:'Exclude duplicate warmUp 1',exact:true}).click();
+   await expect(page.getByRole('region',{name:'Repeated files'})).toHaveCount(0);
+   await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.lists.selections['warmUp:0:stevie wonder|signed sealed delivered im yours'].excluded,{timeout:15000}).toBe(true);
+   const saved=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A;
+   expect(saved.inputs.songs).toEqual(original.inputs.songs);expect(saved.lists.warmUp).toEqual(original.lists.warmUp);expect(saved.lists.transition).toEqual(original.lists.transition);
+   for(const [key,selection] of Object.entries(selections)){expect(saved.lists.selections[key].paths).toEqual(selection.paths);expect(saved.lists.selections[key].confirmed).toBe(true);}
+   await page.reload();await expect(page.getByRole('region',{name:'Repeated files'})).toHaveCount(0);
+   await page.getByRole('button',{name:/Export All to VirtualDJ/}).first().click();
+   await expect.poll(()=>page.evaluate(()=>window.__success.at(-1)),{timeout:15000}).toContain('2 tracks');
+   const out=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.startsWith('duplicate-trial-')&&n.endsWith('.m3u')).flatMap(n=>fs.readFileSync(path.join(temp,'exports',n),'utf8').split(/\r?\n/).filter(line=>line.startsWith(library)));
+   expect(out).toEqual(tt.map(t=>t.filePath));
+   expect(fs.readFileSync(path.join(temp,'exports','duplicate-trial-warm-up.txt'),'utf8')).toContain(a.song);
+ });
+ await check('real matcher ranks intended artists and versions above cross-field collisions without changing saved approval',async()=>{
+   await app.close();
+   const tt=[{artist:'Queen',title:'Radio Ga Ga (Clean)'},{artist:'Rammstein',title:'RADIO (Clean)'},{artist:'Silk City & Dua Lipa',title:'Electricity (Clean)'},{artist:'Jack Harlow',title:'Dua Lipa (Clean)'},{artist:'Silk City & Dua Lipa',title:'Electricity (Extended Clean)'}].map((t,i)=>({...t,filePath:path.join(library,`ranking-${i}.mp3`)}));
+   // Force the broad filename fallback to discover the wrong recording;
+   // keyword relevance must not become intended-track confidence in the UI.
+   tt[3].filePath=path.join(library,'Silk City and Dua Lipa Electricity Clean.mp3');
+   tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic ranking bytes'));
+   const ss=[{artist:'Queen',song:'Radio Ga Ga',fromUpload:true},{artist:'Silk City & Dua Lipa',song:'Electricity',fromUpload:true}];
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
+   const original={id:'A',name:'Ranking trial',updated_at:'v1',inputs:{songs:ss,eventName:'Ranking trial',hours:'1',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:original}));await launch();await page.getByRole('tab',{name:/Peak/}).click();
+   await expect(page.locator('#song-peak-0')).toContainText(tt[0].filePath);
+   await expect(page.locator('#song-peak-1')).toContainText(tt[2].filePath);
+   const wrong=page.locator('#song-peak-1 li').filter({hasText:'Jack Harlow'});
+   await expect(wrong).toContainText('Artist differs from request');
+   const candidates=page.locator('#song-peak-1 li');
+   await expect(candidates.nth(0)).toContainText(tt[2].filePath);
+   await expect(candidates.nth(1)).toContainText(tt[4].filePath);
+   await expect(candidates.nth(2)).toContainText(tt[3].filePath);
+   expect(await wrong.innerText()).not.toMatch(/(?:6[2-9]|[7-9]\d|100)%/);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(original);
+ });
+ await check('fresh event: saved reopen exact, saved-to-New reset blank, populated delayed profile cannot prefill or save',async()=>{
+   await app.close();
+   const preserved={id:'A',name:'Saved preferences',updated_at:'v1',inputs:{eventName:'Saved preferences',songs:[song],hours:'1',minutes:'60',buffer:3,listType:'dance',eventType:'school_dance',decades:['1980s'],artistsInput:'Saved Artist',genresInput:'Pop',vibe:'party',homeKey:'8A',notes:'Saved notes',doNotPlayInput:'Forbidden',expand:true,split:{warmUp:10,transition:20,peak:30},bpmRange:[110,128],danceRange:[6,9],ownedOnlyExpansion:true,includeSeasonalTracks:true,requireCleanVersions:true},lists:{warmUp:[song],transition:[],peak:[],selections:{[key]:{paths:[tracks[1].filePath],confirmed:true}}}};
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks,delayProfile:true,profile:{music_setup_completed:true,default_hours:'7',default_decades:['1990s'],default_expand:true,favorite_artists:'Profile Artist'}}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:preserved}));await launch();
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   await expect(page.getByRole('heading',{name:'Saved preferences',exact:true})).toBeVisible();
+   expect(JSON.parse(before).A).toEqual(preserved);
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+   if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
+   const assertBlank=async()=>{
+     await expect(page.getByRole('heading',{name:/^New Event$/i})).toBeVisible();
+     for(const id of ['eventName','hours','artists','genres','notes','donotplay','homeKey'])await expect(page.locator('#'+id)).toHaveValue('');
+     await expect(page.getByRole('radio',{checked:true})).toHaveCount(0);
+     await expect(page.getByRole('checkbox',{checked:true})).toHaveCount(0);
+     await expect(page.getByRole('switch',{checked:true})).toHaveCount(0);
+     await expect(page.locator('[id^="split-"]')).toHaveCount(0);
+   };
+   await assertBlank();await expect.poll(()=>page.evaluate(()=>typeof window.__releaseProfile)).toBe('function');
+   await page.getByRole('radio',{name:'Dinner',exact:true}).click();await expect(page.locator('#minutes')).toHaveValue('');
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});await assertBlank();
+   await page.evaluate(()=>window.__releaseProfile());await expect.poll(()=>page.evaluate(()=>window.__profileReturned)).toBe(true);await assertBlank();
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
+   await page.reload();await page.waitForFunction(()=>!!window.__testState && typeof window.__rerender==='function');await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});await assertBlank();
+   await page.evaluate(()=>{window.__testState.eventId='A';window.__rerender();});
+   await expect(page.getByRole('heading',{name:'Saved preferences',exact:true})).toBeVisible();
+   await page.getByRole('button',{name:/Dance floor/i}).first().click();
+   await expect(page.locator('#hours')).toHaveValue('1');await expect(page.locator('#artists')).toHaveValue('Saved Artist');
+   await expect(page.locator('#split-warmUp')).toHaveValue('10');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(preserved);
+ });
+ await check('fresh required choices: no bypass, 1× baseline, disabled ranges inert, valid generation persists only chosen preferences',async()=>{
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   await page.getByRole('button',{name:'Continue',exact:true}).click();
+   expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('Choose a list type');
+   await page.getByRole('button',{name:'Upload lists',exact:false}).first().click();
+   await expect(page.locator('#hours')).toBeVisible();
+   await page.getByRole('radio',{name:'Dinner',exact:true}).click();await expect(page.locator('#minutes')).toHaveValue('');
+   await page.getByRole('button',{name:'Continue',exact:true}).click();
+   expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('positive list length');
+   await page.getByRole('radio',{name:/^Dance floor$/i}).click();
+   await page.getByRole('button',{name:'Continue',exact:true}).click();
+   expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('positive dance floor length');
+   await page.locator('#hours').fill('0');await page.getByRole('button',{name:'Continue',exact:true}).click();
+   expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('positive dance floor length');
+   await page.locator('#hours').fill('1');await page.locator('#eventName').fill('Explicit fresh choices');
+   await page.getByRole('button',{name:'Continue',exact:true}).click();
+   const upload=path.join(temp,'fresh.csv');fs.writeFileSync(upload,'Artist,Song\nTest Artist,Test Song - Live\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   await expect(page.locator('tbody tr')).toHaveCount(1);await page.getByRole('button',{name:'Continue',exact:true}).click();
+   await expect(page.locator('#buffer')).toHaveValue('1');await expect(page.getByRole('switch',{name:'Expand event with additional tracks',exact:true})).not.toBeChecked();
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
+   await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();
+   await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Explicit fresh choices');
+   await expect.poll(saved,{timeout:15000}).toBeTruthy();
+   expect(saved().inputs).toMatchObject({hours:'1',buffer:1,listType:'dance',decades:[],artistsInput:'',genresInput:'',notes:'',doNotPlayInput:'',expand:false,ownedOnlyExpansion:false,includeSeasonalTracks:false,requireCleanVersions:false});
+   for(const field of ['bpmRange','danceRange','split','eventType','homeKey','minutes'])expect(saved().inputs[field]).toBeUndefined();
+   expect(saved().inputs.songs).toEqual([song]);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.eventName).toBe('Saved preferences');
+ });
+ await check('fresh background list requires chosen minutes, preserves empty event preferences, and reopens without timing repair',async()=>{
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+   await page.getByRole('radio',{name:'Dinner',exact:true}).click();await expect(page.locator('#minutes')).toHaveValue('');
+   await page.locator('#minutes').fill('15');await page.locator('#eventName').fill('Explicit dinner');
+   await page.getByRole('button',{name:'Continue',exact:true}).click();
+   const upload=path.join(temp,'dinner.csv');fs.writeFileSync(upload,'Artist,Song\nTest Artist,Test Song - Live\n');
+   await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
+   await page.getByRole('button',{name:'Generate dinner playlist',exact:true}).click();
+   await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Explicit dinner');
+   await expect.poll(saved,{timeout:15000}).toBeTruthy();const original=saved();
+   expect(original.inputs).toMatchObject({listType:'dinner',minutes:'15',decades:[],requireCleanVersions:false,ownedOnlyExpansion:false,expand:false});
+   expect([...original.lists.warmUp,...original.lists.transition,...original.lists.peak]).toHaveLength(1);
+   await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},original.id);
+   await expect(page.getByRole('heading',{name:'Explicit dinner',exact:true})).toBeVisible();
+   await expect(page.getByText('Saved event needs review',{exact:false})).toHaveCount(0);
+   expect(saved()).toEqual(original);
+ });
+ await check('optional expansion: 40/5 client tracks, actual lengths, voluntary higher target, 1× roundtrip/reset and legacy 2× unchanged',async()=>{
+   await app.close();
+   const client=Array.from({length:40},(_,i)=>({artist:`Client ${i}`,song:`Normal track ${i}`}));
+   const local=client.map((song,i)=>({artist:song.artist,title:song.song,filePath:path.join(library,`client-${i}.mp3`),songLength:'240'}));
+   local.forEach(t=>fs.writeFileSync(t.filePath,'synthetic audio fixture'));
+   const legacy={id:'A',name:'Legacy 2×',updated_at:'v1',inputs:{eventName:'Legacy 2×',songs:[song],hours:'1',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[]}};
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:local}));fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:legacy}));await launch();
+   const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')));
+   const prepare=async(count,name)=>{
+     await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+     await page.getByRole('radio',{name:/^Dance floor$/i}).click();await page.locator('#hours').fill('1');await page.locator('#eventName').fill(name);
+     await page.getByRole('button',{name:'Continue',exact:true}).click();
+     const upload=path.join(temp,'optional.csv');fs.writeFileSync(upload,'Artist,Song\n'+client.slice(0,count).map(t=>`${t.artist},${t.song}`).join('\n'));
+     await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
+     await page.getByRole('button',{name:'Review songs',exact:false}).first().click();await page.getByRole('button',{name:'Continue',exact:true}).click();
+     await expect(page.locator('#buffer')).toHaveValue('1');await expect(page.getByRole('switch',{name:'Expand event with additional tracks',exact:true})).not.toBeChecked();
+     await expect(page.getByText('60:00 event baseline · 1× preparation 60:00 · expansion off',{exact:true}).first()).toBeVisible();
+   };
+   const generateAndRead=async(name,count)=>{
+     await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+     await expect.poll(()=>saved().find(r=>r.name===name),{timeout:15000}).toBeTruthy();const r=saved().find(r=>r.name===name);
+     const all=[...r.lists.warmUp,...r.lists.transition,...r.lists.peak];expect(all.filter(t=>t.fromUpload)).toHaveLength(count);expect(r.inputs.songs).toEqual(client.slice(0,count));return {r,all};
+   };
+   await prepare(40,'Covered off');await expect(page.getByLabel('Client duration coverage')).toContainText('Baseline duration covered — no additional tracks needed');
+   await page.screenshot({path:path.join(diagnostics,'optional-covered-1x.png')});
+   const covered=await generateAndRead('Covered off',40);expect(covered.all).toHaveLength(40);expect(covered.r.inputs).toMatchObject({buffer:1,expand:false});
+   await expect(page.getByLabel('Event duration coverage')).toContainText('160:00 approved usable unique length');
+   const assertCoveredWithoutAllocationGap=async()=>{
+     await expect(page.getByLabel('Event duration coverage')).toContainText('Baseline duration covered — no additional tracks needed.');
+     await expect(page.getByText('Optional preparation track-count gaps',{exact:true})).toHaveCount(0);
+     await expect(page.getByText('Estimated track-count gap; see duration coverage',{exact:true})).toHaveCount(0);
+     for(const name of [/^Warm Up \(/,/^Transition \(/,/^Peak \(/])expect(await page.getByRole('tab',{name}).first().innerText()).not.toMatch(/, -\d+/);
+   };
+   await assertCoveredWithoutAllocationGap();await page.screenshot({path:path.join(diagnostics,'optional-covered-results-no-gap.png')});
+   await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},covered.r.id);await expect(page.getByRole('heading',{name:'Covered off',exact:true})).toBeVisible();expect(saved().find(r=>r.id===covered.r.id)).toEqual(covered.r);
+   await assertCoveredWithoutAllocationGap();
+   await prepare(40,'Covered expansion 1×');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();
+   const warningsBefore=await page.evaluate(()=>window.__warnings.length);
+   const coveredOn=await generateAndRead('Covered expansion 1×',40);expect(coveredOn.all).toHaveLength(40);expect(coveredOn.r.inputs).toMatchObject({buffer:1,expand:true});
+   await assertCoveredWithoutAllocationGap();expect(await page.evaluate(n=>window.__warnings.slice(n),warningsBefore)).toEqual([]);
+   await page.evaluate(id=>{window.__testState.eventId=id;window.__rerender();},coveredOn.r.id);await expect(page.getByRole('heading',{name:'Covered expansion 1×',exact:true})).toBeVisible();await assertCoveredWithoutAllocationGap();expect(saved().find(r=>r.id===coveredOn.r.id)).toEqual(coveredOn.r);
+   await prepare(40,'Blocked coverage');await page.getByRole('button',{name:/Dance floor/i}).first().click();
+   await page.locator('#donotplay').fill(client.slice(0,35).map(t=>`${t.artist} - ${t.song}`).join('\n'));
+   await page.getByRole('button',{name:'Review songs',exact:false}).first().click();await page.getByRole('button',{name:'Continue',exact:true}).click();
+   await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');await expect(page.getByLabel('Client duration coverage')).toContainText('35 blocked or missing-title rows not counted');
+   await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   await expect.poll(()=>saved().find(r=>r.name==='Blocked coverage'),{timeout:15000}).toBeTruthy();const blocked=saved().find(r=>r.name==='Blocked coverage');expect(blocked.inputs.songs).toEqual(client);expect([...blocked.lists.warmUp,...blocked.lists.transition,...blocked.lists.peak]).toHaveLength(5);
+   await prepare(5,'Short off');await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');const short=await generateAndRead('Short off',5);expect(short.all).toHaveLength(5);
+   await prepare(5,'Short expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();const expanded=await generateAndRead('Short expansion',5);expect(expanded.all.length).toBeGreaterThan(5);expect(expanded.r.inputs).toMatchObject({buffer:1,expand:true});
+   await prepare(40,'Covered expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();await expect(page.getByLabel('Client duration coverage')).toContainText('Choose a higher multiplier');await page.locator('#buffer').selectOption('4');await expect(page.getByLabel('Client duration coverage')).toContainText('80:00 additional time');const extras=await generateAndRead('Covered expansion',40);expect(extras.all.length).toBeGreaterThan(40);expect(extras.r.inputs).toMatchObject({buffer:4,expand:true});
+   await prepare(5,'Reset baseline');expect(saved().find(r=>r.id==='A')).toEqual(legacy);
+   await page.evaluate(()=>{window.__testState.eventId='A';window.__rerender();});await expect(page.getByRole('heading',{name:'Legacy 2×',exact:true})).toBeVisible();expect(saved().find(r=>r.id==='A')).toEqual(legacy);
+ });
+ await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
+   await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';
+   const legacy=Object.fromEntries(Array.from({length:14},(_,i)=>{const id=i===0?'A':`Legacy${i}`;return [id,{id,name:`Legacy ${i}`,updated_at:'v1',inputs:{songs:[song],hours:'.25',buffer:2,...(i===1?{eventType:'school_dance'}:{})},lists:{warmUp:[song],transition:[],peak:[]}}];}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify(legacy));fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));await launch();
+   const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
+   await expect(page.getByRole('switch',{name:'Require clean versions',exact:true})).toBeDisabled();
+   await expect(page.getByRole('alert').filter({hasText:'Update the desktop app'})).toBeVisible();
+   expect(await page.evaluate(()=>window.electronOffline?.preparationPolicyVersion)).toBeUndefined();
+   const unsupported={format:'setarchitect-backup',version:2,account:'synthetic-owner',createdAt:new Date().toISOString(),events:[],sources:[],roots:{}};
+   expect((await page.evaluate(b=>window.electronBackups.save(JSON.stringify(b),b.account),unsupported)).ok).toBe(false);
+   // Real preservation hook + native updater guard, only download/handoff destinations are synthetic.
+   expect(await page.evaluate(()=>window.testBackend.update())).toMatchObject({ok:true});
+   const saved=JSON.parse(await page.evaluate(async()=>(await window.electronBackups.latest('synthetic-owner')).raw));
+   expect(saved.version).toBe(1);expect(saved.events).toHaveLength(14);
+   for(const event of saved.events)expect(event.snapshot).toEqual({name:legacy[event.id].name,inputs:legacy[event.id].inputs,lists:legacy[event.id].lists});
+   expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
+   // runUpdate verifies the freeze before handoff, then explicitly releases it after the synthetic restart.
+   expect(fs.readFileSync(path.join(temp,'handoff'),'utf8')).toBe('staged and relaunched');
+   expect(await page.locator('#update-preservation-lock').count()).toBe(0);
+   delete process.env.SETARCHITECT_TEST_OLD_SHELL;
+ });
+ console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
+}catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});console.error('EXPORT DIAGNOSTICS',JSON.stringify({ui:await page?.evaluate(()=>({errors:window.__errors,warnings:window.__warnings,success:window.__success})).catch(()=>null),checked:fs.existsSync(path.join(temp,'checked-paths.json'))?JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8')):null,outputs:fs.existsSync(path.join(temp,'exports'))?fs.readdirSync(path.join(temp,'exports')):[],profile:temp}));throw e;}finally{await app?.close().catch(()=>{});}
