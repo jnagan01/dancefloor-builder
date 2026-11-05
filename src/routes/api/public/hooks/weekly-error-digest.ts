@@ -33,13 +33,19 @@ export const Route = createFileRoute("/api/public/hooks/weekly-error-digest")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = process.env["ERROR_DIGEST_CRON_SECRET"];
         const provided = request.headers.get("x-cron-secret") ?? "";
-        if (!secret || !provided || !safeEqual(provided, secret)) {
+        if (!provided || provided.length > 256) {
           return new Response("Unauthorized", { status: 401 });
         }
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: ok, error: verifyError } = await supabaseAdmin.rpc(
+          "verify_error_digest_secret",
+          { _provided: provided },
+        );
+        if (verifyError || ok !== true) {
+          return new Response("Unauthorized", { status: 401 });
+        }
 
         const now = new Date();
         const start = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
