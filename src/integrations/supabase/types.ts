@@ -239,6 +239,10 @@ export type Database = {
     }
     Functions: {
       is_dj_approved: { Args: { _user_id: string }; Returns: boolean }
+      verify_error_digest_secret: {
+        Args: { _provided: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "dj"

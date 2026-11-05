@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1793847755986,
+      "tag": "0000_rotate_digest_secret_and_lock_cache",
+      "breakpoints": true
+    }
+  ]
+}
