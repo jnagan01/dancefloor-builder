@@ -1,6 +1,6 @@
 # Workspace rebuild
 ## Weekly hosted CI migration
-- [ ] Support saved secret alias, authentication-only manual check and identity-validated explicit-run manual dry-run; test safeguards.
+- [x] Saved secret alias, authentication-only manual check and identity-validated explicit-run manual dry-run; 24 reporting tests pass.
 - [x] Separate Central-time Tuesday hosted synthetic test/report workflows; existing automations unchanged.
 - [x] Bounded seeded coverage, structured outcomes, issue/mail deduplication and secure setup docs.
 - [x] Local 866 Vitest tests/83 files, reporting decision tests and automatic build OK; no hosted/SMTP claims.
