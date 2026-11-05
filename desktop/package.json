@@ -93,5 +93,16 @@
     "electron-updater": "6.8.11",
     "builder-util-runtime": "9.7.0",
     "semver": "7.7.3"
+  },
+  "overrides": {
+    "node-taglib-sharp": {
+      "uuid": "11.1.1"
+    },
+    "app-builder-lib": {
+      "minimatch": "11.0.4"
+    },
+    "@electron/universal": {
+      "minimatch": "11.0.4"
+    }
   }
 }
