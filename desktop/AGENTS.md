@@ -10,4 +10,4 @@
 - Keep offline eligibility separate from the writer's completed track count; failures, cancellation and rollback leftovers count as zero exported, because a planned playlist is not a successful write.
 - Read and write song metadata tags only inside the Mac app (desktop/tags.cjs via node-taglib-sharp, cached by size+mtime in userData), because browsers cannot modify local files and edits must land in the music files themselves.
 - Mirror native event recovery in an fsynced, account/event-key-hashed journal behind exact-origin main-frame IPC; keep existing browser recovery keys, because Chromium localStorage alone did not survive an abrupt process kill.
-- Regenerate desktop and root bun.lock only with the workflow-pinned Bun (lockfileVersion 1) and verify a clean --frozen-lockfile install, because newer sandbox Bun writes lockfileVersion 3 that CI cannot parse.
+- Install desktop deps in CI with npm ci from package-lock (Bun ignores nested overrides), then run electron/install.js and verify-install.cjs; keep bun.lock regenerated only by the workflow-pinned Bun, because Electron 43 has no postinstall and the patched helpers must be what consumers load.

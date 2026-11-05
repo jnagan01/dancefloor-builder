@@ -7,7 +7,7 @@ On Linux under Xvfb, use a full-size screen (for example `xvfb-run -s "-screen 0
 
 ```sh
 bun install --frozen-lockfile
-bun install --cwd desktop --frozen-lockfile
+(cd desktop && npm ci --no-audit --no-fund && node node_modules/electron/install.js && node verify-install.cjs)
 bunx vitest run
 node tests/native/run.mjs
 ```
