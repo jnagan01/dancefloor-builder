@@ -2,7 +2,7 @@
 
 ## Reproduce
 
-CI uses Node 24, Bun 1.3.5, Electron 33.4.11 and Playwright 1.56.1.
+CI uses Node 24, Bun 1.3.5, Electron 43.8.7 and Playwright 1.56.1.
 
 ```sh
 bun install --frozen-lockfile
@@ -69,7 +69,7 @@ The icon and production event/library data are unchanged. No publishing or GitHu
 
 ## Offline workspace gate
 
-`node tests/native/offline.mjs` launches the real `desktop/main.cjs` (via `fixtures/offline-entry.cjs`, which only answers native dialogs) in a fenced `setarchitect-offline-*` profile. Offline phases deny Chromium networking before launch and try the real published URL. A local stub page stands in for the signed-in origin only to call the real `electronOffline` preload API with a synthetic backup. `ELECTRON_BIN` may point at a pinned Electron 33.4.11 binary when `desktop/node_modules` is absent.
+`node tests/native/offline.mjs` launches the real `desktop/main.cjs` (via `fixtures/offline-entry.cjs`, which only answers native dialogs) in a fenced `setarchitect-offline-*` profile. Offline phases deny Chromium networking before launch and try the real published URL. A local stub page stands in for the signed-in origin only to call the real `electronOffline` preload API with a synthetic backup. `ELECTRON_BIN` may point at a pinned Electron 43.8.7 binary when `desktop/node_modules` is absent.
 
 ## Preparation UI acceptance (`tests/native/prep.mjs`)
 
