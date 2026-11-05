@@ -18,11 +18,15 @@ const expect = (label, actual, ok) => { console.log(`${label}: ${actual}`); if (
 
 const electronVersion = versionFrom(null, "electron");
 expect("electron package", electronVersion, electronVersion === pkg.devDependencies.electron);
-const binary = require("electron"); // path written by electron's verified postinstall
-if (!binary || !fs.existsSync(binary)) failures.push(`Electron binary missing: ${binary}`);
+// Electron 43 has no postinstall; CI runs its install.js (bundled checksums.json) first.
+// Check path.txt before require("electron"), which would otherwise download lazily.
+const electronDir = path.dirname(require.resolve("electron/package.json", { paths: [root] }));
+const pathFile = path.join(electronDir, "path.txt");
+const binary = fs.existsSync(pathFile) ? path.join(electronDir, "dist", fs.readFileSync(pathFile, "utf8")) : null;
+if (!binary || !fs.existsSync(binary)) failures.push(`Electron binary missing (run node node_modules/electron/install.js): ${binary}`);
 else {
-  const reported = execFileSync(binary, ["--version"], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } }).toString().trim();
-  expect("electron binary", reported, reported === `v${electronVersion}`);
+  const reported = execFileSync(binary, ["-p", "process.versions.electron"], { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" } }).toString().trim();
+  expect("electron binary", reported, reported === electronVersion);
 }
 
 const uuid = versionFrom("node-taglib-sharp", "uuid");

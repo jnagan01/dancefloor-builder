@@ -57,9 +57,10 @@ jobs:
 
       - name: Install build tools
         working-directory: desktop
-        # npm ci: honors the audited package-lock nested overrides and runs Electron's checksum-verified binary download.
+        # npm ci: honors the audited package-lock nested overrides and then explicitly runs Electron 43's checksum-verified binary download (it has no postinstall).
         run: |
           npm ci --no-audit --no-fund
+          node node_modules/electron/install.js
           node verify-install.cjs
 
       - name: Stamp the build with its release tag
