@@ -5,8 +5,10 @@ from pathlib import Path
 import signal
 import subprocess
 import time
+import re
 
 SUITES = {
+    "reporting": ["python3", "-m", "unittest", "discover", "-s", ".github/weekly", "-p", "test_*.py", "-v"],
     "vitest": ["bunx", "vitest", "run", "--reporter=default", "--reporter=json", "--outputFile=test-results/weekly/vitest.json"],
     "adversarial": ["bunx", "vitest", "run", "tests/weeklyAdversarial.test.ts", "--reporter=json", "--outputFile=test-results/weekly/adversarial.json"],
     "native": ["node", "tests/native/run.mjs"],
@@ -30,7 +32,7 @@ def main():
         raise ValueError("seed must be uint32")
     os.environ["WEEKLY_SEED"] = seed
     result = {"schema": 1, "commit": os.environ.get("GITHUB_SHA", "local"),
-              "run_id": os.environ.get("GITHUB_RUN_ID", "local"), "seed": seed,
+              "run_id": os.environ.get("GITHUB_RUN_ID", "local"), "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "1"), "seed": seed,
               "limits": {"records": 100000, "import_bytes": 5242880, "minutes": 45},
               "suites": {name: {"status": "not_run"} for name in SUITES}}
     def persist():
@@ -58,6 +60,18 @@ def main():
                         if not valid_vitest(data):
                             entry["status"] = "incomplete"
                     except (OSError, ValueError):
+                        entry["status"] = "incomplete"
+                if code == 0 and name in ("native", "offline", "race", "prep"):
+                    log.flush()
+                    text = (output / f"{name}.log").read_text()
+                    patterns = {"native": r"Native checks: ([1-9][0-9]*) passed\.",
+                                "offline": r"([1-9][0-9]*) offline Electron flows passed",
+                                "race": r"offline UI race checks passed",
+                                "prep": r"Preparation UI checks: ([1-9][0-9]*) passed\."}
+                    found = re.search(patterns[name], text)
+                    checks = len(re.findall(r"^PASS ", text, re.MULTILINE))
+                    entry["checks"] = checks
+                    if not found or checks == 0 or (found.groups() and int(found[1]) != checks):
                         entry["status"] = "incomplete"
             except subprocess.TimeoutExpired:
                 os.killpg(proc.pid, signal.SIGKILL)

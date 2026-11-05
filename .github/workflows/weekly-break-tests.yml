@@ -28,7 +28,7 @@ jobs:
       - name: Initialize interruption evidence
         run: |
           mkdir -p test-results/weekly
-          python3 -c 'import json,os; json.dump({"schema":1,"commit":os.environ["GITHUB_SHA"],"run_id":os.environ["GITHUB_RUN_ID"],"seed":os.environ["WEEKLY_SEED"],"suites":{}},open("test-results/weekly/result.json","w"))'
+          python3 -c 'import json,os; json.dump({"schema":1,"commit":os.environ["GITHUB_SHA"],"run_id":os.environ["GITHUB_RUN_ID"],"run_attempt":os.environ["GITHUB_RUN_ATTEMPT"],"seed":os.environ["WEEKLY_SEED"],"suites":{}},open("test-results/weekly/result.json","w"))'
       - name: Frozen root install
         run: bun install --frozen-lockfile
       - name: Frozen desktop install
@@ -36,11 +36,19 @@ jobs:
         run: bun install --frozen-lockfile
       - name: All bounded synthetic suites
         run: python3 .github/weekly/run_tests.py
-      - name: Persist synthetic diagnostics even on failure
+      - name: Persist structured outcomes even on failure
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: weekly-synthetic-results
+          path: test-results/weekly/result.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Persist synthetic diagnostics even on failure
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: weekly-synthetic-diagnostics
           path: |
             test-results/weekly/
             test-results/native/

@@ -13,7 +13,7 @@ import urllib.request
 import zipfile
 
 ZONE = ZoneInfo("America/Chicago")
-REQUIRED = ("vitest", "adversarial", "native", "offline", "race", "prep")
+REQUIRED = ("reporting", "vitest", "adversarial", "native", "offline", "race", "prep")
 
 
 def tuesday(now):
@@ -44,7 +44,7 @@ def problems(run, evidence=None):
                  for name, item in (evidence or {}).get("suites", {}).items()
                  if name in REQUIRED and item.get("status") != "passed"]
         return found or [(f"run-{conclusion}", "incomplete" if conclusion in ("cancelled", "timed_out", None) else "failure", f"Test run concluded {conclusion}")]
-    if not evidence or evidence.get("schema") != 1 or evidence.get("commit") != run.get("head_sha") or str(evidence.get("run_id")) != str(run["id"]):
+    if not evidence or evidence.get("schema") != 1 or evidence.get("commit") != run.get("head_sha") or str(evidence.get("run_id")) != str(run["id"]) or str(evidence.get("run_attempt")) != str(run.get("run_attempt", 1)):
         return [("evidence-missing", "incomplete", "Successful job lacks matching structured evidence")]
     return [(f"suite-{name}", "incomplete", f"{name} did not pass with complete evidence")
             for name in REQUIRED if evidence.get("suites", {}).get(name, {}).get("status") != "passed"]
@@ -165,7 +165,7 @@ def main():
             tag = f"<!-- weekly-fingerprint:{fingerprint} -->"
             issue = next((i for i in issues if "pull_request" not in i and tag in (i.get("body") or "")), None)
             body = (f"{tag}\nClassification: {classification}\nSeverity: {'high' if classification == 'failure' else 'medium'}\n"
-                    f"Expected: all six synthetic suites pass with complete evidence.\nActual: {actual}\n"
+                    f"Expected: full unit, reporting, adversarial and four native suites pass with complete evidence.\nActual: {actual}\n"
                     f"First seen: {str(day) if issue is None else (issue.get('body') or '').split('First seen: ')[-1].splitlines()[0]}\n"
                     f"Last seen: {day}\nRepro: dispatch Weekly synthetic break tests with seed {(evidence or {}).get('seed', '20261105')}.\n"
                     f"Commit: {run.get('head_sha', 'unavailable') if run else 'unavailable'}\nRun/artifacts: {run_url}\n"
