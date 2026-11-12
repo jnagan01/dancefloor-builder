@@ -15,6 +15,7 @@ import { exportReadiness } from '@/lib/exportReadiness';
 import { runEnrichment, type CacheRow } from '@/lib/enrichPipeline.server';
 import { encodeCacheSource } from '@/lib/prep/provenance';
 import { factsKey } from '@/lib/prep/factsGather';
+import { AdditionKeySet, additionKeys } from '@/lib/additionIdentity';
 import { recommendHandler } from './helpers/recommendHandler';
 const require = createRequire(import.meta.url);
 const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
@@ -80,4 +81,46 @@ it('transient recommendation failure waits, retries once, then succeeds through 
   const server=recommendHandler(async()=>{times.push(Date.now());sends++;if(sends===1)throw Object.assign(new Error('synthetic transient'),{status:503});return {object:{suggestions:[]}};});
   const h=harness({rows:{A:structuredClone(base)},services:{recommend:server.call}});await h.flush();const p=h.current.generate();await vi.advanceTimersByTimeAsync(100000);await p;await h.flush();
   expect(sends).toBeGreaterThanOrEqual(2);expect(times[1]-times[0]).toBeGreaterThanOrEqual(1000);expect(h.infos.some((s:string)=>s.includes('temporarily unavailable'))).toBe(true);h.unmount();
+});
+
+for(const boundary of ['event','account'] as const) for(const outcome of ['rejection','timeout','retry-wait'] as const) it(`actual route fences stale ${boundary} suggestion ${outcome} without late diagnostics, writes or retries`,async()=>{
+  vi.useFakeTimers();let sends=0;
+  const server=recommendHandler(async()=>{
+    sends++;
+    if(outcome==='timeout') return new Promise(()=>{});
+    await new Promise(r=>setTimeout(r,outcome==='retry-wait'?100:2000));
+    throw Object.assign(new Error('synthetic unavailable'),{status:503});
+  });
+  const h=harness({rows:{A:structuredClone(base),B:{...structuredClone(base),id:'B'}},contract:true,services:{recommend:server.call}});
+  await h.flush();const pending=h.current.generate();await vi.advanceTimersByTimeAsync(outcome==='retry-wait'?200:1000);expect(sends).toBe(1);
+  h.switchTo(boundary==='account'?'other':'owner',boundary==='event'?'B':'A');await h.flush();
+  const before={result:JSON.stringify(h.current.result),writes:h.requests.length,infos:[...h.infos],errors:[...h.errors],warnings:[...h.warnings]};
+  await vi.advanceTimersByTimeAsync(100000);await pending;await h.flush();
+  expect(sends).toBe(1);expect(h.requests).toHaveLength(before.writes);expect(JSON.stringify(h.current.result)).toBe(before.result);
+  expect(h.infos).toEqual(before.infos);expect(h.errors).toEqual(before.errors);expect(h.warnings).toEqual(before.warnings);h.unmount();
+});
+
+it('actual handler returns credit variant demonstrably outside max500 wire; local intended identity rejects it',async()=>{
+  const tracks=Array.from({length:1800},(_,i)=>({artist:`TEST Indexed ${i}`,title:`Recording ${i}`,filePath:`/synthetic/wire/${i}.mp3`,year:'2005',bpm:'120',genre:'Pop',songLength:10}));
+  const lib=vdj.buildLibrary(tracks);let wireChecks=0;let variant:any;
+  const admitted=new AdditionKeySet();
+  const observedHarness=require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({vdj,dance,audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions,observeRanking:(args:any[])=>{
+    if(args[2].automaticExpansion)for(const p of args[0])admitted.add(p.row.artist,p.row.song);
+  }});
+  const server=recommendHandler(async()=>({object:{suggestions:[{...variant,energy:8,danceability:8,popularity:8,genre:'Pop',decade:'2000s'}]}}));
+  const h=observedHarness({rows:{A:structuredClone(base)},services:{
+    enrich:async({data}:any)=>({results:data.songs.map((s:any)=>({...s,energy:8,danceability:8,source:'ReccoBeats',prov:{energy:'provider',danceability:'provider'}}))}),
+    recommend:async(request:any)=>{
+      expect(request.data.existing.length).toBeLessThanOrEqual(500);
+      const wire=new AdditionKeySet();for(const s of request.data.existing)wire.add(s.artist,s.song);
+      const original=tracks.find(t=>admitted.has(t.artist,t.title)&&!wire.has(t.artist,t.title));expect(original).toBeDefined();if(!original)throw new Error('Missing synthetic candidate');
+      variant={artist:`${original.artist} feat. TEST Guest`,song:original.title};
+      expect(wire.has(variant.artist,variant.song)).toBe(false);expect(additionKeys(variant.artist,variant.song).some(k=>additionKeys(original.artist,original.title).includes(k))).toBe(true);
+      wireChecks++;return server.call(request);
+    }
+  }});
+  await h.flush();h.library(lib);await h.flush();await h.current.generate();await h.flush();expect(wireChecks).toBeGreaterThan(0);
+  const additions=sections.flatMap(k=>h.current.result[k]).filter((s:any)=>!s.fromUpload);const intended=new AdditionKeySet();
+  for(const s of additions)expect(intended.tryAdd(s.artist,s.song)).toBe(true);
+  expect(additions.some((s:any)=>s.artist.includes('feat. TEST Guest'))).toBe(false);h.unmount();
 });

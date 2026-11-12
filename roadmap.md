@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Stale suggestion errors and beyond-context identity regression
+- [x] Fence suggestion rejection/timeout before diagnostics/retry; six actual-route fake-clock event/account rejection, timeout and retry-wait cases show no late diagnostics/results/saves/retries.
+- [x] Actual handler credit variant demonstrably outside <=500 context belongs to an observed admitted candidate; complete local intended identity rejects it. 17 focused and 966 full tests / 91 files pass; automatic compilation OK.
+- [ ] Exact-head hosted Mac/CodeQL awaits GitHub; 43327174743/43327174643 cover dd4ff60 only. No production access/publication/installation.
 ## Bounded suggestion context and useful lookup completion
 - [x] Bound recommendation wire context at 500 with actual handler validation, complete local credit/version exclusion and terminal/retryable diagnostics.
 - [x] Overlap one estimate lane within existing six connections/deadlines; 34 requests + 1980 short-track files cover 5400/14400/7200-second targets independently in cold/mixed/warm fixtures.

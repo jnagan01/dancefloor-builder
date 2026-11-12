@@ -1440,6 +1440,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart || Date.now() >= repairEnd) return { suggestions: [] };
             return reply;
           } catch (err) {
+            if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart || Date.now() >= repairEnd) return { suggestions: [] };
             const failure = suggestionFailure(err);
             const attempts = (suggestionAttempts.get(section) ?? 0) + 1;
             suggestionAttempts.set(section, attempts);
