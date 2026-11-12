@@ -36,7 +36,7 @@ const GapsSchema = z.object({
   excludeArtists: z.array(z.string().max(150)).max(80).default([]),
 });
 
-const InputSchema = z.object({
+export const RecommendInputSchema = z.object({
   section: SectionEnum,
   count: z.number().int().min(1).max(40),
   prefs: z.object({
@@ -108,7 +108,7 @@ export type RecommendedSong = Omit<z.infer<typeof SuggestionSchema>["suggestions
 
 export const recommendSongsForSection = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => InputSchema.parse(data))
+  .inputValidator((data: unknown) => RecommendInputSchema.parse(data))
   .handler(async ({ data }) => {
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("Missing LOVABLE_API_KEY");

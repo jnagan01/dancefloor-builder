@@ -530,8 +530,44 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       if (mbCtx.lane.pausedUntil >= fetchUntil) return;
     }
   };
+  // One estimate lane starts as soon as the acoustic provider settles, independently
+  // of slow recording/year searches. Four acoustic + one recording + one AI <= six.
+  // The same fixed request end fences every partial; no song receives two estimates.
+  const aiUntil = end - L.upsertMs;
+  const aiCtrl = new AbortController();
+  let aiClosed = false;
+  const estimates = new Map<string, AiEstimate>();
+  let aiFailed = false, aiLate = false;
+  const estimateMissing = async () => {
+    const missing = missOrder.filter(q => {
+      const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k), reco = recoDone.get(k);
+      return (prev?.energy ?? reco?.energy) == null || (prev?.danceability ?? reco?.danceability) == null;
+    });
+    if (!missing.length) return;
+    const work = async () => {
+      for (let offset = 0; offset < missing.length && !aiClosed && now() < aiUntil; offset += 8) {
+        const group = missing.slice(offset, offset + 8);
+        const keep = (i: number, value: AiEstimate) => {
+          const q = group[i]; if (aiClosed || now() >= aiUntil || !q || !value) return;
+          estimates.set(`${q.artistKey}\u0000${q.songKey}`, value);
+        };
+        const items = await (deps.estimate ?? estimateWithAi)(group.map(q => {
+          const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k), mb = mbDone.get(k), reco = recoDone.get(k);
+          return { ...q.original, genre: prev?.genre ?? mb?.genre, year: prev?.year ?? mb?.year, bpm: prev?.bpm ?? reco?.bpm };
+        }), aiCtrl.signal, keep);
+        items.forEach((v, i) => { if (v) keep(i, v); });
+      }
+    };
+    if (now() >= aiUntil) aiLate = true;
+    else try { aiLate = await within(work(), aiUntil, now) === LATE; } catch { aiFailed = true; }
+    aiClosed = true;
+    if (aiLate || aiFailed) aiCtrl.abort();
+  };
+  let aiWork: Promise<void> = Promise.resolve();
   if (missOrder.length) {
-    const pool = Promise.all([mbWorker(), ...Array.from({ length: Math.min(ENRICH_PROVIDER_CONCURRENCY.recco, missOrder.length) }, recoWorker)]);
+    const acoustic = Promise.all(Array.from({ length: Math.min(ENRICH_PROVIDER_CONCURRENCY.recco, missOrder.length) }, recoWorker));
+    aiWork = acoustic.then(estimateMissing);
+    const pool = Promise.all([mbWorker(), acoustic]);
     const got = await within(pool, fetchUntil, now);
     fetchClosed = true;
     fetchCtrl.abort();
@@ -595,32 +631,14 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const needAi = missOrder
     .map((q) => ({ q, k: `${q.artistKey}\u0000${q.songKey}` }))
     .filter(({ k }) => { const e = fetched.get(k); return !e || e.energy == null || e.danceability == null; });
-  const aiUntil = end - L.upsertMs;
-  if (needAi.length && now() < aiUntil) {
-    const aiCtrl = new AbortController();
-    let aiClosed = false;
-    const completed: Array<AiEstimate | null> = needAi.map(() => null);
-    const work = async () => {
-      for (let offset = 0; offset < needAi.length && !aiClosed; offset += 8) {
-        const group = needAi.slice(offset, offset + 8);
-        const items = await (deps.estimate ?? estimateWithAi)(
-          group.map(({ q, k }) => { const e = fetched.get(k); return { artist: q.original.artist, song: q.original.song, genre: e?.genre, year: e?.year, bpm: e?.bpm }; }),
-          aiCtrl.signal,
-          (i, value) => { if (!aiClosed && i >= 0 && i < group.length) completed[offset + i] = value; },
-        );
-        if (!aiClosed) items.forEach((item, i) => { if (i < group.length && item) completed[offset + i] = item; });
-      }
-    };
-    let late = false;
-    // Reuse unused provider time; never extend the fixed request end. A healthy 6–12s
-    // estimate can finish after a quick provider miss instead of always losing at 4s.
-    try { late = await within(work(), aiUntil, now) === LATE; }
-    catch { (status.failed ??= []).push("ai"); status.complete = false; for (const { k } of needAi) unfinished.add(k); }
-    aiClosed = true;
-    if (late) { aiCtrl.abort(); timeout("ai"); for (const { k } of needAi) unfinished.add(k); }
-    const est = completed;
-    needAi.forEach(({ q, k }, idx) => {
-      const a = (est as Array<AiEstimate | null>)[idx];
+  if (needAi.length) {
+    const settled = await within(aiWork, aiUntil, now);
+    if (settled === LATE) { aiLate = true; aiClosed = true; aiCtrl.abort(); }
+    if (aiLate) timeout("ai");
+    if (aiFailed) { (status.failed ??= []).push("ai"); status.complete = false; }
+    needAi.forEach(({ q, k }) => {
+      const a = estimates.get(k);
+      if (aiLate || aiFailed) unfinished.add(k);
       if (!a) return;
       const e: EnrichedSong = fetched.get(k) ?? { artist: q.original.artist, song: q.original.song, source: "none" as const };
       // AI only fills gaps and every filled attribute is labelled an AI estimate.
@@ -644,9 +662,6 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       });
       if (filled) fresh.add(k);
     });
-  } else if (needAi.length) {
-    timeout("ai");
-    for (const { k } of needAi) unfinished.add(k);
   }
 
   // 4) Upsert data gained this call (service role bypasses RLS). Bounded: the response never waits on a hung write;

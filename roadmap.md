@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Bounded suggestion context and useful lookup completion
+- [x] Bound recommendation wire context at 500 with actual handler validation, complete local credit/version exclusion and terminal/retryable diagnostics.
+- [x] Overlap one estimate lane within existing six connections/deadlines; 34 requests + 1980 short-track files cover 5400/14400/7200-second targets independently in cold/mixed/warm fixtures.
+- [x] Final 959 tests / 91 files, 28 mocked reporting checks, automatic compilation OK; evidence in tests/fit/bounded-suggestions.md. No production access/publication.
+- [ ] Exact-head hosted Mac/CodeQL awaits GitHub; four isolated scripts attempted locally but Electron binary/package absent. No installation authorized; no new run ID available.
 ## Targeted useful lookups and automatic avoid-slow admission
 - [x] Prioritize eligible, relevant duration candidates before bounded facts; preserve completed facts and prevent late dispatch/repeated work.
 - [x] Gate fresh automatic avoid-slow additions on positive dance evidence in ranking/refill; requests and passive saved selections unchanged.

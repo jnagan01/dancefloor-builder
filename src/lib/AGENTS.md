@@ -3,3 +3,5 @@
 - Keep the cache adapter service-only behind authenticated handlers and existing schema; isolate timing/cache fixtures from real providers, accounts and files.
 - Wait for dynamic provider cooldowns in the gatherer's fenced pre-dispatch scheduler, not inside timed RPC callbacks; mark attempts and spend budget only when sending, because a late wait must never launch abandoned work.
 - Reuse unused phase time inside the fixed request end for estimates, preserve streamed partials on failure, and reserve observed dispatch latency before the generation cutoff; no deadline extension or transient negative cache.
+- Bound recommendation prompt context separately from complete local credit/version exclusion; serialize sends and stop terminal validation failures, because a bounded wire sample is not the dedupe universe.
+- Start a single acoustic-estimate lane after acoustic lookups settle, independently of recording searches, within six outbound lanes and the fixed request end, because slow year searches must not consume all estimate time.

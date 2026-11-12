@@ -48,8 +48,14 @@ type ExistingFeatured = {
  */
 export function buildRecommendExisting<T extends ExistingFeatured>(
   lists: SectionLists<T>,
+  candidates: T[] = [],
 ): RecommendExistingEntry[] {
-  return [...lists.warmUp, ...lists.transition, ...lists.peak].map((s) => {
+  // Prompt context is NOT the exclusion universe. Selected requests lead; recent discoveries
+  // fill remaining room. The caller's complete local pool still checks every returned credit/version.
+  const selected = [...lists.warmUp, ...lists.transition, ...lists.peak];
+  const room = Math.max(0, 500 - selected.length);
+  return [...selected.slice(0, 500), ...(room ? candidates.slice(-room) : [])]
+    .slice(0, 500).map((s) => {
     const out: RecommendExistingEntry = { artist: s.artist, song: s.song };
     if (typeof s.bpm === "number") out.bpm = s.bpm;
     if (s.camelot) out.camelot = s.camelot;
@@ -58,6 +64,16 @@ export function buildRecommendExisting<T extends ExistingFeatured>(
     if (s.genre) out.genre = s.genre;
     return out;
   });
+}
+
+/** Only explicit transport rate/server errors are retryable. Validation/unknown failures
+ * stop this generation's suggestion lane; never replay an unchanged malformed request. */
+export function suggestionFailure(error: unknown): { retryable: boolean; message: string } {
+  const e = error && typeof error === "object" ? error as { status?: number; statusCode?: number; issues?: unknown; message?: string } : {};
+  const status = e.status ?? e.statusCode;
+  const validation = !!e.issues || /too_big|validation|schema|existing.*500/i.test(e.message ?? "");
+  const retryable = !validation && (status === 429 || (typeof status === "number" && status >= 500 && status < 600));
+  return { retryable, message: validation ? "Suggestions stopped because the request did not pass validation. Existing requests and known track details were kept." : retryable ? "Suggestions are temporarily unavailable; a bounded retry will run. Known track details were kept." : "Suggestions could not complete; no further suggestion requests were sent. Existing requests and known track details were kept." };
 }
 
 /**

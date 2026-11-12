@@ -90,7 +90,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { DjAccountBar, type WorkflowSnapshot } from "@/components/HistoryPanel";
 import { useServerFn } from "@tanstack/react-start";
-import { recommendSongsForSection } from "@/lib/recommend.functions";
+import { recommendSongsForSection, type RecommendedSong } from "@/lib/recommend.functions";
 import { getArtistNeighbors } from "@/lib/neighbors.functions";
 import { getArtistCrowdData, getSimilarTracks, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
@@ -102,7 +102,7 @@ import { resolveAudioFile, resolveAudioMatch, type AudioIndex } from "@/lib/audi
 import { Play } from "lucide-react";
 import { saveDirHandle, loadDirHandle, clearDirHandle, verifyReadWrite, saveDirHandleMeta, loadDirHandleMeta, clearDirHandleMeta } from "@/lib/dirHandleStore";
 import { supabase } from "@/integrations/supabase/client";
-import { buildRecommendExisting, nextWorkflowInstanceId } from "@/lib/workflowIsolation";
+import { buildRecommendExisting, nextWorkflowInstanceId, suggestionFailure } from "@/lib/workflowIsolation";
 import { toCamelot, parseBpm, KEY_OPTIONS } from "@/lib/musicTheory";
 import type { ResultSong } from "@/lib/danceFloor";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
@@ -1428,12 +1428,30 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
         const repairEnd = Date.now() + 90_000;
         const backgroundLookups = new Set<string>();
-        const boundedRecommend = async (request: Parameters<typeof recommendFn>[0]) => {
+        let suggestionsStopped = false, suggestionReason = "";
+        const suggestionAttempts = new Map<string, number>();
+        const boundedRecommend = async (request: Parameters<typeof recommendFn>[0], section: SectionKey): Promise<{ suggestions: RecommendedSong[] }> => {
+          if (suggestionsStopped || genTokenRef.current !== myToken || accountRef.current !== accountAtStart || Date.now() >= repairEnd) return { suggestions: [] };
           let timer: ReturnType<typeof setTimeout> | undefined;
           try {
-            return await Promise.race([recommendFn(request), new Promise<never>((_, reject) => {
+            const reply = await Promise.race([recommendFn(request), new Promise<never>((_, reject) => {
               timer = setTimeout(() => reject(new Error("Suggestion time limit reached")), Math.max(1, Math.min(12_000, repairEnd - Date.now())));
             })]);
+            if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart || Date.now() >= repairEnd) return { suggestions: [] };
+            return reply;
+          } catch (err) {
+            const failure = suggestionFailure(err);
+            const attempts = (suggestionAttempts.get(section) ?? 0) + 1;
+            suggestionAttempts.set(section, attempts);
+            suggestionReason = failure.message;
+            toast.info(failure.message);
+            if (!failure.retryable || attempts >= 2) suggestionsStopped = true;
+            else {
+              if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
+              await new Promise(resolve => setTimeout(resolve, Math.min(1000 * attempts, Math.max(0, repairEnd - Date.now()))));
+              return boundedRecommend(request, section);
+            }
+            return { suggestions: [] };
           } finally { if (timer !== undefined) clearTimeout(timer); }
         };
         for (let round = 0; round <= maxRounds; round++) {
@@ -1442,9 +1460,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // so rankWhy and the displayed facts share one evidence set. Bounded, deterministic order (AI, owned, catalogue,
         // then identity); owned rows keep their file tags (mergeMeta never lets provider/AI values replace tags).
         const familiarityActive = !!normalizeEventFit(eventFit)?.familiarity;
+        const usableSeconds = (p: Pooled) => Math.max(0, ...generationFiles(p.row).map(f => Number.isFinite(f.seconds) ? f.seconds : 0));
         const lookupCandidates = [...pool.values()].filter(p => addedAllowed(p.row) && !facts.wasAttempted(p.row) &&
-          (needsFacts(p.row, familiarityActive) || strictLimitFailure(p.row, strictLimits))).sort((a,b) => songIdentity(a.row.artist,a.row.song).localeCompare(songIdentity(b.row.artist,b.row.song)));
-        const lookupRanked = rankPool(lookupCandidates, baseCandidate, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true }).map(x => x.item);
+          (needsFacts(p.row, familiarityActive) || strictLimitFailure(p.row, strictLimits))).sort((a,b) => usableSeconds(b) - usableSeconds(a) || songIdentity(a.row.artist,a.row.song).localeCompare(songIdentity(b.row.artist,b.row.song)));
+        const lookupRanked = rankPool(lookupCandidates, baseCandidate, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true })
+          .sort((a,b) => b.rec.score - a.rec.score || usableSeconds(b.item) - usableSeconds(a.item)).map(x => x.item);
         // Prefer known usable files, then shared relevance; zero-length review discoveries cannot
         // monopolize preparation lookup time. Sufficient catalogue facts need no acoustic upgrade.
         const usable = new Set(lookupRanked.filter(p => generationFiles(p.row).some(f => Number.isFinite(f.seconds) && f.seconds > 0)));
@@ -1522,22 +1542,28 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         };
         if (rankStats.hidden?.slow) toast.info(`${rankStats.hidden.slow} candidate track${rankStats.hidden.slow === 1 ? " was" : "s were"} left out as slow/ballad additions (provider or measured energy and danceability). Remaining time stays an honest gap.`);
         if (strictDropped) toast.info(`${strictDropped} candidate track${strictDropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
-        durationReason = `${strictDropped} candidates failed verified BPM/decade limits or had verified danceability outside your range; ${rankStats.hidden?.slow ?? 0} had strong slow evidence; ${rankStats.hidden?.uncertainDance ?? 0} lacked supported upbeat dance fit (not classified slow). Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed.`;
+        durationReason = `${strictDropped} candidates failed verified BPM/decade limits or had verified danceability outside your range; ${rankStats.hidden?.slow ?? 0} had strong slow evidence; ${rankStats.hidden?.uncertainDance ?? 0} lacked supported upbeat dance fit (not classified slow). Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed. ${suggestionReason}`;
         if (sectionOrder.every(k => remaining(k) === 0)) break;
         if (round === maxRounds || Date.now() >= repairEnd) { durationReason += " Bounded candidate/time limit reached."; break; }
         const before = new Set(pool.keys());
         const survivors = new Set(ranked.map(x => x.item));
         const selected = new Set([...r.warmUp, ...r.transition, ...r.peak].map(s => songIdentity(s.artist, s.song)));
         // Rejected discoveries relinquish capacity, but finite catalogue remains admitted.
-        removeWhere(p => !eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) && facts.wasAttempted(p.row) && (!survivors.has(p) ||
-          (ownedCursor < ownedQueue.length && p.trackIdx !== undefined && !p.row.aiSuggestion && !selected.has(songIdentity(p.row.artist, p.row.song)))));
+        removeWhere(p => {
+          const remove = !eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) && facts.wasAttempted(p.row) && (!survivors.has(p) ||
+            (ownedCursor < ownedQueue.length && p.trackIdx !== undefined && !p.row.aiSuggestion && !selected.has(songIdentity(p.row.artist, p.row.song))));
+          // Retired attempted candidates remain in the complete local exclusion universe:
+          // a model cannot resurrect a rejected recording just because it is outside wire context.
+          if (remove) taken.add(p.row.artist, p.row.song);
+          return remove;
+        });
         admitOwned();
         // Continue the relevant queued owned work before asking for more suggestions when
         // it can fill the gap. Known unsuitable attempts still release discovery capacity.
         if (lookupRanked.some(p => !facts.wasAttempted(p.row)) && needFacts.length && !strictDropped && !rankStats.hidden?.uncertainDance) continue;
-        await Promise.all(
-          sectionMap.map(async ({ key, label }) => {
-            const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: [...r.peak, ...poolRows()] });
+        for (const { key, label } of sectionMap) {
+          await (async () => {
+            const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: r.peak }, poolRows());
             // PASS 1 — favourite artists (max FAVORITE_ARTIST_CAP per artist across rows and candidates).
             if (favoriteArtists.length) {
               for (let favAttempt = 0; round === 0 && favAttempt < 3; favAttempt++) {
@@ -1549,7 +1575,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 const requestCount = Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE, eligible.length * FAVORITE_ARTIST_CAP);
                 if (requestCount <= 0) break;
                 try {
-                  const res = await boundedRecommend({ data: { section: label, count: requestCount, prefs, existing: existingNow(), onlyArtists: eligible, neighborArtists, crowdArtists } });
+                  const res = await boundedRecommend({ data: { section: label, count: requestCount, prefs, existing: existingNow(), onlyArtists: eligible, neighborArtists, crowdArtists } }, key);
                   let added = 0;
                   for (const sug of res.suggestions) {
                     const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
@@ -1566,7 +1592,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
               try {
                 const gaps = buildGapProfile(r[key], [...r.warmUp, ...r.transition, ...r.peak], gapSection(label), { favoriteArtists });
-                const res = await boundedRecommend({ data: { section: label, count: Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE), prefs, existing: existingNow(), gaps, favoriteArtists, neighborArtists, crowdArtists } });
+                const res = await boundedRecommend({ data: { section: label, count: Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE), prefs, existing: existingNow(), gaps, favoriteArtists, neighborArtists, crowdArtists } }, key);
                 if (!res.suggestions.length) { failed.push(key); return; }
                 gotAny = true;
                 let added = 0;
@@ -1575,9 +1601,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               } catch (err) { console.error("AI recommend failed", err); }
             }
             if (!gotAny && remaining(key) > 0) failed.push(key);
-          }),
-        );
+          })();
+        }
 
+        if (suggestionReason && !durationReason.includes(suggestionReason)) durationReason += ` ${suggestionReason}`;
         if (![...pool.keys()].some(key => !before.has(key)) && !lookupRanked.some(p => !facts.wasAttempted(p.row))) { durationReason += " Sources returned no new candidates."; break; }
         }
 
