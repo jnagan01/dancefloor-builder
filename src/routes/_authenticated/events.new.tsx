@@ -2,6 +2,9 @@ import { buildResolver, intended, cleanReason, requiresClean, seasonal, type Pre
 import { freshEvent, validateEventChoices, clientPlanningCoverage } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
+import { durationTotals, fillRankedDuration, type DurationTargets } from "@/lib/prep/durationFill";
+import { isBlocked, applyVarietyReranker } from "@/lib/danceFloor";
+import { allowedForEventType } from "@/lib/eventTypes";
 import { createCandidatePool } from "@/lib/prep/candidatePool";
 import { preventAutomaticDuplicates, sectionCoverage, durationLabel } from "@/lib/preparationDuplicates";
 import { makeSubject, scorePair } from "@/lib/matchCore";
@@ -977,7 +980,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       toast.error("Upload client tracks first, or enable expansion and enter artists, genres or decades");
       return;
     }
-    const fill = expand && clientCoverage.preparationShortSeconds > 0;
+    const fill = expand;
     if (background ? minutesNum <= 0 : hoursNum <= 0) {
       toast.error(background ? "Enter how many minutes the list should cover" : "Enter a valid dance floor length");
       return;
@@ -1009,7 +1012,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (!fbCache || fbCache.k !== now.knowledge) fbCache = { k: now.knowledge, fb: expansionFeedback(now.knowledge, feedbackEvent) };
       return fbCache.fb;
     };
-    const addedAllowed = (track: Song & { genre?: string }) => !liveFeedback().blocked(track.artist, track.song) && generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
+    const addedAllowed = (track: Song & { genre?: string; year?: number; explicit?: boolean }) => !isBlocked(track.artist, track.song, prefs.doNotPlay) && allowedForEventType(track, getEventType(eventType)) && !liveFeedback().blocked(track.artist, track.song) && generationResolver.allowed(track) && (!requiresClean(generationPolicy) || generationResolver.resolve(track) !== undefined);
     const localPrefs = { ...prefs, additionAllowed: addedAllowed };
     const strictLimits: StrictLimits = { bpmRange: prefs.bpmRange, decades: prefs.decades };
     // One shared ranking engine (the same one the preparation panel uses) orders every automatic addition source.
@@ -1044,6 +1047,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       return { ...g, warmUp: all, transition: [], peak: [], targetTotal: bgTarget, perSectionTarget: bgTarget, perSectionBase: bgTarget, shortfall: sf, finalShortfall: sf };
     };
     if (background) r = collapseBackground(r);
+    const timeShares = activeSplit ?? equalSplit(hoursNum);
+    const durationTargets: DurationTargets = background
+      ? { warmUp: minutesNum * 60, transition: 0, peak: 0 }
+      : { warmUp: timeShares.warmUp * 60 * buffer, transition: timeShares.transition * 60 * buffer, peak: timeShares.peak * 60 * buffer };
+    const generationFiles = (row: ResultSong) => {
+      if (!matcherOn) return [];
+      const match = policyMatch(row, mergedLibrary);
+      if (!exportApproved(match) || match.trackIndex === undefined) return [];
+      const t = mergedLibrary.tracks[match.trackIndex];
+      if (!t || !intended(row, t) || cleanReason(t, requiresClean(generationPolicy))) return [];
+      return [{ identity: trackIdentity(t.filePath, rankRoots), seconds: Number(t.songLength) }];
+    };
+    const generationPath = (row: ResultSong) => {
+      const m = policyMatch(row, mergedLibrary);
+      const t = m.trackIndex === undefined ? undefined : mergedLibrary.tracks[m.trackIndex];
+      return t && (row.fromUpload || intended(row, t)) ? trackIdentity(t.filePath, rankRoots) : undefined;
+    };
+    let refillAfterFeedback: (() => void) | undefined;
+    let durationReason = "No more eligible ranked candidates with approved known-length files. Review unlinked tracks or add eligible files; your limits were not relaxed.";
+
 
     // Metadata enrichment strategy (per user request):
     //   1) Online sources (ReccoBeats + MusicBrainz) via `enrichSongs`.
@@ -1320,12 +1343,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             return t && songIdentity(t.artist, t.title) === songIdentity(row.artist, row.song) ? idx : undefined;
           },
         });
-        const allowedNow = (p: Pooled) => addedAllowed(p.row);
         const poolRows = () => [...pool.values()].map((p) => p.row);
-        const pooledFor = (k: SectionKey) => { let n = 0, open = 0; for (const p of pool.values()) if (allowedNow(p)) { if (p.prefer === k) n++; else if (!p.prefer) open++; } // Unassigned owned candidates reduce AI requests only by the previous small library share, so the AI call
-          // budget is unchanged and weak library candidates can't stop stronger AI candidates from being considered.
-          return n + Math.min(Math.floor(open / sectionOrder.length), Math.max(1, Math.round(r.perSectionTarget * (simEvidence.length ? 0.3 : 0.15)))); };
-        const remaining = (k: SectionKey) => sectionTargetFor(r, k) - r[k].length - pooledFor(k);
+        const remaining = (k: SectionKey) => Math.max(0, Math.ceil((durationTargets[k] - durationTotals(r, generationFiles)[k]) / clientCoverage.averageSeconds));
 
         // Owned library sources: Last.fm exact similar tracks, then musical neighbours (no raw-order cap; variety decides).
         if (mergedLibrary?.tracks.length) {
@@ -1344,54 +1363,35 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }
         }
 
-        await Promise.all(
-          sectionMap.map(async ({ key, label }) => {
-            const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: [...r.peak, ...poolRows()] });
-            // PASS 1 — favourite artists (max FAVORITE_ARTIST_CAP per artist across rows and candidates).
-            if (favoriteArtists.length) {
-              for (let favAttempt = 0; favAttempt < 3; favAttempt++) {
-                if (remaining(key) <= 0) break;
-                const counts = new Map<string, number>();
-                for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...poolRows()]) { const hit = favoriteArtists.find((f) => isFavoriteArtist(s.artist, [f])); if (hit) counts.set(hit, (counts.get(hit) ?? 0) + 1); }
-                const eligible = favoriteArtists.filter((f) => (counts.get(f) ?? 0) < FAVORITE_ARTIST_CAP);
-                if (!eligible.length) break;
-                const requestCount = Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE, eligible.length * FAVORITE_ARTIST_CAP);
-                if (requestCount <= 0) break;
-                try {
-                  const res = await recommendFn({ data: { section: label, count: requestCount, prefs, existing: existingNow(), onlyArtists: eligible, neighborArtists, crowdArtists } });
-                  let added = 0;
-                  for (const sug of res.suggestions) {
-                    const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
-                    if (!owner || (counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
-                    if (offer(toAiSong(sug) as PRow, key)) { counts.set(owner, (counts.get(owner) ?? 0) + 1); added++; }
-                  }
-                  if (added === 0) break;
-                } catch (err) { console.error("Favorite-artist recommend failed", err); break; }
-              }
-            }
-            // PASS 2 — general gap-driven candidates for whatever is still uncovered.
-            const MAX_ATTEMPTS = Math.max(4, Math.ceil(sectionTargetFor(r, key) / MAX_AI_RECOMMENDATION_BATCH_SIZE) + 3);
-            let attempt = 0, gotAny = false;
-            while (remaining(key) > 0 && attempt < MAX_ATTEMPTS) {
-              attempt += 1;
-              try {
-                const gaps = buildGapProfile(r[key], [...r.warmUp, ...r.transition, ...r.peak], gapSection(label), { favoriteArtists });
-                const res = await recommendFn({ data: { section: label, count: Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE), prefs, existing: existingNow(), gaps, favoriteArtists, neighborArtists, crowdArtists } });
-                if (!res.suggestions.length) break;
-                gotAny = true;
-                let added = 0;
-                for (const sug of res.suggestions) if (offer(toAiSong(sug) as PRow, key)) added++;
-                if (added === 0) break;
-              } catch (err) { console.error("AI recommend failed", err); break; }
-            }
-            if (!gotAny && remaining(key) > 0) failed.push(key);
-          }),
-        );
 
+        // Inspect the account's in-memory index only; no disk access or raw-order padding. Every admitted
+        // recording still passes shared facts/ranking and strict rules. Stable pool admission bounds saturation.
+        for (let idx = 0; idx < mergedLibrary.tracks.length; idx++) {
+          const row = ownedRow(idx);
+          const relevant = !!(prefs.bpmRange || prefs.decades.length || prefs.danceRange || prefs.vibe ||
+            prefs.genres.some(g => row.genre?.toLowerCase().includes(g.toLowerCase())) ||
+            isFavoriteArtist(row.artist, [...favoriteArtists, ...uniqueSongs.map(s => s.artist), ...neighborArtists]));
+          if (relevant && addedAllowed(row) && !strictLimitFailure(row, strictLimits)) offer(row);
+        }
         // Complete eligible finite catalogue: no old preference-score/gap pre-cut. Reserved admission keeps these
         // alternatives available even when discovered sources saturate the cap; rankPool alone selects final slots.
         for (const c of catalogue) offer(c.row as PRow, background ? "warmUp" : c.prefer);
 
+        const durationBase = r;
+        const reviewTargets = { warmUp: sectionTargetFor(r, "warmUp"), transition: sectionTargetFor(r, "transition"), peak: sectionTargetFor(r, "peak") };
+        const maxRounds = Math.max(4, ...sectionOrder.map(k => Math.ceil(sectionTargetFor(r, k) / MAX_AI_RECOMMENDATION_BATCH_SIZE) + 3));
+        const community = new Map<string, CommunityEvidence>();
+        const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
+        const repairEnd = Date.now() + 90_000;
+        const boundedRecommend = async (request: Parameters<typeof recommendFn>[0]) => {
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            return await Promise.race([recommendFn(request), new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error("Suggestion time limit reached")), Math.max(1, Math.min(12_000, repairEnd - Date.now())));
+            })]);
+          } finally { if (timer !== undefined) clearTimeout(timer); }
+        };
+        for (let round = 0; round <= maxRounds; round++) {
         // Attach facts BEFORE strict eligibility, ranking and energy ordering: every non-owned candidate (provider years/BPM
         // feed strict limits) and every owned candidate missing facts the active ranking uses,
         // so rankWhy and the displayed facts share one evidence set. Bounded, deterministic order (AI, owned, catalogue,
@@ -1417,14 +1417,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // preliminary shared ranking WITHOUT community evidence (identity order for anything it hides); the final
         // ranking below then reuses the same scorer with the evidence (lookupPriority leaves only the uncertain-dance similarity
         // bound off here, because community upbeat tags can lift it; slow-risk caps and exclusions still apply). Unattempted songs stay unknown and are reported.
-        const community = new Map<string, CommunityEvidence>();
         const fitNow = normalizeEventFit(eventFit);
         const baseCandidate = (p: Pooled) => {
           if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
           return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
         };
         if (fitNow && (fitNow.avoidSlow || fitNow.familiarity === "familiar") && pool.size) {
-          const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
           const candidatesForLookup = [...pool.values()].filter((p) => addedAllowed(p.row) && !strictLimitFailure(p.row, strictLimits)).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
           const prelim = rankPool(candidatesForLookup, baseCandidate, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true }).map((x) => x.item);
           const prelimSet = new Set(prelim);
@@ -1455,22 +1453,73 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const eligible = [...pool.entries()].filter(([, p]) => {
           if (!addedAllowed(p.row)) return false;
           if (strictLimitFailure(p.row, strictLimits)) { strictDropped++; return false; }
+          if (prefs.danceRange && (typeof p.row.danceability !== "number" || !usableForHardRule(attrSource(p.row, "danceability"), true, "danceability") || p.row.danceability < prefs.danceRange[0] || p.row.danceability > prefs.danceRange[1])) { strictDropped++; return false; }
           const bpm = typeof p.row.bpm === "number" ? p.row.bpm : undefined;
           // The vibe's tempo window applies only to a verified tempo; estimates never exclude.
           if (!prefs.bpmRange && vbpm && bpm && usableForHardRule(attrSource(p.row, "bpm"), true, "bpm") && (bpm < vbpm[0] - 15 || bpm > vbpm[1] + 15)) return false;
           return true;
         }).map(([, p]) => p).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
-        const room = sectionOrder.reduce((n, k) => n + Math.max(0, sectionTargetFor(r, k) - r[k].length), 0);
         const rankStats: Parameters<typeof rankPool>[4] & object = {};
-        const ranked = rankPool(eligible, (p) => withCommunity(baseCandidate(p), p.row), rankCtx([...r.warmUp, ...r.transition, ...r.peak]), room, rankStats);
-        for (const { item, rec } of ranked) {
-          const k = item.prefer && r[item.prefer].length < sectionTargetFor(r, item.prefer) ? item.prefer : sectionOrder.find((x) => r[x].length < sectionTargetFor(r, x));
-          if (!k) break;
-          r[k].push({ ...item.row, rankWhy: explainTop(rec) } as (typeof r)[typeof k][number]);
-        }
+        const ranked = rankPool(eligible, (p) => withCommunity(baseCandidate(p), p.row), rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]), eligible.length, rankStats);
+        r = fillRankedDuration(durationBase, ranked.map(({ item, rec }) => ({ row: { ...item.row, rankWhy: explainTop(rec) }, prefer: item.prefer })), durationTargets, generationFiles, generationPath, reviewTargets);
+        refillAfterFeedback = () => {
+          const finalRanked = rankPool(eligible.filter(p => addedAllowed(p.row)), p => withCommunity(baseCandidate(p), p.row), rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]));
+          r = fillRankedDuration(durationBase, finalRanked.map(({item,rec}) => ({row:{...item.row,rankWhy:explainTop(rec)},prefer:item.prefer})), durationTargets, generationFiles, generationPath, reviewTargets);
+          if (!background) for (const key of ["warmUp", "transition", "peak"] as SectionKey[]) r[key] = applyVarietyReranker(r[key], { favoriteArtists: prefs.artists ?? [] });
+        };
         if (rankStats.hidden?.slow) toast.info(`${rankStats.hidden.slow} candidate track${rankStats.hidden.slow === 1 ? " was" : "s were"} left out as slow/ballad additions (provider or measured energy and danceability). Remaining time stays an honest gap.`);
         if (strictDropped) toast.info(`${strictDropped} candidate track${strictDropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
         if (failed.length && ranked.length) toast.error("AI suggestions unavailable for some sections — used other ranked candidates.");
+        durationReason = `${strictDropped} candidates lacked verified BPM/decade/danceability within your limits; ${rankStats.hidden?.slow ?? 0} had strong slow evidence. Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed.`;
+        if (sectionOrder.every(k => remaining(k) === 0)) break;
+        if (round === maxRounds || Date.now() >= repairEnd || pool.size >= POOL_CAP) { durationReason += " Bounded candidate/time limit reached."; break; }
+        const before = pool.size;
+        await Promise.all(
+          sectionMap.map(async ({ key, label }) => {
+            const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: [...r.peak, ...poolRows()] });
+            // PASS 1 — favourite artists (max FAVORITE_ARTIST_CAP per artist across rows and candidates).
+            if (favoriteArtists.length) {
+              for (let favAttempt = 0; round === 0 && favAttempt < 3; favAttempt++) {
+                if (remaining(key) <= 0) break;
+                const counts = new Map<string, number>();
+                for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...poolRows()]) { const hit = favoriteArtists.find((f) => isFavoriteArtist(s.artist, [f])); if (hit) counts.set(hit, (counts.get(hit) ?? 0) + 1); }
+                const eligible = favoriteArtists.filter((f) => (counts.get(f) ?? 0) < FAVORITE_ARTIST_CAP);
+                if (!eligible.length) break;
+                const requestCount = Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE, eligible.length * FAVORITE_ARTIST_CAP);
+                if (requestCount <= 0) break;
+                try {
+                  const res = await boundedRecommend({ data: { section: label, count: requestCount, prefs, existing: existingNow(), onlyArtists: eligible, neighborArtists, crowdArtists } });
+                  let added = 0;
+                  for (const sug of res.suggestions) {
+                    const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
+                    if (!owner || (counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
+                    if (offer(toAiSong(sug) as PRow, key)) { counts.set(owner, (counts.get(owner) ?? 0) + 1); added++; }
+                  }
+                  if (added === 0) return;
+                } catch (err) { console.error("Favorite-artist recommend failed", err); break; }
+              }
+            }
+            // PASS 2 — general gap-driven candidates for whatever is still uncovered.
+            let gotAny = false;
+            if (remaining(key) > 0 && round < maxRounds) {
+
+              try {
+                const gaps = buildGapProfile(r[key], [...r.warmUp, ...r.transition, ...r.peak], gapSection(label), { favoriteArtists });
+                const res = await boundedRecommend({ data: { section: label, count: Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE), prefs, existing: existingNow(), gaps, favoriteArtists, neighborArtists, crowdArtists } });
+                if (!res.suggestions.length) { failed.push(key); return; }
+                gotAny = true;
+                let added = 0;
+                for (const sug of res.suggestions) if (offer(toAiSong(sug) as PRow, key)) added++;
+                if (added === 0) return;
+              } catch (err) { console.error("AI recommend failed", err); }
+            }
+            if (!gotAny && remaining(key) > 0) failed.push(key);
+          }),
+        );
+
+        if (pool.size === before) { durationReason += " Sources returned no new candidates."; break; }
+        }
+
       }
     }
 
@@ -1490,11 +1539,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       let ui = 0, ei = 0;
       for (let i = 0; i < total; i++) {
         const wantUp = ei >= extra.length || (ui < ups.length && ui / Math.max(1, ups.length) <= ei / Math.max(1, extra.length));
-        merged.push(wantUp ? ups[ui++]! : extra[ei++]!);
+        const next = wantUp ? ups[ui++] : extra[ei++];
+        if (next) merged.push(next);
       }
       r = collapseBackground({ ...r, warmUp: merged });
     } else {
-      r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [], eventType: prefs.eventType });
+      if (fill) {
+        // Sequence within each duration allocation; global count-based rebucketing would trim short tracks
+        // and let a surplus in one section hide another section's deficit.
+        for (const key of ["warmUp", "transition", "peak"] as SectionKey[]) r[key] = applyVarietyReranker(r[key], { favoriteArtists: prefs.artists ?? [] });
+      } else r = reorderForEnergyProgression(r, { favoriteArtists: prefs.artists ?? [], eventType: prefs.eventType });
       // No source-first library top-up here: every addition came through the shared ranking above.
     }
 
@@ -1533,19 +1587,20 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     if (genTokenRef.current !== myToken) return;
     // Account/session fence: a sign-out or account switch during generation discards this result.
     if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
-    if (fill) {
+    if (fill && feedbackOwner) {
       // Wait for any queued Never/dismiss writes for this owner, then re-check against exactly that state.
       let settled: Parameters<typeof expansionFeedback>[0];
-      try { settled = await store.settled(feedbackOwner!); } catch { settled = null; }
+      try { settled = await store.settled(feedbackOwner); } catch { settled = null; }
       if (genTokenRef.current !== myToken) return;
       const now = store.get();
-      if (!settled || feedbackLost || accountRef.current !== accountAtStart || now.account !== feedbackOwner!.account || now.generation !== feedbackOwner!.generation) {
+      if (!settled || feedbackLost || accountRef.current !== accountAtStart || now.account !== feedbackOwner.account || now.generation !== feedbackOwner.generation) {
         toast.error(now.status === "blocked" ? GATE_MESSAGES.blocked : "Account changed during generation; nothing was applied.");
         return;
       }
       // Late feedback re-check: additions that became Never/dismissed while generation ran are dropped; requests stay.
       const fb = expansionFeedback(settled, feedbackEvent);
       let removed = 0; for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) { const c = recheckAdditions(r[section], fb); removed += c.removed; r[section] = c.kept; }
+      if (removed) refillAfterFeedback?.();
       if (removed) toast.info(`${removed} added track${removed === 1 ? " was" : "s were"} left out because of your Never or dismiss choices made during generation.`);
     }
 
@@ -1579,13 +1634,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Generation and subsequent edits share the same single-flight autosave queue.
     r.finalShortfall = currentShortfall(r, background ? ["warmUp"] : ["warmUp", "transition", "peak"]);
     const fs = r.finalShortfall;
-    if (expand ? clientCoverage.preparationShortSeconds > 0 && fs && fs.total > 0 : clientCoverage.baselineShortSeconds > 0) {
+    const actualSeconds = durationTotals(r, generationFiles);
+    const durationGaps = (["warmUp", "transition", "peak"] as SectionKey[]).filter(k => actualSeconds[k] < durationTargets[k]);
+    if (expand ? durationGaps.length > 0 : clientCoverage.baselineShortSeconds > 0) {
       const parts: string[] = [];
       if (fs.warmUp > 0) parts.push(`${fs.warmUp} short in Warm Up`);
       if (fs.transition > 0) parts.push(`${fs.transition} short in Transition`);
       if (fs.peak > 0) parts.push(`${fs.peak} short in Peak`);
       toast.warning(
-        expand ? `Optional preparation has gaps — ${parts.join(", ")}. Add tracks or review the expansion constraints.` : coverageMessage,
+        expand ? `Preparation is short — ${durationGaps.map(k => `${k}: ${durationLabel(durationTargets[k] - actualSeconds[k])}`).join(", ")}. ${durationReason}` : coverageMessage,
         { duration: 8000 },
       );
     } else {
@@ -2274,17 +2331,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const coverage = useMemo(() => {
     const sections: SectionKey[] = background ? ["warmUp"] : ["warmUp", "transition", "peak"];
     const refs: ExportSongRef[] = [];
-    const bySection: Partial<Record<SectionKey, { text: string; unknown: number; repeats: number }>> = {};
+    const bySection: Partial<Record<SectionKey, { text: string; unknown: number; repeats: number; shortSec: number }>> = {};
     let known = 0, unknown = 0, repeats = 0;
     const times = activeSplit ?? equalSplit(hoursNum);
     for (const section of sections) {
       if (!result) break;
       refs.push(...result[section].map((song, index) => ({ song, match: matches[songKey(section, index, song)], requireClean: cleanRequired, identity: { section, index, key: songKey(section, index, song) } })));
       const report = exportReadiness(refs, mergedLibrary, {}, getFolderRoots());
-      bySection[section] = { text: sectionCoverage(report.knownSec - known, background ? minutesNum : times[section], background ? 1 : buffer).text, unknown: report.unknownLength - unknown, repeats: report.duplicateCount - repeats };
+      bySection[section] = { shortSec: Math.max(0, (background ? minutesNum : times[section]) * 60 * (background ? 1 : buffer) - (report.knownSec - known)), text: sectionCoverage(report.knownSec - known, background ? minutesNum : times[section], background ? 1 : buffer).text, unknown: report.unknownLength - unknown, repeats: report.duplicateCount - repeats };
       known = report.knownSec; unknown = report.unknownLength; repeats = report.duplicateCount;
     }
-    return { bySection, report: exportReadiness(refs, mergedLibrary, {}, getFolderRoots()) };
+    return { bySection, complete: sections.every(k => bySection[k]?.shortSec === 0), report: exportReadiness(refs, mergedLibrary, {}, getFolderRoots()) };
   }, [result, matches, mergedLibrary, background, activeSplit, hoursNum, minutesNum, buffer, cleanRequired]);
 
   const summary = useMemo(() => {
@@ -3089,7 +3146,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
               <section className="space-y-1 border-y border-border py-3" aria-label="Event duration coverage">
                 <p className="text-sm">{targetMessage}</p>
-                <p className="text-sm">{durationLabel(coverage.report.knownSec)} approved usable unique length · {coverage.report.knownSec >= clientCoverage.baselineSeconds ? "Baseline duration covered — no additional tracks needed." : `${durationLabel(clientCoverage.baselineSeconds - coverage.report.knownSec)} baseline time not yet covered by known eligible files.`}</p>
+                <p className="text-sm">{durationLabel(coverage.report.knownSec)} approved usable unique length · {coverage.complete ? "Every section meets its selected preparation duration." : "Selected preparation duration is not yet covered in every section. Review unapproved or missing files and unknown lengths; add eligible tracks or check your expansion limits."}</p>
                 <p className="text-xs text-muted-foreground">{coverage.report.unknownLength} eligible tracks with unknown length · {coverage.report.duplicateCount} repeated files not counted. {planningMessage} Client planning lengths do not confirm file selection or export eligibility.</p>
               </section>
               <section className="space-y-2 border-y border-border py-3" aria-label="Export readiness">

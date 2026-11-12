@@ -732,6 +732,29 @@ try{
    expect(out).toEqual(tt.map(t=>t.filePath));
    expect(fs.readFileSync(path.join(temp,'exports','duplicate-trial-warm-up.txt'),'utf8')).toContain(a.song);
  });
+ await check('duration expansion: synthetic 45/120/60 at 2x reaches each target with short exact files, save/reopen preserves choices',async()=>{
+   await app.close();
+   const letters=i=>String.fromCharCode(97+Math.floor(i/26))+String.fromCharCode(97+i%26);
+   const tt=Array.from({length:260},(_,i)=>({artist:`DurationArtist${letters(i)}`,title:`DurationSong${letters(i)}`,filePath:path.join(library,`duration-${i}.mp3`),bpm:'120',year:'2005',genre:'Pop',songLength:120}));
+   tt.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes, never played'));
+   const client=Array.from({length:10},(_,i)=>({artist:`DurationClient${letters(i)}`,song:`DurationRequest${letters(i)}`,fromUpload:true}));
+   const original={id:'A',name:'TEST ONLY duration expansion',updated_at:'v1',inputs:{songs:client,hours:'3.75',buffer:2,listType:'dance',expand:true,eventName:'TEST ONLY duration expansion',split:{warmUp:45,transition:120,peak:60},decades:['2000s'],bpmRange:[110,130],danceRange:[6,10],eventFit:{avoidSlow:true},requireCleanVersions:false,ownedOnlyExpansion:false,includeSeasonalTracks:false},lists:{warmUp:client,transition:[],peak:[],selections:{}}};
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:original}));fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt,enrichResults:tt.map(t=>({artist:t.artist,song:t.title,energy:8,danceability:8,source:'ReccoBeats',prov:{energy:'provider',danceability:'provider'}}))}));
+   await launch();
+   const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.isVisible())await archive.click();
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(original);
+   await page.getByRole('button',{name:/Track expansion/}).first().click();
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   const saved=()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A;
+   await expect.poll(()=>saved().lists.transition.length,{timeout:30000}).toBe(120);
+   const generated=saved(),sec=['warmUp','transition','peak'];
+   const seconds=sec.map(k=>Object.entries(generated.lists.selections).filter(([key,choice])=>key.startsWith(`${k}:`)&&choice.confirmed).reduce((n,[,choice])=>n+choice.paths.filter(p=>tt.some(t=>t.filePath===p)).length*120,0));
+   expect(seconds).toEqual([5400,14400,7200]);
+   expect(sec.flatMap(k=>generated.lists[k]).filter(r=>r.fromUpload)).toHaveLength(10);
+   await expect(page.getByLabel('Event duration coverage')).toContainText('Every section meets its selected preparation duration.');
+   fs.writeFileSync(path.join(diagnostics,'duration-expansion.json'),JSON.stringify({label:'Synthetic Electron real event route, not user wedding',before:[0,0,0],after:seconds,targets:[5400,14400,7200],rows:sec.map(k=>generated.lists[k].length)},null,2));
+   await page.reload();await expect(page.getByLabel('Event duration coverage')).toContainText('Every section meets its selected preparation duration.');expect(saved()).toEqual(generated);
+ });
  await check('real matcher ranks intended artists and versions above cross-field collisions without changing saved approval',async()=>{
    await app.close();
    const tt=[{artist:'Queen',title:'Radio Ga Ga (Clean)'},{artist:'Rammstein',title:'RADIO (Clean)'},{artist:'Silk City & Dua Lipa',title:'Electricity (Clean)'},{artist:'Jack Harlow',title:'Dua Lipa (Clean)'},{artist:'Silk City & Dua Lipa',title:'Electricity (Extended Clean)'}].map((t,i)=>({...t,filePath:path.join(library,`ranking-${i}.mp3`)}));
@@ -864,7 +887,7 @@ try{
    const covered=await generateAndRead('Covered off',40);expect(covered.all).toHaveLength(40);expect(covered.r.inputs).toMatchObject({buffer:1,expand:false});
    await expect(page.getByLabel('Event duration coverage')).toContainText('160:00 approved usable unique length');
    const assertCoveredWithoutAllocationGap=async()=>{
-     await expect(page.getByLabel('Event duration coverage')).toContainText('Baseline duration covered — no additional tracks needed.');
+     await expect(page.getByLabel('Event duration coverage')).toContainText('Every section meets its selected preparation duration.');
      await expect(page.getByText('Optional preparation track-count gaps',{exact:true})).toHaveCount(0);
      await expect(page.getByText('Estimated track-count gap; see duration coverage',{exact:true})).toHaveCount(0);
      for(const name of [/^Warm Up \(/,/^Transition \(/,/^Peak \(/])expect(await page.getByRole('tab',{name}).first().innerText()).not.toMatch(/, -\d+/);
