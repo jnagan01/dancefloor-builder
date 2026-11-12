@@ -1,4 +1,7 @@
 # Workspace rebuild
+## Authenticated song-details cache repair
+- [x] Restore service-only cache reads inside the authenticated handler; preserve permissions, deadlines and provenance; audit found no sibling runtime readers.
+- [x] Actual handler/auth middleware/adapter/pipeline regressions: 28 focused, 901 full tests with two workers, 28 mocked reporting tests; automatic compilation OK. Live read-only grants and synthetic-key service adapter read succeeded. Final-head hosted Mac acceptance remains external.
 ## Expansion duration repair
 - [x] Correct only the new native duration wait to approved unique seconds; retain all ten request identities, exact timing/reopen checks and unchanged original 40-client assertion. Final hosted Mac native/offline acceptance remains pending.
 - [x] Repair fresh client duration allocation before expansion; native 40-row/no-warning assertion unchanged; 891 units / 86 files and 28 reporting tests pass. Final hosted Mac run still required.

@@ -53,6 +53,8 @@ export interface EnrichStatus {
   timedOut: EnrichPhase[];
   /** Songs whose online lookup didn't finish; they return only what was already known (cache/partial), never invented. */
   unfinished: number;
+  /** Storage failures are distinct from ordinary misses; provider facts remain usable. */
+  failed?: EnrichPhase[];
 }
 
 interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number }
@@ -397,6 +399,10 @@ export interface CacheRow {
   popularity: number | null; bpm: number | null; camelot: string | null; genre: string | null; year: number | null;
   source: string; fetched_at: string | null;
 }
+/** Internal error with optional recovered rows; never print this object or its payload. */
+export class EnrichCacheError extends Error {
+  constructor(readonly rows: CacheRow[] | null = null) { super('Metadata cache unavailable'); }
+}
 export interface EnrichDeps {
   readRows(artistKeys: string[], songKeys: string[]): Promise<CacheRow[] | null>;
   upsert(rows: Array<Omit<CacheRow, "fetched_at"> & { fetched_at: string }>): Promise<void>;
@@ -417,7 +423,16 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const now = deps.now ?? Date.now;
   const start = now();
   const end = start + L.totalMs - L.assemblyMs; // everything must settle before assembly
-  const timeout = (ph: EnrichPhase) => { status.complete = false; if (!status.timedOut.includes(ph)) status.timedOut.push(ph); };
+  const timeout = (ph: EnrichPhase) => {
+    status.complete = false;
+    if (!status.timedOut.includes(ph)) status.timedOut.push(ph);
+    if (ph === 'cacheRead' || ph === 'upsert') console.warn(`[enrichSongs] metadata cache ${ph} timed out; bounded fallback retained`);
+  };
+  const cacheFailure = (ph: EnrichPhase) => {
+    status.complete = false;
+    (status.failed ??= []).push(ph);
+    console.warn(`[enrichSongs] metadata cache ${ph} failed; bounded fallback retained`);
+  };
 
   // Build normalized keys and de-dupe (multiple identical songs in one batch).
   type Query = { original: { artist: string; song: string }; artistKey: string; songKey: string };
@@ -433,7 +448,10 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     try {
       const got = await within(Promise.resolve().then(() => deps.readRows(artistKeys, songKeys)), Math.min(end, start + L.cacheReadMs), now);
       if (got === LATE) timeout("cacheRead"); else rows = got;
-    } catch { rows = null; }
+    } catch (err) {
+      cacheFailure('cacheRead');
+      rows = err instanceof EnrichCacheError ? err.rows : null;
+    }
     const cutoffMs = Date.now() - CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
     for (const row of rows ?? []) {
       const fetchedMs = row.fetched_at ? new Date(row.fetched_at).getTime() : 0;
@@ -616,9 +634,9 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     try {
       const got = await within(Promise.resolve().then(() => deps.upsert(toUpsert)), Math.min(end, now() + L.upsertMs), now);
       if (got === LATE) timeout("upsert");
-    } catch (err) {
+    } catch {
       // Cache write failure is non-fatal — we still return the fresh data.
-      console.warn("[enrichSongs] cache upsert failed", err);
+      cacheFailure('upsert');
     }
   }
 

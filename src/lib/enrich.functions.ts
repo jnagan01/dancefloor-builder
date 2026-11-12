@@ -11,8 +11,7 @@
  * network entirely. Cache TTL: 90 days.
  *
  * Auth: `requireSupabaseAuth` — same posture as the AI recommender. Cache
- * upserts use the service role since the SELECT policy is authenticated-
- * read only.
+ * reads and upserts use the service-only cache adapter after authentication.
  */
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
@@ -36,20 +35,8 @@ export type { EnrichSource, EnrichedSong, EnrichStatus } from "./enrichPipeline.
 export const enrichSongs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => InputSchema.parse(data))
-  .handler(async ({ data, context }) => {
+  .handler(async ({ data }) => {
     const { runEnrichment } = await import("./enrichPipeline.server");
-    return runEnrichment(data.songs, {
-      async readRows(artistKeys, songKeys) {
-        const { data: rows } = await context.supabase
-          .from("song_metadata_cache")
-          .select("artist_key, song_key, energy, danceability, valence, popularity, bpm, camelot, genre, year, source, fetched_at")
-          .in("artist_key", artistKeys)
-          .in("song_key", songKeys);
-        return rows ?? null;
-      },
-      async upsert(rows) {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        await supabaseAdmin.from("song_metadata_cache").upsert(rows, { onConflict: "artist_key,song_key" });
-      },
-    }, { needPopularity: data.needPopularity });
+    const { createEnrichCache } = await import("./enrichCache.server");
+    return runEnrichment(data.songs, createEnrichCache(), { needPopularity: data.needPopularity });
   });
