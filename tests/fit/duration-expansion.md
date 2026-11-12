@@ -35,7 +35,7 @@ The 2× fixture produces 55/120/60 rows, including all ten client requests; usab
 
 ## Validation
 
-- Full Vitest after independent-review repairs: **889 passing tests / 86 files** (`bunx vitest run --maxWorkers=2`). Focused review cases plus existing catalogue/source/scorer checks: **37 passing tests**; original metadata-timing and ranking route regressions also pass in the full suite.
+- Full Vitest after independent-review and fresh-client allocation repairs: **891 passing tests / 86 files** (`bunx vitest run --maxWorkers=2`). Latest focused client/duration/catalogue checks: **22 passing tests**; original metadata-timing and ranking route regressions also pass in the full suite.
 - Reporting Python: **28 passing tests**, mocked SMTP only (no email sent).
 - Automatic preview compilation: **build OK**. Manual app builds/typechecks are intentionally not run; the platform runs them.
 - Isolated Electron event suite attempted with existing Linux/Xvfb: **blocked before tests**, missing `desktop/node_modules/electron/dist/electron` (ENOENT). No binary installed under the user's restriction.
@@ -51,3 +51,15 @@ Source baseline: `ad1466c`; implementation checkpoint: `4bbff77` (platform maint
 - Sparse unknown/AI danceability retains eligibility, while verified out-of-range BPM/decades remain rejected. A varied 6/8/9-energy fixture meets **5,400 / 14,400 / 7,200** in warm-up/transition/peak roles; requests are not moved. Shared greedy ranking uses an artist heap, with an independent original-greedy equivalence regression, to avoid quadratic large-library scans.
 - Bounded shortage reasons remain visible in the current review session, without persisted schema changes. Reopened snapshots are not regenerated and manual selection decisions remain intact; a reopening displays coverage guidance, not a fabricated historic generation reason.
 - Local Electron binary remains absent; no install attempted. Previous hosted run **43286992448** covers the prior head only. The unchanged automatic macos-15 workflow must validate this final commit before acceptance. No publish, production access, data migration, email, native installation, schedule or updater changes.
+
+## Actual Mac CI follow-up: fresh client allocation
+
+User-reported run **43286992448**, job **131422895090** passed the native 2× duration test but failed the unchanged optional expansion assertion at `tests/native/run.mjs:900`: forty clients became 68 because all requests initially occupied Warm Up. The offline phase was skipped, not passed. This is supplied CI evidence; the sandbox did not independently read GitHub.
+
+Explicit expansion Generate now allocates freshly generated requests before computing deficits, in the existing energy/era order with selected duration shares rather than count trimming. Every request occurrence is retained. Unknown lengths only guide placement as estimates; they never confirm coverage. Expansion-off, background lists, passive reopen and manual saved sections are untouched.
+
+An actual-route regression with the same forty 240-second clients, one hour and 1× preserves exactly **40 rows**, makes **zero recommendation calls**, produces **no warnings**, and covers **3,120 / 3,360 / 3,120 seconds** against **1,200 / 1,200 / 1,200** section targets. Saved membership and selections roundtrip unchanged. The original native assertion still demands 40, not 68; no native test or workflow was changed. The synthetic 2× fixture still reaches **5,400 / 14,400 / 7,200 seconds**.
+
+The older catalogue comparison now correctly has **14** review additions (24 planning slots minus ten distributed requests), rather than 16 caused by clients occupying only one bucket. Full-catalogue admission, stronger-alternative displacement, reverse-order identity, provider failure and request retention assertions remain intact; archived comparison artifacts were not overwritten. Fresh-client pure tests additionally cover unequal file lengths, varied energy, repeated requests, unknown lengths and read-only input preservation.
+
+Validation: **891 Vitest tests / 86 files**, **28 reporting tests** (mocked mail only), automatic **build OK**. Local native execution remains blocked by absent Electron binary; no installation performed. A new final-head hosted Mac run including all native/offline phases is required; prior-head success of the duration case is not full acceptance.

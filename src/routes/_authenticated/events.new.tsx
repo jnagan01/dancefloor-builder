@@ -2,7 +2,7 @@ import { buildResolver, intended, cleanReason, requiresClean, seasonal, type Pre
 import { freshEvent, validateEventChoices, clientPlanningCoverage } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
-import { durationTotals, fillRankedDuration, type DurationTargets } from "@/lib/prep/durationFill";
+import { allocateFreshClients, durationTotals, fillRankedDuration, type DurationTargets } from "@/lib/prep/durationFill";
 import { isBlocked, applyVarietyReranker } from "@/lib/danceFloor";
 import { allowedForEventType } from "@/lib/eventTypes";
 import { createCandidatePool } from "@/lib/prep/candidatePool";
@@ -1142,6 +1142,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     });
 
     if (fill) {
+      if (!background) r = allocateFreshClients(r, durationTargets, generationFiles, clientCoverage.averageSeconds, { favoriteArtists: prefs.artists ?? [], eventType: prefs.eventType });
       {
         type FillLabel = "Warm Up" | "Transition" | "Peak" | "Cocktail Hour" | "Dinner";
         const gapSection = (l: FillLabel) => (l === "Cocktail Hour" || l === "Dinner" ? "Warm Up" : l);

@@ -25,9 +25,10 @@ async function run(opts:{reverse?:boolean;baseline?:boolean;off?:boolean;neutral
 it('actual route: >14 alternatives compete for duration-bounded review slots; evidence beyond old cut displaces weak picks; requests/save/reopen preserved',async()=>{
  const after=await run(),reverse=await run({reverse:true}),before=await run({baseline:true});
  const adds=all(after.result).filter(r=>!r.fromUpload),old=all(before.result).filter(r=>!r.fromUpload);
- expect(adds).toHaveLength(16);expect(after.looked.filter(s=>CATALOGUE.some(c=>key(c)===key(s)))).toHaveLength(30);
+ expect(adds).toHaveLength(14);expect(after.looked.filter(s=>CATALOGUE.some(c=>key(c)===key(s)))).toHaveLength(30);
  expect(adds.map(key).sort()).toEqual(all(reverse.result).filter(r=>!r.fromUpload).map(key).sort());
- // Existing shared scorer's variety keeps two weaker alternatives; this change does not tune scores or assert perfection.
+ // Fresh client time-share allocation occupies all ten request slots before review filling:
+ // 24 planning slots minus ten requests = 14 suggestions, not the old 16 from one-bucket clients.
  expect(adds.filter(r=>PROVIDERS.find(p=>key(p)===key(r))?.popularity===9)).toHaveLength(14);expect(old).toHaveLength(0); // old cut discards decade; strict policy rejects it
  expect(all(after.result).filter(r=>r.fromUpload).map(key).sort()).toEqual(CLIENTS.map(key).sort());
  expect(adds.some(r=>r.song==='Recording 29')).toBe(true);expect(adds.every(r=>r.catalogueDecade==='1980s'&&r.year===undefined)).toBe(true);
@@ -35,13 +36,13 @@ it('actual route: >14 alternatives compete for duration-bounded review slots; ev
  const diagnostic=(res:typeof after)=>({beforeTruncation:CATALOGUE.length,afterSourcing:res.looked.filter(s=>CATALOGUE.some(c=>key(c)===key(s))).length,...res.stages.at(-1),selected:all(res.result).filter(r=>!r.fromUpload).map(r=>({key:key(r),reasons:r.rankWhy,prov:r.metaProv})),sourceContribution:{catalogue:all(res.result).filter(r=>!r.fromUpload).length,ai:0,owned:0},community:'disabled; unknown, no tags assumed'});
  const relaxedBefore=await run({baseline:true,relaxed:true}),relaxedAfter=await run({relaxed:true});
  const weak=(r:any)=>all(r.result).filter(s=>!s.fromUpload&&PROVIDERS.find(p=>key(p)===key(s))?.popularity===2).length;
- expect(weak(relaxedAfter)).toBeLessThan(weak(relaxedBefore));expect(all(relaxedAfter.result).filter(r=>!r.fromUpload)).toHaveLength(16);
+ expect(weak(relaxedAfter)).toBeLessThan(weak(relaxedBefore));expect(all(relaxedAfter.result).filter(r=>!r.fromUpload)).toHaveLength(14);
  const report={label:'CONTROLLED FICTIONAL fixture, real event route and save validator. NOT original native pool/replay; no ratings or claimed real quality gains.',sourceCommit:'985f18cf4a204381f597883299d1ab1f9aa05b28',targetCommit:'content-addressed patch; final automatic revision reported separately',targetSourceHash:createHash('sha256').update(readFileSync('src/routes/_authenticated/events.new.tsx')).digest('hex'),fixture:{clients:CLIENTS,catalogue:CATALOGUE,providers:PROVIDERS,inputs:INPUTS,community:'disabled',recommendations:[],library:[]},before:diagnostic(before),after:diagnostic(after),noStrictDecadesControl:{before:diagnostic(relaxedBefore),after:diagnostic(relaxedAfter)}};
  mkdirSync('test-results',{recursive:true});writeFileSync('test-results/candidate-stage.json',JSON.stringify(report,null,2));
 },30000);
 it('actual route: provider failure retains catalogue provenance, owned promotion keeps file tags, expand-off retains requests and neutral does not infer fit',async()=>{
- const failed=await run({failure:true});expect(all(failed.result).filter(r=>!r.fromUpload)).toHaveLength(16);expect(failed.warnings.join(' ')).toMatch(/Couldn't reach/);
+ const failed=await run({failure:true});expect(all(failed.result).filter(r=>!r.fromUpload)).toHaveLength(14);expect(failed.warnings.join(' ')).toMatch(/Couldn't reach/);
  const owned=await run({owned:true});expect(all(owned.result).find(r=>r.song==='Recording 29')).toMatchObject({genre:'Funk',catalogueDecade:'1980s',metaProv:{genre:'tags',energy:'provider'}});
  const off=await run({off:true});expect(all(off.result)).toHaveLength(10);expect(off.looked).toHaveLength(10);
- const neutral=await run({neutral:true});expect(neutral.saved.inputs.eventFit).toBeUndefined();expect(all(neutral.result).filter(r=>!r.fromUpload)).toHaveLength(16);expect(all(neutral.result).some(r=>/dance suitability uncertain/.test(r.rankWhy??''))).toBe(false);
+ const neutral=await run({neutral:true});expect(neutral.saved.inputs.eventFit).toBeUndefined();expect(all(neutral.result).filter(r=>!r.fromUpload)).toHaveLength(14);expect(all(neutral.result).some(r=>/dance suitability uncertain/.test(r.rankWhy??''))).toBe(false);
 },30000);

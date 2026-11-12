@@ -1,9 +1,47 @@
 import { AdditionKeySet } from "../additionIdentity";
-import { normalizeKey, HARD_ARTIST_CAP, type GenerationResult, type ResultSong, type SectionKey } from "../danceFloor";
+import { normalizeKey, HARD_ARTIST_CAP, effectiveIntensityFor, intensityOf, reorderForEnergyProgression, type GenerationResult, type ResultSong, type SectionKey } from "../danceFloor";
+import { getEventType } from "../eventTypes";
 
 export type DurationFile = { identity: string; seconds: number };
 export type DurationTargets = Record<SectionKey, number>;
 const sections: SectionKey[] = ["warmUp", "transition", "peak"];
+
+/** Explicit fresh Generate only: distribute every request before computing addition gaps.
+ * Reuse the existing energy/era ordering, but partition by time shares, not old
+ * count caps. Unknown lengths are placement estimates only, never coverage. */
+export function allocateFreshClients(
+  base: GenerationResult, targets: DurationTargets,
+  files: (row: ResultSong) => readonly DurationFile[], averageSeconds: number,
+  opts: { favoriteArtists?: string[]; eventType?: string } = {},
+): GenerationResult {
+  const ordered = reorderForEnergyProgression(base, opts);
+  const evType = getEventType(opts.eventType), eraOn = !evType || evType.eraMode === "vintage";
+  const rows = [...ordered.warmUp, ...ordered.transition, ...ordered.peak].sort((a,b) =>
+    effectiveIntensityFor(a, eraOn) - effectiveIntensityFor(b, eraOn) || intensityOf(a) - intensityOf(b));
+  const seen = new Set<string>();
+  const lengths = rows.map(row => {
+    let seconds = 0;
+    for (const f of files(row)) {
+      if (seen.has(f.identity)) continue;
+      seen.add(f.identity);
+      if (Number.isFinite(f.seconds) && f.seconds > 0) seconds += f.seconds;
+    }
+    return seconds || (Number.isFinite(averageSeconds) && averageSeconds > 0 ? averageSeconds : 240);
+  });
+  const active = sections.filter(k => targets[k] > 0);
+  if (!active.length) return base;
+  const targetTotal = active.reduce((n,k) => n + targets[k],0);
+  const total = lengths.reduce((a,b) => a+b,0);
+  const next = { ...base, warmUp: [] as ResultSong[], transition: [] as ResultSong[], peak: [] as ResultSong[] };
+  let cursor = 0, boundary = total * targets[active[0]] / targetTotal, elapsed = 0;
+  rows.forEach((row,i) => {
+    while (cursor < active.length - 1 && elapsed + lengths[i] / 2 > boundary) {
+      cursor++; boundary += total * targets[active[cursor]] / targetTotal;
+    }
+    next[active[cursor]].push(row); elapsed += lengths[i];
+  });
+  return next;
+}
 
 /** Read-only accounting: only approved, policy-eligible files with known lengths count.
  * The caller supplies the same exact selected-file classification used by export. */

@@ -69,3 +69,18 @@ it('actual route varied-energy files retain warm-up, transition and peak roles a
  const {h}=await setup({tracks:tt,enrich:async({data}:any)=>({results:provider(data.songs).results.map((s:any)=>({...s,energy:energy.get(s.artist)??8}))})});
  await h.current.generate();await h.flush();expect(seconds(h)).toEqual([5400,14400,7200]);for(const [i,k] of sections.entries())expect(h.current.result[k].filter(s=>!s.fromUpload).every(s=>s.energy===[6,8,9][i])).toBe(true);h.unmount();
 },30000);
+it('actual route Mac optional-expansion regression: forty 240-second clients at 1h/1x stay forty, all sections covered, no warnings, passive membership unchanged',async()=>{
+ vi.useFakeTimers();try{
+ const cc=Array.from({length:40},(_,i)=>({artist:`Client ${i}`,song:`Normal track ${i}`}));
+ const inputs={songs:cc,hours:'1',buffer:1,listType:'dance',expand:true,eventName:'Covered expansion 1×'};
+ const lists={warmUp:cc.map(s=>({...s,fromUpload:true})),transition:[],peak:[]};
+ let recommendCalls=0;
+ const h=harness({eventId:id,rows:{[id]:{id,inputs,lists}},contract:true,services:{enrich:async()=>({results:[]}),recommend:async()=>{recommendCalls++;return {suggestions:[]};}}});
+ await h.flush();h.lib=vdj.buildLibrary(cc.map((s,i)=>({artist:s.artist,title:s.song,filePath:`/synthetic/client-${i}.mp3`,songLength:240})));h.library(h.lib);await h.flush();
+ expect(h.current.result.warmUp).toHaveLength(40);expect(h.current.result.transition).toEqual([]);expect(h.requests).toEqual([]);
+ await h.current.generate();await h.flush();expect(sections.flatMap(k=>h.current.result[k])).toHaveLength(40);expect(seconds(h)).toEqual([3120,3360,3120]);expect(h.warnings).toEqual([]);expect(recommendCalls).toBe(0);
+ expect(sections.flatMap(k=>h.current.result[k]).map(s=>`${s.artist}|${s.song}`).sort()).toEqual(cc.map(s=>`${s.artist}|${s.song}`).sort());
+ await vi.advanceTimersByTimeAsync(1800);await h.flush();const saved=h.requests.at(-1);expect(saved.inputs.songs).toEqual(cc);
+ const reopened=harness({eventId:id,rows:{[id]:{id,inputs:saved.inputs,lists:saved.lists}},contract:true});await reopened.flush();reopened.library(h.lib);await reopened.flush();expect(reopened.current.eventSnapshot(reopened.current.result,reopened.current.matches).lists).toEqual(saved.lists);expect(reopened.requests).toEqual([]);reopened.unmount();h.unmount();
+ }finally{vi.useRealTimers();}
+},30000);

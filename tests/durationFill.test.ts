@@ -1,8 +1,15 @@
 import {it,expect} from 'vitest';
-import {durationTotals,fillRankedDuration} from '@/lib/prep/durationFill';
+import {allocateFreshClients,durationTotals,fillRankedDuration} from '@/lib/prep/durationFill';
 import {generateLists,type ResultSong} from '@/lib/danceFloor';
 const base=()=>generateLists({uploaded:[],hours:1,buffer:1,expand:false,prefs:{artists:[],genres:[],decades:[],notes:''}});
 const row=(artist:string,song:string):ResultSong=>({artist,song,fromUpload:false});
+it('fresh client allocation uses known duration shares and energy ordering without losing repeated requests or counting unknowns',()=>{
+ const r=base();r.warmUp=[9,6,8,6,9,8].map((energy,i)=>({...row(`Client ${i}`,`Request ${i}`),fromUpload:true,energy,danceability:energy}));
+ const files=(s:ResultSong)=>[{identity:s.song,seconds:s.energy===6?60:s.energy===8?120:180}];
+ const next=allocateFreshClients(r,{warmUp:120,transition:240,peak:360},files,240,{eventType:'wedding'});
+ expect(durationTotals(next,files)).toEqual({warmUp:120,transition:240,peak:360});expect([...next.warmUp,...next.transition,...next.peak]).toHaveLength(6);expect(next.warmUp.map(s=>s.energy)).toEqual([6,6]);expect(next.peak.map(s=>s.energy)).toEqual([9,9]);
+ const repeated={...r,warmUp:[...r.warmUp,r.warmUp[0]]};const unknown=allocateFreshClients(repeated,{warmUp:120,transition:240,peak:360},()=>[],240);expect([...unknown.warmUp,...unknown.transition,...unknown.peak]).toHaveLength(7);expect(durationTotals(unknown,()=>[])).toEqual({warmUp:0,transition:0,peak:0});expect(r.warmUp).toHaveLength(6);
+});
 it('duration accounting never counts unknown lengths or repeated exact files across sections',()=>{const r=base();r.warmUp=[row('A','one'),row('B','unknown')];r.peak=[row('C','repeat')];expect(durationTotals(r,s=>[{identity:s.song==='unknown'?'unknown':'same',seconds:s.song==='unknown'?NaN:180}])).toEqual({warmUp:180,transition:0,peak:0});});
 it('tentative/unlinked review rows cannot stop eligible known files, aliases and shared file paths do not count twice',()=>{const candidates=[row('Review','unknown'),row('Lead feat. Guest','Song'),row('Guest & Lead','Song'),row('Other','Different'),row('Fresh','New')];const files=(s:ResultSong)=>s.artist==='Review'?[]:[{identity:s.song==='Different'?'Song':s.song,seconds:120}];const r=fillRankedDuration(base(),candidates.map(row=>({row})),{warmUp:120,transition:120,peak:0},files,s=>files(s)[0]?.identity,{warmUp:3,transition:3,peak:0});expect(durationTotals(r,files)).toEqual({warmUp:120,transition:120,peak:0});expect([...r.warmUp,...r.transition].map(s=>s.artist)).toEqual(['Lead feat. Guest','Fresh']);});
 it('no eligible files stays honest bounded review; a surplus never covers another section',()=>{const r=base();r.warmUp=[row('Client','long')];r.warmUp[0].fromUpload=true;const files=(s:ResultSong)=>s.fromUpload?[{identity:'client',seconds:9999}]:[];const next=fillRankedDuration(r,Array.from({length:100},(_,i)=>({row:row(`Artist ${i}`,`Song ${i}`)})),{warmUp:60,transition:120,peak:0},files,()=>undefined,{warmUp:3,transition:2,peak:0});expect(next.transition).toHaveLength(2);expect(next.warmUp).toEqual(r.warmUp);expect(durationTotals(next,files)).toEqual({warmUp:9999,transition:0,peak:0});});
