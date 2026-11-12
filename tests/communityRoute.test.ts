@@ -16,12 +16,12 @@ import { REQUESTS } from "./fit/fitComparison";
 const harness = createRequire(import.meta.url)("./helpers/eventRouteHarness.cjs").createEventRouteHarness({vdj,dance:{...dance,catalogueCandidates:()=>[]},audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions});
 const id="10000000-0000-4000-8000-000000000077";
 const requests=REQUESTS.map(r=>({...r,fromUpload:true}));
-// TEST-ONLY renamed synthetic owned files with identical estimated feel; only community evidence differs.
+// TEST-ONLY renamed synthetic owned files with identical positive estimated feel; only community evidence differs.
 const extras=[["Held Out Tagged","Q"],["Held Out Plain","R"],["Held Out Wrong","S"]].map(([a,s])=>({artist:`TEST ${a}`,song:s}));
 const library=vdj.buildLibrary(extras.map(c=>({artist:c.artist,title:c.song,filePath:`/synthetic/${c.song}.mp3`,year:"1985",genre:"Pop"})) as vdj.VdjTrack[]);
 const inputBase={songs:requests,hours:"1.5",buffer:1,listType:"dance",expand:true,eventName:"TEST ONLY community",artistsInput:"",genresInput:"",decades:["1970s","1980s","1990s","2000s","2010s","2020s"],notes:"",doNotPlayInput:""};
 const all=(r:any)=>[...r.warmUp,...r.transition,...r.peak];
-const enrich=async({data}:any)=>({results:data.songs.flatMap((s:any)=>extras.some(c=>c.artist===s.artist)?[{...s,energy:6,danceability:6,source:"AI",prov:{energy:"estimate",danceability:"estimate"}}]:[])});
+const enrich=async({data}:any)=>({results:data.songs.flatMap((s:any)=>extras.some(c=>c.artist===s.artist)?[{...s,energy:8,danceability:8,source:"AI",prov:{energy:"estimate",danceability:"estimate"}}]:[])});
 async function run(fit:any, community:any){
   const row={id,name:inputBase.eventName,updated_at:"2026-11-04T00:00:00Z",inputs:{...inputBase,...(fit?{eventFit:fit}:{})},lists:{warmUp:requests,transition:[],peak:[]}};
   const calls:any[]=[];
@@ -40,11 +40,11 @@ it("community slow tags reach rankPool before ranking, stay out of the snapshot,
   const {result,saved,calls,row}=await run({avoidSlow:true},tagged);
   expect(result.filter((r:any)=>r.fromUpload).map((r:any)=>`${r.artist}|${r.song}`).sort()).toEqual(REQUESTS.map(r=>`${r.artist}|${r.song}`).sort());
   const adds=result.filter((r:any)=>!r.fromUpload).map((r:any)=>r.artist);
-  expect(adds.indexOf("TEST Held Out Tagged")).toBeGreaterThan(adds.indexOf("TEST Held Out Plain"));
-  expect(result.find((r:any)=>r.artist==="TEST Held Out Tagged")?.rankWhy).toMatch(/community tags "ballad".*not confirmed slow/);
+  expect(adds).not.toContain("TEST Held Out Tagged");
+  expect(adds).toContain("TEST Held Out Plain");
   expect(calls.flat().length).toBe(new Set(calls.flat().map((s:any)=>`${s.artist}||${s.song}`)).size);
   expect(JSON.stringify(saved.lists)).not.toMatch(/"community"|slowTags/);
-  const t=result.find((r:any)=>r.artist==="TEST Held Out Tagged");expect([t.energy,t.danceability]).toEqual([6,6]);
+  const t=result.find((r:any)=>r.artist==="TEST Held Out Plain");expect([t.energy,t.danceability]).toEqual([8,8]);
   const reopened=harness({eventId:id,rows:{[id]:{...row,inputs:saved.inputs,lists:saved.lists}},contract:true});await reopened.flush();
   expect(all(reopened.current.result).filter((r:any)=>r.fromUpload)).toHaveLength(REQUESTS.length);expect(reopened.requests).toEqual([]);reopened.unmount();
 });
@@ -63,7 +63,7 @@ it("discovery-only: no community lookups (they could not change the ranking)",as
 it("provider disabled: truthful notice limited to community evidence; other facts kept",async()=>{
   const {result,infos}=await run({avoidSlow:true},async(r:any)=>r.data.songs.map((s:any)=>({...s,status:"disabled"})));
   expect(infos.join(" ")).toMatch(/Last\.fm isn't available, so community tags and listener counts weren't checked for 3 candidate tracks\. Only that community evidence is unknown/);
-  const t=result.find((r:any)=>r.artist==="TEST Held Out Tagged");expect([t.energy,t.danceability]).toEqual([6,6]);
+  const t=result.find((r:any)=>r.artist==="TEST Held Out Tagged");expect([t.energy,t.danceability]).toEqual([8,8]);
 });
 it("budget: at most 40 distinct lookups, preliminary-rank priority, unattempted eligible tracks reported once",async()=>{
   const many=Array.from({length:45},(_,i)=>({artist:`TEST Bulk ${String(i).padStart(2,"0")}`,song:`T${i}`}));
@@ -102,10 +102,10 @@ async function runUD(community:any){
   }finally{vi.useRealTimers();}
 }
 const ud1=(res:any[],a:string)=>res.find((r:any)=>r.artist===a);
-it("uncertain dance bound: lookup fetches the relevant uncertain track, final rank applies the bound; save/reopen keeps explanation and requests, no new fields",async()=>{
+it("uncertain dance: lookup investigates relevant unknown fit, final expansion withholds it; save/reopen keeps requests, no new fields",async()=>{
   const {result,saved,calls,row}=await runUD(async(r:any)=>late(r.data.songs.map((s:any)=>({...s,status:"none"}))));
   expect(calls.map((s:any)=>s.artist)).toContain("TEST UD Weak");
-  const w=ud1(result,"TEST UD Weak");expect(w.rankWhy).toMatch(/similarity bounded: dance suitability uncertain/);
+  expect(ud1(result,"TEST UD Weak")).toBeUndefined();
   // Set order is energy-flow, not rank order: assert the bound itself (Weak bounded, upbeat Up not).
   expect(ud1(result,"TEST UD Up").rankWhy).not.toMatch(/dance suitability uncertain/);
   expect(result.filter((r:any)=>r.fromUpload)).toHaveLength(REQUESTS.length);
@@ -113,15 +113,15 @@ it("uncertain dance bound: lookup fetches the relevant uncertain track, final ra
   expect(Object.keys(saved.inputs).sort()).toEqual(Object.keys({...row.inputs,...saved.inputs}).sort());
   const reopened=harness({eventId:id,rows:{[id]:{...row,inputs:saved.inputs,lists:saved.lists}},contract:true});await reopened.flush();
   const rr=all(reopened.current.result);expect(rr.filter((r:any)=>r.fromUpload)).toHaveLength(REQUESTS.length);
-  expect(ud1(rr,"TEST UD Weak").rankWhy).toBe(w.rankWhy);expect(reopened.requests).toEqual([]);reopened.unmount();
+  expect(ud1(rr,"TEST UD Weak")).toBeUndefined();expect(reopened.requests).toEqual([]);reopened.unmount();
 });
-it("uncertain dance bound: late pure dance tags are awaited and lift it; mixed tags, disabled and failed stay bounded",async()=>{
+it("uncertain dance: late pure dance tags support admission; mixed tags, disabled and failed do not rescue weak fit",async()=>{
   const tag=(t:any)=>async(r:any)=>late(r.data.songs.map((s:any)=>s.artist==="TEST UD Weak"?{...s,status:"found",evidence:{source:"lastfm",listeners:90000,...t}}:{...s,status:"none"}));
   const up=await runUD(tag({slowTags:[],upbeatTags:["dance"]}));
   expect(ud1(up.result,"TEST UD Weak").rankWhy).not.toMatch(/dance suitability uncertain/);
   const mixed=await runUD(tag({slowTags:["slow"],upbeatTags:["party"]}));
-  expect(ud1(mixed.result,"TEST UD Weak").rankWhy).toMatch(/similarity bounded: dance suitability uncertain/);
+  expect(ud1(mixed.result,"TEST UD Weak")).toBeUndefined();
   for (const c of [async(r:any)=>r.data.songs.map((s:any)=>({...s,status:"disabled"})),async()=>{throw Error("down");}]) {
-    const x=await runUD(c);expect(ud1(x.result,"TEST UD Weak").rankWhy).toMatch(/similarity bounded: dance suitability uncertain/);
+    const x=await runUD(c);expect(ud1(x.result,"TEST UD Weak")).toBeUndefined();
   }
 });

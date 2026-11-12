@@ -95,6 +95,20 @@ export function catalogueFitFacts(s: { energy?: number; danceability?: number })
 /** Similarity ceiling when avoid-slow is active but upbeat dance suitability is not adequately supported. */
 export const UNCERTAIN_DANCE_SIMILARITY_CAP = 2;
 
+/** Fresh automatic expansion only. A withheld unknown is NOT a classification as slow.
+ * Positive curated/provider/estimated acoustic evidence can support fit; tempo, reissue
+ * year, popularity and artist/title resemblance cannot. Conflicting slow tags fail closed. */
+export function automaticDanceFailure(fit: EventFit | undefined, facts: FitFacts | undefined): string | undefined {
+  if (!fit?.avoidSlow) return undefined;
+  const f = facts ?? {}, e = num10(f.energy), d = num10(f.danceability);
+  const es = strength(f.energySource, e !== undefined), ds = strength(f.danceabilitySource, d !== undefined);
+  if (f.community?.slowTags.length) return "Conflicting slow/ballad evidence: automatic dance suitability not established";
+  const supported = e !== undefined && d !== undefined && es !== "unknown" && ds !== "unknown" && e >= 5 && d >= 5 && (e >= 7 || d >= 7);
+  const groove = d !== undefined && ds === "strong" && d >= 7 && (e === undefined || e > 4);
+  const tags = !!f.community?.upbeatTags.length && !(e !== undefined && e <= 4) && !(d !== undefined && d <= 4);
+  return supported || groove || tags ? undefined : "Upbeat dance suitability unestablished — withheld from automatic expansion, not classified slow";
+}
+
 export interface FitResult {
   /** Reason the candidate is excluded (strong evidence only), else undefined. */ exclude?: string;
   /** Evidence lines to add (points may be negative). */ lines: { kind: "familiarTrack" | "unfamiliarTrack" | "slowEstimate" | "discoveryTrack"; text: string; points: number }[];

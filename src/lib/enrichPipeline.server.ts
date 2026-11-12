@@ -60,7 +60,7 @@ export interface EnrichStatus {
   retryAfterMs?: number;
 }
 
-interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number; lane?: ReturnType<typeof createProviderLane>; failed?: boolean }
+interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number; lane?: ReturnType<typeof createProviderLane>; failed?: boolean; timedOut?: boolean }
 
 async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx): Promise<Response> {
   if (ctx?.lane && !(await ctx.lane.ready())) { ctx.failed = true; throw new Error("Provider paused"); }
@@ -71,12 +71,13 @@ async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx):
   if (ctx?.signal.aborted) ctrl.abort(); else ctx?.signal.addEventListener("abort", onAbort);
   try {
     const response = await within(fetch(url, { ...init, signal: ctrl.signal }), Date.now() + ms, Date.now);
-    if (response === LATE) { ctrl.abort(); throw new Error("Provider request deadline"); }
+    if (response === LATE) { if (ctx) ctx.timedOut = true; ctrl.abort(); throw new Error("Provider request deadline"); }
     ctx?.lane?.response(response);
     if (ctx && !response.ok) ctx.failed = true;
     return response;
   } catch (err) {
     if (ctx) ctx.failed = true;
+    if (ctx && ctrl.signal.aborted) ctx.timedOut = true;
     throw err;
   } finally {
     clearTimeout(timer);
@@ -321,7 +322,8 @@ async function estimateWithAi(
 ): Promise<Array<AiEstimate | null>> {
   const out: Array<AiEstimate | null> = songs.map(() => null);
   const key = process.env.LOVABLE_API_KEY;
-  if (!key || !songs.length) return out;
+  if (!songs.length) return out;
+  if (!key) throw new Error("AI estimate unavailable");
   try {
     const { streamText } = await import("ai");
     const { createLovableAiGatewayProvider } = await import("./ai-gateway.server");
@@ -359,7 +361,7 @@ ${lines}`;
 
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
-    if (start < 0 || end <= start) return out;
+    if (start < 0 || end <= start) throw new Error("AI estimate unavailable");
     const parsed = JSON.parse(text.slice(start, end + 1)) as { items?: Array<Record<string, unknown>> };
     const score = (v: unknown) =>
       typeof v === "number" && Number.isFinite(v)
@@ -381,6 +383,7 @@ ${lines}`;
     }
   } catch (err) {
     console.warn("[enrichSongs] AI estimate unavailable; completed estimates retained");
+    throw new Error("AI estimate unavailable");
   }
   return out;
 }
@@ -504,6 +507,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const reusesMb = (prev: EnrichedSong | undefined) => !!(prev && (prev.genre || prev.year));
   let recoCursor = 0;
   const providerIncomplete = new Set<string>();
+  const providerTimeout = new Set<string>();
   const recoWorker = async () => {
     while (open()) {
       const q = missOrder[recoCursor++];
@@ -511,7 +515,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       const k = `${q.artistKey}\u0000${q.songKey}`;
       const songCtx = { ...recoCtx, failed: false };
       const r = await fetchReccoBeats(q.original.artist, q.original.song, songCtx);
-      if (open()) { recoDone.set(k, r); if (songCtx.failed) providerIncomplete.add(k); }
+      if (open()) { recoDone.set(k, r); if (songCtx.failed) providerIncomplete.add(k); if (songCtx.timedOut) providerTimeout.add(k); }
       if (recoCtx.lane.pausedUntil >= fetchUntil) return;
     }
   };
@@ -519,9 +523,11 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     const todo = missOrder.filter(q => !reusesMb(partial.get(`${q.artistKey}\u0000${q.songKey}`)));
     for (let i = 0; i < todo.length && open(); i += MUSICBRAINZ_GROUP) {
       const group = todo.slice(i, i + MUSICBRAINZ_GROUP);
-      const rows = await fetchMusicBrainzGroup(group.map(q => q.original), mbCtx);
-      if (mbCtx.lane.pausedUntil >= fetchUntil) return;
+      const groupCtx = { ...mbCtx, failed: false, timedOut: false };
+      const rows = await fetchMusicBrainzGroup(group.map(q => q.original), groupCtx);
+      if (open() && groupCtx.failed) for (const q of group) { const k = `${q.artistKey}\u0000${q.songKey}`; providerIncomplete.add(k); if (groupCtx.timedOut) providerTimeout.add(k); mbDone.set(k, null); }
       if (open() && rows) group.forEach((q, j) => { const k = `${q.artistKey}\u0000${q.songKey}`; mbDone.set(k, rows[j] ?? null); if (rows[j]?.incomplete) providerIncomplete.add(k); });
+      if (mbCtx.lane.pausedUntil >= fetchUntil) return;
     }
   };
   if (missOrder.length) {
@@ -535,14 +541,19 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   // Assemble from whatever each provider completed. Per-field provenance priority: a fresh value replaces a known one
   // only when its source ranks at least as high, so a loose-match estimate never downgrades cached provider facts.
   const unfinished = new Set<string>(providerIncomplete);
-  if (providerIncomplete.size) timeout("fetch");
+  if (providerTimeout.size) timeout("fetch");
+  if (providerIncomplete.size > providerTimeout.size) { status.complete = false; (status.failed ??= []).push("fetch"); }
   for (const q of missOrder) {
     const k = `${q.artistKey}\u0000${q.songKey}`;
     if (fetched.has(k)) continue;
     const prev = partial.get(k);
     const reusedMb = reusesMb(prev);
     const hasReco = recoDone.has(k), hasMb = reusedMb || mbDone.has(k);
-    if (!hasReco || !hasMb) { unfinished.add(k); timeout("fetch"); }
+    if (!hasReco || !hasMb) {
+      unfinished.add(k);
+      if (now() >= fetchUntil) timeout("fetch");
+      else { status.complete = false; if (!status.failed?.includes("fetch")) (status.failed ??= []).push("fetch"); }
+    }
     if (!hasReco && !(mbDone.has(k))) {
       if (prev) fetched.set(k, { ...prev, artist: q.original.artist, song: q.original.song, source: prev.energy != null ? prev.source : "MusicBrainz" });
       continue;
@@ -601,8 +612,10 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       }
     };
     let late = false;
-    try { late = await within(work(), Math.min(aiUntil, now() + L.aiMs), now) === LATE; }
-    catch { (status.failed ??= []).push("ai"); status.complete = false; }
+    // Reuse unused provider time; never extend the fixed request end. A healthy 6–12s
+    // estimate can finish after a quick provider miss instead of always losing at 4s.
+    try { late = await within(work(), aiUntil, now) === LATE; }
+    catch { (status.failed ??= []).push("ai"); status.complete = false; for (const { k } of needAi) unfinished.add(k); }
     aiClosed = true;
     if (late) { aiCtrl.abort(); timeout("ai"); for (const { k } of needAi) unfinished.add(k); }
     const est = completed;

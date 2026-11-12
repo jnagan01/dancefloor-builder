@@ -47,7 +47,7 @@ async function settle(h: any, d: ReturnType<typeof deferredEnrich>, gen: Promise
 }
 
 describe('owned-library facts are gathered BEFORE ranking (timing regression)', () => {
-  it('holds ranking until the bounded lookup settles; rankWhy and fit facts agree; verified low energy+dance excludes, estimate only penalises', async () => {
+  it('holds ranking until lookup settles; fresh avoid-slow admits supported facts only, not low-both estimates', async () => {
     const d = deferredEnrich();
     const h = harness({ rows: { A: row({ hours: '4', eventFit: { avoidSlow: true } }) }, services: { crowd, recommend: async () => ({ suggestions: [] }), enrich: d.enrich } });
     await h.flush(); h.library(lib); await h.flush();
@@ -63,10 +63,7 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     const est = rows.find((t: any) => t.song === 'Estimated Slow');
     const up = rows.find((t: any) => t.song === 'Upbeat');
     expect(rows.find((t: any) => t.song === 'Verified Slow')).toBeUndefined();
-    expect(est, 'estimates never exclude').toBeTruthy();
-    expect(est.energy).toBe(2); expect(est.danceability).toBe(2);
-    expect(est.rankWhy).toMatch(/Energy 2\/10 .*danceability 2\/10 .*low-both slow risk/);
-    expect(est.rankWhy).not.toMatch(/no energy or danceability data/);
+    expect(est, 'unsupported automatic fit is withheld, not classified slow').toBeUndefined();
     expect(up.energy).toBe(8); expect(up.year).toBe(1972); // verified file tag beats provider year
     // Each owned key was requested exactly once (final pass never re-requests attempted additions).
     const flat = d.calls.flat().map(factsKey);
@@ -80,8 +77,8 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     await h.flush(); h.library(lib); await h.flush();
     await h.current.generate(); await h.flush();
     const owned = all(h.current.result).filter((t: any) => t.artist.startsWith(OWNED));
-    expect(owned.length).toBe(3); // unknown never excludes
-    for (const t of owned) { expect(t.energy).toBeUndefined(); expect(t.rankWhy).toMatch(/no energy or danceability data/); }
+    expect(owned).toEqual([]); // fresh avoid-slow fails closed; requests remain
+    expect(all(h.current.result).filter((t:any)=>t.fromUpload)).toHaveLength(2);
     expect(h.warnings.some((w: string) => /Couldn't reach the online music data service/.test(w))).toBe(true);
     h.unmount();
   });

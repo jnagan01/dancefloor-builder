@@ -192,7 +192,7 @@ try{
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))[created.id].lists).toEqual(created.lists);
    expect(await page.getByText('Event not saved',{exact:false}).count()).toBe(0);
  });
- await check('held-out slow risk: exact similarity bounded, estimates retained, strong low both excluded, save/reopen preserves requests',async()=>{
+ await check('held-out fresh avoid-slow: unsupported estimates withheld, supported fit retained, save/reopen preserves requests',async()=>{
    const additions=[{artist:'TEST Native Risk',song:'A',energy:4,danceability:4,popularity:10,src:'ai'},
      {artist:'TEST Native Supported',song:'B',energy:7,danceability:7,src:'provider'},
      {artist:'TEST Native Strong',song:'C',energy:4,danceability:4,src:'provider'},
@@ -213,9 +213,9 @@ try{
    await expect.poll(()=>find()?.lists?.warmUp?.length,{timeout:30000}).toBeGreaterThan(0);await page.waitForTimeout(1500);
    const saved=find(), all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
    expect(all.filter(r=>r.fromUpload).map(r=>r.song).sort()).toEqual(['One','Two','Three','Four','Keep (Live)'].sort());
-   const risk=all.find(r=>r.artist==='TEST Native Risk');expect(risk).toBeTruthy();expect(risk.rankWhy).toContain('ranked lower, not confirmed slow');expect(risk.rankWhy).toContain('similarity bounded');
+   expect(all.some(r=>r.artist==='TEST Native Risk')).toBe(false);
    expect(all.some(r=>r.artist==='TEST Native Supported')).toBe(true);expect(all.some(r=>r.artist==='TEST Native Strong')).toBe(false);
-   const weak=all.find(r=>r.artist==='TEST Native Weak');expect(weak).toBeTruthy();expect(weak.rankWhy).toContain('similarity bounded: dance suitability uncertain (not confirmed slow)');expect([weak.energy,weak.danceability]).toEqual([6,6]);
+   expect(all.some(r=>r.artist==='TEST Native Weak')).toBe(false);
    expect(all.find(r=>r.artist==='TEST Native Supported').rankWhy??'').not.toContain('dance suitability uncertain');
    expect(JSON.stringify(saved)).not.toMatch(/lookupPriority|similarityCap|upbeatTags/);
    expect(saved.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});

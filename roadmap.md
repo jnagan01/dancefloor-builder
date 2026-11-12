@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Targeted useful lookups and automatic avoid-slow admission
+- [x] Prioritize eligible, relevant duration candidates before bounded facts; preserve completed facts and prevent late dispatch/repeated work.
+- [x] Gate fresh automatic avoid-slow additions on positive dance evidence in ranking/refill; requests and passive saved selections unchanged.
+- [x] 949 tests / 90 files, 28 mocked reporting checks, automatic compilation OK; synthetic route reaches 5400/14400/7200 seconds in cold/mixed/warm cases; evidence in tests/fit/online-scheduling.md.
+- [ ] Exact-head hosted macOS/CodeQL requires GitHub; four isolated native scripts attempted but Electron binary/package absent locally. No installation or production access.
 ## Bounded online metadata scheduling
 - [x] Move dynamic cooldown before fenced dispatch; actual-route 2s/30s/120s, stale event/account and unsent-accounting regressions; 60 focused and 929 full tests / 89 files pass, automatic compilation OK. New exact-head Mac gate still required (43303936319 tests previous head).
 - [x] Separate provider queues, small serial enrichment batches, rate cooldowns and generation-wide bounds; preserve partial/cache facts and identity fences.

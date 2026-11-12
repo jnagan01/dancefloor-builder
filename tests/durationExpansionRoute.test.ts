@@ -59,10 +59,10 @@ it('actual route saturated usable library reserves AI metadata and capacity afte
  const {h}=await setup({tracks:[...saturated,...supply],enrich:async({data}:any)=>{data.songs.forEach((s:any)=>looked.add(`${s.artist}|${s.song}`));return {results:provider(data.songs).results.map((s:any)=>s.artist.startsWith('A crowded')?{...s,danceability:2}:s)};},recommend:async({data}:any)=>{const offset=calls;calls+=data.count;return {suggestions:supply.slice(offset,offset+data.count).map(t=>({artist:t.artist,song:t.title,energy:8,danceability:8}))};}});
  await h.current.generate();await h.flush();expect(calls).toBeGreaterThan(0);expect(looked.has(`${supply[0].artist}|${supply[0].title}`)).toBe(true);expect(looked.size).toBeLessThanOrEqual(610);seconds(h).forEach((s,i)=>{expect(s).toBeGreaterThanOrEqual([5400,14400,7200][i]);expect(s).toBeLessThan([5400,14400,7200][i]+120);});h.unmount();
 },30000);
-it('actual route sparse unknown/AI danceability remains eligible while strict BPM and decade stay enforced',async()=>{
+it('actual route sparse unsupported danceability stays an honest gap with avoidSlow, strict BPM/decade unchanged',async()=>{
  const good=tracks(120), bad=tracks().slice(0,20).map((t,i)=>({...t,artist:`Bad strict ${i}`,year:i%2?'1995':'2005',bpm:i%2?'120':'180'}));
  const {h}=await setup({tracks:[...bad,...good],enrich:async({data}:any)=>({results:data.songs.map((s:any)=>({...s,energy:8,danceability:s.artist.endsWith('a')?3:undefined,source:'AI',prov:{energy:'ai',danceability:'ai'}}))})});
- await h.current.generate();await h.flush();expect(seconds(h)).toEqual([5400,14400,7200]);expect(sections.flatMap(k=>h.current.result[k]).some(s=>s.artist.startsWith('Bad strict'))).toBe(false);h.unmount();
+ await h.current.generate();await h.flush();expect(seconds(h)).toEqual([0,0,0]);expect(sections.flatMap(k=>h.current.result[k]).some(s=>s.artist.startsWith('Bad strict'))).toBe(false);expect(h.warnings.join(' ')).toMatch(/Preparation is short/);expect(sections.flatMap(k=>h.current.result[k]).filter(s=>s.fromUpload)).toHaveLength(10);h.unmount();
 },30000);
 it('actual route varied-energy files retain warm-up, transition and peak roles after duration allocation',async()=>{
  const tt=tracks(120).slice(0,240);const energy=new Map(tt.map((t,i)=>[t.artist,i<50?6:i<175?8:9]));

@@ -12,7 +12,7 @@
  * - A failed/timed-out chunk leaves its songs unknown (never fabricated) and is reported via `failed`.
  */
 export interface FactsRow { artist: string; song: string; energy?: number | null; danceability?: number | null; popularity?: number | null }
-export interface GatherOptions<E = unknown> { batchSize?: number; concurrency?: number; budget?: number; timeoutMs?: number; overallMs?: number; intervalMs?: number; readyAt?: () => number; isCurrent?: () => boolean; isIncomplete?: (e: E) => boolean }
+export interface GatherOptions<E = unknown> { batchSize?: number; concurrency?: number; budget?: number; timeoutMs?: number; overallMs?: number; intervalMs?: number; readyAt?: () => number; minDispatchMs?: () => number; isCurrent?: () => boolean; isIncomplete?: (e: E) => boolean }
 /** timedOutSongs ⊆ failedSongs. skippedAfterTimeout: unsent songs blocked by a deadline/cooldown.
  * skippedCancelled: unsent songs blocked by a stale generation/account. Neither spends budget or marks attempts. */
 export interface GatherReport { requested: number; found: number; failedSongs: number; timedOutSongs: number; skippedAfterTimeout: number; skippedCancelled: number; skippedByBudget: number; alreadyAttempted: number; incompleteSongs: number }
@@ -84,7 +84,7 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
             await new Promise(resolve => setTimeout(resolve, Math.min(100, ready - Date.now(), end - Date.now())));
           }
           if (opts.isCurrent?.() === false) { report.skippedCancelled += chunk.length; continue; }
-          if (timedOut || Date.now() >= end || Math.max(nextStart, opts.readyAt?.() ?? 0) >= end) {
+          if (timedOut || Date.now() >= end || Math.max(nextStart, opts.readyAt?.() ?? 0) >= end || end - Date.now() < Math.max(0, opts.minDispatchMs?.() ?? 0)) {
             report.skippedAfterTimeout += chunk.length;
             continue;
           }

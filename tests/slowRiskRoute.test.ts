@@ -30,11 +30,11 @@ it("real owned route bounds exact similarity, retains requests, and saves/reopen
     const result=all(h.current.result);
     expect(result.filter((r:any)=>r.fromUpload).map((r:any)=>`${r.artist}|${r.song}`).sort()).toEqual(REQUESTS.map(r=>`${r.artist}|${r.song}`).sort());
     expect(result.find((r:any)=>r.artist==="TEST Strong")).toBeUndefined();
-    const risk=result.find((r:any)=>r.artist==="TEST Risk");expect(risk?.rankWhy).toMatch(/ranked lower, not confirmed slow/);
+    expect(result.find((r:any)=>r.artist==="TEST Risk")).toBeUndefined();
     expect(result.find((r:any)=>r.artist==="TEST Supported")?.rankWhy).toMatch(/Last.fm/);
     await vi.advanceTimersByTimeAsync(1500);await h.flush();
     const saved=h.requests.at(-1);expect(h.errors).toEqual([]);expect(h.warnings.join(" ")).toMatch(/Preparation is short/);expect(saved.inputs.eventFit).toEqual(fit);expect(saved.lists).toBeDefined();h.unmount();
     const reopened=harness({eventId:id,rows:{[id]:{...row,inputs:saved.inputs,lists:saved.lists}},contract:true});await reopened.flush();
-    expect(all(reopened.current.result).find((r:any)=>r.artist==="TEST Risk")?.rankWhy).toBe(risk.rankWhy);expect(reopened.requests).toEqual([]);reopened.unmount();
+    expect(all(reopened.current.result).find((r:any)=>r.artist==="TEST Risk")).toBeUndefined();expect(reopened.requests).toEqual([]);reopened.unmount();
   } finally {vi.useRealTimers();}
 });

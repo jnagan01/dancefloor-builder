@@ -2,3 +2,4 @@
 - Use small serial generation chunks, independent bounded provider lanes and rate-paced grouped recording searches; retain partial streamed estimates and stale-generation fences, because queue volume or one hung provider must not monopolize lookup time.
 - Keep the cache adapter service-only behind authenticated handlers and existing schema; isolate timing/cache fixtures from real providers, accounts and files.
 - Wait for dynamic provider cooldowns in the gatherer's fenced pre-dispatch scheduler, not inside timed RPC callbacks; mark attempts and spend budget only when sending, because a late wait must never launch abandoned work.
+- Reuse unused phase time inside the fixed request end for estimates, preserve streamed partials on failure, and reserve observed dispatch latency before the generation cutoff; no deadline extension or transient negative cache.

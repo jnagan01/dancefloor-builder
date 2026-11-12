@@ -1102,12 +1102,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // With an active familiarity choice the server also upgrades warm cache rows lacking track popularity (bounded).
     const needPopularity = !!normalizeEventFit(eventFit)?.familiarity;
     let incompleteWarned = false;
-    let metadataReadyAt = 0;
+    let metadataReadyAt = 0, metadataDispatchMs = 0;
     const facts = createFactsGatherer<EnrichedSong>(
       async (songs) => {
         if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
         const started = Date.now();
         const reply = await enrichFn({ data: { songs, needPopularity } });
+        // Reserve enough remaining generation time for observed service latency plus transport margin.
+        metadataDispatchMs = Math.min(20_000, Math.max(metadataDispatchMs, Date.now() - started + 1_000));
         // Warm hits need no pacing; cold grouped MusicBrainz requests must not burst across invocations.
         metadataReadyAt = Math.max(started + (reply.status?.retryAfterMs === undefined ? 0 : 1000), Date.now() + (reply.status?.retryAfterMs ?? 0));
         return reply.results;
@@ -1115,6 +1117,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       (e) => factsKey(e),
       { budget: FACTS_BUDGET + r.warmUp.length + r.transition.length + r.peak.length, isIncomplete: (e) => !!e.incomplete,
         readyAt: () => metadataReadyAt,
+        minDispatchMs: () => metadataDispatchMs,
         isCurrent: () => genTokenRef.current === myToken && accountRef.current === accountAtStart },
     );
     const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
@@ -1397,7 +1400,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const orderedOwned = rankPool(broadOwned, p => {
           const t = p.trackIdx === undefined ? undefined : mergedLibrary.tracks[p.trackIdx];
           return t ? { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) } : rowCandidate(p.row, "ai");
-        }, rankCtx([...r.warmUp, ...r.transition, ...r.peak]), broadOwned.length).map(x => x.item);
+        }, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true }, broadOwned.length).map(x => x.item);
         const ownedQueue = orderedOwned.filter(p => generationFiles(p.row).some(f => Number.isFinite(f.seconds) && f.seconds > 0));
         const ownedReview = orderedOwned.filter(p => !generationFiles(p.row).some(f => Number.isFinite(f.seconds) && f.seconds > 0)).slice(0, 100);
         let ownedCursor = 0;
@@ -1418,6 +1421,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const reviewTargets = { warmUp: sectionTargetFor(r, "warmUp"), transition: sectionTargetFor(r, "transition"), peak: sectionTargetFor(r, "peak") };
         const maxRounds = Math.max(4, ...sectionOrder.map(k => Math.ceil(sectionTargetFor(r, k) / MAX_AI_RECOMMENDATION_BATCH_SIZE) + 3));
         const community = new Map<string, CommunityEvidence>();
+        const baseCandidate = (p: Pooled) => {
+          if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
+          return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
+        };
         const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
         const repairEnd = Date.now() + 90_000;
         const backgroundLookups = new Set<string>();
@@ -1435,8 +1442,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // so rankWhy and the displayed facts share one evidence set. Bounded, deterministic order (AI, owned, catalogue,
         // then identity); owned rows keep their file tags (mergeMeta never lets provider/AI values replace tags).
         const familiarityActive = !!normalizeEventFit(eventFit)?.familiarity;
-        const tier = (p: Pooled) => (p.row.aiSuggestion ? 0 : eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? 1 : 2);
-        const needFacts = [...pool.values()].filter((p) => p.trackIdx === undefined || needsFacts(p.row, familiarityActive) || strictLimitFailure(p.row, strictLimits)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1)).filter(p => {
+        const lookupCandidates = [...pool.values()].filter(p => addedAllowed(p.row) && !facts.wasAttempted(p.row) &&
+          (needsFacts(p.row, familiarityActive) || strictLimitFailure(p.row, strictLimits))).sort((a,b) => songIdentity(a.row.artist,a.row.song).localeCompare(songIdentity(b.row.artist,b.row.song)));
+        const lookupRanked = rankPool(lookupCandidates, baseCandidate, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true }).map(x => x.item);
+        // Prefer known usable files, then shared relevance; zero-length review discoveries cannot
+        // monopolize preparation lookup time. Sufficient catalogue facts need no acoustic upgrade.
+        const usable = new Set(lookupRanked.filter(p => generationFiles(p.row).some(f => Number.isFinite(f.seconds) && f.seconds > 0)));
+        const needFacts = [...lookupRanked.filter(p => p.row.aiSuggestion), ...lookupRanked.filter(p => !p.row.aiSuggestion && usable.has(p)), ...lookupRanked.filter(p => !p.row.aiSuggestion && !usable.has(p))].slice(0, 64).filter(p => {
           // Keep half of the EXISTING 600 lookup allowance for later recommendations.
           // Repeated rounds reuse cached attempts; library saturation cannot exhaust discovery's reserve.
           const key = factsKey(p.row);
@@ -1463,10 +1475,6 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // ranking below then reuses the same scorer with the evidence (lookupPriority leaves only the uncertain-dance similarity
         // bound off here, because community upbeat tags can lift it; slow-risk caps and exclusions still apply). Unattempted songs stay unknown and are reported.
         const fitNow = normalizeEventFit(eventFit);
-        const baseCandidate = (p: Pooled) => {
-          if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
-          return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
-        };
         if (fitNow && (fitNow.avoidSlow || fitNow.familiarity === "familiar") && pool.size) {
           const candidatesForLookup = [...pool.values()].filter((p) => addedAllowed(p.row) && !strictLimitFailure(p.row, strictLimits)).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
           const prelim = rankPool(candidatesForLookup, baseCandidate, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true }).map((x) => x.item);
@@ -1505,26 +1513,28 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           return true;
         }).map(([, p]) => p).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
         const rankStats: Parameters<typeof rankPool>[4] & object = {};
-        const ranked = rankPool(eligible, (p) => withCommunity(baseCandidate(p), p.row), rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]), eligible.length, rankStats);
+        const ranked = rankPool(eligible, (p) => withCommunity(baseCandidate(p), p.row), { ...rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]), automaticExpansion: true }, eligible.length, rankStats);
         r = fillRankedDuration(durationBase, ranked.map(({ item, rec }) => ({ row: { ...item.row, rankWhy: explainTop(rec) }, prefer: item.prefer })), durationTargets, generationFiles, generationPath, reviewTargets);
         refillAfterFeedback = () => {
-          const finalRanked = rankPool(eligible.filter(p => addedAllowed(p.row)), p => withCommunity(baseCandidate(p), p.row), rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]));
+          const finalRanked = rankPool(eligible.filter(p => addedAllowed(p.row)), p => withCommunity(baseCandidate(p), p.row), { ...rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]), automaticExpansion: true });
           r = fillRankedDuration(durationBase, finalRanked.map(({item,rec}) => ({row:{...item.row,rankWhy:explainTop(rec)},prefer:item.prefer})), durationTargets, generationFiles, generationPath, reviewTargets);
           if (!background) for (const key of ["warmUp", "transition", "peak"] as SectionKey[]) r[key] = applyVarietyReranker(r[key], { favoriteArtists: prefs.artists ?? [] });
         };
         if (rankStats.hidden?.slow) toast.info(`${rankStats.hidden.slow} candidate track${rankStats.hidden.slow === 1 ? " was" : "s were"} left out as slow/ballad additions (provider or measured energy and danceability). Remaining time stays an honest gap.`);
         if (strictDropped) toast.info(`${strictDropped} candidate track${strictDropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
-        if (failed.length && ranked.length) toast.error("AI suggestions unavailable for some sections — used other ranked candidates.");
-        durationReason = `${strictDropped} candidates failed verified BPM/decade limits or had verified danceability outside your range; ${rankStats.hidden?.slow ?? 0} had strong slow evidence. Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed.`;
+        durationReason = `${strictDropped} candidates failed verified BPM/decade limits or had verified danceability outside your range; ${rankStats.hidden?.slow ?? 0} had strong slow evidence; ${rankStats.hidden?.uncertainDance ?? 0} lacked supported upbeat dance fit (not classified slow). Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed.`;
         if (sectionOrder.every(k => remaining(k) === 0)) break;
         if (round === maxRounds || Date.now() >= repairEnd) { durationReason += " Bounded candidate/time limit reached."; break; }
         const before = new Set(pool.keys());
         const survivors = new Set(ranked.map(x => x.item));
         const selected = new Set([...r.warmUp, ...r.transition, ...r.peak].map(s => songIdentity(s.artist, s.song)));
         // Rejected discoveries relinquish capacity, but finite catalogue remains admitted.
-        removeWhere(p => !eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) && (!survivors.has(p) ||
+        removeWhere(p => !eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) && facts.wasAttempted(p.row) && (!survivors.has(p) ||
           (ownedCursor < ownedQueue.length && p.trackIdx !== undefined && !p.row.aiSuggestion && !selected.has(songIdentity(p.row.artist, p.row.song)))));
         admitOwned();
+        // Continue the relevant queued owned work before asking for more suggestions when
+        // it can fill the gap. Known unsuitable attempts still release discovery capacity.
+        if (lookupRanked.some(p => !facts.wasAttempted(p.row)) && needFacts.length && !strictDropped && !rankStats.hidden?.uncertainDance) continue;
         await Promise.all(
           sectionMap.map(async ({ key, label }) => {
             const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: [...r.peak, ...poolRows()] });
@@ -1568,7 +1578,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }),
         );
 
-        if (![...pool.keys()].some(key => !before.has(key))) { durationReason += " Sources returned no new candidates."; break; }
+        if (![...pool.keys()].some(key => !before.has(key)) && !lookupRanked.some(p => !facts.wasAttempted(p.row))) { durationReason += " Sources returned no new candidates."; break; }
         }
 
       }

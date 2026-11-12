@@ -50,7 +50,8 @@ describe('real event route: Last.fm track evidence and preparation feedback in a
         return { results: [] };
       },
       recommend: async () => {
-        return { suggestions: [sug('Bad Act', 'Never Track'), sug('Slow Act', 'Dismissed Track'), sug('Plain Act', 'Plain Song'), sug('Late Act', 'Late Song'), sug('Fav Act', 'Fav Song')] };
+        // Missing danceability intentionally requires the enrichment await where late feedback arrives.
+        return { suggestions: [sug('Bad Act', 'Never Track'), sug('Slow Act', 'Dismissed Track'), sug('Plain Act', 'Plain Song'), { ...sug('Late Act', 'Late Song'), danceability: undefined }, sug('Fav Act', 'Fav Song')] };
       },
     };
     h = harness({ rows: { A: row() }, services });

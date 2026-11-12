@@ -2,7 +2,7 @@ import { songIdentity, type Feedback, type Dismissal, type TrackNote } from "./k
 import { matchesFilter, type FilterFacts, type FilterState } from "./filters";
 import { similarTrackPoints, type SimilarTrackEvidence } from "./similarTracks";
 import { TIER_WEIGHT, sourceLabel, tierOf } from "./metaConfidence";
-import { evaluateFit, type EventFit, type FitFacts } from "./eventFit";
+import { automaticDanceFailure, evaluateFit, type EventFit, type FitFacts } from "./eventFit";
 
 /**
  * Shared deterministic ranking engine for the preparation panel AND every automatic expansion source
@@ -37,6 +37,8 @@ export interface RecInput {
   /** Community-lookup budget priority only (never final ranking): leave uncertain-dance similarity unbounded so the
    *  most request-relevant tracks are checked first, since their community tags may supply the missing upbeat support. */
   lookupPriority?: boolean;
+  /** Explicit fresh-generation lane only; never used for saved rows or quality replay. */
+  automaticExpansion?: boolean;
   /** Exact case-sensitive file identities already selected by event rows (primary + explicit extras). */
   inEventTrackIds?: Iterable<string>;
   feedback: Feedback[]; dismissed: Dismissal[]; notes?: Map<string, TrackNote>; eventTags?: string[];
@@ -47,7 +49,7 @@ export interface RecInput {
   artistUse?: readonly { artist: string; count: number }[];
   controls: RecControls; filter?: FilterState; limit?: number;
 }
-export interface RecOutput { items: Recommendation[]; hidden: { dismissed: number; never: number; inEvent: number; filtered: number; notOwned: number; /** Excluded by the event's avoid-slow choice on strong evidence. */ slow?: number } }
+export interface RecOutput { items: Recommendation[]; hidden: { dismissed: number; never: number; inEvent: number; filtered: number; notOwned: number; /** Excluded by the event's avoid-slow choice on strong evidence. */ slow?: number; uncertainDance?: number } }
 
 const norm = (s: string) => s.toLowerCase().replace(/^the\s+/, "").replace(/\s+/g, " ").trim();
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -109,6 +111,7 @@ export function recommend(input: RecInput): RecOutput {
     // Known exclusions beat similarity: strong slow evidence removes an automatic candidate before any scoring.
     const fitR = evaluateFit(fitChoice, cand);
     if (fitR.exclude) { hidden.slow = (hidden.slow ?? 0) + 1; continue; }
+    if (input.automaticExpansion && !input.lookupPriority && automaticDanceFailure(fitChoice, cand.fit)) { hidden.uncertainDance = (hidden.uncertainDance ?? 0) + 1; continue; }
     const dedupe = cand.trackId ? `f:${cand.trackId}` : `s:${key}`;
     if (seen.has(dedupe)) continue; seen.add(dedupe);
     const ev: Evidence[] = [];
