@@ -1,4 +1,6 @@
 # Preparation ranking architecture
 - Enumerate complete eligible finite catalogue candidates before shared ranking, reserve their admission within the bounded pool, and preserve per-field curated provenance without inventing exact years, because gap-sized/source-order admission hides stronger alternatives.
 - Merge metadata into an exact owned recording only when its full identity agrees; file tags outrank catalogue/provider estimates, because standard-recording facts must never be lent to a different remix or credit.
-- Allocate expansion by approved unique known-file seconds after shared ranking and identity/artist caps, retaining bounded review suggestions separately; sequence within sections because count trimming and cross-section surplus cannot establish preparation coverage.
+- Allocate expansion by approved unique known-file seconds after shared ranking and identity/artist caps, retaining bounded review suggestions separately; allocate known energy roles before nearest-role overflow and sequence within sections because count trimming and cross-section surplus cannot establish preparation coverage.
+- Pre-rank usable owned index candidates before bounded admission, reserve discovery capacity and existing lookup budget, and replenish rejected entries without evicting the finite catalogue; pool size alone is never preparation coverage.
+- Keep shared greedy artist-variety ranking heap-based by artist with original tie order, because complete large-library admission must not require quadratic candidate scans.

@@ -170,19 +170,46 @@ export function recommend(input: RecInput): RecOutput {
   const artistUse = new Map<string, number>();
   for (const s of input.inEvent) artistUse.set(norm(s.artist), (artistUse.get(norm(s.artist)) ?? 0) + 1);
   for (const a of input.artistUse ?? []) if (a.count > 0) artistUse.set(norm(a.artist), (artistUse.get(norm(a.artist)) ?? 0) + Math.floor(a.count));
-  const out: Recommendation[] = [];
-  while (out.length < limit && pool.length) {
-    let best = -1, bestScore = -Infinity;
-    for (let i = 0; i < pool.length; i++) {
-      const s = pool[i].score - c.artistVariety * 1.5 * (artistUse.get(norm(pool[i].artist)) ?? 0);
-      if (s > bestScore + 1e-9) { bestScore = s; best = i; }
+  // One heap head per artist: only that artist's penalty changes after a pick.
+  // This preserves the exact greedy scorer/tie order without a quadratic scan
+  // when duration admission evaluates a large in-memory library.
+  const groups = new Map<string, { pick: Recommendation; order: number }[]>();
+  pool.forEach((pick, order) => { const key = norm(pick.artist); const group = groups.get(key) ?? []; group.push({ pick, order }); groups.set(key, group); });
+  type Head = { key: string; index: number; score: number; order: number };
+  const heap: Head[] = [];
+  const better = (a: Head, b: Head) => a.score > b.score + 1e-9 || (Math.abs(a.score - b.score) <= 1e-9 && a.order < b.order);
+  const pushHead = (key: string, index: number) => {
+    const entry = groups.get(key)?.[index]; if (!entry) return;
+    const head = { key, index, score: entry.pick.score - c.artistVariety * 1.5 * (artistUse.get(key) ?? 0), order: entry.order };
+    heap.push(head); let pos = heap.length - 1;
+    while (pos > 0) { const parent = Math.floor((pos - 1) / 2); if (!better(head, heap[parent])) break; heap[pos] = heap[parent]; pos = parent; }
+    heap[pos] = head;
+  };
+  const popHead = () => {
+    const first = heap[0], last = heap.pop();
+    if (heap.length && last) {
+      let pos = 0;
+      while (pos * 2 + 1 < heap.length) {
+        let child = pos * 2 + 1;
+        if (child + 1 < heap.length && better(heap[child + 1], heap[child])) child++;
+        if (!better(heap[child], last)) break;
+        heap[pos] = heap[child]; pos = child;
+      }
+      heap[pos] = last;
     }
-    const [pick] = pool.splice(best, 1);
+    return first;
+  };
+  for (const key of groups.keys()) pushHead(key, 0);
+  const out: Recommendation[] = [];
+  while (out.length < limit && heap.length) {
+    const head = popHead(); if (!head) break;
+    const pick = groups.get(head.key)?.[head.index]?.pick; if (!pick) continue;
     const uses = artistUse.get(norm(pick.artist)) ?? 0;
     const penalty = c.artistVariety * 1.5 * uses;
     const final = penalty ? { ...pick, score: round(pick.score - penalty), evidence: [...pick.evidence, { kind: "variety" as const, text: `${pick.artist} already appears ${uses} time${uses === 1 ? "" : "s"} in this event or above`, points: -round(penalty) }] } : pick;
     out.push(final);
     artistUse.set(norm(pick.artist), uses + 1);
+    pushHead(head.key, head.index + 1);
   }
   return { items: out, hidden };
 }

@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Expansion duration repair
+- [x] Repair reviewed favourite fallback, saturated admission/lookup reserves, sparse dance metadata and section energy allocation; 889 full units / 86 files and 28 reporting tests pass; evidence updated.
 - [x] Fill each selected section duration after eligibility, ranking, exact matching and unique-file accounting; preserve expansion-off and saved snapshots.
 - [x] Add 8 synthetic actual-route and 3 pure duration regressions plus isolated Electron duration/reopen case; 881 units and 28 reporting tests pass, automatic build OK.
 - [ ] Native execution/macOS acceptance awaits GitHub: local isolated suite launch fails ENOENT (Electron binary absent); no native installation authorized. Existing workflow unchanged.

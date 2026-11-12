@@ -39,13 +39,23 @@ export function fillRankedDuration(
   }
   const usable: typeof ranked[number][] = [], review: typeof ranked[number][] = [];
   for (const item of ranked) (files(item.row).some(f => Number.isFinite(f.seconds) && f.seconds > 0) ? usable : review).push(item);
-  for (const lane of [usable, review]) for (const item of lane) {
+  // First give each energy role its ranked suitable recordings. Only then use
+  // nearest-role overflow; high-scoring peak rows cannot pre-empt warm-up files.
+  for (const lane of [usable, review]) for (const overflow of [false, true]) for (const item of lane) {
     const row = item.row, path = selectedPath(row), fs = files(row);
     if (identities.has(row.artist, row.song)) { identities.absorb(row.artist, row.song); continue; }
     if ((path && paths.has(path)) || fs.some(f => paths.has(f.identity))) continue;
     const artist = normalizeKey(row.artist);
     const open = sections.filter(s => targets[s] > 0 && totals[s] < targets[s] && (artists[s].get(artist) ?? 0) < HARD_ARTIST_CAP && (lane === usable || next[s].length < reviewTargets[s]));
-    const section = item.prefer && open.includes(item.prefer) ? item.prefer : open[0];
+    // Known energy gives unassigned recordings the same roles as the catalogue.
+    // Unknown energy remains unknown. If a role is full, use the nearest open role,
+    // not always the first section; shared rank order still decides admission.
+    const energy = row.energy;
+    const role = item.prefer ?? (typeof energy === "number" && Number.isFinite(energy)
+      ? energy <= 6 ? "warmUp" : energy <= 8 ? "transition" : "peak"
+      : undefined);
+    if (!overflow && role && !open.includes(role)) continue;
+    const section = role ? [...open].sort((a, b) => Math.abs(sections.indexOf(a) - sections.indexOf(role)) - Math.abs(sections.indexOf(b) - sections.indexOf(role)))[0] : open[0];
     if (!section) continue;
     next[section].push(row); identities.add(row.artist, row.song);
     artists[section].set(artist, (artists[section].get(artist) ?? 0) + 1);

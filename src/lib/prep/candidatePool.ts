@@ -76,5 +76,13 @@ export function createCandidatePool<R extends PoolRow, S>(o: PoolOptions<R, S>) 
     if (o.sectionRank(prefer) < o.sectionRank(old.prefer)) old.prefer = prefer;
     return false;
   }
-  return { offer, map };
+  function removeWhere(predicate: (entry: PoolEntry<R, S>) => boolean) {
+    for (const [key, entry] of map) if (predicate(entry)) { map.delete(key); credits.delete(key); }
+    alias = new AdditionKeySet();
+    for (const [key, entry] of map) {
+      alias.add(entry.row.artist, entry.row.song, key);
+      for (const credit of credits.get(key) ?? []) alias.absorb(credit.artist, credit.song, key);
+    }
+  }
+  return { offer, map, removeWhere };
 }

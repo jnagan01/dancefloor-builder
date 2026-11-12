@@ -345,6 +345,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   const [eventName, setEventName] = useState(fresh.eventName);
   const [spotifyJob, setSpotifyJob] = useState<SpotifyExportJob | null>(null);
   const [result, setResult] = useState<GenerationResult | null>(null);
+  const [generationShortage, setGenerationShortage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const recommendFn = useServerFn(recommendSongsForSection);
   const neighborsFn = useServerFn(getArtistNeighbors);
@@ -452,6 +453,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setIncludeCombined(false);
     setEventName("");
     setResult(null);
+    setGenerationShortage(null);
     setMatches({});
     setSearchOpen(null);
     setSearchQuery("");
@@ -1333,9 +1335,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           return withProv({ artist: t.artist, song: t.title, fromUpload: false, bpm: parseBpm(t.bpm), camelot: toCamelot(t.key), genre: t.genre, year: yearNum, explicit: detectExplicitFromTitle(t.title), metaSource: "Library", aiReason: reason } as PRow, "tags");
         };
         // Credit aliases collapse into one pool entry BEFORE ranking (shared pure helper; arrival-order independent).
-        const { offer } = createCandidatePool<PRow, SectionKey>({
+        const { offer, removeWhere } = createCandidatePool<PRow, SectionKey>({
           cap: POOL_CAP, taken: (a, so) => taken.has(a, so), identity: songIdentity, ownedRow, sectionRank: secIdx,
-          admissionKey: row => `${eligibleCatalogueKeys.has(songIdentity(row.artist, row.song)) ? "0" : "1"}:${songIdentity(row.artist, row.song)}`,
+          admissionKey: row => `${eligibleCatalogueKeys.has(songIdentity(row.artist, row.song)) ? "0" : row.aiSuggestion ? "1" : "2"}:${songIdentity(row.artist, row.song)}`,
           merge: (a, b) => ({ ...mergeMeta(a, b, b.metaProv ?? "estimate"), ...(b.catalogueDecade && !a.catalogueDecade ? { catalogueDecade: b.catalogueDecade } : {}) }), map: pool,
           exactOwned: (row) => {
             const idx = generationResolver.resolve({ artist: row.artist, song: row.song });
@@ -1344,7 +1346,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           },
         });
         const poolRows = () => [...pool.values()].map((p) => p.row);
-        const remaining = (k: SectionKey) => Math.max(0, Math.ceil((durationTargets[k] - durationTotals(r, generationFiles)[k]) / clientCoverage.averageSeconds));
+        const remaining = (k: SectionKey) => {
+          const lengths = [...r.warmUp, ...r.transition, ...r.peak].filter(s => !s.fromUpload).flatMap(generationFiles).map(f => f.seconds).filter(s => Number.isFinite(s) && s > 0);
+          const average = lengths.length ? Math.min(clientCoverage.averageSeconds, lengths.reduce((a,b) => a+b,0) / lengths.length) : clientCoverage.averageSeconds;
+          return Math.max(0, Math.ceil((durationTargets[k] - durationTotals(r, generationFiles)[k]) / average));
+        };
 
         // Owned library sources: Last.fm exact similar tracks, then musical neighbours (no raw-order cap; variety decides).
         if (mergedLibrary?.tracks.length) {
@@ -1366,13 +1372,32 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
         // Inspect the account's in-memory index only; no disk access or raw-order padding. Every admitted
         // recording still passes shared facts/ranking and strict rules. Stable pool admission bounds saturation.
+        const broadOwned: Pooled[] = [];
         for (let idx = 0; idx < mergedLibrary.tracks.length; idx++) {
           const row = ownedRow(idx);
           const relevant = !!(prefs.bpmRange || prefs.decades.length || prefs.danceRange || prefs.vibe ||
             prefs.genres.some(g => row.genre?.toLowerCase().includes(g.toLowerCase())) ||
             isFavoriteArtist(row.artist, [...favoriteArtists, ...uniqueSongs.map(s => s.artist), ...neighborArtists]));
-          if (relevant && addedAllowed(row) && !strictLimitFailure(row, strictLimits)) offer(row);
+          if (relevant && addedAllowed(row) && !strictLimitFailure(row, strictLimits)) broadOwned.push({ row, trackIdx: idx });
         }
+        // Scan index references, not audio. Shared ranking orders known usable candidates
+        // BEFORE bounded admission; unknown/unusable files cannot crowd out later usable ones.
+        const orderedOwned = rankPool(broadOwned, p => {
+          const t = p.trackIdx === undefined ? undefined : mergedLibrary.tracks[p.trackIdx];
+          return t ? { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) } : rowCandidate(p.row, "ai");
+        }, rankCtx([...r.warmUp, ...r.transition, ...r.peak]), broadOwned.length).map(x => x.item);
+        const ownedQueue = orderedOwned.filter(p => generationFiles(p.row).some(f => Number.isFinite(f.seconds) && f.seconds > 0));
+        const ownedReview = orderedOwned.filter(p => !generationFiles(p.row).some(f => Number.isFinite(f.seconds) && f.seconds > 0)).slice(0, 100);
+        let ownedCursor = 0;
+        const admitOwned = () => {
+          // Reserve discovery capacity even in very large libraries. Catalogue is independently reserved.
+          const limit = POOL_CAP - catalogue.length - MAX_AI_RECOMMENDATION_BATCH_SIZE * sectionOrder.length;
+          while (ownedCursor < ownedQueue.length && pool.size < Math.max(0, limit)) {
+            const p = ownedQueue[ownedCursor++]; offer(p.row, p.prefer);
+          }
+        };
+        admitOwned();
+        for (const p of ownedReview) if (pool.size < POOL_CAP - catalogue.length - MAX_AI_RECOMMENDATION_BATCH_SIZE * sectionOrder.length) offer(p.row);
         // Complete eligible finite catalogue: no old preference-score/gap pre-cut. Reserved admission keeps these
         // alternatives available even when discovered sources saturate the cap; rankPool alone selects final slots.
         for (const c of catalogue) offer(c.row as PRow, background ? "warmUp" : c.prefer);
@@ -1383,6 +1408,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const community = new Map<string, CommunityEvidence>();
         const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
         const repairEnd = Date.now() + 90_000;
+        const backgroundLookups = new Set<string>();
         const boundedRecommend = async (request: Parameters<typeof recommendFn>[0]) => {
           let timer: ReturnType<typeof setTimeout> | undefined;
           try {
@@ -1397,8 +1423,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // so rankWhy and the displayed facts share one evidence set. Bounded, deterministic order (AI, owned, catalogue,
         // then identity); owned rows keep their file tags (mergeMeta never lets provider/AI values replace tags).
         const familiarityActive = !!normalizeEventFit(eventFit)?.familiarity;
-        const tier = (p: Pooled) => (p.row.aiSuggestion ? 0 : p.trackIdx !== undefined ? 1 : 2);
-        const needFacts = [...pool.values()].filter((p) => p.trackIdx === undefined || needsFacts(p.row, familiarityActive)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
+        const tier = (p: Pooled) => (p.row.aiSuggestion ? 0 : eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? 1 : 2);
+        const needFacts = [...pool.values()].filter((p) => p.trackIdx === undefined || needsFacts(p.row, familiarityActive) || strictLimitFailure(p.row, strictLimits)).sort((a, b) => tier(a) - tier(b) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1)).filter(p => {
+          // Keep half of the EXISTING 600 lookup allowance for later recommendations.
+          // Repeated rounds reuse cached attempts; library saturation cannot exhaust discovery's reserve.
+          const key = factsKey(p.row);
+          if (p.row.aiSuggestion || backgroundLookups.has(key)) return true;
+          if (backgroundLookups.size >= Math.floor(FACTS_BUDGET / 2)) return false;
+          backgroundLookups.add(key); return true;
+        });
         if (needFacts.length) {
           const online = await enrichBatch(needFacts.map((p) => p.row));
           // Stale-generation/account fence after the await: never rank or apply with another run's or account's state.
@@ -1453,7 +1486,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const eligible = [...pool.entries()].filter(([, p]) => {
           if (!addedAllowed(p.row)) return false;
           if (strictLimitFailure(p.row, strictLimits)) { strictDropped++; return false; }
-          if (prefs.danceRange && (typeof p.row.danceability !== "number" || !usableForHardRule(attrSource(p.row, "danceability"), true, "danceability") || p.row.danceability < prefs.danceRange[0] || p.row.danceability > prefs.danceRange[1])) { strictDropped++; return false; }
+          if (prefs.danceRange && typeof p.row.danceability === "number" && usableForHardRule(attrSource(p.row, "danceability"), true, "danceability") && (p.row.danceability < prefs.danceRange[0] || p.row.danceability > prefs.danceRange[1])) { strictDropped++; return false; }
           const bpm = typeof p.row.bpm === "number" ? p.row.bpm : undefined;
           // The vibe's tempo window applies only to a verified tempo; estimates never exclude.
           if (!prefs.bpmRange && vbpm && bpm && usableForHardRule(attrSource(p.row, "bpm"), true, "bpm") && (bpm < vbpm[0] - 15 || bpm > vbpm[1] + 15)) return false;
@@ -1470,10 +1503,16 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         if (rankStats.hidden?.slow) toast.info(`${rankStats.hidden.slow} candidate track${rankStats.hidden.slow === 1 ? " was" : "s were"} left out as slow/ballad additions (provider or measured energy and danceability). Remaining time stays an honest gap.`);
         if (strictDropped) toast.info(`${strictDropped} candidate track${strictDropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
         if (failed.length && ranked.length) toast.error("AI suggestions unavailable for some sections — used other ranked candidates.");
-        durationReason = `${strictDropped} candidates lacked verified BPM/decade/danceability within your limits; ${rankStats.hidden?.slow ?? 0} had strong slow evidence. Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed.`;
+        durationReason = `${strictDropped} candidates failed verified BPM/decade limits or had verified danceability outside your range; ${rankStats.hidden?.slow ?? 0} had strong slow evidence. Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed.`;
         if (sectionOrder.every(k => remaining(k) === 0)) break;
-        if (round === maxRounds || Date.now() >= repairEnd || pool.size >= POOL_CAP) { durationReason += " Bounded candidate/time limit reached."; break; }
-        const before = pool.size;
+        if (round === maxRounds || Date.now() >= repairEnd) { durationReason += " Bounded candidate/time limit reached."; break; }
+        const before = new Set(pool.keys());
+        const survivors = new Set(ranked.map(x => x.item));
+        const selected = new Set([...r.warmUp, ...r.transition, ...r.peak].map(s => songIdentity(s.artist, s.song)));
+        // Rejected discoveries relinquish capacity, but finite catalogue remains admitted.
+        removeWhere(p => !eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) && (!survivors.has(p) ||
+          (ownedCursor < ownedQueue.length && p.trackIdx !== undefined && !p.row.aiSuggestion && !selected.has(songIdentity(p.row.artist, p.row.song)))));
+        admitOwned();
         await Promise.all(
           sectionMap.map(async ({ key, label }) => {
             const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: [...r.peak, ...poolRows()] });
@@ -1495,7 +1534,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     if (!owner || (counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
                     if (offer(toAiSong(sug) as PRow, key)) { counts.set(owner, (counts.get(owner) ?? 0) + 1); added++; }
                   }
-                  if (added === 0) return;
+                  if (added === 0) break;
                 } catch (err) { console.error("Favorite-artist recommend failed", err); break; }
               }
             }
@@ -1517,7 +1556,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }),
         );
 
-        if (pool.size === before) { durationReason += " Sources returned no new candidates."; break; }
+        if (![...pool.keys()].some(key => !before.has(key))) { durationReason += " Sources returned no new candidates."; break; }
         }
 
       }
@@ -1636,6 +1675,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const fs = r.finalShortfall;
     const actualSeconds = durationTotals(r, generationFiles);
     const durationGaps = (["warmUp", "transition", "peak"] as SectionKey[]).filter(k => actualSeconds[k] < durationTargets[k]);
+    setGenerationShortage(expand && durationGaps.length ? durationReason : null);
     if (expand ? durationGaps.length > 0 : clientCoverage.baselineShortSeconds > 0) {
       const parts: string[] = [];
       if (fs.warmUp > 0) parts.push(`${fs.warmUp} short in Warm Up`);
@@ -3147,6 +3187,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               <section className="space-y-1 border-y border-border py-3" aria-label="Event duration coverage">
                 <p className="text-sm">{targetMessage}</p>
                 <p className="text-sm">{durationLabel(coverage.report.knownSec)} approved usable unique length · {coverage.complete ? "Every section meets its selected preparation duration." : "Selected preparation duration is not yet covered in every section. Review unapproved or missing files and unknown lengths; add eligible tracks or check your expansion limits."}</p>
+                {!coverage.complete && generationShortage && <p className="text-sm text-warning" role="status">{generationShortage}</p>}
                 <p className="text-xs text-muted-foreground">{coverage.report.unknownLength} eligible tracks with unknown length · {coverage.report.duplicateCount} repeated files not counted. {planningMessage} Client planning lengths do not confirm file selection or export eligibility.</p>
               </section>
               <section className="space-y-2 border-y border-border py-3" aria-label="Export readiness">

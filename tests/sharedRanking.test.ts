@@ -18,6 +18,14 @@ const base = (candidates: Candidate[], extra: Partial<RecInput> = {}): RecInput 
 });
 
 describe('shared ranking engine', () => {
+  it('large-library heap preserves the original greedy scores, ties and artist penalties', () => {
+    const cands = Array.from({length:240},(_,i)=>lib(`Artist ${i%23}`,`Song ${i}`,i%3?{genre:'House',genreSource:'tags'}:{}));
+    const ctx=base(cands,{preferences:{genres:['House']},limit:240,inEvent:[{artist:'Artist 3',song:'Existing'}]});
+    const neutral=recommend({...ctx,controls:{...ctx.controls,artistVariety:0}}).items;
+    const pending=neutral.map(r=>({...r})),uses=new Map([['artist 3',1]]),expected=[];
+    while(pending.length){let best=0,score=-Infinity;for(let i=0;i<pending.length;i++){const n=pending[i].score-0.75*(uses.get(pending[i].artist.toLowerCase())??0);if(n>score+1e-9){score=n;best=i;}}const [p]=pending.splice(best,1);expected.push([p.key,Math.round(score*100)/100]);const key=p.artist.toLowerCase();uses.set(key,(uses.get(key)??0)+1);}
+    expect(recommend(ctx).items.map(r=>[r.key,r.score])).toEqual(expected);
+  });
   it('panel recommend and expansion rankPool give identical scores and explanations for the same context', () => {
     const cands = [lib('Double', 'Hit'), lib('Single', 'Hit'), lib('Neighbour', 'Song'), lib('Plain', 'Song', { genre: 'House', genreSource: 'tags' })];
     let k = emptyKnowledge(); k = setEventTags(k, 'E', ['singalong']); k = setTrackNote(k, 'id/Plain/Song', { tags: ['singalong'] });

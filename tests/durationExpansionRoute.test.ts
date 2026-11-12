@@ -12,9 +12,9 @@ const provider=(songs:any[])=>({results:songs.map(s=>({...s,bpm:120,year:2005,en
 const harness=req('./helpers/eventRouteHarness.cjs').createEventRouteHarness({vdj,dance,audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions});
 function seconds(h:any){return sections.map(section=>exportReadiness(h.current.result[section].map((song:any,i:number)=>({song,match:h.current.matches[`${section}:${i}:${dance.dedupeKey(song.artist,song.song)}`]})),h.lib).knownSec);}
 async function setup(opts:any={}){
- const inputs={songs:clients,hours:'3.75',buffer:opts.buffer??2,listType:opts.background?'dinner':'dance',minutes:'60',expand:!opts.off,eventName:'TEST ONLY duration',split:opts.background?undefined:{warmUp:45,transition:120,peak:60},decades:['2000s'],bpmRange:[110,130],danceRange:[6,10],eventFit:{avoidSlow:true},requireCleanVersions:false,ownedOnlyExpansion:false,includeSeasonalTracks:false};
+ const inputs={songs:clients,hours:'3.75',buffer:opts.buffer??2,listType:opts.background?'dinner':'dance',minutes:'60',expand:!opts.off,eventName:'TEST ONLY duration',split:opts.background?undefined:{warmUp:45,transition:120,peak:60},artistsInput:(opts.artists??[]).join(', '),decades:['2000s'],bpmRange:[110,130],danceRange:[6,10],eventFit:{avoidSlow:true},requireCleanVersions:false,ownedOnlyExpansion:false,includeSeasonalTracks:false};
  const lists={warmUp:clients.map(s=>({...s,fromUpload:true})),transition:[],peak:[],selections:opts.selections??{}};
- const h=harness({eventId:id,rows:{[id]:{id,name:inputs.eventName,updated_at:'2026-11-12T00:00:00Z',inputs,lists}},contract:true,services:{enrich:async({data}:any)=>provider(data.songs),recommend:opts.recommend??(async()=>({suggestions:[]}))}});
+ const h=harness({eventId:id,rows:{[id]:{id,name:inputs.eventName,updated_at:'2026-11-12T00:00:00Z',inputs,lists}},contract:true,services:{enrich:opts.enrich??(async({data}:any)=>provider(data.songs)),recommend:opts.recommend??(async()=>({suggestions:[]}))}});
  await h.flush();h.lib=vdj.buildLibrary(opts.tracks??tracks());h.library(h.lib);await h.flush();return {h,inputs,lists};
 }
 it('actual route 45/120/60 at 2x fills 90/240/120 individually with short files beyond old counts, save/reopen unchanged',async()=>{
@@ -37,3 +37,35 @@ it('actual route metadata-rejected first suggestions are replaced by later exact
  await h.current.generate();await h.flush();expect(seconds(h)).toEqual([5400,14400,7200]);expect(sections.flatMap(k=>h.current.result[k]).some(s=>reject.some(t=>t.artist===s.artist))).toBe(false);h.unmount();
 },30000);
 it('actual route hung suggestion provider terminates at bounded waits and never claims duration coverage',async()=>{vi.useFakeTimers();try{const {h}=await setup({tracks:[],recommend:()=>new Promise(()=>{})});const generating=h.current.generate();await vi.advanceTimersByTimeAsync(13000);await generating;await h.flush();expect(seconds(h)).toEqual([0,0,0]);expect(h.warnings.join(' ')).toMatch(/Preparation is short/);h.unmount();}finally{vi.useRealTimers();}},30000);
+it.each(['empty','duplicates'])('actual route %s favourite response still runs general usable-file sourcing',async(mode)=>{
+ const tt=tracks(120).map(t=>({...t,bpm:''}));let general=0,favourites=0;
+ // Use tags with unknown BPM, upgraded by the real enrichment pass only for AI offers.
+ let calls=0;
+ const s=await setup({tracks:tt,artists:['Client 0'],enrich:async({data}:any)=>provider(data.songs),recommend:async({data}:any)=>{
+  if(data.onlyArtists){favourites++;return {suggestions:mode==='empty'?[]:[{artist:'Client 0',song:'Request 0',energy:8,danceability:8}]};}
+  general++;const offset=calls;calls+=data.count;return {suggestions:tt.slice(offset,offset+data.count).map(t=>({artist:t.artist,song:t.title,energy:8,danceability:8}))};
+ }});
+ await s.h.current.generate();await s.h.flush();expect(favourites).toBeGreaterThan(0);expect(general).toBeGreaterThan(0);expect(seconds(s.h)).toEqual([5400,14400,7200]);s.h.unmount();
+},30000);
+it('actual route >2000 unsuitable owned rows cannot crowd out later usable files, reversed input selects same identities',async()=>{
+ const unsuitable=Array.from({length:2200},(_,i)=>({artist:`A bad ${i}`,title:`Bad ${i}`,filePath:`/synthetic/bad/${i}.mp3`,bpm:i%3===0?'180':i%3===1?'':'120',year:'2005',songLength:0}));
+ const known=tracks(120);const lib=[...unsuitable,...known];const results=[];
+ for(const tt of [lib,[...lib].reverse()]){const {h}=await setup({tracks:tt});await h.current.generate();await h.flush();expect(seconds(h)).toEqual([5400,14400,7200]);results.push(sections.map(k=>h.current.result[k].map(s=>`${s.artist}|${s.song}`)));h.unmount();}
+ expect(results[1]).toEqual(results[0]);
+},30000);
+it('actual route saturated usable library reserves AI metadata and capacity after verified dance rejection',async()=>{
+ const saturated=Array.from({length:2200},(_,i)=>({artist:`A crowded ${i}`,title:`Crowded ${i}`,filePath:`/synthetic/crowded/${i}.mp3`,bpm:'120',year:'2005',songLength:1}));
+ const supply=tracks(120).map(t=>({...t,bpm:''}));let calls=0;const looked=new Set<string>();
+ const {h}=await setup({tracks:[...saturated,...supply],enrich:async({data}:any)=>{data.songs.forEach((s:any)=>looked.add(`${s.artist}|${s.song}`));return {results:provider(data.songs).results.map((s:any)=>s.artist.startsWith('A crowded')?{...s,danceability:2}:s)};},recommend:async({data}:any)=>{const offset=calls;calls+=data.count;return {suggestions:supply.slice(offset,offset+data.count).map(t=>({artist:t.artist,song:t.title,energy:8,danceability:8}))};}});
+ await h.current.generate();await h.flush();expect(calls).toBeGreaterThan(0);expect(looked.has(`${supply[0].artist}|${supply[0].title}`)).toBe(true);expect(looked.size).toBeLessThanOrEqual(610);seconds(h).forEach((s,i)=>{expect(s).toBeGreaterThanOrEqual([5400,14400,7200][i]);expect(s).toBeLessThan([5400,14400,7200][i]+120);});h.unmount();
+},30000);
+it('actual route sparse unknown/AI danceability remains eligible while strict BPM and decade stay enforced',async()=>{
+ const good=tracks(120), bad=tracks().slice(0,20).map((t,i)=>({...t,artist:`Bad strict ${i}`,year:i%2?'1995':'2005',bpm:i%2?'120':'180'}));
+ const {h}=await setup({tracks:[...bad,...good],enrich:async({data}:any)=>({results:data.songs.map((s:any)=>({...s,energy:8,danceability:s.artist.endsWith('a')?3:undefined,source:'AI',prov:{energy:'ai',danceability:'ai'}}))})});
+ await h.current.generate();await h.flush();expect(seconds(h)).toEqual([5400,14400,7200]);expect(sections.flatMap(k=>h.current.result[k]).some(s=>s.artist.startsWith('Bad strict'))).toBe(false);h.unmount();
+},30000);
+it('actual route varied-energy files retain warm-up, transition and peak roles after duration allocation',async()=>{
+ const tt=tracks(120).slice(0,240);const energy=new Map(tt.map((t,i)=>[t.artist,i<50?6:i<175?8:9]));
+ const {h}=await setup({tracks:tt,enrich:async({data}:any)=>({results:provider(data.songs).results.map((s:any)=>({...s,energy:energy.get(s.artist)??8}))})});
+ await h.current.generate();await h.flush();expect(seconds(h)).toEqual([5400,14400,7200]);for(const [i,k] of sections.entries())expect(h.current.result[k].filter(s=>!s.fromUpload).every(s=>s.energy===[6,8,9][i])).toBe(true);h.unmount();
+},30000);

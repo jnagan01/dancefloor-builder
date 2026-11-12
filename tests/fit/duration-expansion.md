@@ -26,19 +26,28 @@ The 2× fixture produces 55/120/60 rows, including all ten client requests; usab
 
 ## Bounds and limitations
 
-- Candidate pool remains 2,000, deterministically bounded with catalogue admission reserved. Larger eligible libraries can still have alternatives outside this pool; no raw-order padding or relaxed constraints.
+- Candidate pool remains 2,000, with complete eligible catalogue admission and 120 discovery places reserved (40 per active section). Shared ranking orders usable owned index candidates before bounded admission; unselected owned candidates rotate while eligible discoveries and selected recordings remain. Rejected entries relinquish capacity. No raw-order padding or relaxed constraints.
 - General recommendation rounds are bounded by the prior maximum section-call allowance (at least four, or estimated section count / 40 rounded up plus three). Each call requests at most 40. Favourite passes remain at most three per section.
 - Client waits are bounded to 12 seconds per recommendation and a 90-second sourcing cutoff; already-running provider work cannot be cancelled by this client-only guard, but cannot write a late result into the event.
-- Existing metadata and community budgets/deadlines are retained, shared across rounds (community at most 40 lookups). Unknown danceability cannot satisfy an explicitly selected dance range.
+- Existing metadata and community budgets/deadlines are retained, shared across rounds (600 addition facts plus request allowance; community at most 40 lookups). At most 300 initial non-AI facts consume that allowance, reserving the other half for later discoveries. Unknown/AI danceability does not fail the range; verified contradictions do. Strict BPM/decade requirements remain unchanged.
 - Known lengths can exceed the exact target by the last whole file's duration. Approval/library presence does not prove physical disk availability; existing export readiness still verifies that separately.
 - No schema changes, passive regeneration, workflow/schedule/updater changes or desktop installation.
 
 ## Validation
 
-- Full Vitest: **881 passing tests / 86 files**, with bounded worker concurrency to avoid unrelated wall-clock deadline test contention.
+- Full Vitest after independent-review repairs: **889 passing tests / 86 files** (`bunx vitest run --maxWorkers=2`). Focused review cases plus existing catalogue/source/scorer checks: **37 passing tests**; original metadata-timing and ranking route regressions also pass in the full suite.
 - Reporting Python: **28 passing tests**, mocked SMTP only (no email sent).
 - Automatic preview compilation: **build OK**. Manual app builds/typechecks are intentionally not run; the platform runs them.
 - Isolated Electron event suite attempted with existing Linux/Xvfb: **blocked before tests**, missing `desktop/node_modules/electron/dist/electron` (ENOENT). No binary installed under the user's restriction.
 - Added real Electron event-route duration/save/reopen case; runner syntax and bundling succeeded before launch. Actual macOS execution remains required through the unchanged automatic macos-15 workflow. No native passing claim is made.
 
 Source baseline: `ad1466c`; implementation checkpoint: `4bbff77` (platform maintenance checkpoint preserved). Final commit is reported in chat/GitHub, not fabricated here.
+
+## Independent review follow-up (source a7cd5cf)
+
+- Empty/duplicate favourites break only that pass; general sourcing still runs and actual-route fixtures reach **5,400 / 14,400 / 7,200 seconds**. Requests adapt to admitted files' shorter known lengths instead of converging slowly on an obsolete average.
+- A **2,520-record** isolated library with 2,200 unsuitable/unknown/unusable rows before known usable files reaches those same targets; reversing the complete index produces identical selected identities and explanations.
+- Saturated **2,520-record** fixture with one-second owned rows, verified dance rejections and subsequent exact-file AI supply reaches every section, within one 120-second whole-file overshoot. Lookup assertions enforce at most **610 distinct requests** including ten clients. No synthetic input is sent to a real provider.
+- Sparse unknown/AI danceability retains eligibility, while verified out-of-range BPM/decades remain rejected. A varied 6/8/9-energy fixture meets **5,400 / 14,400 / 7,200** in warm-up/transition/peak roles; requests are not moved. Shared greedy ranking uses an artist heap, with an independent original-greedy equivalence regression, to avoid quadratic large-library scans.
+- Bounded shortage reasons remain visible in the current review session, without persisted schema changes. Reopened snapshots are not regenerated and manual selection decisions remain intact; a reopening displays coverage guidance, not a fabricated historic generation reason.
+- Local Electron binary remains absent; no install attempted. Previous hosted run **43286992448** covers the prior head only. The unchanged automatic macos-15 workflow must validate this final commit before acceptance. No publish, production access, data migration, email, native installation, schedule or updater changes.
