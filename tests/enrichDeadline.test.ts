@@ -30,7 +30,7 @@ function stubNet(hang: Record<string, Hang> = {}, log: string[] = []) {
   vi.stubGlobal('fetch', (url: string, init?: RequestInit) => {
     const u = new URL(url);
     const text = u.searchParams.get('searchText') ?? u.searchParams.get('query') ?? decodeURIComponent(u.pathname);
-    const h = Object.entries(hang).find(([t]) => text.includes(t));
+    const h = Object.entries(hang).find(([t]) => text.includes(t) && (u.host !== 'musicbrainz.org' || !text.includes(' OR ')));
     log.push(text);
     if (h) return new Promise<Response>((_, rej) => { if (h[1] === 'abortable') init?.signal?.addEventListener('abort', () => rej(new Error('aborted'))); });
     if (u.host === 'api.reccobeats.com' && u.pathname.endsWith('/search')) {
@@ -145,7 +145,7 @@ describe('server pipeline end-to-end deadline (real runEnrichment)', () => {
     stubNet({}, log);
     const row = { [key(A('Pop Upgrade'), 'Pop Upgrade')]: { energy: 6, danceability: 6, source: V2({ energy: 'provider', danceability: 'provider' }) } };
     await runEnrichment([{ artist: A('Pop Upgrade'), song: 'Pop Upgrade' }, { artist: A('Gap Song'), song: 'Gap Song' }], { ...deps(row), limits: { totalMs: 2000, cacheReadMs: 80, aiMs: 80, upsertMs: 60, requestMs: 300, assemblyMs: 10 } }, { needPopularity: true });
-    expect(log.findIndex(t => t.includes('Gap Song'))).toBeLessThan(log.findIndex(t => t.includes('Pop Upgrade')));
+    expect(log.findIndex(t => t === 'Gap Song')).toBeLessThan(log.findIndex(t => t === 'Pop Upgrade'));
   });
 });
 
@@ -175,7 +175,7 @@ describe('client gatherer + real pipeline with production deadlines (fake clock)
     for (const s of list) if (!s.song.startsWith('Hung')) rows[key(s.artist, s.song)] = cachedHit;
     const d = { ...deps(rows, { estimate: () => new Promise(() => {}) }), limits: undefined };
     let inflight = 0, peak = 0; const sizes: number[] = [];
-    const g = createFactsGatherer<EnrichedSong>(async (songs) => { sizes.push(songs.length); inflight++; peak = Math.max(peak, inflight); try { return (await runEnrichment(songs, d as never)).results; } finally { inflight--; } }, factsKey, { isIncomplete: (e) => !!e.incomplete, budget: 1000 });
+    const g = createFactsGatherer<EnrichedSong>(async (songs) => { sizes.push(songs.length); inflight++; peak = Math.max(peak, inflight); try { return (await runEnrichment(songs, d as never)).results; } finally { inflight--; } }, factsKey, { isIncomplete: (e) => !!e.incomplete, budget: 1000, batchSize: 200 });
     const run = g.gather(list);
     await vi.advanceTimersByTimeAsync(3 * FACTS_TIMEOUT_MS);
     const rep = await run;
@@ -198,7 +198,7 @@ describe('real event route + real pipeline: mixed cache hits, hung lookups, part
     const d = deps(cache, { estimate: () => new Promise(() => {}), upsert: 'hang' });
     const seen: any[] = [];
     const h = harness({ rows: { A: row({ eventFit: { avoidSlow: true, familiarity: 'familiar' }, decades: ['1970s'], bpmRange: [118, 126] }) }, services: {
-      enrich: (r: any) => { seen.push(r.data); return runEnrichment(r.data.songs, d as never, { needPopularity: r.data.needPopularity }); },
+      enrich: async (r: any) => { seen.push(r.data); const reply = await runEnrichment(r.data.songs, d as never, { needPopularity: r.data.needPopularity }); return { results: reply.results }; },
       recommend: async () => ({ suggestions: [sug('Warm Alpha'), sug('Hung Gamma'), sug('Warm Beta')] }),
     } });
     await h.flush(); await h.current.generate(); await h.flush();
@@ -220,7 +220,7 @@ describe('real event route + real pipeline: mixed cache hits, hung lookups, part
     const cache = { [key(A('Warm Alpha'), 'Warm Alpha')]: { ...cachedHit, year: 1979 } };
     const d = deps(cache, { estimate: async (s: unknown[]) => s.map(() => ({ year: 1978, energy: 7, danceability: 7 })) });
     const h = harness({ rows: { A: row({ decades: ['1970s'] }) }, services: {
-      enrich: (r: any) => runEnrichment(r.data.songs, d as never, { needPopularity: r.data.needPopularity }),
+      enrich: async (r: any) => ({ results: (await runEnrichment(r.data.songs, d as never, { needPopularity: r.data.needPopularity })).results }),
       recommend: async () => ({ suggestions: [sug('Warm Alpha'), sug('Hung Gamma')] }),
     } });
     await h.flush(); await h.current.generate(); await h.flush();

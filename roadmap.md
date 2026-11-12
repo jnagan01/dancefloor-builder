@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Bounded online metadata scheduling
+- [x] Separate provider queues, small serial enrichment batches, rate cooldowns and generation-wide bounds; preserve partial/cache facts and identity fences.
+- [x] Synthetic 34/100/200/600 cold/mixed/warm and adverse-provider evidence; 922 full tests, 28 mocked reporting tests and automatic compilation pass; final deadline check 27 focused tests pass.
+- [ ] Final-head hosted Mac/offline/preparation gates require GitHub execution; local four isolated scripts blocked by absent Electron package/binary. No install or publish; report tests/fit/online-scheduling.md.
 ## Authenticated song-details cache repair
 - [x] Restore service-only cache reads inside the authenticated handler; preserve permissions, deadlines and provenance; audit found no sibling runtime readers.
 - [x] Actual handler/auth middleware/adapter/pipeline regressions: 28 focused, 901 full tests with two workers, 28 mocked reporting tests; automatic compilation OK. Live read-only grants and synthetic-key service adapter read succeeded. Final-head hosted Mac acceptance remains external.

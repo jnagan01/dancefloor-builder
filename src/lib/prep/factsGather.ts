@@ -3,7 +3,7 @@
  *
  * - Every candidate (owned, AI, catalogue) that lacks facts the ranking needs is looked up BEFORE strict eligibility,
  *   rankPool and energy ordering, so rankWhy and the displayed facts come from the same evidence.
- * - Lookups go out in deterministic chunks of at most `batchSize` (the server limit, 200), with bounded concurrency and a
+ * - Lookups go out in deterministic small chunks (default eight, RPC maximum 200), with bounded concurrency and a
  *   total per-generation request budget. Songs beyond the budget are NOT looked up: they stay unknown and are counted.
  * - Each exact "artist||song" key is attempted at most once per generation, including misses and failures, so a later
  *   pass never re-requests a known-attempted result.
@@ -12,15 +12,15 @@
  * - A failed/timed-out chunk leaves its songs unknown (never fabricated) and is reported via `failed`.
  */
 export interface FactsRow { artist: string; song: string; energy?: number | null; danceability?: number | null; popularity?: number | null }
-export interface GatherOptions<E = unknown> { batchSize?: number; concurrency?: number; budget?: number; timeoutMs?: number; isIncomplete?: (e: E) => boolean }
+export interface GatherOptions<E = unknown> { batchSize?: number; concurrency?: number; budget?: number; timeoutMs?: number; overallMs?: number; intervalMs?: number; isCurrent?: () => boolean; isIncomplete?: (e: E) => boolean }
 /** timedOutSongs ⊆ failedSongs. skippedAfterTimeout: songs whose chunks were never sent because an earlier chunk timed
  *  out (the transport can't abort, so we stop adding in-flight requests); they are NOT marked attempted. */
 export interface GatherReport { requested: number; found: number; failedSongs: number; timedOutSongs: number; skippedAfterTimeout: number; skippedByBudget: number; alreadyAttempted: number; incompleteSongs: number }
 /** incompleteSongs: returned in time, but the server reported its online lookup unfinished (only already-known values kept). */
 
-export const FACTS_BATCH = 200;
-export const FACTS_CONCURRENCY = 2;
-/** Max distinct songs looked up per generation (3 server requests). Pool cap is 2000; the rest stay unknown. */
+export const FACTS_BATCH = 8;
+export const FACTS_CONCURRENCY = 1;
+/** Max distinct candidate songs looked up per generation. Pool cap is 2000; the rest stay unknown. */
 export const FACTS_BUDGET = 600;
 /** Per-chunk deadline. A chunk that hasn't settled by then counts as failed; its late result is ignored. */
 export const FACTS_TIMEOUT_MS = 20_000;
@@ -39,17 +39,20 @@ export function needsFacts(r: FactsRow, familiarityActive: boolean): boolean {
 }
 
 export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: string; song: string }>) => Promise<E[]>, keyOf: (e: E) => string, opts: GatherOptions<E> = {}) {
-  const batchSize = Math.max(1, Math.min(FACTS_BATCH, opts.batchSize ?? FACTS_BATCH));
-  const concurrency = Math.max(1, opts.concurrency ?? FACTS_CONCURRENCY);
+  const batchSize = Math.max(1, Math.min(200, opts.batchSize ?? FACTS_BATCH));
+  const concurrency = Math.max(1, Math.min(2, opts.concurrency ?? FACTS_CONCURRENCY));
   let budgetLeft = Math.max(0, opts.budget ?? FACTS_BUDGET);
   const attempted = new Set<string>();
   const results = new Map<string, E>();
   const timeoutMs = Math.max(1, opts.timeoutMs ?? FACTS_TIMEOUT_MS);
+  const overallMs = Math.max(1, opts.overallMs ?? 90_000);
+  let end = Infinity, nextStart = 0;
   let anyFailure = false;
   let timedOut = false; // sticky per generation: never schedule more requests behind an un-abortable hung one
 
   /** Rows are looked up in the given order (callers pass a deterministic order); duplicates collapse to one key. */
   async function gather(rows: Array<{ artist: string; song: string }>): Promise<GatherReport> {
+    if (end === Infinity) end = Date.now() + overallMs;
     const report: GatherReport = { requested: 0, found: 0, failedSongs: 0, timedOutSongs: 0, skippedAfterTimeout: 0, skippedByBudget: 0, alreadyAttempted: 0, incompleteSongs: 0 };
     const todo: Array<{ artist: string; song: string }> = [];
     const seen = new Set<string>();
@@ -58,7 +61,7 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
       if (seen.has(k)) continue;
       seen.add(k);
       if (attempted.has(k)) { report.alreadyAttempted++; continue; }
-      if (timedOut) { report.skippedAfterTimeout++; continue; }
+      if (timedOut || Date.now() >= end || opts.isCurrent?.() === false) { report.skippedAfterTimeout++; continue; }
       if (budgetLeft <= 0) { report.skippedByBudget++; continue; }
       budgetLeft--; attempted.add(k); todo.push({ artist: r.artist, song: r.song });
     }
@@ -68,8 +71,9 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
     let next = 0;
     const worker = async () => {
       while (next < chunks.length) {
-        const chunk = chunks[next++]!;
-        if (timedOut) {
+        const chunk = chunks[next++];
+        if (!chunk) return;
+        if (timedOut || Date.now() >= end || opts.isCurrent?.() === false) {
           // Not sent: release the keys/budget so they read as never attempted rather than as a known miss.
           for (const c of chunk) { attempted.delete(factsKey(c)); budgetLeft++; }
           report.requested -= chunk.length; report.skippedAfterTimeout += chunk.length;
@@ -77,11 +81,20 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
         }
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
+          const delay = Math.max(0, nextStart - Date.now());
+          if (delay) await new Promise(resolve => setTimeout(resolve, Math.min(delay, Math.max(0, end - Date.now()))));
+          if (Date.now() >= end || opts.isCurrent?.() === false) {
+            for (const c of chunk) { attempted.delete(factsKey(c)); budgetLeft++; }
+            report.requested -= chunk.length; report.skippedAfterTimeout += chunk.length;
+            continue;
+          }
+          nextStart = Date.now() + (opts.intervalMs ?? 0);
           const call = Promise.resolve().then(() => fetchChunk(chunk));
           call.catch(() => {}); // a late rejection after the deadline must never become unhandled
-          const deadline = new Promise<typeof TIMEOUT>((res) => { timer = setTimeout(() => res(TIMEOUT), timeoutMs); });
+          const deadline = new Promise<typeof TIMEOUT>((res) => { timer = setTimeout(() => res(TIMEOUT), Math.min(timeoutMs, Math.max(1, end - Date.now()))); });
           const got = await Promise.race([call, deadline]);
           if (got === TIMEOUT) { timedOut = true; anyFailure = true; report.failedSongs += chunk.length; report.timedOutSongs += chunk.length; continue; }
+          if (opts.isCurrent?.() === false) continue;
           const want = new Set(chunk.map(factsKey));
           for (const e of got) { const k = keyOf(e); if (want.has(k) && !results.has(k)) { results.set(k, e); report.found++; if (opts.isIncomplete?.(e)) report.incompleteSongs++; } }
         } catch {

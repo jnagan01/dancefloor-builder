@@ -6,6 +6,7 @@ import { toCamelot } from "./musicTheory";
 import { normalizeKey } from "./danceFloor";
 import { decodeCacheSource, encodeCacheSource, sourceRank, type MetaProv } from "./prep/provenance";
 import { ENRICH_SERVER_DEADLINE_MS } from "./prep/factsGather";
+import { createProviderLane, ENRICH_PROVIDER_CONCURRENCY, MUSICBRAINZ_GROUP, MUSICBRAINZ_INTERVAL_MS } from "./enrichScheduling.server";
 
 export type EnrichSource =
   | "ReccoBeats+MusicBrainz"
@@ -36,7 +37,7 @@ export interface EnrichedSong {
 const CACHE_TTL_DAYS = 90;
 // Bounded parallelism + hard budget keep generation responsive; anything not
 // enriched in time falls back to VirtualDJ metadata / heuristics.
-const FETCH_CONCURRENCY = 8;
+// Independent lanes use at most five outbound provider connections, leaving one for storage.
 
 /**
  * End-to-end server deadlines. The WHOLE call (cache read, provider fetches, AI estimate, cache write, assembly) finishes
@@ -55,18 +56,28 @@ export interface EnrichStatus {
   unfinished: number;
   /** Storage failures are distinct from ordinary misses; provider facts remain usable. */
   failed?: EnrichPhase[];
+  /** Pause subsequent serial chunks after provider rate pressure; no failed recording is replayed. */
+  retryAfterMs?: number;
 }
 
-interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number }
+interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number; lane?: ReturnType<typeof createProviderLane>; failed?: boolean }
 
 async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx): Promise<Response> {
+  if (ctx?.lane && !(await ctx.lane.ready())) { ctx.failed = true; throw new Error("Provider paused"); }
   const ctrl = new AbortController();
   const ms = ctx ? Math.max(1, Math.min(ctx.requestMs, ctx.until - ctx.now())) : ENRICH_LIMITS.requestMs;
   const timer = setTimeout(() => ctrl.abort(), ms);
   const onAbort = () => ctrl.abort();
   if (ctx?.signal.aborted) ctrl.abort(); else ctx?.signal.addEventListener("abort", onAbort);
   try {
-    return await fetch(url, { ...init, signal: ctrl.signal });
+    const response = await within(fetch(url, { ...init, signal: ctrl.signal }), Date.now() + ms, Date.now);
+    if (response === LATE) { ctrl.abort(); throw new Error("Provider request deadline"); }
+    ctx?.lane?.response(response);
+    if (ctx && !response.ok) ctx.failed = true;
+    return response;
+  } catch (err) {
+    if (ctx) ctx.failed = true;
+    throw err;
   } finally {
     clearTimeout(timer);
     ctx?.signal.removeEventListener("abort", onAbort);
@@ -216,11 +227,12 @@ async function fetchReccoBeats(
     if (!match && !ctx?.signal.aborted) match = pick(await searchReccoBeats(clean, 1, ctx));
     if (!match?.id) return null;
 
-    const featRes = await fetchWithTimeout(
+    let featRes: Response;
+    try { featRes = await fetchWithTimeout(
       `https://api.reccobeats.com/v1/track/${encodeURIComponent(match.id)}/audio-features`,
       { headers: { Accept: "application/json" } },
       ctx,
-    );
+    ); } catch { return { popularity: popularityTo10(match.popularity), exact: isExact(match) }; }
     const exact = isExact(match);
     if (!featRes.ok) {
       // Popularity alone is still useful.
@@ -262,57 +274,30 @@ interface MusicBrainzInfo {
   genre?: string;
   year?: number;
   exact?: boolean;
+  incomplete?: boolean;
 }
 
-async function fetchMusicBrainz(
-  artist: string,
-  song: string,
-  ctx?: FetchCtx,
-): Promise<MusicBrainzInfo | null> {
+/** OR groups reduce rate-limited recording searches; each result is independently identity-checked.
+ * Never label a truncated group response as a definitive miss. */
+async function fetchMusicBrainzGroup(songs: Array<{ artist: string; song: string }>, ctx: FetchCtx): Promise<Array<MusicBrainzInfo | null> | null> {
   try {
-    // MusicBrainz Lucene query — quoted terms escape reserved chars.
-    const escape = (s: string) => s.replace(/["\\]/g, " ").trim();
-    const q = `artist:"${escape(artist)}" AND recording:"${escape(song)}"`;
-    const res = await fetchWithTimeout(
-      `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=5`,
-      {
-        headers: {
-          Accept: "application/json",
-          // MusicBrainz requires a descriptive UA identifying the app.
-          "User-Agent":
-            "DancefloorBuilder/1.0 (https://dancefloor-builder.lovable.app)",
-        },
-      },
-      ctx,
-    );
+    const escape = (s: string) => s.replace(/[+\-&|!(){}\[\]^"~*?:\\/]/g, " ").trim();
+    const q = songs.map(s => `(artist:"${escape(s.artist)}" AND recording:"${escape(s.song)}")`).join(" OR ");
+    const res = await fetchWithTimeout(`https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=100`, {
+      headers: { Accept: "application/json", "User-Agent": "DancefloorBuilder/1.0 (https://dancefloor-builder.lovable.app)" },
+    }, ctx);
     if (!res.ok) return null;
-    const json = (await res.json()) as {
-      recordings?: Array<{
-        title?: string;
-        "artist-credit"?: Array<{ name?: string; artist?: { name?: string } }>;
-        "first-release-date"?: string;
-        tags?: Array<{ name?: string; count?: number }>;
-      }>;
-    };
+    const json = await res.json() as { count?: number; recordings?: Array<{ title?: string; "artist-credit"?: Array<{ name?: string; artist?: { name?: string } }>; "first-release-date"?: string; tags?: Array<{ name?: string; count?: number }> }> };
     const recs = json.recordings ?? [];
-    const byArtist = recs.filter((r) => {
-      const credits = (r["artist-credit"] ?? [])
-        .map((c) => c?.name ?? c?.artist?.name ?? "")
-        .filter(Boolean);
-      return credits.some((n) => artistLooseMatch(n, artist));
+    return songs.map(s => {
+      const credits = (r: typeof recs[number]) => (r["artist-credit"] ?? []).map(c => c.name ?? c.artist?.name ?? "").filter(Boolean);
+      const exact = recs.find(r => exactArtistCredit(credits(r), s.artist) && sameRecordingTitle(s.song, r.title ?? ""));
+      // Group searches must not lend a different song's facts merely because its artist matches.
+      const match = exact ?? recs.find(r => (sameRecordingTitle(s.song, r.title ?? "") || (songs.length === 1 && normalizeKey(cleanTitleForSearch(s.song)) === normalizeKey(cleanTitleForSearch(r.title ?? "")))) && credits(r).some(n => artistLooseMatch(n, s.artist)));
+      if (!match) return (json.count ?? recs.length) >= 100 ? { exact: false, incomplete: true } : null;
+      return { year: parseYear(match["first-release-date"]), genre: (match.tags ?? []).filter(t => t.name).sort((a,b) => (b.count ?? 0) - (a.count ?? 0))[0]?.name, exact: !!exact };
     });
-    const creditsOf = (r: (typeof recs)[number]) => (r["artist-credit"] ?? []).map((c) => c?.name ?? c?.artist?.name ?? "").filter(Boolean);
-    const exactMatch = recs.find((r) => exactArtistCredit(creditsOf(r), artist) && sameRecordingTitle(song, r.title ?? ""));
-    const match = exactMatch ?? byArtist[0];
-    if (!match) return null;
-    const year = parseYear(match["first-release-date"]);
-    const topTag = (match.tags ?? [])
-      .filter((t) => t?.name)
-      .sort((a, b) => (b.count ?? 0) - (a.count ?? 0))[0]?.name;
-    return { year, genre: topTag, exact: !!exactMatch };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 interface AiEstimate {
@@ -332,6 +317,7 @@ interface AiEstimate {
 async function estimateWithAi(
   songs: Array<{ artist: string; song: string; genre?: string; year?: number; bpm?: number }>,
   signal?: AbortSignal,
+  onItem?: (index: number, value: AiEstimate) => void,
 ): Promise<Array<AiEstimate | null>> {
   const out: Array<AiEstimate | null> = songs.map(() => null);
   const key = process.env.LOVABLE_API_KEY;
@@ -353,8 +339,24 @@ ${lines}`;
       prompt,
       providerOptions: { lovable: { reasoningEffort: "low" } },
       abortSignal: signal,
+      maxRetries: 0,
     });
-    const text = await result.text;
+    let text = "";
+    const delivered = new Set<number>();
+    const emit = () => {
+      for (const m of text.matchAll(/\{[^{}]*"i"\s*:\s*\d+[^{}]*\}/g)) {
+        try {
+          const item = JSON.parse(m[0]);
+          const i = item.i;
+          if (!Number.isInteger(i) || i < 0 || i >= songs.length || delivered.has(i)) continue;
+          const score = (v: unknown) => typeof v === "number" && Number.isFinite(v) ? v <= 1 ? toScore10(v) : Math.max(1, Math.min(10, Math.round(v))) : undefined;
+          const value = { energy: score(item.energy), danceability: score(item.danceability), valence: score(item.valence), bpm: typeof item.bpm === "number" && item.bpm > 40 && item.bpm < 250 ? Math.round(item.bpm) : undefined, year: typeof item.year === "number" && item.year >= 1900 && item.year <= 2099 ? Math.round(item.year) : undefined, genre: typeof item.genre === "string" ? item.genre.slice(0,60) : undefined };
+          out[i] = value; delivered.add(i); onItem?.(i, value);
+        } catch { /* incomplete frame */ }
+      }
+    };
+    for await (const delta of result.textStream) { text += delta; emit(); }
+
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start < 0 || end <= start) return out;
@@ -378,7 +380,7 @@ ${lines}`;
       };
     }
   } catch (err) {
-    console.warn("[enrichSongs] AI estimate failed", err);
+    console.warn("[enrichSongs] AI estimate unavailable; completed estimates retained");
   }
   return out;
 }
@@ -406,7 +408,7 @@ export class EnrichCacheError extends Error {
 export interface EnrichDeps {
   readRows(artistKeys: string[], songKeys: string[]): Promise<CacheRow[] | null>;
   upsert(rows: Array<Omit<CacheRow, "fetched_at"> & { fetched_at: string }>): Promise<void>;
-  estimate?: (songs: Parameters<typeof estimateWithAi>[0], signal?: AbortSignal) => ReturnType<typeof estimateWithAi>;
+  estimate?: (songs: Parameters<typeof estimateWithAi>[0], signal?: AbortSignal, onItem?: (index: number, value: AiEstimate) => void) => ReturnType<typeof estimateWithAi>;
   /** Test/override hooks: phase limits and clock. Production uses ENRICH_LIMITS + Date.now. */
   limits?: Partial<EnrichLimits>;
   now?: () => number;
@@ -493,37 +495,47 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const fetchUntil = Math.max(now(), end - L.upsertMs - (missOrder.length ? Math.min(L.aiMs, Math.floor((end - now()) / 3)) : 0));
   const fetchCtrl = new AbortController();
   const ctx: FetchCtx = { signal: fetchCtrl.signal, until: fetchUntil, requestMs: L.requestMs, now };
+  const recoCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal) };
+  const mbCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal, MUSICBRAINZ_INTERVAL_MS) };
   let fetchClosed = false;
-  let cursor = 0;
-  // Each provider's result is recorded the moment it completes (fenced by the phase deadline), so a hung response from
-  // one provider never discards the other's completed fields. Workers still await both, keeping the pool bounded.
   const recoDone = new Map<string, ReccoBeatsFeatures | null>();
   const mbDone = new Map<string, MusicBrainzInfo | null>();
   const open = () => !fetchClosed && now() < fetchUntil;
   const reusesMb = (prev: EnrichedSong | undefined) => !!(prev && (prev.genre || prev.year));
-  const worker = async () => {
-    for (;;) {
-      const i = cursor++;
-      if (i >= missOrder.length || !open()) return;
-      const q = missOrder[i];
+  let recoCursor = 0;
+  const providerIncomplete = new Set<string>();
+  const recoWorker = async () => {
+    while (open()) {
+      const q = missOrder[recoCursor++];
+      if (!q) return;
       const k = `${q.artistKey}\u0000${q.songKey}`;
-      const prev = partial.get(k);
-      await Promise.allSettled([
-        fetchReccoBeats(q.original.artist, q.original.song, ctx).then((r) => { if (open()) recoDone.set(k, r); }),
-        reusesMb(prev) ? Promise.resolve() : fetchMusicBrainz(q.original.artist, q.original.song, ctx).then((r) => { if (open()) mbDone.set(k, r); }),
-      ]);
+      const songCtx = { ...recoCtx, failed: false };
+      const r = await fetchReccoBeats(q.original.artist, q.original.song, songCtx);
+      if (open()) { recoDone.set(k, r); if (songCtx.failed) providerIncomplete.add(k); }
+      if (recoCtx.lane.pausedUntil >= fetchUntil) return;
+    }
+  };
+  const mbWorker = async () => {
+    const todo = missOrder.filter(q => !reusesMb(partial.get(`${q.artistKey}\u0000${q.songKey}`)));
+    for (let i = 0; i < todo.length && open(); i += MUSICBRAINZ_GROUP) {
+      const group = todo.slice(i, i + MUSICBRAINZ_GROUP);
+      const rows = await fetchMusicBrainzGroup(group.map(q => q.original), mbCtx);
+      if (mbCtx.lane.pausedUntil >= fetchUntil) return;
+      if (open() && rows) group.forEach((q, j) => { const k = `${q.artistKey}\u0000${q.songKey}`; mbDone.set(k, rows[j] ?? null); if (rows[j]?.incomplete) providerIncomplete.add(k); });
     }
   };
   if (missOrder.length) {
-    const pool = Promise.all(Array.from({ length: Math.min(FETCH_CONCURRENCY, missOrder.length) }, worker));
+    const pool = Promise.all([mbWorker(), ...Array.from({ length: Math.min(ENRICH_PROVIDER_CONCURRENCY.recco, missOrder.length) }, recoWorker)]);
     const got = await within(pool, fetchUntil, now);
     fetchClosed = true;
     fetchCtrl.abort();
     if (got === LATE) timeout("fetch");
+    status.retryAfterMs = Math.max(0, recoCtx.lane.pausedUntil - now(), mbCtx.lane.pausedUntil - now());
   }
   // Assemble from whatever each provider completed. Per-field provenance priority: a fresh value replaces a known one
   // only when its source ranks at least as high, so a loose-match estimate never downgrades cached provider facts.
-  const unfinished = new Set<string>();
+  const unfinished = new Set<string>(providerIncomplete);
+  if (providerIncomplete.size) timeout("fetch");
   for (const q of missOrder) {
     const k = `${q.artistKey}\u0000${q.songKey}`;
     if (fetched.has(k)) continue;
@@ -575,17 +587,25 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const aiUntil = end - L.upsertMs;
   if (needAi.length && now() < aiUntil) {
     const aiCtrl = new AbortController();
-    let est: Array<AiEstimate | null> | typeof LATE = [];
-    try {
-      est = await within(
-        Promise.resolve().then(() => (deps.estimate ?? estimateWithAi)(
-          needAi.map(({ q, k }) => { const e = fetched.get(k); return { artist: q.original.artist, song: q.original.song, genre: e?.genre, year: e?.year, bpm: e?.bpm }; }),
+    let aiClosed = false;
+    const completed: Array<AiEstimate | null> = needAi.map(() => null);
+    const work = async () => {
+      for (let offset = 0; offset < needAi.length && !aiClosed; offset += 8) {
+        const group = needAi.slice(offset, offset + 8);
+        const items = await (deps.estimate ?? estimateWithAi)(
+          group.map(({ q, k }) => { const e = fetched.get(k); return { artist: q.original.artist, song: q.original.song, genre: e?.genre, year: e?.year, bpm: e?.bpm }; }),
           aiCtrl.signal,
-        )),
-        Math.min(aiUntil, now() + L.aiMs), now,
-      );
-    } catch { est = []; }
-    if (est === LATE) { aiCtrl.abort(); timeout("ai"); for (const { k } of needAi) unfinished.add(k); est = []; }
+          (i, value) => { if (!aiClosed && i >= 0 && i < group.length) completed[offset + i] = value; },
+        );
+        if (!aiClosed) items.forEach((item, i) => { if (i < group.length && item) completed[offset + i] = item; });
+      }
+    };
+    let late = false;
+    try { late = await within(work(), Math.min(aiUntil, now() + L.aiMs), now) === LATE; }
+    catch { (status.failed ??= []).push("ai"); status.complete = false; }
+    aiClosed = true;
+    if (late) { aiCtrl.abort(); timeout("ai"); for (const { k } of needAi) unfinished.add(k); }
+    const est = completed;
     needAi.forEach(({ q, k }, idx) => {
       const a = (est as Array<AiEstimate | null>)[idx];
       if (!a) return;

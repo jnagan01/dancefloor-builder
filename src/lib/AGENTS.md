@@ -1,0 +1,3 @@
+# Online metadata scheduling
+- Use small serial generation chunks, independent bounded provider lanes and rate-paced grouped recording searches; retain partial streamed estimates and stale-generation fences, because queue volume or one hung provider must not monopolize lookup time.
+- Keep the cache adapter service-only behind authenticated handlers and existing schema; isolate timing/cache fixtures from real providers, accounts and files.

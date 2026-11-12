@@ -111,8 +111,8 @@ describe('bounded per-generation gatherer', () => {
     const sizes: number[] = []; const firsts: string[] = [];
     const g = createFactsGatherer(async c => { sizes.push(c.length); firsts.push(c[0].artist); return c.map(s => ({ ...s, energy: 5 })); }, factsKey, { concurrency: 1 });
     const rep = await g.gather(songs(450));
-    expect(sizes).toEqual([FACTS_BATCH, FACTS_BATCH, 50]);
-    expect(firsts).toEqual(['A0000', 'A0200', 'A0400']);
+    expect(sizes).toEqual([...Array(56).fill(FACTS_BATCH), 2]);
+    expect(firsts[0]).toBe('A0000'); expect(firsts.at(-1)).toBe('A0448');
     expect(rep).toMatchObject({ requested: 450, found: 450, failedSongs: 0, skippedByBudget: 0 });
     expect(g.get({ artist: 'A0449', song: 'S' })).toBeTruthy();
   });
@@ -125,7 +125,7 @@ describe('bounded per-generation gatherer', () => {
   });
   it('partial failure: only the failed chunk is unknown; duplicates and attempted misses are never re-requested', async () => {
     let n = 0; const requested: string[] = [];
-    const g = createFactsGatherer(async c => { requested.push(...c.map(factsKey)); if (n++ === 1) throw new Error('500'); return c.slice(0, 10).map(s => ({ ...s })); }, factsKey, { concurrency: 1 });
+    const g = createFactsGatherer(async c => { requested.push(...c.map(factsKey)); if (n++ === 1) throw new Error('500'); return c.slice(0, 10).map(s => ({ ...s })); }, factsKey, { concurrency: 1, batchSize: 200 });
     const list = songs(300);
     const rep = await g.gather([...list, ...list.slice(0, 5)]);
     expect(rep).toMatchObject({ requested: 300, found: 10, failedSongs: 100 });

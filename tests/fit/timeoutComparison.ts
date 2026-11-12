@@ -49,7 +49,8 @@ async function gatherWith(impl: "before" | "after") {
       estimate: () => new Promise<never>(() => {}),
     };
     const fn = impl === "after" ? (s: Array<{ artist: string; song: string }>) => afterRun(s, deps as never) : (s: Array<{ artist: string; song: string }>) => beforeRun(s, deps as never);
-    const g = createFactsGatherer<EnrichedSong>(async (s) => (await fn(s)).results, factsKey, { isIncomplete: (e) => !!e.incomplete });
+    // Freeze this historical comparison's original one-chunk protocol; new scheduling has separate evidence.
+    const g = createFactsGatherer<EnrichedSong>(async (s) => (await fn(s)).results, factsKey, { batchSize: 200, concurrency: 2, isIncomplete: (e) => !!e.incomplete });
     const list = fixture().map(r => ({ artist: r.artist, song: r.song }));
     const run = g.gather(list);
     await vi.advanceTimersByTimeAsync(FACTS_TIMEOUT_MS + 5000);

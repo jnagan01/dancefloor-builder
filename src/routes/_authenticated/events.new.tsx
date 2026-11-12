@@ -1097,15 +1097,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // return a map keyed by "artist||song" (raw values). Best-effort — a
     // network failure returns an empty map so generation continues.
     let enrichFailed = false, budgetWarned = false, timeoutWarned = false;
-    // One per-generation gatherer: chunks of ≤200 (server limit), bounded concurrency, a total request budget, and each
+    // One per-generation gatherer: small serial chunks, bounded concurrency, a total request budget, and each
     // exact artist||song attempted once (misses and failures included) so later passes never re-request them.
     // With an active familiarity choice the server also upgrades warm cache rows lacking track popularity (bounded).
     const needPopularity = !!normalizeEventFit(eventFit)?.familiarity;
     let incompleteWarned = false;
+    let metadataReadyAt = 0;
     const facts = createFactsGatherer<EnrichedSong>(
-      async (songs) => (await enrichFn({ data: { songs, needPopularity } })).results,
+      async (songs) => {
+        const wait = Math.max(0, metadataReadyAt - Date.now());
+        if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+        if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
+        const started = Date.now();
+        const reply = await enrichFn({ data: { songs, needPopularity } });
+        // Warm hits need no pacing; cold grouped MusicBrainz requests must not burst across invocations.
+        metadataReadyAt = Math.max(started + (reply.status?.retryAfterMs === undefined ? 0 : 1000), Date.now() + Math.min(90_000, reply.status?.retryAfterMs ?? 0));
+        return reply.results;
+      },
       (e) => factsKey(e),
-      { budget: FACTS_BUDGET + r.warmUp.length + r.transition.length + r.peak.length, isIncomplete: (e) => !!e.incomplete },
+      { budget: FACTS_BUDGET + r.warmUp.length + r.transition.length + r.peak.length, isIncomplete: (e) => !!e.incomplete,
+        isCurrent: () => genTokenRef.current === myToken && accountRef.current === accountAtStart },
     );
     const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
       const map = new Map<string, EnrichedSong>();
