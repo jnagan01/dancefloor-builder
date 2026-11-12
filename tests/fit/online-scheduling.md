@@ -29,6 +29,15 @@ The change prioritizes completing useful queued work over a falsely quick incomp
 
 ## Gates and limitations
 
+### Follow-through: delayed-send cooldown
+
+- Provider cooldown now belongs to the gatherer's dynamic `readyAt` pre-dispatch scheduler, outside the 20-second RPC deadline. The existing 90-second overall limit bounds it; a cooldown beyond that end stops unsent work immediately, with no delayed sender left behind. Retry-After is not shortened to 90 seconds.
+- Fences are checked while waiting (at most 100 ms between checks) and immediately before dispatch. Only dispatched songs consume budget/become attempted. Dynamic-cooldown workers and overlapping gather calls are serialized. Cancellation is counted separately from deadline/cooldown skips; stale generations do not show lookup-failure messages.
+- Actual event-route fake-timer tests cover 2-second, 30-second (>20-second RPC cutoff), and 120-second (>90-second generation limit) cooldowns, event/account changes during waiting, retained requests/facts, and no sends after completion. Pure accounting checks assert unsent identities, request totals, budget classification and no overlapping calls. All data/services are synthetic.
+- Provider-unavailable/aborted lookup evidence remains incomplete rather than a definitive no-match; review messages now name deadline/cooldown or provider unavailability instead of claiming all incomplete work timed out. No provider/cache/server behavior was broadened.
+- Hosted Mac run `43303936319` is prior-head `00fbfb7` evidence only; this correction still requires a new exact-head hosted check. No native app access, installation, publication or production access performed.
+- Correction validation: 60 focused scheduling/deadline/actual-route tests pass; 24 duration/cooldown/historical-report checks pass; final full suite 929 tests / 89 files passes with two workers, automatic compilation build OK. Test harness page and preparation modules now share dynamically resolved fake clock/timers, including suites that enable fake timers after mounting; historical reports remain byte-for-byte unchanged.
+
 - Full suite: 922 tests / 88 files pass with two workers. Focused cache/deadline/facts/route checks: 42 passing; scheduling matrix: 21 passing. Python reporting: 28 mocked tests pass; no email sent. Automatic preview compilation reports build OK.
 - All four existing isolated Electron scripts attempted without installation. Event/preparation/offline cannot launch: Electron binary absent; offline race cannot resolve desktop Electron package. These are **not passing native gates**.
 - Workflow definitions, runner/concurrency, schedules, desktop/security setup and dependencies are unchanged. No workflow run was started/inspected from this environment (no GitHub credentials). User-reported successful run `43292496440` is prior-head `7fb1600` evidence only. A new final-commit hosted macos-15 native/offline/preparation run remains required before publication.

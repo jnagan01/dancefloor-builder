@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Bounded online metadata scheduling
+- [x] Move dynamic cooldown before fenced dispatch; actual-route 2s/30s/120s, stale event/account and unsent-accounting regressions; 60 focused and 929 full tests / 89 files pass, automatic compilation OK. New exact-head Mac gate still required (43303936319 tests previous head).
 - [x] Separate provider queues, small serial enrichment batches, rate cooldowns and generation-wide bounds; preserve partial/cache facts and identity fences.
 - [x] Synthetic 34/100/200/600 cold/mixed/warm and adverse-provider evidence; 922 full tests, 28 mocked reporting tests and automatic compilation pass; final deadline check 27 focused tests pass.
 - [ ] Final-head hosted Mac/offline/preparation gates require GitHub execution; local four isolated scripts blocked by absent Electron package/binary. No install or publish; report tests/fit/online-scheduling.md.

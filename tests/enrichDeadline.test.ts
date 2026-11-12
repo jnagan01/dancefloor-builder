@@ -210,7 +210,7 @@ describe('real event route + real pipeline: mixed cache hits, hung lookups, part
     const gamma = rows.find((t: any) => t.song === 'Hung Gamma');
     if (gamma) expect(gamma.metaProv?.energy).not.toBe('provider');
     expect(seen.some(x => x.needPopularity === true)).toBe(true);
-    expect(h.infos.some((m: string) => /ran out of time/.test(m))).toBe(true);
+    expect(h.infos.some((m: string) => /lookup was incomplete/.test(m))).toBe(true);
     expect(listsSchema.safeParse(h.current.result).success).toBe(true);
     h.unmount();
   });

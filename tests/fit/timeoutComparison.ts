@@ -54,7 +54,8 @@ async function gatherWith(impl: "before" | "after") {
     const list = fixture().map(r => ({ artist: r.artist, song: r.song }));
     const run = g.gather(list);
     await vi.advanceTimersByTimeAsync(FACTS_TIMEOUT_MS + 5000);
-    const report = await run;
+    // Keep the historical report's field set unchanged; cancellation has separate route evidence.
+    const { skippedCancelled: _cancelled, ...report } = await run;
     return { report, got: list.map(s => g.get(s)) };
   } finally {
     globalThis.fetch = prevFetch;

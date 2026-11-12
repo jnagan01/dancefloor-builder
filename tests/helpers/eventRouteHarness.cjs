@@ -23,7 +23,7 @@ function createEventRouteHarness(actual) {
   const loadPrep = name => {
     if (prepModules[name]) return prepModules[name].exports;
     const m = { exports: {} }; prepModules[name] = m;
-    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/prep/${name}.ts`), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:m,exports:m.exports,setTimeout,clearTimeout,require:k=>k === '../danceFloor' ? actual.dance : k === '../eventTypes' ? eventTypeModule.exports : k === '../additionIdentity' ? additionModule.exports : k === '../songLibrary' ? songLibraryForPrep() : k.startsWith('./') ? loadPrep(k.slice(2)) : k === '@/lib/virtualDj' ? actual.vdj : k === '@/lib/fileIdentity' ? identityModule.exports : require(k)});
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/prep/${name}.ts`), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:m,exports:m.exports,get setTimeout(){return setTimeout;},get clearTimeout(){return clearTimeout;},get Date(){return Date;},require:k=>k === '../danceFloor' ? actual.dance : k === '../eventTypes' ? eventTypeModule.exports : k === '../additionIdentity' ? additionModule.exports : k === '../songLibrary' ? songLibraryForPrep() : k.startsWith('./') ? loadPrep(k.slice(2)) : k === '@/lib/virtualDj' ? actual.vdj : k === '@/lib/fileIdentity' ? identityModule.exports : require(k)});
     if (name === 'recommend' && actual.observeRanking) { const original=m.exports.rankPool; m.exports.rankPool=(...args)=>{const result=original(...args);actual.observeRanking(args,result);return result;}; }
     return m.exports;
   };
@@ -86,7 +86,7 @@ function createEventRouteHarness(actual) {
     const module={exports:{}};
     const testWindow={addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k),confirm:()=>true};
     const events=new Map();
-    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,structuredClone,File,Blob,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:testWindow,setTimeout,clearTimeout,Date});
+    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,structuredClone,File,Blob,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:testWindow,get setTimeout(){return setTimeout;},get clearTimeout(){return clearTimeout;},get Date(){return Date;}});
     const cleanup=old=>{for(const slot of old)slot?.cleanup?.();};
     function render() {
       slots=rootSlots;cursor=0;renderingRoot=true;

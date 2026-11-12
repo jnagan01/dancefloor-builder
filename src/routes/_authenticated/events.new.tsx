@@ -1105,23 +1105,23 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     let metadataReadyAt = 0;
     const facts = createFactsGatherer<EnrichedSong>(
       async (songs) => {
-        const wait = Math.max(0, metadataReadyAt - Date.now());
-        if (wait) await new Promise(resolve => setTimeout(resolve, wait));
         if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
         const started = Date.now();
         const reply = await enrichFn({ data: { songs, needPopularity } });
         // Warm hits need no pacing; cold grouped MusicBrainz requests must not burst across invocations.
-        metadataReadyAt = Math.max(started + (reply.status?.retryAfterMs === undefined ? 0 : 1000), Date.now() + Math.min(90_000, reply.status?.retryAfterMs ?? 0));
+        metadataReadyAt = Math.max(started + (reply.status?.retryAfterMs === undefined ? 0 : 1000), Date.now() + (reply.status?.retryAfterMs ?? 0));
         return reply.results;
       },
       (e) => factsKey(e),
       { budget: FACTS_BUDGET + r.warmUp.length + r.transition.length + r.peak.length, isIncomplete: (e) => !!e.incomplete,
+        readyAt: () => metadataReadyAt,
         isCurrent: () => genTokenRef.current === myToken && accountRef.current === accountAtStart },
     );
     const enrichBatch = async (list: ResultSong[]): Promise<Map<string, EnrichedSong>> => {
       const map = new Map<string, EnrichedSong>();
       if (!list.length) return map;
       const rep = await facts.gather(list);
+      if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return map;
       if (rep.failedSongs && !enrichFailed) {
         enrichFailed = true;
         console.warn("Online enrichment failed for", rep.failedSongs, "songs — their details stay unknown/estimated");
@@ -1133,11 +1133,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       }
       if (rep.skippedAfterTimeout && !timeoutWarned) {
         timeoutWarned = true;
-        toast.info(`The online music data service stopped responding, so ${rep.skippedAfterTimeout} more track${rep.skippedAfterTimeout === 1 ? " wasn't" : "s weren't"} looked up. Any details they already had are kept; nothing was added for them.`);
+        toast.info(`The online lookup time limit or provider cooldown prevented ${rep.skippedAfterTimeout} more track${rep.skippedAfterTimeout === 1 ? " from being" : "s from being"} looked up. Any details they already had are kept; nothing was added for them.`);
       }
       if (rep.incompleteSongs && !incompleteWarned) {
         incompleteWarned = true;
-        toast.info(`The online music data lookup ran out of time for ${rep.incompleteSongs} track${rep.incompleteSongs === 1 ? "" : "s"}. Details that were already known or finished in time are kept; nothing was guessed for the rest.`);
+        toast.info(`The online music data lookup was incomplete (time limit or provider unavailable) for ${rep.incompleteSongs} track${rep.incompleteSongs === 1 ? "" : "s"}. Details that were already known or finished in time are kept; nothing was guessed for the rest.`);
       }
       for (const s of list) { const e = facts.get(s); if (e) map.set(factsKey(s), e); }
       return map;

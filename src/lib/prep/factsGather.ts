@@ -12,10 +12,10 @@
  * - A failed/timed-out chunk leaves its songs unknown (never fabricated) and is reported via `failed`.
  */
 export interface FactsRow { artist: string; song: string; energy?: number | null; danceability?: number | null; popularity?: number | null }
-export interface GatherOptions<E = unknown> { batchSize?: number; concurrency?: number; budget?: number; timeoutMs?: number; overallMs?: number; intervalMs?: number; isCurrent?: () => boolean; isIncomplete?: (e: E) => boolean }
-/** timedOutSongs ⊆ failedSongs. skippedAfterTimeout: songs whose chunks were never sent because an earlier chunk timed
- *  out (the transport can't abort, so we stop adding in-flight requests); they are NOT marked attempted. */
-export interface GatherReport { requested: number; found: number; failedSongs: number; timedOutSongs: number; skippedAfterTimeout: number; skippedByBudget: number; alreadyAttempted: number; incompleteSongs: number }
+export interface GatherOptions<E = unknown> { batchSize?: number; concurrency?: number; budget?: number; timeoutMs?: number; overallMs?: number; intervalMs?: number; readyAt?: () => number; isCurrent?: () => boolean; isIncomplete?: (e: E) => boolean }
+/** timedOutSongs ⊆ failedSongs. skippedAfterTimeout: unsent songs blocked by a deadline/cooldown.
+ * skippedCancelled: unsent songs blocked by a stale generation/account. Neither spends budget or marks attempts. */
+export interface GatherReport { requested: number; found: number; failedSongs: number; timedOutSongs: number; skippedAfterTimeout: number; skippedCancelled: number; skippedByBudget: number; alreadyAttempted: number; incompleteSongs: number }
 /** incompleteSongs: returned in time, but the server reported its online lookup unfinished (only already-known values kept). */
 
 export const FACTS_BATCH = 8;
@@ -40,7 +40,8 @@ export function needsFacts(r: FactsRow, familiarityActive: boolean): boolean {
 
 export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: string; song: string }>) => Promise<E[]>, keyOf: (e: E) => string, opts: GatherOptions<E> = {}) {
   const batchSize = Math.max(1, Math.min(200, opts.batchSize ?? FACTS_BATCH));
-  const concurrency = Math.max(1, Math.min(2, opts.concurrency ?? FACTS_CONCURRENCY));
+  // A dynamic cooldown belongs to the previous response: never overlap its dispatches.
+  const concurrency = opts.readyAt ? 1 : Math.max(1, Math.min(2, opts.concurrency ?? FACTS_CONCURRENCY));
   let budgetLeft = Math.max(0, opts.budget ?? FACTS_BUDGET);
   const attempted = new Set<string>();
   const results = new Map<string, E>();
@@ -51,9 +52,9 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
   let timedOut = false; // sticky per generation: never schedule more requests behind an un-abortable hung one
 
   /** Rows are looked up in the given order (callers pass a deterministic order); duplicates collapse to one key. */
-  async function gather(rows: Array<{ artist: string; song: string }>): Promise<GatherReport> {
+  async function runGather(rows: Array<{ artist: string; song: string }>): Promise<GatherReport> {
     if (end === Infinity) end = Date.now() + overallMs;
-    const report: GatherReport = { requested: 0, found: 0, failedSongs: 0, timedOutSongs: 0, skippedAfterTimeout: 0, skippedByBudget: 0, alreadyAttempted: 0, incompleteSongs: 0 };
+    const report: GatherReport = { requested: 0, found: 0, failedSongs: 0, timedOutSongs: 0, skippedAfterTimeout: 0, skippedCancelled: 0, skippedByBudget: 0, alreadyAttempted: 0, incompleteSongs: 0 };
     const todo: Array<{ artist: string; song: string }> = [];
     const seen = new Set<string>();
     for (const r of rows) {
@@ -61,11 +62,11 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
       if (seen.has(k)) continue;
       seen.add(k);
       if (attempted.has(k)) { report.alreadyAttempted++; continue; }
-      if (timedOut || Date.now() >= end || opts.isCurrent?.() === false) { report.skippedAfterTimeout++; continue; }
-      if (budgetLeft <= 0) { report.skippedByBudget++; continue; }
-      budgetLeft--; attempted.add(k); todo.push({ artist: r.artist, song: r.song });
+      if (opts.isCurrent?.() === false) { report.skippedCancelled++; continue; }
+      if (timedOut || Date.now() >= end) { report.skippedAfterTimeout++; continue; }
+      if (todo.length >= budgetLeft) { report.skippedByBudget++; continue; }
+      todo.push({ artist: r.artist, song: r.song });
     }
-    report.requested = todo.length;
     const chunks: Array<typeof todo> = [];
     for (let i = 0; i < todo.length; i += batchSize) chunks.push(todo.slice(i, i + batchSize));
     let next = 0;
@@ -73,23 +74,26 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
       while (next < chunks.length) {
         const chunk = chunks[next++];
         if (!chunk) return;
-        if (timedOut || Date.now() >= end || opts.isCurrent?.() === false) {
-          // Not sent: release the keys/budget so they read as never attempted rather than as a known miss.
-          for (const c of chunk) { attempted.delete(factsKey(c)); budgetLeft++; }
-          report.requested -= chunk.length; report.skippedAfterTimeout += chunk.length;
-          continue;
-        }
         let timer: ReturnType<typeof setTimeout> | undefined;
         try {
-          const delay = Math.max(0, nextStart - Date.now());
-          if (delay) await new Promise(resolve => setTimeout(resolve, Math.min(delay, Math.max(0, end - Date.now()))));
-          if (Date.now() >= end || opts.isCurrent?.() === false) {
-            for (const c of chunk) { attempted.delete(factsKey(c)); budgetLeft++; }
-            report.requested -= chunk.length; report.skippedAfterTimeout += chunk.length;
+          // Cooldown is pre-dispatch, outside the RPC deadline. Poll the current fence during
+          // waits; an out-of-budget cooldown has no pending callback that can later send.
+          while (!timedOut && Date.now() < end && opts.isCurrent?.() !== false) {
+            const ready = Math.max(nextStart, opts.readyAt?.() ?? 0);
+            if (ready <= Date.now() || ready >= end) break;
+            await new Promise(resolve => setTimeout(resolve, Math.min(100, ready - Date.now(), end - Date.now())));
+          }
+          if (opts.isCurrent?.() === false) { report.skippedCancelled += chunk.length; continue; }
+          if (timedOut || Date.now() >= end || Math.max(nextStart, opts.readyAt?.() ?? 0) >= end) {
+            report.skippedAfterTimeout += chunk.length;
             continue;
           }
           nextStart = Date.now() + (opts.intervalMs ?? 0);
-          const call = Promise.resolve().then(() => fetchChunk(chunk));
+          // Only sent songs spend budget or become attempted, after the final fence check.
+          budgetLeft -= chunk.length;
+          for (const c of chunk) attempted.add(factsKey(c));
+          report.requested += chunk.length;
+          const call = Promise.resolve(fetchChunk(chunk));
           call.catch(() => {}); // a late rejection after the deadline must never become unhandled
           const deadline = new Promise<typeof TIMEOUT>((res) => { timer = setTimeout(() => res(TIMEOUT), Math.min(timeoutMs, Math.max(1, end - Date.now()))); });
           const got = await Promise.race([call, deadline]);
@@ -106,6 +110,13 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
     };
     await Promise.all(Array.from({ length: Math.min(concurrency, chunks.length) }, worker));
     return report;
+  }
+  // Concurrent callers share one generation budget and cannot create overlapping runs.
+  let previous: Promise<unknown> = Promise.resolve();
+  function gather(rows: Array<{ artist: string; song: string }>): Promise<GatherReport> {
+    const pending = previous.then(() => runGather(rows));
+    previous = pending.catch(() => {});
+    return pending;
   }
   return { gather, get: (r: { artist: string; song: string }) => results.get(factsKey(r)), wasAttempted: (r: { artist: string; song: string }) => attempted.has(factsKey(r)), get anyFailure() { return anyFailure; } };
 }
