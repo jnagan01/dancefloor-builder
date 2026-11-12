@@ -1,8 +1,9 @@
 # Workspace rebuild
 ## Expansion duration repair
-- [ ] Fill each selected section duration after eligibility, ranking, exact matching and unique-file accounting; preserve expansion-off and saved snapshots.
-- [ ] Add synthetic actual-route and isolated Electron duration/reopen regressions, run full units and available validation.
-- [ ] Report fixture seconds, bounded shortages and final commit; macOS acceptance awaits GitHub, no production access/publication.
+- [x] Fill each selected section duration after eligibility, ranking, exact matching and unique-file accounting; preserve expansion-off and saved snapshots.
+- [x] Add 8 synthetic actual-route and 3 pure duration regressions plus isolated Electron duration/reopen case; 881 units and 28 reporting tests pass, automatic build OK.
+- [ ] Native execution/macOS acceptance awaits GitHub: local isolated suite launch fails ENOENT (Electron binary absent); no native installation authorized. Existing workflow unchanged.
+- [x] Record synthetic seconds, bounds and limitations in tests/fit/duration-expansion.md; no production access/publication.
 ## Weekly hosted CI migration
 - [x] Default seed rotates by Central Tuesday; explicit seeds stay exact, safe decisions print; 28 reporting tests pass.
 - [x] Saved secret alias, authentication-only manual check and identity-validated explicit-run manual dry-run; 24 reporting tests pass.
