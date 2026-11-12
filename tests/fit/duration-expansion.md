@@ -22,7 +22,7 @@ The actual event-route harness uses isolated storage/services and the real safe-
 | Synthetic 1× after generation (whole 120-second files) | 2760 | 7200 | 3600 |
 | Background 60 minutes | 3600 | 0 | 0 |
 
-The 2× fixture produces 55/120/60 rows, including all ten client requests; usable additions exceed old estimated counts. Save/reopen preserves the generated selections exactly; passive opening writes nothing. Separate regressions cover hard-metadata rejection, additional sourcing rounds, outages, unknown/unlinked durations, credit aliases, repeated files, section imbalance, expansion-off, exclusions and missing saved paths.
+The 2× fixture produces 45/120/60 usable additions plus ten unlinked client requests distributed across sections by fresh allocation; total rows are not duration coverage. Usable additions exceed old estimated counts. Save/reopen preserves the generated selections exactly; passive opening writes nothing. Separate regressions cover hard-metadata rejection, additional sourcing rounds, outages, unknown/unlinked durations, credit aliases, repeated files, section imbalance, expansion-off, exclusions and missing saved paths.
 
 ## Bounds and limitations
 
@@ -63,3 +63,11 @@ An actual-route regression with the same forty 240-second clients, one hour and 
 The older catalogue comparison now correctly has **14** review additions (24 planning slots minus ten distributed requests), rather than 16 caused by clients occupying only one bucket. Full-catalogue admission, stronger-alternative displacement, reverse-order identity, provider failure and request retention assertions remain intact; archived comparison artifacts were not overwritten. Fresh-client pure tests additionally cover unequal file lengths, varied energy, repeated requests, unknown lengths and read-only input preservation.
 
 Validation: **891 Vitest tests / 86 files**, **28 reporting tests** (mocked mail only), automatic **build OK**. Local native execution remains blocked by absent Electron binary; no installation performed. A new final-head hosted Mac run including all native/offline phases is required; prior-head success of the duration case is not full acceptance.
+
+## Native duration wait correction (source 9538300)
+
+User-reported Mac run **43290594148** passed **883 Mac Vitest tests** but stopped at the new duration fixture's stale Transition total-row wait: **125** rows, comprising five unlinked client requests plus 120 usable additions, rather than 120 total rows. Supplied logs reported “Lists generated” without app errors/warnings. Offline phases were skipped; the native pipeline is not accepted yet.
+
+Test-only correction: wait for confirmed, non-excluded, globally unique, exact synthetic file seconds **5,400 / 14,400 / 7,200**, rather than total rows. Unknown/unlinked lengths and repeated paths cannot satisfy the wait. Separately assert the exact seconds, all ten original request identities and unchanged input requests, review coverage, and identical saved snapshot after reload. The existing forty-client 1× assertion and all other policy/save tests remain unchanged. No application, workflow, production data or installer changes.
+
+Focused local validation: **20 tests / 2 files passed** (`bunx vitest run tests/durationExpansionRoute.test.ts tests/durationFill.test.ts --maxWorkers=2`), including the unchanged forty-client/no-warning route regression. `node --check tests/native/run.mjs` passed; direct execution of the new polling callback against synthetic selections verified exact targets, duplicate/tentative/excluded/unknown-path rejection, and a 120-second deficit. Automatic preview **build OK**. No Electron installation/run performed; final-head hosted Mac native and offline validation remains required.

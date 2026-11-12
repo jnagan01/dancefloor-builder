@@ -746,11 +746,22 @@ try{
    await page.getByRole('button',{name:/Track expansion/}).first().click();
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    const saved=()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A;
-   await expect.poll(()=>saved().lists.transition.length,{timeout:30000}).toBe(120);
-   const generated=saved(),sec=['warmUp','transition','peak'];
-   const seconds=sec.map(k=>Object.entries(generated.lists.selections).filter(([key,choice])=>key.startsWith(`${k}:`)&&choice.confirmed).reduce((n,[,choice])=>n+choice.paths.filter(p=>tt.some(t=>t.filePath===p)).length*120,0));
+   const sec=['warmUp','transition','peak'],targets=[5400,14400,7200];
+   const approvedSeconds=event=>{
+     const seen=new Set(),lengths=new Map(tt.map(t=>[t.filePath,t.songLength]));
+     return sec.map(k=>Object.entries(event.lists.selections).filter(([key,choice])=>key.startsWith(`${k}:`)&&choice.confirmed&&!choice.excluded).reduce((n,[,choice])=>n+choice.paths.reduce((sum,p)=>{
+       const length=lengths.get(p);if(seen.has(p)||!Number.isFinite(length)||length<=0)return sum;
+       seen.add(p);return sum+length;
+     },0),0));
+   };
+   // Fresh allocation distributes unlinked requests too; total rows are not coverage.
+   await expect.poll(()=>approvedSeconds(saved()),{timeout:30000}).toEqual(targets);
+   const generated=saved(),seconds=approvedSeconds(generated);
    expect(seconds).toEqual([5400,14400,7200]);
-   expect(sec.flatMap(k=>generated.lists[k]).filter(r=>r.fromUpload)).toHaveLength(10);
+   const retained=sec.flatMap(k=>generated.lists[k]).filter(r=>r.fromUpload);
+   expect(retained).toHaveLength(10);
+   expect(retained.map(r=>`${r.artist}|${r.song}`).sort()).toEqual(client.map(r=>`${r.artist}|${r.song}`).sort());
+   expect(generated.inputs.songs).toEqual(client);
    await expect(page.getByLabel('Event duration coverage')).toContainText('Every section meets its selected preparation duration.');
    fs.writeFileSync(path.join(diagnostics,'duration-expansion.json'),JSON.stringify({label:'Synthetic Electron real event route, not user wedding',before:[0,0,0],after:seconds,targets:[5400,14400,7200],rows:sec.map(k=>generated.lists[k].length)},null,2));
    await page.reload();await expect(page.getByLabel('Event duration coverage')).toContainText('Every section meets its selected preparation duration.');expect(saved()).toEqual(generated);
