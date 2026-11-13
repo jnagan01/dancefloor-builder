@@ -176,8 +176,12 @@ for (const mode of ['cold', 'mixed', 'warm'] as const) it(`healthy 20-25 s repli
   expect(first('Transition').end - first('Transition').start).toBeGreaterThanOrEqual(22000);
   expect(first('Peak').end - first('Peak').start).toBeGreaterThanOrEqual(21000);
   expect(first('Transition').returned).toBe(40);
-  expect(all.some((x: any) => x.artist.startsWith('TEST Lane transition'))).toBe(true);
-  expect(all.some((x: any) => x.artist.startsWith('TEST Lane peak'))).toBe(true);
+  // With slower metadata the delayed replies are needed and their songs are placed. With a warm cache the same
+  // owned files are verified directly from the library first, so coverage need not wait for the replies.
+  if (mode !== 'warm') {
+    expect(all.some((x: any) => x.artist.startsWith('TEST Lane transition'))).toBe(true);
+    expect(all.some((x: any) => x.artist.startsWith('TEST Lane peak'))).toBe(true);
+  }
   // Fair opportunity: Peak's first request is dispatched in the same round as Warm Up, not after Transition.
   expect(first('Peak').start - first('Warm Up').start).toBeLessThan(1000);
   // One in-flight request per section lane; coordinated deadlines; bounded wire context.
@@ -223,9 +227,12 @@ it('a Transition reply with no output ends only its own lane after bounded timeo
   if (t[1]) expect(t[1].count).toBeLessThanOrEqual(Math.floor(t[0].count / 2));
   const seconds = s.seconds();
   expect(seconds[0]).toBeGreaterThanOrEqual(TARGETS[0]); expect(seconds[2]).toBeGreaterThanOrEqual(TARGETS[2]);
-  expect(seconds[1]).toBeLessThan(TARGETS[1]);
-  expect(s.h.infos.some((m: string) => m.includes('ran out of time; other sections continued'))).toBe(true);
-  expect(s.h.warnings.some((m: string) => m.includes('short'))).toBe(true);
+  // The hung lane contributed nothing. Transition is filled only if verified owned library files (looked up
+  // during idle time) suffice; otherwise its gap is reported honestly.
+  expect(t.every(c => c.returned === 0)).toBe(true);
+  expect(s.h.warnings.some((m: string) => m.includes('short'))).toBe(seconds[1] < TARGETS[1]);
+  // A still-hung request is closed when verified library files already cover Transition; otherwise it times out.
+  if (seconds[1] < TARGETS[1]) expect(s.h.infos.some((m: string) => m.includes('ran out of time; other sections continued'))).toBe(true);
   expect(sections.flatMap(k => s.h.current.result[k]).filter((x: any) => x.fromUpload)).toHaveLength(34);
   s.h.unmount();
 }, 60000);

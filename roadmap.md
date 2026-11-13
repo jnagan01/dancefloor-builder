@@ -183,3 +183,8 @@
 - [ ] Required read-only macOS regression gate on the final commit (runs on GitHub macOS runner, not here).
 
 - [x] Exact-track Last.fm community evidence (advisory slow tags/listeners) + conservative same-work Versions drawer; report tests/fit/community.{json,md}. Mac CI on final commit: external, pending.
+
+## Coordinated suggestion/metadata staging
+- [x] Per-section lanes beside a deficit-prioritized metadata worker, measured-pace request sizing/skip, final reserve, bounded refinement, barren-lane stop; owned unverified-year files as lookup candidates.
+- [x] Native-shaped synthetic regression (baseline fails, repaired reaches 90/240/120), exhausted/outage honest gaps, stale fences, transient/validation, favourites cap, wire 500 + dedupe; full suite and typecheck.
+- [ ] Hosted macOS and CodeQL on the final commit (GitHub runners, after push).

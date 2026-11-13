@@ -70,7 +70,8 @@ export function createSuggestionLanes<Req, S>(o: {
     try {
       for (;;) {
         if (!live() || s.stopped || wanted <= 0) return null;
-        const window = endAt() - Date.now() - SUGGESTION_TRANSPORT_MARGIN_MS;
+        // Whole milliseconds: the server validator accepts integer deadlines only.
+        const window = Math.floor(endAt() - Date.now() - SUGGESTION_TRANSPORT_MARGIN_MS);
         // Measured pacing: a window that cannot return useful output is never sent (honest lane end).
         if (window < usefulWindowMs(s.perItemMs, Math.min(wanted, s.cap))) { s.stopped = true; s.shortWindow = true; return null; }
         const deadlineMs = Math.min(SUGGESTION_SERVER_DEADLINE_MS, window);

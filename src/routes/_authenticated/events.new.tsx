@@ -2,7 +2,7 @@ import { buildResolver, intended, cleanReason, requiresClean, seasonal, type Pre
 import { freshEvent, validateEventChoices, clientPlanningCoverage } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
-import { createSuggestionLanes } from "@/lib/prep/suggestionLanes";
+import { createSuggestionLanes, SUGGESTION_MIN_COUNT } from "@/lib/prep/suggestionLanes";
 import { allocateFreshClients, durationTotals, fillRankedDuration, type DurationTargets } from "@/lib/prep/durationFill";
 import { isBlocked, applyVarietyReranker } from "@/lib/danceFloor";
 import { allowedForEventType } from "@/lib/eventTypes";
@@ -192,6 +192,11 @@ const CONTEXT_PHASE_MS = 15_000;
 const REVIEW_LOOKUP_CAP = 32;
 /** The last part of the fixed expansion window is reserved for the final ranking and fill. */
 const FINAL_RESERVE_MS = 3_000;
+/** Bounded refinement after every section is covered: queued usable owned files may still improve role fit. */
+const REFINE_MS = 20_000;
+/** Fast lookups are ranked in batches: at most this many unranked lookups, or this long, between evaluations. */
+const EVAL_EVERY_LOOKUPS = 32;
+const EVAL_INTERVAL_MS = 2_000;
 type ListType = "dance" | "cocktail" | "dinner";
 const AVG_BACKGROUND_SONG_MIN = 3.5;
 const LIST_TYPE_LABEL: Record<ListType, string> = { dance: "Dance Floor", cocktail: "Cocktail Hour", dinner: "Dinner" };
@@ -1423,13 +1428,21 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
         // Inspect the account's in-memory index only; no disk access or raw-order padding. Every admitted
         // recording still passes shared facts/ranking and strict rules. Stable pool admission bounds saturation.
+        // Each strict limit separately: a lookup can only resolve a limit not already decided by equal-or-stronger
+        // evidence (file tags, user edits, provider). Tag-verified failures are never looked up or admitted.
+        const lookupCanPass = (row: PRow) => (["bpm", "decade"] as const).every(kind => {
+          const failure = strictLimitFailure(row, kind === "bpm" ? { bpmRange: strictLimits.bpmRange } : { decades: strictLimits.decades });
+          return !failure || sourceRank(attrSource(row, kind === "bpm" ? "bpm" : "year")) < sourceRank("provider");
+        });
         const broadOwned: Pooled[] = [];
         for (let idx = 0; idx < mergedLibrary.tracks.length; idx++) {
           const row = ownedRow(idx);
           const relevant = !!(prefs.bpmRange || prefs.decades.length || prefs.danceRange || prefs.vibe ||
             prefs.genres.some(g => row.genre?.toLowerCase().includes(g.toLowerCase())) ||
             isFavoriteArtist(row.artist, [...favoriteArtists, ...uniqueSongs.map(s => s.artist), ...neighborArtists]));
-          if (relevant && addedAllowed(row) && !strictLimitFailure(row, strictLimits)) broadOwned.push({ row, trackIdx: idx });
+          // Exact usable owned files whose strict facts are merely unverified stay as lookup candidates (ranked after
+          // verified ones); they only become eligible once a lookup verifies them within every limit.
+          if (relevant && addedAllowed(row) && lookupCanPass(row)) broadOwned.push({ row, trackIdx: idx });
         }
         // Scan index references, not audio. Shared ranking orders known usable candidates
         // BEFORE bounded admission; unknown/unusable files cannot crowd out later usable ones.
@@ -1476,7 +1489,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const libraryOn = matcherOn && mergedLibrary.tracks.length > 0;
         const backgroundLookups = new Set<string>();
         const retiredRows: Array<{ artist: string; song: string }> = [];
-        let communityNoticed = false, communityBusy = false;
+        let communityNoticed = false, communityBusy = false, communityDone = false;
+        let communityRun: Promise<void> | undefined, communityFinal = false;
         let suggestionReason = "", stopReason = "";
         const suggestionToasts = new Set<string>();
         const progress = { lookupsSent: 0, usableLooked: 0, usableEligible: 0, reviewLooked: 0, requests: 0, returned: 0 };
@@ -1494,10 +1508,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           return lengths.length ? Math.min(clientCoverage.averageSeconds, lengths.reduce((a, b) => a + b, 0) / lengths.length) : clientCoverage.averageSeconds;
         };
         // A lookup cannot fix a strict failure already decided by equal-or-stronger evidence (tags/user/provider).
-        const lookupCanHelp = (row: PRow) => {
-          const failure = strictLimitFailure(row, strictLimits);
-          return !failure || sourceRank(attrSource(row, failure === "bpm" ? "bpm" : "year")) < sourceRank("provider");
-        };
+        const lookupCanHelp = lookupCanPass;
         const pendingLookup = (p: Pooled) => addedAllowed(p.row) && !facts.wasAttempted(p.row) &&
           (needsFacts(p.row, familiarityActive) || !!strictLimitFailure(p.row, strictLimits)) && lookupCanHelp(p.row);
         // Observed yield of looked-up candidates with counted files (Laplace-smoothed; starts at one half).
@@ -1513,14 +1524,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const lookupOrder = () => {
           if (orderVersion === poolVersion) return orderCache;
           const candidates = [...pool.values()].filter(pendingLookup).sort((a, b) => usableSeconds(b) - usableSeconds(a) || songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)));
-          orderCache = rankPool(candidates, baseCandidate, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true })
+          // Priority context is the request base: rows already placed in this generation are still candidates.
+          orderCache = rankPool(candidates, baseCandidate, { ...rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]), lookupPriority: true })
             .sort((a, b) => b.rec.score - a.rec.score || usableSeconds(b.item) - usableSeconds(a.item)).map(x => x.item);
           orderVersion = poolVersion;
           return orderCache;
         };
         /** Next small chunk: exact usable owned files for the largest remaining section deficits first, then other
          *  usable owned files, then a bounded share of review-only rows (no counted file) when nothing else waits. */
-        const nextChunk = (): Pooled[] => {
+        const nextChunk = (refining = false): Pooled[] => {
           const order = lookupOrder().filter(pendingLookup);
           const usable = order.filter(p => usableSeconds(p) > 0);
           const chosen: Pooled[] = [];
@@ -1541,8 +1553,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             if (backgroundLookups.size >= Math.floor(FACTS_BUDGET / 2)) return false;
             backgroundLookups.add(key); return true;
           };
-          for (const p of usable) { if (chosen.length >= FACTS_BATCH) break; if (!chosen.includes(p) && (p.prefer === undefined || deficitSec(p.prefer) > 0) && allow(p)) chosen.push(p); }
-          if (!chosen.length) {
+          for (const p of usable) { if (chosen.length >= FACTS_BATCH) break; if (!chosen.includes(p) && (refining || p.prefer === undefined || deficitSec(p.prefer) > 0) && allow(p)) chosen.push(p); }
+          // Review-only rows add no counted time: never during refinement, and only once no lane can still deliver.
+          if (!chosen.length && !refining && (!libraryOn || activeLanes === 0)) {
             for (const p of order) {
               if (chosen.length >= FACTS_BATCH) break;
               if (usableSeconds(p) > 0) continue;
@@ -1552,7 +1565,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }
           return chosen;
         };
-        let strictDropped = 0, eligible: Pooled[] = [];
+        let strictDropped = 0, eligible: Pooled[] = [], seenStrict = 0, seenSlow = 0, seenUncertain = 0;
         let rankStats: Parameters<typeof rankPool>[4] & object = {};
         const withCommunity = <C extends { fit?: FitFacts }>(c: C, row: { artist: string; song: string }): C => { const e = community.get(factsKey(row)); return e ? { ...c, fit: { ...(c.fit ?? {}), community: e } } : c; };
         // Exact-track community evidence (Last.fm tags/listeners) only when it can change the ranking: "Favor familiar
@@ -1560,16 +1573,21 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // written into rows, snapshots or the library. Bounded (≤ 40 songs, 12 s cutoff) and run beside the metadata
         // worker, so a slow community provider never holds lookups; the next evaluation uses whatever has arrived.
         const startCommunity = () => {
-          if (!fitNow || !(fitNow.avoidSlow || fitNow.familiarity === "familiar") || !pool.size || communityBusy || Date.now() >= workEnd) return;
+          if (!fitNow || !(fitNow.avoidSlow || fitNow.familiarity === "familiar") || !pool.size || communityBusy || communityDone || Date.now() >= workEnd) return;
           const candidatesForLookup = [...pool.values()].filter((p) => addedAllowed(p.row) && !strictLimitFailure(p.row, strictLimits) && !cg.wasAttempted(p.row)).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
           if (!candidatesForLookup.length) return;
-          const prelim = rankPool(candidatesForLookup, baseCandidate, { ...rankCtx([...r.warmUp, ...r.transition, ...r.peak]), lookupPriority: true }).map((x) => x.item);
+          const prelim = rankPool(candidatesForLookup, baseCandidate, { ...rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]), lookupPriority: true }).map((x) => x.item);
           const prelimSet = new Set(prelim);
           const order = [...prelim, ...candidatesForLookup.filter((p) => !prelimSet.has(p))];
           communityBusy = true;
-          void cg.gather(order.map((p) => ({ artist: p.row.artist, song: p.row.song }))).then(() => {
+          communityRun = cg.gather(order.map((p) => ({ artist: p.row.artist, song: p.row.song }))).then((rep) => {
             communityBusy = false;
-            if (!live() || finished) return;
+            // After the final ranking a late reply changes nothing and reports nothing.
+            if (communityFinal) return;
+            // The per-run community budget is spent: later evaluations reuse the evidence already gathered.
+            if (rep.requested === 0) communityDone = true;
+            const evidenceBefore = community.size;
+            if (!live()) return;
             let unavailable = 0, disabled = 0, unattempted = 0;
             const counted = new Set<string>();
             for (const p of order) {
@@ -1587,9 +1605,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             if (disabled) toast.info(`Last.fm isn't available, so community tags and listener counts weren't checked for ${disabled} candidate track${s(disabled)}. Only that community evidence is unknown; other details are kept.`);
             if (unavailable) toast.info(`Last.fm community tags couldn't be checked for ${unavailable} candidate track${s(unavailable)} (no reply in time or an error). Only that community evidence is unknown; other details are kept.`);
             if (unattempted) toast.info(`${unattempted} lower-ranked candidate track${s(unattempted)} weren't checked on Last.fm (per-run limit of 40). Their community evidence is unknown; nothing was assumed.`);
-            dirty = true; notify();
+            if (community.size !== evidenceBefore) { dirty = true; notify(); }
           }, () => { communityBusy = false; });
         };
+        const communityActive = !!fitNow && (!!fitNow.avoidSlow || fitNow.familiarity === "familiar");
+        const communityMayChange = (p: Pooled) => communityActive && (!cg.wasAttempted(p.row) ? !communityDone : communityBusy && !cg.get(p.row));
         /** Strict eligibility, shared ranking and duration fill from the current pool (synchronous). */
         const evaluate = (final: boolean) => {
           const vbpm = getVibe(prefs.vibe)?.bpm;
@@ -1605,6 +1625,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }).map(([, p]) => p).sort((a, b) => songIdentity(a.row.artist, a.row.song).localeCompare(songIdentity(b.row.artist, b.row.song)) || (a.trackIdx ?? -1) - (b.trackIdx ?? -1));
           rankStats = {};
           const ranked = rankPool(eligible, (p) => withCommunity(baseCandidate(p), p.row), { ...rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]), automaticExpansion: true }, eligible.length, rankStats);
+          // Retired candidates leave the pool, so report the largest counts seen in this generation (lower bounds).
+          seenStrict = Math.max(seenStrict, strictDropped);
+          seenSlow = Math.max(seenSlow, rankStats.hidden?.slow ?? 0);
+          seenUncertain = Math.max(seenUncertain, rankStats.hidden?.uncertainDance ?? 0);
           r = fillRankedDuration(durationBase, ranked.map(({ item, rec }) => ({ row: { ...item.row, rankWhy: explainTop(rec) }, prefer: item.prefer })), durationTargets, generationFiles, generationPath, reviewTargets);
           const finalEligible = eligible;
           refillAfterFeedback = () => {
@@ -1616,18 +1640,23 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           const survivors = new Set(ranked.map(x => x.item));
           const selected = new Set([...r.warmUp, ...r.transition, ...r.peak].map(s => songIdentity(s.artist, s.song)));
           // Rejected discoveries relinquish capacity, but finite catalogue remains admitted.
+          let membershipChanged = false;
           removeWhere(p => {
-            const remove = !eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) && facts.wasAttempted(p.row) && (!survivors.has(p) ||
+            // A ranking-only rejection that pending community evidence could still reverse is kept until it settles.
+            const rejected = !survivors.has(p) && (!!strictLimitFailure(p.row, strictLimits) || !addedAllowed(p.row) || !communityMayChange(p));
+            const remove = !eligibleCatalogueKeys.has(songIdentity(p.row.artist, p.row.song)) && facts.wasAttempted(p.row) && (rejected ||
               (ownedCursor < ownedQueue.length && p.trackIdx !== undefined && !p.row.aiSuggestion && !selected.has(songIdentity(p.row.artist, p.row.song))));
             // Retired attempted candidates remain in the complete local exclusion universe: a model cannot resurrect a
             // rejected recording just because it is outside wire context. Recent ones also inform the wire context.
-            if (remove) { taken.add(p.row.artist, p.row.song); if (!survivors.has(p)) retiredRows.push({ artist: p.row.artist, song: p.row.song }); }
+            if (remove) { membershipChanged = true; taken.add(p.row.artist, p.row.song); if (rejected) retiredRows.push({ artist: p.row.artist, song: p.row.song }); }
             return remove;
           });
+          const cursorBefore = ownedCursor;
           admitOwned();
-          poolVersion++;
+          // Lookup priority only needs recomputing when pool membership changed.
+          if (membershipChanged || ownedCursor !== cursorBefore) poolVersion++;
         };
-        let dirty = true, finished = false, activeLanes = 0, lookupsClosed = false;
+        let dirty = true, finished = false, activeLanes = 0, lookupsClosed = false, pendingEval = 0, lastEvalAt = 0;
         // One in-flight request per section lane, lanes side by side, coordinated client/server deadlines; a lane
         // never sends into a window too short for useful output at its measured pace (or too late to look up).
         const lanes = createSuggestionLanes<Parameters<typeof recommendFn>[0], RecommendedSong>({
@@ -1643,9 +1672,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           },
         });
         const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: r.peak }, [...retiredRows.slice(-200), ...poolRows()]);
+        let lastUsableAdded = 0;
+        const barrenLanes: string[] = [];
         const offerReply = (key: SectionKey, rows: RecommendedSong[], accept: (s: RecommendedSong) => boolean = () => true) => {
-          let added = 0;
-          for (const sug of rows) if (accept(sug) && offer(toAiSong(sug) as PRow, key)) added++;
+          let added = 0; lastUsableAdded = 0;
+          for (const sug of rows) {
+            const row = toAiSong(sug) as PRow;
+            if (accept(sug) && offer(row, key)) { added++; if (generationFiles(row).some(f => Number.isFinite(f.seconds) && f.seconds > 0)) lastUsableAdded++; }
+          }
           progress.returned += rows.length;
           if (added) { poolVersion++; dirty = true; notify(); }
           return added;
@@ -1653,22 +1687,24 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const laneLoop = async ({ key, label }: { key: SectionKey; label: FillLabel }) => {
           activeLanes++;
           try {
-            let sent = 0, favoriteAttempts = favoriteArtists.length ? 0 : 3;
-            while (!finished && live() && lanes.open(key) && sent < maxLaneRequests) {
+            let sent = 0, barren = 0, favoriteAttempts = favoriteArtists.length ? 0 : 3;
+            // Once lookups have stopped, further replies could never be verified: the lane ends honestly.
+            while (!finished && !lookupsClosed && live() && lanes.open(key) && sent < maxLaneRequests) {
               const deficit = deficitSec(key);
               if (deficit <= 0) break;
               // Backpressure: replies already waiting for facts (scaled by observed yield) count against the deficit,
-              // and the metadata queue must be able to absorb another reply before the work end.
+              // and this section's waiting replies must still be checkable before the work end.
               const pending = pendingFor(key);
               const wantSec = deficit - pending.sec * yieldEstimate();
-              const queued = sectionOrder.reduce((n, k) => n + pendingFor(k).n, 0);
-              const queueMs = Math.ceil(queued / FACTS_BATCH) * chunkMs();
-              if (wantSec <= 0 || (queued > 0 && Date.now() + queueMs >= suggestionEnd())) {
+              // This section's own waiting replies already need all remaining lookup time: more would go unchecked.
+              const queueMs = Math.ceil(pending.n / FACTS_BATCH) * chunkMs();
+              if (wantSec <= 0 || (pending.n > 0 && Date.now() + queueMs >= suggestionEnd())) {
                 await waitChange(Math.min(1000, Math.max(0, workEnd - Date.now())));
                 if (Date.now() >= workEnd) break;
                 continue;
               }
-              const want = Math.max(1, Math.min(MAX_AI_RECOMMENDATION_BATCH_SIZE, Math.ceil(wantSec / averageSec() / Math.max(0.3, yieldEstimate()))));
+              // At least a useful batch: tiny requests pay full start-up latency for one or two songs.
+              const want = Math.max(SUGGESTION_MIN_COUNT, Math.min(MAX_AI_RECOMMENDATION_BATCH_SIZE, Math.ceil(wantSec / averageSec() / Math.max(0.3, yieldEstimate()))));
               // PASS 1 — favourite artists (max FAVORITE_ARTIST_CAP per artist across rows and candidates).
               if (favoriteAttempts < 3) {
                 const favoriteCounts = () => {
@@ -1680,7 +1716,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 const allowed = favoriteArtists.filter((f) => (counts.get(f) ?? 0) < FAVORITE_ARTIST_CAP);
                 const requestCount = Math.min(want, allowed.length * FAVORITE_ARTIST_CAP);
                 if (requestCount > 0) {
-                  favoriteAttempts++; sent++; progress.requests++;
+                  favoriteAttempts++; sent++;
                   const res = await lanes.request(key, requestCount, (count, deadlineMs) => ({ data: { section: label, count, deadlineMs, prefs, existing: existingNow(), onlyArtists: allowed, neighborArtists, crowdArtists } }));
                   if (!live() || finished) return;
                   // Other lanes may have admitted favourites while this request awaited its reply.
@@ -1698,10 +1734,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               }
               // PASS 2 — general gap-driven candidates for whatever is still uncovered.
               const gaps = buildGapProfile(r[key], [...r.warmUp, ...r.transition, ...r.peak], gapSection(label), { favoriteArtists });
-              sent++; progress.requests++;
+              sent++;
               const res = await lanes.request(key, want, (count, deadlineMs) => ({ data: { section: label, count, deadlineMs, prefs, existing: existingNow(), gaps, favoriteArtists, neighborArtists, crowdArtists } }));
               if (!live() || finished) return;
-              if (res) offerReply(key, res.suggestions);
+              // A reply with nothing new (all duplicates/known) ends this lane: repeating it cannot add coverage.
+              if (res && offerReply(key, res.suggestions) === 0 && res.suggestions.length) { stopReason ||= " Sources returned no new candidates."; break; }
+              // Two consecutive replies without a single new song that has a counted library file: further requests
+              // are unlikely to add counted time, so the lane ends honestly.
+              barren = res && libraryOn ? (lastUsableAdded === 0 ? barren + 1 : 0) : barren;
+              if (barren >= 2) { barrenLanes.push(label); break; }
             }
           } finally {
             activeLanes--;
@@ -1709,8 +1750,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           }
         };
         const worker = async () => {
+          // After every section is covered, a short bounded refinement keeps checking already-queued usable owned
+          // files (no new suggestion requests) so the shared ranking can choose better role fits; never past workEnd.
+          let coveredAt: number | undefined;
           while (!finished && live()) {
-            const chunk = Date.now() < workEnd && !lookupsClosed ? nextChunk() : [];
+            const lookupEnd = coveredAt === undefined ? workEnd : Math.min(workEnd, coveredAt + REFINE_MS);
+            const chunk = Date.now() < lookupEnd && !lookupsClosed ? nextChunk(coveredAt !== undefined) : [];
             if (chunk.length) {
               const online = await enrichBatch(chunk.map((p) => p.row));
               // Stale-generation/account fence after the await: never rank or apply with another run's or account's state.
@@ -1722,16 +1767,28 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 p.row = (p.trackIdx !== undefined ? enriched : enrichFromLibrary(enriched)) as PRow;
                 if (facts.wasAttempted(p.row)) { progress.lookupsSent++; if (usable) { progress.usableLooked++; if (!strictLimitFailure(p.row, strictLimits) && !automaticDanceFailure(fitNow, (withFit(p.row) as { fit?: FitFacts }).fit)) progress.usableEligible++; } else progress.reviewLooked++; }
               }
-              poolVersion++; dirty = true;
+              pendingEval += chunk.length;
               // Nothing was sent (time limit, cooldown beyond the end, or a hung provider): lookups are over.
-              if (rep && rep.requested === 0) { stopReason ||= " Online lookups stopped at the time limit or because the provider stopped responding; unchecked candidates were not counted."; lookupsClosed = true; }
+              if (rep && rep.requested === 0) { if (coveredAt === undefined) stopReason ||= " Online lookups stopped at the time limit or because the provider stopped responding; unchecked candidates were not counted."; lookupsClosed = true; }
             }
-            if (dirty) {
-              dirty = false;
+            // Re-rank after new replies/evidence at once; batch fast lookups (bounded CPU on large pools) but never
+            // leave looked-up facts unranked when the queue pauses or a slow chunk lands.
+            const due = dirty || (pendingEval > 0 && (!chunk.length || pendingEval >= EVAL_EVERY_LOOKUPS || Date.now() - lastEvalAt >= EVAL_INTERVAL_MS));
+            if (due) {
+              dirty = false; pendingEval = 0; lastEvalAt = Date.now();
               startCommunity();
               evaluate(false);
+              // Covered: lanes send nothing new; replies already in flight may still land within the refinement window.
+              if (coveredAt === undefined && sectionOrder.every(k => deficitSec(k) <= 0)) { coveredAt = Date.now(); stopReason = ""; }
               notify();
-              if (sectionOrder.every(k => deficitSec(k) <= 0)) { finished = true; stopReason = ""; break; }
+              continue;
+            }
+            if (chunk.length) continue;
+            if (coveredAt !== undefined) {
+              // Covered: finish once refinement has nothing left and no reply is still in flight, or its window ends.
+              const refineEnd = Math.min(workEnd, coveredAt + REFINE_MS);
+              if (activeLanes === 0 || Date.now() >= refineEnd) break;
+              await waitChange(Math.min(1000, Math.max(0, refineEnd - Date.now())));
               continue;
             }
             if (Date.now() >= workEnd) { stopReason ||= " Bounded time limit reached."; break; }
@@ -1740,16 +1797,32 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             await waitChange(Math.min(1000, Math.max(0, workEnd - Date.now())));
           }
         };
-        await Promise.all([worker().finally(() => { finished = true; lanes.close(); notify(); }), ...sectionMap.map(laneLoop)]);
+        // Place what is already eligible (verified owned files need no lookup) before the first request, so lane
+        // deficits and wire context reflect it. Synchronous: no network wait precedes the first suggestions.
+        evaluate(false); dirty = false;
+        // Lanes register before the worker's first idle check, so it never mistakes "not yet started" for "done".
+        const laneRuns = sectionOrder.every(k => deficitSec(k) <= 0) ? [] : sectionMap.map(laneLoop);
+        await Promise.all([worker().finally(() => { finished = true; lanes.close(); notify(); }), ...laneRuns]);
         if (genTokenRef.current !== myToken) return;
         if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
+        // Late community evidence (bounded by the fixed end) still informs the final ranking.
+        for (let i = 0; i < 2 && communityRun && Date.now() < repairEnd; i++) {
+          let t: ReturnType<typeof setTimeout> | undefined;
+          await Promise.race([communityRun, new Promise<void>(res => { t = setTimeout(res, Math.max(0, repairEnd - Date.now())); })]).finally(() => clearTimeout(t));
+          if (genTokenRef.current !== myToken) return;
+          if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
+          communityRun = undefined; startCommunity();
+        }
+        finished = true; communityFinal = true;
         evaluate(true);
-        if (rankStats.hidden?.slow) toast.info(`${rankStats.hidden.slow} candidate track${rankStats.hidden.slow === 1 ? " was" : "s were"} left out as slow/ballad additions (provider or measured energy and danceability). Remaining time stays an honest gap.`);
-        if (strictDropped) toast.info(`${strictDropped} candidate track${strictDropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
+        if (seenSlow) toast.info(`${seenSlow} candidate track${seenSlow === 1 ? " was" : "s were"} left out as slow/ballad additions (provider or measured energy and danceability). Remaining time stays an honest gap.`);
+        if (seenStrict) toast.info(`${seenStrict} candidate track${seenStrict === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
+        progress.requests = sectionMap.reduce((n, { key }) => n + lanes.lane(key).attempts, 0);
         const shortLanes = sectionMap.filter(({ key }) => lanes.lane(key).shortWindow && deficitSec(key) > 0).map(({ label }) => label);
-        durationReason = `${strictDropped} candidates failed verified BPM/decade limits or had verified danceability outside your range; ${rankStats.hidden?.slow ?? 0} had strong slow evidence; ${rankStats.hidden?.uncertainDance ?? 0} lacked supported upbeat dance fit (not classified slow). Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed.` +
+        durationReason = `${seenStrict} candidates failed verified BPM/decade limits or had verified danceability outside your range; ${seenSlow} had strong slow evidence; ${seenUncertain} lacked supported upbeat dance fit (not classified slow). Only approved unique known-length files count. Review unlinked tracks, supply missing metadata or add eligible files; constraints were not relaxed.` +
           ` Checked ${progress.lookupsSent} candidates online (${progress.usableLooked} with counted files, ${progress.usableEligible} of those eligible); ${progress.requests} suggestion request${progress.requests === 1 ? "" : "s"} returned ${progress.returned} songs.` +
           (shortLanes.length ? ` ${shortLanes.join(", ")}: no further suggestions were requested because too little time remained for useful results.` : "") +
+          (barrenLanes.length ? ` ${barrenLanes.join(", ")}: recent suggestions had no new songs with counted files in your library, so no more were requested.` : "") +
           (suggestionReason ? ` ${suggestionReason}` : "") + stopReason;
         console.info("[expansion] coordinated staging", { ...progress, metadataChunks: metadataLatencies.length, averageChunkMs: Math.round(chunkMs()), stop: stopReason.trim() || "covered" });
 
