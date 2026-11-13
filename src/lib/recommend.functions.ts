@@ -455,6 +455,8 @@ Rules:
         // Without this, Gemini truncates mid-list (finishReason=length) and the
         // caller gets fewer songs than it asked for, leaving the playlist short.
         maxOutputTokens: 8192,
+        // Retry decisions belong to the fenced section lanes, not hidden SDK attempts inside 30s.
+        maxRetries: 0,
         abortSignal: controller.signal,
         onError: ({ error }) => { if (!controller.signal.aborted) streamError ??= error; },
       });

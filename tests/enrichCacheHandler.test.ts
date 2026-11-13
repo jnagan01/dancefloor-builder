@@ -124,6 +124,18 @@ describe('authenticated handler service-only metadata cache', () => {
     expect(io.reads).toBe(2); expect(io.writes).toBe(1); expect(h.userQuery).not.toHaveBeenCalled();
   });
 
+  it('actual authenticated handler retains cached provenance and reports stalled-body timeout without negative writes', async () => {
+    vi.useFakeTimers();
+    const io = database([{ ...warm(), energy: null, danceability: null }]);
+    vi.stubGlobal('fetch', async () => new Response(new ReadableStream({ start() {} })));
+    state.ai.mockReturnValue({ textStream: (async function* () { yield '{"items":[]}'; })() });
+    const h = handler(); const pending = h.call({ songs: [song] });
+    await vi.advanceTimersByTimeAsync(16000); const out = await pending;
+    expect(out.status.timedOut).toContain('fetch'); expect(out.status.complete).toBe(false);
+    expect(out.results[0]).toMatchObject({ year: 2004, bpm: 122, incomplete: true, prov: { year: 'provider', bpm: 'provider' } });
+    expect(io.writes).toBe(0); expect(h.userQuery).not.toHaveBeenCalled();
+  });
+
   it.each(['absent', 'invalid'] as const)('rejects %s auth before privileged cache work', async auth => {
     database([warm()]); const fetch = providers();
     await expect(handler(auth).call({ songs: [song] })).rejects.toThrow(/Unauthorized/);

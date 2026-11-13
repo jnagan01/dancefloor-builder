@@ -62,7 +62,7 @@ export interface EnrichStatus {
 
 interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number; lane?: ReturnType<typeof createProviderLane>; failed?: boolean; timedOut?: boolean }
 
-async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx): Promise<Response> {
+async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx): Promise<{ ok: boolean; json: () => Promise<unknown> }> {
   if (ctx?.lane && !(await ctx.lane.ready())) { ctx.failed = true; throw new Error("Provider paused"); }
   const ctrl = new AbortController();
   const ms = ctx ? Math.max(1, Math.min(ctx.requestMs, ctx.until - ctx.now())) : ENRICH_LIMITS.requestMs;
@@ -70,11 +70,18 @@ async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx):
   const onAbort = () => ctrl.abort();
   if (ctx?.signal.aborted) ctrl.abort(); else ctx?.signal.addEventListener("abort", onAbort);
   try {
-    const response = await within(fetch(url, { ...init, signal: ctrl.signal }), Date.now() + ms, Date.now);
+    const now = ctx?.now ?? Date.now;
+    const until = now() + ms;
+    const response = await within(fetch(url, { ...init, signal: ctrl.signal }), until, now);
     if (response === LATE) { if (ctx) ctx.timedOut = true; ctrl.abort(); throw new Error("Provider request deadline"); }
     ctx?.lane?.response(response);
     if (ctx && !response.ok) ctx.failed = true;
-    return response;
+    // Keep the request timer and abort forwarding alive through body consumption, not just headers.
+    // Failed bodies are never useful and must not hold a connection during the shared cooldown.
+    if (!response.ok) { void response.body?.cancel().catch(() => {}); return { ok: false, json: async () => ({}) }; }
+    const body = await within(response.json(), until, now);
+    if (body === LATE) { if (ctx) ctx.timedOut = true; ctrl.abort(); void response.body?.cancel().catch(() => {}); throw new Error("Provider body deadline"); }
+    return { ok: true, json: async () => body };
   } catch (err) {
     if (ctx) ctx.failed = true;
     if (ctx && ctrl.signal.aborted) ctx.timedOut = true;
@@ -225,10 +232,10 @@ async function fetchReccoBeats(
       );
     };
     let match = pick(await searchReccoBeats(clean, 0, ctx));
-    if (!match && !ctx?.signal.aborted) match = pick(await searchReccoBeats(clean, 1, ctx));
+    if (!match && !ctx?.failed && !ctx?.signal.aborted) match = pick(await searchReccoBeats(clean, 1, ctx));
     if (!match?.id) return null;
 
-    let featRes: Response;
+    let featRes: Awaited<ReturnType<typeof fetchWithTimeout>>;
     try { featRes = await fetchWithTimeout(
       `https://api.reccobeats.com/v1/track/${encodeURIComponent(match.id)}/audio-features`,
       { headers: { Accept: "application/json" } },
@@ -508,6 +515,14 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   let recoCursor = 0;
   const providerIncomplete = new Set<string>();
   const providerTimeout = new Set<string>();
+  let acousticSettled = false;
+  const acousticWaiters = new Set<() => void>();
+  const acousticChanged = () => { for (const resolve of [...acousticWaiters]) resolve(); };
+  const waitAcoustic = () => new Promise<void>(resolve => {
+    const finish = () => { clearTimeout(timer); acousticWaiters.delete(finish); resolve(); };
+    const timer = setTimeout(finish, Math.max(0, fetchUntil - now()));
+    acousticWaiters.add(finish);
+  });
   const recoWorker = async () => {
     while (open()) {
       const q = missOrder[recoCursor++];
@@ -516,6 +531,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       const songCtx = { ...recoCtx, failed: false };
       const r = await fetchReccoBeats(q.original.artist, q.original.song, songCtx);
       if (open()) { recoDone.set(k, r); if (songCtx.failed) providerIncomplete.add(k); if (songCtx.timedOut) providerTimeout.add(k); }
+      acousticChanged();
       if (recoCtx.lane.pausedUntil >= fetchUntil) return;
     }
   };
@@ -530,7 +546,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       if (mbCtx.lane.pausedUntil >= fetchUntil) return;
     }
   };
-  // One estimate lane starts as soon as the acoustic provider settles, independently
+  // One estimate lane starts from completed acoustic gaps, independently
   // of slow recording/year searches. Four acoustic + one recording + one AI <= six.
   // The same fixed request end fences every partial; no song receives two estimates.
   const aiUntil = end - L.upsertMs;
@@ -539,14 +555,28 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const estimates = new Map<string, AiEstimate>();
   let aiFailed = false, aiLate = false;
   const estimateMissing = async () => {
-    const missing = missOrder.filter(q => {
-      const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k), reco = recoDone.get(k);
-      return (prev?.energy ?? reco?.energy) == null || (prev?.danceability ?? reco?.danceability) == null;
-    });
-    if (!missing.length) return;
+    const attemptedAi = new Set<string>();
+    let firstGroup = true;
     const work = async () => {
-      for (let offset = 0; offset < missing.length && !aiClosed && now() < aiUntil; offset += 8) {
-        const group = missing.slice(offset, offset + 8);
+      while (!aiClosed && now() < aiUntil) {
+        // Coalesce simultaneously completing acoustic workers before paying model startup for one row.
+        // A single short timer yield (not a provider barrier) keeps quick 8-row misses in one estimate.
+        if (firstGroup && recoDone.size > 0 && !acousticSettled && !fetchClosed && missOrder.length > 1) {
+          firstGroup = false;
+          await new Promise(resolve => setTimeout(resolve, Math.min(25, Math.max(0, aiUntil - now()))));
+          continue;
+        }
+        const group = missOrder.filter(q => {
+          const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k), reco = recoDone.get(k);
+          return !attemptedAi.has(k) && (recoDone.has(k) || acousticSettled || fetchClosed) &&
+            ((prev?.energy ?? reco?.energy) == null || (prev?.danceability ?? reco?.danceability) == null);
+        }).slice(0, 8);
+        if (!group.length) {
+          if (acousticSettled || fetchClosed) return;
+          await waitAcoustic();
+          continue;
+        }
+        for (const q of group) attemptedAi.add(`${q.artistKey}\u0000${q.songKey}`);
         const keep = (i: number, value: AiEstimate) => {
           const q = group[i]; if (aiClosed || now() >= aiUntil || !q || !value) return;
           estimates.set(`${q.artistKey}\u0000${q.songKey}`, value);
@@ -566,11 +596,13 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   let aiWork: Promise<void> = Promise.resolve();
   if (missOrder.length) {
     const acoustic = Promise.all(Array.from({ length: Math.min(ENRICH_PROVIDER_CONCURRENCY.recco, missOrder.length) }, recoWorker));
-    aiWork = acoustic.then(estimateMissing);
+    void acoustic.finally(() => { acousticSettled = true; acousticChanged(); }).catch(() => {});
+    aiWork = estimateMissing();
     const pool = Promise.all([mbWorker(), acoustic]);
     const got = await within(pool, fetchUntil, now);
     fetchClosed = true;
     fetchCtrl.abort();
+    acousticChanged();
     if (got === LATE) timeout("fetch");
     status.retryAfterMs = Math.max(0, recoCtx.lane.pausedUntil - now(), mbCtx.lane.pausedUntil - now());
   }

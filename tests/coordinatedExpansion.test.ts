@@ -16,6 +16,8 @@ import { exportReadiness } from '@/lib/exportReadiness';
 import { factsKey } from '@/lib/prep/factsGather';
 import { AdditionKeySet } from '@/lib/additionIdentity';
 import { recommendHandler } from './helpers/recommendHandler';
+import { runEnrichment, type CacheRow } from '@/lib/enrichPipeline.server';
+import { encodeCacheSource } from '@/lib/prep/provenance';
 
 /*
  * Native-shaped coordination regression, all synthetic (no production data, no real accounts/files):
@@ -94,7 +96,7 @@ function providerFacts(s: { artist: string; song: string }) {
   return { ...s, source: 'none' };
 }
 type Call = { section: string; start: number; end: number; count: number; deadlineMs?: number; existing: number; returned: number; only: number };
-type Opts = { mode: 'cold' | 'mixed' | 'warm'; baseline?: boolean; laneFiles?: number; outage?: boolean; harYield?: boolean; lowYield?: boolean; estimatedCatalogue?: boolean; immediate?: boolean; failure?: (section: string, n: number) => 'transient' | 'validation' | undefined; favorites?: boolean };
+type Opts = { mode: 'cold' | 'mixed' | 'warm'; realPipeline?: boolean; baseline?: boolean; laneFiles?: number; outage?: boolean; harYield?: boolean; lowYield?: boolean; estimatedCatalogue?: boolean; immediate?: boolean; failure?: (section: string, n: number) => 'transient' | 'validation' | undefined; favorites?: boolean };
 
 function scenario(o: Opts) {
   const laneFiles = o.laneFiles ?? 200;
@@ -185,6 +187,27 @@ function scenario(o: Opts) {
     return providerFacts(s);
   };
   const fixtureDance = o.estimatedCatalogue ? { ...dance, catalogueCandidates: () => sections.flatMap(k => Array.from({ length: 24 }, (_, i) => { const t = laneTrack(k, i); return { row: { artist: t.artist, song: t.title, energy: 8, danceability: 8, year: 2005, bpm: 120, metaProv: { energy: 'estimate', danceability: 'estimate', year: 'tags', bpm: 'tags' } }, prefer: k }; })) } : dance;
+  const requested = new Map<string, { artist: string; song: string }>();
+  if (o.realPipeline) vi.stubGlobal('fetch', async (url: string) => {
+    const u = new URL(url);
+    const json = (body: unknown) => new Response(JSON.stringify(body));
+    if (u.host === 'musicbrainz.org') {
+      const titles = [...(u.searchParams.get('query') ?? '').matchAll(/recording:"([^"]+)"/g)].map(m => m[1]);
+      return json({ recordings: titles.flatMap(title => {
+        const s = requested.get(title); if (!s) return [];
+        const f = outcomes(s) as any;
+        return [{ title, 'artist-credit': [{ name: s.artist }], 'first-release-date': `${f.year ?? 2005}-01-01`, tags: [{ name: 'Pop' }] }];
+      }) });
+    }
+    if (u.pathname.endsWith('/search')) {
+      const title = u.searchParams.get('searchText') ?? '', s = requested.get(title);
+      return json({ content: s ? [{ id: title, trackTitle: title, artists: [{ name: s.artist }], popularity: 80 }] : [] });
+    }
+    const title = decodeURIComponent(u.pathname.split('/').at(-2) ?? ''), s = requested.get(title);
+    if (!s) return json({});
+    const f = outcomes(s) as any;
+    return json({ energy: f.energy === undefined ? undefined : (f.energy - 1) / 9, danceability: f.danceability === undefined ? undefined : (f.danceability - 1) / 9, tempo: f.bpm });
+  });
   const h = createHarness({ ...actual, dance: fixtureDance, observeRanking, observeCoordinator, routeSource: o.baseline ? readFileSync('tests/fit/archived/events.new.5e46335.txt', 'utf8') : undefined })({ rows: { A: o.favorites ? { ...structuredClone(base), inputs: { ...structuredClone(base.inputs), artistsInput: FAVE } } : structuredClone(base), B: { ...structuredClone(base), id: 'B' } }, contract: true, services: {
     enrich: async ({ data }: any) => {
       const songs: string[] = data.songs.map(factsKey);
@@ -193,6 +216,14 @@ function scenario(o: Opts) {
       if (o.outage && expansion) await new Promise(() => {});
       const latency = songs.every(warm) ? 300 : COLD[seq++ % COLD.length];
       if (!o.immediate) await new Promise(r => setTimeout(r, latency)); entry.end = Date.now();
+      if (o.realPipeline) {
+        for (const s of data.songs) requested.set(s.song, s);
+        const rows: CacheRow[] = data.songs.filter((s: any) => warm(factsKey(s))).map((s: any) => {
+          const f = outcomes(s) as any;
+          return { artist_key: dance.normalizeKey(s.artist), song_key: dance.normalizeKey(s.song), energy: f.energy ?? null, danceability: f.danceability ?? null, bpm: f.bpm ?? null, year: f.year ?? null, popularity: 8, valence: null, camelot: null, genre: 'Pop', fetched_at: new Date().toISOString(), source: encodeCacheSource('ReccoBeats+MusicBrainz', f.prov ?? {}) };
+        });
+        return runEnrichment(data.songs, { readRows: async () => rows, upsert: async () => {}, estimate: async group => group.map(() => null) });
+      }
       return { results: data.songs.map(outcomes) };
     },
     recommend: async (request: any) => {
@@ -229,7 +260,7 @@ function report(label: string, s: ReturnType<typeof scenario>, t0: number) {
   console.info(`SYNTHETIC ${label}: seconds ${sec.join('/')} (targets ${TARGETS.join('/')}); suggestion calls ${s.calls.length} ${JSON.stringify(per)}; lookups ${s.lookups.length} chunks / ${s.lookups.reduce((a, l) => a + l.songs.length, 0)} songs; work span ${Math.round((last - first) / 100) / 10}s; generate total ${Math.round((s.doneAt() - t0) / 100) / 10}s`);
   return sec;
 }
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 it('baseline 5e46335 (archived route) fails the native-shaped mixed reproduction', async () => {
   vi.useFakeTimers();
@@ -460,6 +491,15 @@ it('refinement reopens coverage invalidated by verified slow evidence and resume
   }
   invariants(s); s.h.unmount();
 }, 20000);
+
+for (const mode of ['cold', 'mixed', 'warm'] as const) it(`real pipeline + route + recommend handler: 40% linked strict yield retains all targets (${mode})`, async () => {
+  vi.useFakeTimers();
+  const s = scenario({ mode, lowYield: true, realPipeline: true });
+  const t0 = await s.run(); const sec = report(`real pipeline low yield ${mode}`, s, t0);
+  sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
+  expect(s.lookups.reduce((n, l) => n + l.songs.filter(k => !k.startsWith('TEST Request')).length, 0)).toBeLessThanOrEqual(600);
+  invariants(s); s.h.unmount();
+}, 30000);
 
 it('immediately settled metadata cannot spin the actual worker or starve a pending timer', async () => {
   vi.useFakeTimers();

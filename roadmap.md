@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Remaining online lookup timeouts
+- [ ] Start the single AI gap lane from completed acoustic misses, bound response bodies, and recheck shared provider cooldowns without increasing deadlines/concurrency.
+- [ ] Real pipeline/handler cold/warm/rate/outage/partial fixtures and actual-route 40% yield coverage; preserve native optional-expansion checks.
+- [ ] Focused/full tests, TypeScript, automatic compilation, evidence and final commit; exact-head hosted Mac/CodeQL requires GitHub access after commit.
 ## Already-covered client base
 - [x] Skip expansion coordination only when freshly allocated requested files cover every selected target; preserve automatic coverage refinement/reopening.
 - [x] Actual-route 40 known four-minute requests, 20/20/20 at 1×: slow/hung unrelated providers fail before fix, finish within 1s after fix; 40 client lookups only, no suggestions/additions/warnings; save/reopen unchanged.

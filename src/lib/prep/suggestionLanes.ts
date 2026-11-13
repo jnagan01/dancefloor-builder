@@ -110,7 +110,15 @@ export function createSuggestionLanes<Req, S>(o: {
           if (failure.kind === "transient" && s.transient < 1) {
             s.transient++;
             if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
-            await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1000, o.end - Date.now()))));
+            const e = error && typeof error === "object" ? error as { retryAfterMs?: number; responseHeaders?: Record<string, string> } : {};
+            const header = e.responseHeaders?.["retry-after"];
+            const seconds = header === undefined ? NaN : Number(header);
+            const date = header ? Date.parse(header) : NaN;
+            const delay = Math.max(1000, Number.isFinite(e.retryAfterMs) ? e.retryAfterMs ?? 1000 :
+              Number.isFinite(seconds) ? seconds * 1000 : Number.isFinite(date) ? date - Date.now() : 1000);
+            // A provider cooldown that leaves no useful response window ends this lane, not a doomed replay.
+            if (delay + usefulWindowMs(s.perItemMs, count) + SUGGESTION_TRANSPORT_MARGIN_MS >= endAt() - Date.now()) { s.stopped = true; return null; }
+            await new Promise(resolve => setTimeout(resolve, delay));
             continue; // fenced again at the top of the loop before any resend
           }
           if (failure.kind === "transient") { s.stopped = true; return null; }

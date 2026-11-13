@@ -18,14 +18,20 @@ export function createProviderLane(now: () => number, until: number, signal: Abo
     get pausedUntil() { return blocked ? until : pausedUntil; },
     async ready() {
       if (blocked || signal.aborted) return false;
-      const waitUntil = Math.max(nextStart, pausedUntil);
-      if (waitUntil >= until) return false;
-      const ms = Math.max(0, waitUntil - now());
-      if (ms) await new Promise<void>(resolve => {
-        const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
-        const timer = setTimeout(finish, ms);
-        signal.addEventListener('abort', finish, { once: true });
-      });
+      // Another in-flight response can extend the lane cooldown while this worker sleeps.
+      // Recompute after every wake; old reservations must never bypass new rate pressure.
+      for (;;) {
+        if (blocked || signal.aborted || now() >= until) return false;
+        const waitUntil = Math.max(nextStart, pausedUntil);
+        if (waitUntil >= until) return false;
+        const ms = Math.max(0, waitUntil - now());
+        if (!ms) break;
+        await new Promise<void>(resolve => {
+          const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
+          const timer = setTimeout(finish, ms);
+          signal.addEventListener('abort', finish, { once: true });
+        });
+      }
       if (signal.aborted || now() >= until || blocked) return false;
       nextStart = now() + intervalMs;
       return true;
