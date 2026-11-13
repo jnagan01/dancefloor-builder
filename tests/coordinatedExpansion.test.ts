@@ -42,7 +42,11 @@ const KEY: Record<string, (typeof sections)[number]> = { 'Warm Up': 'warmUp', Tr
 const clients = Array.from({ length: 34 }, (_, i) => ({ artist: `TEST Request ${i}`, song: `Client ${i}` }));
 const base = { id: 'A', inputs: { songs: clients, hours: '3.75', buffer: 2, listType: 'dance', expand: true, split: { warmUp: 45, transition: 120, peak: 60 }, genresInput: 'Pop', decades: ['2000s'], bpmRange: [110, 130], danceRange: [6, 10], eventFit: { avoidSlow: true } }, lists: { warmUp: clients.map(s => ({ ...s, fromUpload: true })), transition: [], peak: [], selections: {} } };
 const DESPERADO = { artist: 'TEST Eagle Trio', title: 'Desperado Ballad' };
-const laneTrack = (k: string, i: number) => ({ artist: `TEST Lane ${k} ${i}`, title: `Lane Song ${k} ${i}`, filePath: `/synthetic/lane/${k}/${i}.mp3`, genre: 'Pop', songLength: 180 + (i % 5) * 30 });
+const SYL = ['ka', 'vo', 'rel', 'min', 'tas', 'quo', 'zen', 'bri', 'lux', 'dov', 'hap', 'yer', 'gim', 'sol', 'fen', 'wir', 'nap', 'cue', 'jot', 'pex'];
+const SEC_SYL: Record<string, string> = { warmUp: 'Amber', transition: 'Cobalt', peak: 'Scarlet' };
+const word = (i: number) => { const a = SYL[i % 20], b = SYL[Math.floor(i / 20) % 20], c = SYL[(i * 7 + 3) % 20]; return (a + b + c).replace(/^./, x => x.toUpperCase()); };
+/** Distinct, non-numeric names so the real matcher approves exactly one file (no prefix ambiguity). */
+const laneTrack = (k: string, i: number) => ({ artist: `TEST Lane ${SEC_SYL[k]} ${word(i)}`, title: `${word(i * 13 + 5)} ${SEC_SYL[k]} Groove`, filePath: `/synthetic/lane/${k}/${i}.mp3`, genre: 'Pop', songLength: 180 + (i % 5) * 30 });
 const shelfTrack = (i: number) => ({ artist: `TEST Shelf ${i}`, title: `Shelf Song ${i}`, filePath: `/synthetic/shelf/${i}.mp3`, genre: 'Pop', bpm: '120', songLength: 180 + (i % 5) * 30 });
 
 function library(laneFiles: number) {
@@ -55,6 +59,8 @@ function library(laneFiles: number) {
   expect(tracks).toHaveLength(37722);
   return vdj.buildLibrary(tracks);
 }
+const laneIndex = new Map<string, number>();
+for (const k of sections) for (let i = 0; i < 400; i++) { const t = laneTrack(k, i); laneIndex.set(`${t.artist}||${t.title}`, i); }
 const P = (o: Record<string, unknown>) => Object.fromEntries(Object.keys(o).map(k => [k, 'provider']));
 /** Realistic per-song provider outcome (never "correct facts for every candidate"). */
 function providerFacts(s: { artist: string; song: string }) {
@@ -69,10 +75,10 @@ function providerFacts(s: { artist: string; song: string }) {
     if (c <= 13) return { ...full({ year: 2003 }), incomplete: true }; // verified year, no dance evidence
     return full({ energy: 3, danceability: 3, year: 2006 }); // slow
   }
-  const lane = /^TEST Lane \w+ (\d+)$/.exec(s.artist);
-  if (lane && /^Lane Song \w+ \d+$/.test(s.song)) {
-    const c = Number(lane[1]) % 10;
-    if (c <= 3) return full({ energy: 8, danceability: 8, bpm: 112 + (Number(lane[1]) % 15), year: 2000 + c, popularity: 7, genre: 'Pop' });
+  const lane = laneIndex.get(`${s.artist}||${s.song}`);
+  if (lane !== undefined) {
+    const c = lane % 10;
+    if (c <= 3) return full({ energy: 8, danceability: 8, bpm: 112 + (lane % 15), year: 2000 + c, popularity: 7, genre: 'Pop' });
     if (c === 4) return { ...full({ energy: 8, danceability: 7, bpm: 124, year: 2007 }), incomplete: true }; // partial, sufficient
     if (c === 5) return full({ energy: 7, danceability: 6, bpm: 118, year: 2008 });
     if (c === 6) return full({ energy: 8, danceability: 8, bpm: 120, year: 1997 }); // verified decade fail
@@ -179,7 +185,7 @@ for (const mode of ['mixed', 'warm'] as const) it(`coordinated staging reaches 9
   // The 12.5 s Warm Up reply is looked up while the 29.6 s Transition reply is still streaming.
   const warmReply = s.calls.find(c => c.section === 'Warm Up')!, transition = s.calls.find(c => c.section === 'Transition')!;
   const warmSongs = new Set(s.suggested.slice(0, 0));
-  const firstWarmLookup = s.lookups.find(l => l.at >= warmReply.end && l.songs.some(k => k.startsWith('TEST Lane warmUp')));
+  const firstWarmLookup = s.lookups.find(l => l.at >= warmReply.end && l.songs.some(k => k.startsWith('TEST Lane Amber')));
   expect(firstWarmLookup!.at).toBeLessThan(transition.end);
   expect(warmSongs.size).toBe(0);
   // No request is sent into a window too short for useful output.
