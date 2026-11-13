@@ -70,7 +70,7 @@ function scenario(opts: { mode: 'cold' | 'mixed' | 'warm'; delay?: (section: str
     if (section === 'Peak' && n === 0) rows.push(item(DESPERADO), item(UNKNOWN_FIT));
     if (section === 'Peak' && n === 1) rows.push({ ...item(laneTrack('warmUp', 0)), artist: 'TEST Lane warmUp 0 feat. TEST Guest' }, item(laneTrack('transition', 0)));
     while (rows.length < want && cursor[section] < LANE_FILES[k]) rows.push(item(laneTrack(k, cursor[section]++)));
-    if (mode === 'stream-hang') return { stream: rows, stepMs: 1000 }; // 40 items over 40 s: server deadline keeps the finished ones
+    if (mode === 'stream-hang') return { stream: rows, stepMs: 2000 }; // 20 items over 40 s: server deadline keeps the finished ones
     if (mode === 'hang') return new Promise(() => {});
     await new Promise(r => setTimeout(r, opts.delay?.(section, n) ?? (section === 'Warm Up' ? 8970 + n * 1220 : section === 'Transition' ? 22430 + (n % 2) * 190 : 21000 + (n % 2) * 3500)));
     return { object: { suggestions: rows } };
@@ -172,10 +172,12 @@ for (const mode of ['cold', 'mixed', 'warm'] as const) it(`healthy 20-25 s repli
   // Slow gate and supported-fit gate hold: the Desperado-like and no-evidence files never appear.
   expect(all.some((x: any) => x.artist === DESPERADO.artist || x.artist === UNKNOWN_FIT.artist)).toBe(false);
   // Healthy >12 s replies contributed: the first Transition/Peak replies took 21-25 s and their songs were placed.
+  // Proactive sizing asks for what the prior pace streams inside 60% of the window, so the whole reply is kept.
   const first = (label: string) => s.calls.find(c => c.section === label)!;
   expect(first('Transition').end - first('Transition').start).toBeGreaterThanOrEqual(22000);
   expect(first('Peak').end - first('Peak').start).toBeGreaterThanOrEqual(21000);
-  expect(first('Transition').returned).toBe(40);
+  expect(first('Transition').count).toBeLessThanOrEqual(20);
+  expect(first('Transition').returned).toBe(first('Transition').count);
   // With slower metadata the delayed replies are needed and their songs are placed. With a warm cache the same
   // owned files are verified directly from the library first, so coverage need not wait for the replies.
   if (mode !== 'warm') {
@@ -207,7 +209,7 @@ it('a hung Transition stream keeps finished songs at the server deadline and nev
   const t = s.calls.filter(c => c.section === 'Transition');
   // Server deadline (≤30 s) returned the completed items; the client did not time out or discard them.
   expect(t[0].end - t[0].start).toBeLessThanOrEqual(SUGGESTION_SERVER_DEADLINE_MS + 1000);
-  expect(t[0].returned).toBeGreaterThanOrEqual(25); expect(t[0].returned).toBeLessThan(40);
+  expect(t[0].returned).toBeGreaterThanOrEqual(10); expect(t[0].returned).toBeLessThan(t[0].count);
   // The lane resized its next request to what fit; other lanes were served in the same round.
   if (t[1]) expect(t[1].count).toBeLessThanOrEqual(t[0].returned);
   expect(s.calls.find(c => c.section === 'Peak')!.start - started).toBeLessThan(t[0].end - started);
@@ -318,7 +320,7 @@ it('lane controller: one in-flight request per lane, validation stops all lanes,
   sent.length = 0;
   const b = make(lane => lane === 'Transition' ? suggestionDeadlineError() : undefined);
   expect(await b.request('Transition', 40, () => ({ lane: 'Transition' }))).toBeNull();
-  expect(b.lane('Transition').cap).toBe(20); expect(b.open('Transition')).toBe(true);
+  expect(b.lane('Transition').cap).toBe(10); expect(b.open('Transition')).toBe(true); // half of the paced 20
   expect(await b.request('Transition', 40, () => ({ lane: 'Transition' }))).toBeNull(); expect(b.open('Transition')).toBe(false);
   expect((await b.request('Peak', 10, () => ({ lane: 'Peak' })))?.suggestions).toEqual(['x']);
   const c = make(() => Object.assign(new Error('validation'), { issues: [] }));

@@ -18,6 +18,9 @@ import { AdditionKeySet } from '@/lib/additionIdentity';
 import { recommendHandler } from './helpers/recommendHandler';
 import { runEnrichment, type CacheRow } from '@/lib/enrichPipeline.server';
 import { encodeCacheSource } from '@/lib/prep/provenance';
+import { pacedCount } from '@/lib/prep/suggestionLanes';
+import { runEnrichment as baselineEnrichment } from './fit/archived/enrichPipeline.376d12b';
+import { estimateItems, gatewayStream } from './helpers/gatewayStream';
 
 /*
  * Native-shaped coordination regression, all synthetic (no production data, no real accounts/files):
@@ -96,10 +99,25 @@ function providerFacts(s: { artist: string; song: string }) {
   return { ...s, source: 'none' };
 }
 type Call = { section: string; start: number; end: number; count: number; deadlineMs?: number; existing: number; returned: number; only: number };
-type Opts = { mode: 'cold' | 'mixed' | 'warm'; realPipeline?: boolean; baseline?: boolean; laneFiles?: number; outage?: boolean; harYield?: boolean; lowYield?: boolean; estimatedCatalogue?: boolean; immediate?: boolean; failure?: (section: string, n: number) => 'transient' | 'validation' | undefined; favorites?: boolean };
+type Opts = { mode: 'cold' | 'mixed' | 'warm'; realPipeline?: boolean; baseline?: boolean; laneFiles?: number; outage?: boolean; harYield?: boolean; lowYield?: boolean; estimatedCatalogue?: boolean; immediate?: boolean; failure?: (section: string, n: number) => 'transient' | 'validation' | 'stall' | undefined; favorites?: boolean;
+  /** Selected BPM limit (default 110–130). Verified out-of-range fixtures sit 14 BPM below the minimum. */
+  bpm?: [number, number];
+  /** Real pipeline timing: delayed provider responses, the REAL AI SDK estimate stream (measured model start-up), and
+   * four client requests whose "(Clean)"-style lookups only the estimate can describe. */
+  providerTiming?: boolean;
+  /** Every 7th ReccoBeats search meets 429 Retry-After 2 s (shared lane cooldown). */
+  ratePressure?: boolean;
+  /** Run the frozen 376d12b pipeline (astra low-reasoning estimate, measured 14.2 s first delta) for before/after. */
+  baselinePipeline?: boolean };
+/** Live measured first-delta latency per estimate model (2026-11-13, 8-song production prompt). */
+const ESTIMATE_STARTUP: Record<string, number> = { 'openai/gpt-6-astra': 14185, 'google/gemini-3-flash-preview': 600 };
+const STUBBORN = new Set([30, 31, 32, 33].map(i => `TEST Request ${i}||Client ${i}`));
 
 function scenario(o: Opts) {
   const laneFiles = o.laneFiles ?? 200;
+  const bpm: [number, number] = o.bpm ?? [110, 130], bpmFail = bpm[0] - 14;
+  const statuses: any[] = [];
+  const stubbornReplies = new Map<string, any>();
   const lib = library(laneFiles);
   if (o.estimatedCatalogue) for (const t of lib.tracks) if (t.artist.startsWith('TEST Lane')) { t.year = '2005'; t.bpm = '120'; }
   const before = JSON.stringify(lib.tracks);
@@ -125,6 +143,7 @@ function scenario(o: Opts) {
     const mode = o.failure?.(section, call);
     if (mode === 'transient') throw Object.assign(new Error('synthetic gateway busy'), { status: 503 });
     if (mode === 'validation') throw Object.assign(new Error('synthetic validation'), { issues: [] });
+    if (mode === 'stall') return new Promise(() => {}); // native: a first request returned nothing by its 30 s deadline
     const k = KEY[section];
     const want = Math.min(count, FIRST_CAP[section]);
     const rows: any[] = [];
@@ -168,7 +187,7 @@ function scenario(o: Opts) {
       const i = laneIndex.get(`${s.artist}||${s.song}`);
       if (i !== undefined) {
         const c = i % 10;
-        const fields = { energy: c === 9 ? 2 : 8, danceability: c === 9 ? 2 : 8, year: c >= 4 && c <= 6 ? 1985 : 2005, bpm: c >= 7 && c <= 8 ? 96 : 120, genre: 'Pop' };
+        const fields = { energy: c === 9 ? 2 : 8, danceability: c === 9 ? 2 : 8, year: c >= 4 && c <= 6 ? 1985 : 2005, bpm: c >= 7 && c <= 8 ? bpmFail : 120, genre: 'Pop' };
         return { ...s, ...fields, source: 'ReccoBeats', prov: P(fields) };
       }
     }
@@ -180,7 +199,7 @@ function scenario(o: Opts) {
         if (harObserved[k].length >= rule.checked) break;
         const n = harObserved[k].length, year = n < rule.year, bpm = n >= rule.bpmStart && n < rule.bpmStart + rule.bpm;
         harObserved[k].push({ year, bpm });
-        const fields = { energy: 8, danceability: 8, year: year ? 1985 : 2005, bpm: bpm ? 96 : 120, genre: 'Pop' };
+        const fields = { energy: 8, danceability: 8, year: year ? 1985 : 2005, bpm: bpm ? bpmFail : 120, genre: 'Pop' };
         return { ...s, ...fields, source: 'ReccoBeats', prov: P(fields) };
       }
     }
@@ -188,9 +207,23 @@ function scenario(o: Opts) {
   };
   const fixtureDance = o.estimatedCatalogue ? { ...dance, catalogueCandidates: () => sections.flatMap(k => Array.from({ length: 24 }, (_, i) => { const t = laneTrack(k, i); return { row: { artist: t.artist, song: t.title, energy: 8, danceability: 8, year: 2005, bpm: 120, metaProv: { energy: 'estimate', danceability: 'estimate', year: 'tags', bpm: 'tags' } }, prefer: k }; })) } : dance;
   const requested = new Map<string, { artist: string; song: string }>();
-  if (o.realPipeline) vi.stubGlobal('fetch', async (url: string) => {
+  let reccoSearches = 0;
+  const gateway = gatewayStream({ startupMs: m => ESTIMATE_STARTUP[m] ?? 600, chunkMs: 60,
+    content: req => estimateItems(req.prompt, () => ({ energy: 8, danceability: 8, valence: 7, bpm: 120, genre: 'Pop', year: 2005 })) });
+  if (o.realPipeline) vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     const u = new URL(url);
-    const json = (body: unknown) => new Response(JSON.stringify(body));
+    const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers });
+    if (o.providerTiming) {
+      if (u.host === 'ai.gateway.lovable.dev') return gateway(init);
+      await new Promise(r => setTimeout(r, u.host === 'musicbrainz.org' ? 1200 : u.pathname.endsWith('/search') ? 700 : 500));
+      if (u.pathname.endsWith('/search') && o.ratePressure && ++reccoSearches % 7 === 0) return json({}, 429, { 'retry-after': '2' });
+      const stubborn = (title: string) => { const s = requested.get(title); return !!s && STUBBORN.has(factsKey(s)); };
+      if (u.pathname.endsWith('/search') && stubborn(u.searchParams.get('searchText') ?? '')) return json({ content: [] });
+      if (u.host === 'musicbrainz.org') {
+        const titles = [...(u.searchParams.get('query') ?? '').matchAll(/recording:"([^"]+)"/g)].map(m => m[1]).filter(t => !stubborn(t));
+        return json({ recordings: titles.flatMap(title => { const s = requested.get(title); if (!s) return []; const f = outcomes(s) as any; return [{ title, 'artist-credit': [{ name: s.artist }], 'first-release-date': `${f.year ?? 2005}-01-01`, tags: [{ name: 'Pop' }] }]; }) });
+      }
+    }
     if (u.host === 'musicbrainz.org') {
       const titles = [...(u.searchParams.get('query') ?? '').matchAll(/recording:"([^"]+)"/g)].map(m => m[1]);
       return json({ recordings: titles.flatMap(title => {
@@ -208,22 +241,31 @@ function scenario(o: Opts) {
     const f = outcomes(s) as any;
     return json({ energy: f.energy === undefined ? undefined : (f.energy - 1) / 9, danceability: f.danceability === undefined ? undefined : (f.danceability - 1) / 9, tempo: f.bpm });
   });
-  const h = createHarness({ ...actual, dance: fixtureDance, observeRanking, observeCoordinator, routeSource: o.baseline ? readFileSync('tests/fit/archived/events.new.5e46335.txt', 'utf8') : undefined })({ rows: { A: o.favorites ? { ...structuredClone(base), inputs: { ...structuredClone(base.inputs), artistsInput: FAVE } } : structuredClone(base), B: { ...structuredClone(base), id: 'B' } }, contract: true, services: {
+  const rowA = structuredClone(base); rowA.inputs.bpmRange = [...bpm]; if (o.favorites) (rowA.inputs as any).artistsInput = FAVE;
+  const savedInputs = JSON.stringify(rowA.inputs);
+  const h = createHarness({ ...actual, dance: fixtureDance, observeRanking, observeCoordinator, routeSource: o.baseline ? readFileSync('tests/fit/archived/events.new.5e46335.txt', 'utf8') : undefined })({ rows: { A: rowA, B: { ...structuredClone(base), id: 'B' } }, contract: true, services: {
     enrich: async ({ data }: any) => {
       const songs: string[] = data.songs.map(factsKey);
       const entry = { at: Date.now(), end: -1, songs }; lookups.push(entry);
       const expansion = songs.some(k => !k.startsWith('TEST Request'));
       if (o.outage && expansion) await new Promise(() => {});
       const latency = songs.every(warm) ? 300 : COLD[seq++ % COLD.length];
-      if (!o.immediate) await new Promise(r => setTimeout(r, latency)); entry.end = Date.now();
+      // With provider timing the real pipeline's own provider/model delays are the latency.
+      if (!o.immediate && !o.providerTiming) await new Promise(r => setTimeout(r, latency));
       if (o.realPipeline) {
         for (const s of data.songs) requested.set(s.song, s);
         const rows: CacheRow[] = data.songs.filter((s: any) => warm(factsKey(s))).map((s: any) => {
           const f = outcomes(s) as any;
           return { artist_key: dance.normalizeKey(s.artist), song_key: dance.normalizeKey(s.song), energy: f.energy ?? null, danceability: f.danceability ?? null, bpm: f.bpm ?? null, year: f.year ?? null, popularity: 8, valence: null, camelot: null, genre: 'Pop', fetched_at: new Date().toISOString(), source: encodeCacheSource('ReccoBeats+MusicBrainz', f.prov ?? {}) };
         });
-        return runEnrichment(data.songs, { readRows: async () => rows, upsert: async () => {}, estimate: async group => group.map(() => null) });
+        const storage = { readRows: async () => rows, upsert: async () => {} };
+        const out = o.providerTiming ? await (o.baselinePipeline ? baselineEnrichment : runEnrichment)(data.songs, storage)
+          : await runEnrichment(data.songs, { ...storage, estimate: async group => group.map(() => null) });
+        entry.end = Date.now(); statuses.push(out.status);
+        for (const r of out.results) if (STUBBORN.has(factsKey(r))) stubbornReplies.set(factsKey(r), r);
+        return out;
       }
+      entry.end = Date.now();
       return { results: data.songs.map(outcomes) };
     },
     recommend: async (request: any) => {
@@ -249,7 +291,7 @@ function scenario(o: Opts) {
     if (!o.baseline) { expect(iterations.length).toBeGreaterThan(0); expect(iterations.length).toBeLessThan(4000); }
     return t0;
   };
-  return { h, lib, before, calls, lookups, seconds, suggested, faveAdmitted, iterations, harObserved, harCounts, run, doneAt: () => doneAt, denyLater: () => { deny = true; } };
+  return { h, lib, before, calls, lookups, seconds, suggested, faveAdmitted, iterations, harObserved, harCounts, run, doneAt: () => doneAt, denyLater: () => { deny = true; }, bpm, statuses, stubbornReplies, rowA, savedInputs };
 }
 function report(label: string, s: ReturnType<typeof scenario>, t0: number) {
   const first = Math.min(...s.calls.map(c => c.start));
@@ -282,12 +324,14 @@ function invariants(s: ReturnType<typeof scenario>) {
   // Counted additions are verified within every strict limit (no estimated lengths/facts, no raw padding).
   for (const k of sections) h_counted(s, k).forEach((x: any) => {
     expect(x.year).toBeGreaterThanOrEqual(2000); expect(x.year).toBeLessThan(2010);
-    expect(x.bpm).toBeGreaterThanOrEqual(110); expect(x.bpm).toBeLessThanOrEqual(130);
+    expect(x.bpm).toBeGreaterThanOrEqual(s.bpm[0]); expect(x.bpm).toBeLessThanOrEqual(s.bpm[1]);
     expect(['provider', 'tags', 'user', 'measured', 'virtualdj']).toContain(x.metaProv?.year);
     expect(['provider', 'tags', 'user', 'measured', 'virtualdj']).toContain(x.metaProv?.bpm);
   });
   for (const c of s.calls) { expect(c.existing).toBeLessThanOrEqual(500); expect(Number.isInteger(c.deadlineMs)).toBe(true); }
   expect(JSON.stringify(s.lib.tracks)).toBe(s.before);
+  // The saved event inputs fixture is never rewritten by generation (selected limits, requests, targets).
+  expect(JSON.stringify(s.rowA.inputs)).toBe(s.savedInputs);
 }
 /** Non-request rows that count toward approved known-length coverage. */
 function h_counted(s: ReturnType<typeof scenario>, k: (typeof sections)[number]) {
@@ -303,14 +347,16 @@ for (const mode of ['mixed', 'warm'] as const) it(`coordinated staging reaches 9
   const first = s.calls.slice(0, 3);
   expect(new Set(first.map(c => c.section)).size).toBe(3);
   expect(Math.max(...first.map(c => c.start)) - Math.min(...first.map(c => c.start))).toBeLessThan(1000);
-  const warmCalls = s.calls.filter(c => c.section === 'Warm Up'), transition = s.calls.find(c => c.section === 'Transition')!;
+  const warmCalls = s.calls.filter(c => c.section === 'Warm Up'), slowest = first.reduce((a, c) => c.end > a.end ? c : a);
   if (mode === 'mixed') {
-    // Not a barrier: lookups continue while the 29.6 s Transition reply streams, and Warm Up's next request
+    // Not a barrier: lookups continue while the slowest first-round reply streams, and Warm Up's next request
     // goes out as soon as its own 12.5 s reply lands instead of waiting for the slowest section.
-    expect(s.lookups.some(l => l.at > warmCalls[0].end && l.at < transition.end)).toBe(true);
+    expect(s.lookups.some(l => l.at < slowest.end && l.end > warmCalls[0].end && l.songs.some(k => !k.startsWith('TEST Request')))).toBe(true);
     expect(warmCalls[1].start - warmCalls[0].end).toBeLessThan(1000);
-    expect(warmCalls[1].start).toBeLessThan(transition.end);
+    expect(warmCalls[1].start).toBeLessThan(slowest.end);
   }
+  // Proactive sizing: no first request asks for more than the prior pace can stream inside 60% of its window.
+  for (const c of first) expect(c.count).toBeLessThanOrEqual(pacedCount(c.deadlineMs!));
   // Generation completes within the fixed expansion window plus request-phase/preparation time.
   expect(s.doneAt() - t0).toBeLessThan(120000);
   // Every request had a useful window at its lane's measured pace and returned songs; none is a tiny batch.
@@ -519,7 +565,7 @@ it('immediately settled metadata cannot spin the actual worker or starve a pendi
 
 it('lane controller: measured pace skips windows that cannot return useful output, sizes counts to the window, sends integer deadlines, and close() aborts quietly', async () => {
   vi.useFakeTimers();
-  const { createSuggestionLanes, usefulWindowMs, SUGGESTION_STARTUP_MS, SUGGESTION_MIN_WINDOW_MS } = await import('@/lib/prep/suggestionLanes');
+  const { createSuggestionLanes, usefulWindowMs, pacedCount, SUGGESTION_MIN_WINDOW_MS } = await import('@/lib/prep/suggestionLanes');
   const sent: Array<{ count: number; deadlineMs: number }> = [];
   const failures: string[] = [];
   let latest = Date.now() + 60000.4; // a fractional dynamic end must still yield whole-millisecond deadlines
@@ -545,9 +591,56 @@ it('lane controller: measured pace skips windows that cannot return useful outpu
   const sized = lanes.request('Peak', 40, (count, deadlineMs) => ({ count, deadlineMs }));
   await vi.advanceTimersByTimeAsync(10);
   const last = sent.at(-1)!;
-  expect(last.count).toBe(Math.floor((last.deadlineMs - SUGGESTION_STARTUP_MS) / lanes.lane('Peak').perItemMs!));
+  expect(last.count).toBe(pacedCount(last.deadlineMs, lanes.lane('Peak').perItemMs!));
   // close(): the in-flight request resolves null at once, reports nothing, and nothing further is sent.
   lanes.close(); expect(await sized).toBeNull(); expect(failures).toEqual([]);
   const before = sent.length; expect(await lanes.request('Transition', 40, (count, deadlineMs) => ({ count, deadlineMs }))).toBeNull(); expect(sent).toHaveLength(before);
   expect(lanes.inFlight).toBe(0);
 });
+
+/** Online replies for client rows whose lookup only the estimate can describe ("(Clean)"-style catalogue misses).
+ * The route merges them by the unchanged provenance ranking (an AI estimate never displaces another estimate). */
+const stubbornReplies = (s: ReturnType<typeof scenario>) => [...s.stubbornReplies.values()];
+const aiTimeouts = (s: ReturnType<typeof scenario>) => s.statuses.filter(st => st.timedOut?.includes('ai')).length;
+
+it('same timed provider/estimate fixture through the actual route: frozen 376d12b estimate leaves stubborn requests unknown; repair describes them', async () => {
+  vi.useFakeTimers(); vi.stubEnv('LOVABLE_API_KEY', 'synthetic-not-a-key');
+  await import('ai'); await import('@ai-sdk/openai-compatible'); await import('@/lib/ai-gateway.server');
+  const old = scenario({ mode: 'cold', lowYield: true, realPipeline: true, providerTiming: true, baselinePipeline: true, bpm: [90, 130] });
+  const oldStart = await old.run(); report('timed baseline pipeline 90-130', old, oldStart);
+  expect(stubbornReplies(old)).toHaveLength(4);
+  expect(stubbornReplies(old).every(r => r.source === 'none' && r.incomplete && r.energy === undefined)).toBe(true);
+  expect(aiTimeouts(old)).toBeGreaterThan(0);
+  const oldIncomplete = old.statuses.reduce((n, st) => n + st.unfinished, 0);
+  old.h.unmount(); vi.unstubAllGlobals();
+
+  const s = scenario({ mode: 'cold', lowYield: true, realPipeline: true, providerTiming: true, bpm: [90, 130] });
+  const t0 = await s.run(); const sec = report('timed repaired pipeline 90-130', s, t0);
+  const incomplete = s.statuses.reduce((n, st) => n + st.unfinished, 0);
+  console.info(`SYNTHETIC timed estimate: baseline ${aiTimeouts(old)}/${old.statuses.length} lookups with AI timeout, ${oldIncomplete} unfinished songs; repaired ${aiTimeouts(s)}/${s.statuses.length}, ${incomplete} unfinished`);
+  expect(aiTimeouts(s)).toBe(0); expect(incomplete).toBeLessThan(oldIncomplete);
+  // Exact partial provenance: estimate-only facts come back AI-labelled and complete for the unchanged requests.
+  for (const r of stubbornReplies(s)) { expect(r).toMatchObject({ source: 'AI', energy: 8, danceability: 8 }); expect(r.prov).toMatchObject({ energy: 'ai', danceability: 'ai', bpm: 'ai', year: 'ai' }); expect(r.incomplete).toBeUndefined(); }
+  sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
+  invariants(s); s.h.unmount();
+}, 60000);
+
+for (const bpm of [[90, 130], [110, 130]] as Array<[number, number]>) for (const mode of ['cold', 'mixed', 'warm'] as const)
+it(`timed real providers + real estimate stream + rate pressure + stalled first Peak request: every target at BPM ${bpm.join('–')} (${mode})`, async () => {
+  vi.useFakeTimers(); vi.stubEnv('LOVABLE_API_KEY', 'synthetic-not-a-key');
+  await import('ai'); await import('@ai-sdk/openai-compatible'); await import('@/lib/ai-gateway.server');
+  const s = scenario({ mode, lowYield: true, realPipeline: true, providerTiming: true, ratePressure: true, bpm, failure: (section, n) => section === 'Peak' && n === 0 ? 'stall' : undefined });
+  const t0 = await s.run(); const sec = report(`timed ${mode} BPM ${bpm.join('-')}`, s, t0);
+  sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
+  // The stalled Peak request ended at its own deadline (lane-local) and Peak still continued.
+  const peak = s.calls.filter(c => c.section === 'Peak');
+  expect(peak[0].returned).toBe(0); if (mode !== 'warm') expect(peak.length).toBeGreaterThan(1);
+  expect(aiTimeouts(s)).toBe(0);
+  if (mode !== 'warm') expect(s.statuses.some(st => st.causes?.reccobeats?.rate)).toBe(true);
+  // Cold: the estimate describes the catalogue misses; mixed/warm serve those requests from the cache.
+  for (const r of stubbornReplies(s)) expect(r.prov?.energy).toBe(mode === 'cold' ? 'ai' : 'provider');
+  expect(s.lookups.reduce((n, l) => n + l.songs.filter(k => !k.startsWith('TEST Request')).length, 0)).toBeLessThanOrEqual(600);
+  // Verified slow candidates (c = 9) are never admitted.
+  for (const k of sections) for (const row of s.h.current.result[k]) { const i = laneIndex.get(factsKey(row)); if (i !== undefined) expect(i % 10).not.toBe(9); }
+  invariants(s); s.h.unmount();
+}, 60000);

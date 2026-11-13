@@ -1,4 +1,10 @@
 # Workspace rebuild
+## Remaining metadata/suggestion timeouts after 376d12be
+- [x] Measure estimate/suggestion latency live; switch estimate to the measured fast zero-retention model, cap serial estimate start-ups at two per chunk with a final reserve.
+- [x] Catalogue 404 is a definitive miss; truncated MusicBrainz groups get paced single-song searches; bounded numeric per-provider causes.
+- [x] Proactive suggestion sizing from prior/measured pace; safe numeric deadline stage.
+- [x] Real SDK + real pipeline/handler before/after fixtures; actual route at BPM 90–130 and 110–130, cold/mixed/warm, rate pressure and stalled Peak; full suite, TypeScript, preview; evidence in tests/fit/provider-timeouts.md.
+- [ ] Exact-head hosted Mac/CodeQL runs after this commit reaches GitHub; publishing stays with Joe.
 ## Remaining online lookup timeouts
 - [x] Start the single AI gap lane from completed acoustic misses, bound response bodies, and recheck shared provider cooldowns without increasing deadlines/concurrency; no hidden recommendation SDK retries.
 - [x] Real pipeline/handler cold/warm/rate/outage/partial fixtures and actual-route 40% yield reach 5640/14400/7260s cold/mixed and 5640/14490/7260s warm; native optional-expansion checks unchanged.

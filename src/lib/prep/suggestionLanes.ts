@@ -18,6 +18,15 @@ export const SUGGESTION_MIN_COUNT = 8;
 export const SUGGESTION_DEADLINE_CODE = "SUGGESTION_DEADLINE";
 /** Conservative start-up allowance before a streamed reply yields its first complete item. */
 export const SUGGESTION_STARTUP_MS = 4_000;
+/** Measured live with the real handler prompt (≈8.7k input tokens, ≈155 output tokens per item): 0.69–0.74 s per item,
+ * so 39 items need 28–29 s — the edge of the 30 s window. Before a lane has its own measurement, size from this pace. */
+export const SUGGESTION_PRIOR_ITEM_MS = 700;
+/** Proactive sizing aims to finish within this share of the request window, leaving headroom for start-up variance. */
+export const SUGGESTION_TARGET_FRACTION = 0.6;
+/** Largest count whose expected stream fits the target share of `deadlineMs` at `perItemMs`. */
+export function pacedCount(deadlineMs: number, perItemMs = SUGGESTION_PRIOR_ITEM_MS): number {
+  return Math.max(1, Math.floor((deadlineMs * SUGGESTION_TARGET_FRACTION - SUGGESTION_STARTUP_MS) / Math.max(1, perItemMs)));
+}
 const CLOSED = Symbol("closed");
 
 export type SuggestionFailureKind = "validation" | "transient" | "timeout" | "terminal";
@@ -76,8 +85,9 @@ export function createSuggestionLanes<Req, S>(o: {
         if (window < usefulWindowMs(s.perItemMs, Math.min(wanted, s.cap))) { s.stopped = true; s.shortWindow = true; return null; }
         const deadlineMs = Math.min(SUGGESTION_SERVER_DEADLINE_MS, window);
         let count = Math.max(1, Math.min(wanted, s.cap, o.maxCount));
-        // Size the request to what the window can stream at this lane's measured pace.
-        if (s.perItemMs) count = Math.max(1, Math.min(count, Math.floor((deadlineMs - SUGGESTION_STARTUP_MS) / s.perItemMs)));
+        // Proactive sizing: smaller requests that finish well inside the window (prior pace until this lane measures its
+        // own), continued fairly per section, instead of one oversized request that meets the deadline with nothing.
+        count = Math.min(count, pacedCount(deadlineMs, s.perItemMs));
         const controller = new AbortController();
         let timer: ReturnType<typeof setTimeout> | undefined;
         let handle: { controller: AbortController; reject: (e: unknown) => void } | undefined;

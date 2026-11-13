@@ -41,12 +41,15 @@ it('early completed acoustic gaps get AI time before a slow group: frozen baseli
   expect(old.out.results.filter(s => s.energy !== undefined)).toHaveLength(0);
   expect(fixed.starts[0]).toBeLessThan(1000);
   expect(old.starts[0]).toBeGreaterThanOrEqual(6000);
-  expect(fixed.out.results.filter(s => s.energy === 7)).toHaveLength(7);
+  // 376d12be kept 7; the slow row whose feature request hangs now also joins the second (speculative) group, keeps an
+  // AI-labelled estimate and stays honestly marked unfinished.
+  expect(fixed.out.results.filter(s => s.energy === 7)).toHaveLength(8);
   expect(fixed.out.results.slice(0, 7).every(s => s.energy === 7)).toBe(true);
+  expect(fixed.out.results[7]).toMatchObject({ incomplete: true, prov: { energy: 'ai', danceability: 'ai' } });
   expect(fixed.peak).toBe(1);
   expect(fixed.out.results[0].prov?.energy).toBe('ai');
   expect(fixed.out.status.complete).toBe(false); // the hung external recording is not hidden
-  console.info('SYNTHETIC early gaps before/after', { beforeAiStarts: old.starts, afterAiStarts: fixed.starts, beforeFacts: 0, afterFacts: 7 });
+  console.info('SYNTHETIC early gaps before/after', { beforeAiStarts: old.starts, afterAiStarts: fixed.starts, beforeFacts: 0, afterFacts: 8 });
 });
 
 it.each(['headers', 'body', 'ai'] as const)('full %s stall returns within the unchanged 16s end and never negative-caches failures', async stall => {
@@ -119,9 +122,10 @@ it('actual recommendation handler deadline: lane retries smaller without hidden 
   });
   const lanes = createSuggestionLanes({ send: (data: any) => server.call({ data }), classify: suggestionFailure, isCurrent: () => true, end: Date.now() + 90000, maxCount: 40 });
   const build = (count: number, deadlineMs: number) => ({ section: 'Transition', count, deadlineMs, prefs: {}, existing: [] });
+  // Proactive size 20 (prior pace inside 60% of 30 s); a stalled start ends at the server deadline and halves the lane.
   const first = lanes.request('Transition', 40, build); await vi.advanceTimersByTimeAsync(30000); expect(await first).toBeNull();
   const next = lanes.request('Transition', 40, build); await vi.advanceTimersByTimeAsync(10000);
-  expect((await next)?.suggestions).toHaveLength(20); expect(sizes).toEqual([40, 20]);
+  expect((await next)?.suggestions).toHaveLength(10); expect(sizes).toEqual([20, 10]);
 });
 
 it.each([14000, 120000])('suggestion rate cooldown %ims is honored or stops without an out-of-window replay', async cooldown => {

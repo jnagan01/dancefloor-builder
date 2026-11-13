@@ -442,6 +442,9 @@ Rules:
     const controller = new AbortController();
     const aborted = new Promise<"deadline">((resolve) => controller.signal.addEventListener("abort", () => resolve("deadline"), { once: true }));
     const timer = setTimeout(() => controller.abort(), deadlineMs);
+    // Diagnostics only (no abort): when the first streamed output arrived distinguishes a stalled start from a slow list.
+    let firstOutputMs: number | undefined;
+    const startedAt = Date.now();
     let latest: unknown[] = [];
     let streamError: unknown;
     let timedOut = false;
@@ -468,6 +471,7 @@ Rules:
         const step = await Promise.race([iterator.next(), aborted]).catch((error: unknown) => { if (!controller.signal.aborted) streamError ??= error; return { done: true as const, value: undefined }; });
         if (step === "deadline") { timedOut = true; void Promise.resolve(iterator.return?.()).catch(() => {}); break; }
         if (step.done) break;
+        firstOutputMs ??= Date.now() - startedAt;
         const rows = (step.value as { suggestions?: unknown } | undefined)?.suggestions;
         if (Array.isArray(rows)) latest = rows;
       }
@@ -490,6 +494,11 @@ Rules:
     // Deadline or stream failure: keep only fully streamed items (the last one may be cut off mid-field).
     const kept = completeItems(latest, true);
     if (kept.length) return finish(kept, true, timedOut ? `deadline ${deadlineMs}ms reached; ` : "stream failed after partial output; ");
-    if (timedOut) throw Object.assign(new Error(`Suggestion server deadline reached (${SUGGESTION_DEADLINE_CODE})`), { code: SUGGESTION_DEADLINE_CODE });
+    if (timedOut) {
+      // Safe numeric stage only (no prompt, payload or credentials): stalled start vs. output without a complete item.
+      const stage = firstOutputMs === undefined ? `no model output within ${deadlineMs}ms` : `first output at ${firstOutputMs}ms, no complete item by ${deadlineMs}ms`;
+      console.warn(`[recommendSongsForSection] ${stage}; section=${data.section} requested=${data.count}`);
+      throw Object.assign(new Error(`Suggestion server deadline reached: ${stage} (${SUGGESTION_DEADLINE_CODE})`), { code: SUGGESTION_DEADLINE_CODE });
+    }
     throw streamError ?? new Error("Suggestions could not be generated");
   });

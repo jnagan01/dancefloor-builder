@@ -37,13 +37,27 @@ function syntheticStreamObject(generate: (options: any) => Promise<any>, finishR
 
 /** Real validator/handler; only framework, authentication transport and AI are synthetic. */
 export function recommendHandler(generate: (options: any) => Promise<any>, authenticated = true, finishReason = Promise.resolve('stop')) {
-  const require = createRequire(import.meta.url), ts = require('typescript');
-  const module = { exports: {} as any };
-  const code = ts.transpileModule(readFileSync('src/lib/recommend.functions.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const imports: Record<string, any> = {
-    './danceFloor': { stripArtistFromTitle }, './vibes': { targetsNote }, './eventTypes': { eventTypeNote }, zod: { z }, './prep/suggestionLanes': lanes,
+  return loadHandler({
     './ai-gateway.server': { createLovableAiGatewayProvider: () => () => 'synthetic' },
     ai: { streamObject: syntheticStreamObject(generate, finishReason), NoObjectGeneratedError: { isInstance: () => false } },
+  }, authenticated);
+}
+
+/** Real validator/handler with the REAL AI SDK and real gateway provider; only the HTTP transport (global fetch) is
+ * synthetic. `source` loads a frozen baseline handler for before/after evidence. */
+export async function recommendHandlerSdk(source = 'src/lib/recommend.functions.ts', lanesModule: any = lanes) {
+  const ai = await import('ai');
+  const gateway = await import('@/lib/ai-gateway.server');
+  return loadHandler({ './ai-gateway.server': gateway, ai, './prep/suggestionLanes': lanesModule }, true, source);
+}
+
+function loadHandler(overrides: Record<string, any>, authenticated: boolean, source = 'src/lib/recommend.functions.ts') {
+  const require = createRequire(import.meta.url), ts = require('typescript');
+  const module = { exports: {} as any };
+  const code = ts.transpileModule(readFileSync(source, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const imports: Record<string, any> = {
+    './danceFloor': { stripArtistFromTitle }, './vibes': { targetsNote }, './eventTypes': { eventTypeNote }, zod: { z }, './prep/suggestionLanes': lanes,
+    ...overrides,
     '@/integrations/supabase/auth-middleware': { requireSupabaseAuth: async ({ next }: any) => { if (!authenticated) throw new Error('Unauthorized'); return next({ context: { userId: 'synthetic-owner' } }); } },
     '@tanstack/react-start': { createServerFn: () => {
       let validate: any, chain: any[] = [];
@@ -53,6 +67,6 @@ export function recommendHandler(generate: (options: any) => Promise<any>, authe
       } }; return builder;
     } },
   };
-  vm.runInNewContext(code, { module, exports: module.exports, console, get setTimeout() { return setTimeout; }, get clearTimeout() { return clearTimeout; }, AbortController, process: { env: { LOVABLE_API_KEY: 'synthetic-not-a-key' } }, require: (k: string) => { if (!(k in imports)) throw new Error('Unexpected test import'); return imports[k]; } });
+  vm.runInNewContext(code, { module, exports: module.exports, console, get Date() { return Date; }, get setTimeout() { return setTimeout; }, get clearTimeout() { return clearTimeout; }, AbortController, process: { env: { LOVABLE_API_KEY: 'synthetic-not-a-key' } }, require: (k: string) => { if (!(k in imports)) throw new Error('Unexpected test import'); return imports[k]; } });
   return { call: module.exports.recommendSongsForSection, schema: module.exports.RecommendInputSchema };
 }

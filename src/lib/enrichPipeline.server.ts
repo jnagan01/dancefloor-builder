@@ -45,8 +45,12 @@ const CACHE_TTL_DAYS = 90;
  * always reach the client instead of being discarded with a hung miss. Every phase is raced against its own deadline,
  * in-flight work is aborted where the transport allows, and late results are fenced out.
  */
-export interface EnrichLimits { totalMs: number; cacheReadMs: number; aiMs: number; upsertMs: number; requestMs: number; assemblyMs: number }
-export const ENRICH_LIMITS: EnrichLimits = { totalMs: ENRICH_SERVER_DEADLINE_MS, cacheReadMs: 3_000, aiMs: 4_000, upsertMs: 1_000, requestMs: 6_000, assemblyMs: 250 };
+export interface EnrichLimits { totalMs: number; cacheReadMs: number; aiMs: number; upsertMs: number; requestMs: number; assemblyMs: number;
+  /** Final estimate dispatch reserve: by `aiEnd - aiFinalMs` every row still lacking acoustic facts joins one estimate group
+   * (even while its provider search is pending), so a late-discovered miss never misses the window. Live estimate calls
+   * measured 0.7–4.1 s (time to headers + stream); 6 s also covers an in-flight group finishing first. */
+  aiFinalMs: number }
+export const ENRICH_LIMITS: EnrichLimits = { totalMs: ENRICH_SERVER_DEADLINE_MS, cacheReadMs: 3_000, aiMs: 4_000, upsertMs: 1_000, requestMs: 6_000, assemblyMs: 250, aiFinalMs: 6_000 };
 export type EnrichPhase = "cacheRead" | "fetch" | "ai" | "upsert";
 export interface EnrichStatus {
   /** True only when every phase finished in time and every looked-up song got a full provider/AI attempt. */
@@ -58,33 +62,60 @@ export interface EnrichStatus {
   failed?: EnrichPhase[];
   /** Pause subsequent serial chunks after provider rate pressure; no failed recording is replayed. */
   retryAfterMs?: number;
+  /** Bounded per-provider cause counts (numbers only: never titles, URLs, payloads or credentials). */
+  causes?: EnrichCauses;
+}
+/** Why a provider attempt did not yield facts. `missing` (catalogue has no such track) is a definitive miss, not a failure. */
+export type FetchCause = "rate" | "server" | "denied" | "http" | "missing" | "malformed" | "network" | "deadline" | "paused" | "truncated";
+export type AiCause = "deadline" | "unavailable";
+export interface EnrichCauses {
+  reccobeats?: Partial<Record<FetchCause, number>>;
+  musicbrainz?: Partial<Record<FetchCause, number>>;
+  ai?: Partial<Record<AiCause, number>>;
+}
+/** Measured live (2026-11-13, 8 songs): `openai/gpt-6-astra` low reasoning first delta 14.2–23.8 s, beyond the 14.75 s
+ * estimate window; `google/gemini-3-flash-preview` (zero-retention chat-completions, already the app's recommender)
+ * first delta 0.5–0.8 s, complete 1.5–2.5 s. Estimates stay gap-only and AI-labelled; they never satisfy strict limits. */
+export const ESTIMATE_MODEL = "google/gemini-3-flash-preview";
+
+interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number; lane?: ReturnType<typeof createProviderLane>; failed?: boolean; timedOut?: boolean; note?: (cause: FetchCause) => void }
+
+function httpCause(status: number): FetchCause {
+  if (status === 429) return "rate";
+  if (status >= 500) return "server";
+  if (status === 401 || status === 403) return "denied";
+  if (status === 404 || status === 410) return "missing";
+  return "http";
 }
 
-interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number; lane?: ReturnType<typeof createProviderLane>; failed?: boolean; timedOut?: boolean }
-
 async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx): Promise<{ ok: boolean; json: () => Promise<unknown> }> {
-  if (ctx?.lane && !(await ctx.lane.ready())) { ctx.failed = true; throw new Error("Provider paused"); }
+  if (ctx?.lane && !(await ctx.lane.ready())) { ctx.failed = true; ctx.note?.("paused"); throw new Error("Provider paused"); }
   const ctrl = new AbortController();
   const ms = ctx ? Math.max(1, Math.min(ctx.requestMs, ctx.until - ctx.now())) : ENRICH_LIMITS.requestMs;
   const timer = setTimeout(() => ctrl.abort(), ms);
   const onAbort = () => ctrl.abort();
+  let noted = false;
   if (ctx?.signal.aborted) ctrl.abort(); else ctx?.signal.addEventListener("abort", onAbort);
   try {
     const now = ctx?.now ?? Date.now;
     const until = now() + ms;
     const response = await within(fetch(url, { ...init, signal: ctrl.signal }), until, now);
-    if (response === LATE) { if (ctx) ctx.timedOut = true; ctrl.abort(); throw new Error("Provider request deadline"); }
+    if (response === LATE) { if (ctx) ctx.timedOut = true; ctx?.note?.("deadline"); noted = true; ctrl.abort(); throw new Error("Provider request deadline"); }
     ctx?.lane?.response(response);
-    if (ctx && !response.ok) ctx.failed = true;
+    // A catalogue "not found" is a definitive miss (no facts exist there), never an unfinished lookup.
+    if (!response.ok) { const cause = httpCause(response.status); ctx?.note?.(cause); noted = true; if (ctx && cause !== "missing") ctx.failed = true; }
     // Keep the request timer and abort forwarding alive through body consumption, not just headers.
     // Failed bodies are never useful and must not hold a connection during the shared cooldown.
     if (!response.ok) { void response.body?.cancel().catch(() => {}); return { ok: false, json: async () => ({}) }; }
-    const body = await within(response.json(), until, now);
-    if (body === LATE) { if (ctx) ctx.timedOut = true; ctrl.abort(); void response.body?.cancel().catch(() => {}); throw new Error("Provider body deadline"); }
+    let malformed = false;
+    const body = await within(response.json().catch(() => { malformed = true; return null; }), until, now);
+    if (body === LATE) { if (ctx) ctx.timedOut = true; ctx?.note?.("deadline"); noted = true; ctrl.abort(); void response.body?.cancel().catch(() => {}); throw new Error("Provider body deadline"); }
+    if (malformed) { ctx?.note?.("malformed"); noted = true; throw new Error("Provider body malformed"); }
     return { ok: true, json: async () => body };
   } catch (err) {
     if (ctx) ctx.failed = true;
     if (ctx && ctrl.signal.aborted) ctx.timedOut = true;
+    if (!noted) ctx?.note?.(ctrl.signal.aborted ? "deadline" : "network");
     throw err;
   } finally {
     clearTimeout(timer);
@@ -287,14 +318,20 @@ interface MusicBrainzInfo {
 
 /** OR groups reduce rate-limited recording searches; each result is independently identity-checked.
  * Never label a truncated group response as a definitive miss. */
-async function fetchMusicBrainzGroup(songs: Array<{ artist: string; song: string }>, ctx: FetchCtx): Promise<Array<MusicBrainzInfo | null> | null> {
+async function fetchMusicBrainzGroup(songs: Array<{ artist: string; song: string }>, ctx: FetchCtx, limit = 100): Promise<Array<MusicBrainzInfo | null> | null> {
   try {
     const escape = (s: string) => s.replace(/[+\-&|!(){}\[\]^"~*?:\\/]/g, " ").trim();
-    const q = songs.map(s => `(artist:"${escape(s.artist)}" AND recording:"${escape(s.song)}")`).join(" OR ");
-    const res = await fetchWithTimeout(`https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=100`, {
+    // A single-song refinement also searches the base title so a "(Clean)" edit can find its recording; identity checks
+    // below still decide exact vs estimate (a different version is never verified).
+    const recording = (s: { song: string }) => {
+      const base = songs.length === 1 ? cleanTitleForSearch(s.song) : "";
+      return base && fullTitleKey(base) !== fullTitleKey(s.song) ? `(recording:"${escape(s.song)}" OR recording:"${escape(base)}")` : `recording:"${escape(s.song)}"`;
+    };
+    const q = songs.map(s => `(artist:"${escape(s.artist)}" AND ${recording(s)})`).join(" OR ");
+    const res = await fetchWithTimeout(`https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(q)}&fmt=json&limit=${limit}`, {
       headers: { Accept: "application/json", "User-Agent": "DancefloorBuilder/1.0 (https://dancefloor-builder.lovable.app)" },
     }, ctx);
-    if (!res.ok) return null;
+    if (!res.ok) return ctx.failed ? null : songs.map(() => null);
     const json = await res.json() as { count?: number; recordings?: Array<{ title?: string; "artist-credit"?: Array<{ name?: string; artist?: { name?: string } }>; "first-release-date"?: string; tags?: Array<{ name?: string; count?: number }> }> };
     const recs = json.recordings ?? [];
     return songs.map(s => {
@@ -302,7 +339,7 @@ async function fetchMusicBrainzGroup(songs: Array<{ artist: string; song: string
       const exact = recs.find(r => exactArtistCredit(credits(r), s.artist) && sameRecordingTitle(s.song, r.title ?? ""));
       // Group searches must not lend a different song's facts merely because its artist matches.
       const match = exact ?? recs.find(r => (sameRecordingTitle(s.song, r.title ?? "") || (songs.length === 1 && normalizeKey(cleanTitleForSearch(s.song)) === normalizeKey(cleanTitleForSearch(r.title ?? "")))) && credits(r).some(n => artistLooseMatch(n, s.artist)));
-      if (!match) return (json.count ?? recs.length) >= 100 ? { exact: false, incomplete: true } : null;
+      if (!match) return (json.count ?? recs.length) >= limit ? { exact: false, incomplete: true } : null;
       return { year: parseYear(match["first-release-date"]), genre: (match.tags ?? []).filter(t => t.name).sort((a,b) => (b.count ?? 0) - (a.count ?? 0))[0]?.name, exact: !!exact };
     });
   } catch { return null; }
@@ -344,9 +381,9 @@ Return ONLY JSON: {"items":[{"i":0,"energy":7,"danceability":8,"valence":6,"bpm"
 
 ${lines}`;
     const result = streamText({
-      model: gateway("openai/gpt-6-astra"),
+      // Non-reasoning fast estimate model (see ESTIMATE_MODEL); no temperature/reasoning options are sent.
+      model: gateway(ESTIMATE_MODEL),
       prompt,
-      providerOptions: { lovable: { reasoningEffort: "low" } },
       abortSignal: signal,
       maxRetries: 0,
     });
@@ -505,8 +542,15 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const fetchUntil = Math.max(now(), end - L.upsertMs - (missOrder.length ? Math.min(L.aiMs, Math.floor((end - now()) / 3)) : 0));
   const fetchCtrl = new AbortController();
   const ctx: FetchCtx = { signal: fetchCtrl.signal, until: fetchUntil, requestMs: L.requestMs, now };
-  const recoCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal) };
-  const mbCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal, MUSICBRAINZ_INTERVAL_MS) };
+  const count = <K extends string>(provider: keyof EnrichCauses, cause: K) => {
+    // Notes from requests that settle after the provider phase closed are fenced out (the phase timeout already reports
+    // them); the returned status never changes after assembly.
+    if (provider !== "ai" && fetchClosed) return;
+    const bucket = ((status.causes ??= {})[provider] ??= {}) as Partial<Record<K, number>>;
+    bucket[cause] = (bucket[cause] ?? 0) + 1;
+  };
+  const recoCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal), note: (c: FetchCause) => count("reccobeats", c) };
+  const mbCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal, MUSICBRAINZ_INTERVAL_MS), note: (c: FetchCause) => count("musicbrainz", c) };
   let fetchClosed = false;
   const recoDone = new Map<string, ReccoBeatsFeatures | null>();
   const mbDone = new Map<string, MusicBrainzInfo | null>();
@@ -518,9 +562,9 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   let acousticSettled = false;
   const acousticWaiters = new Set<() => void>();
   const acousticChanged = () => { for (const resolve of [...acousticWaiters]) resolve(); };
-  const waitAcoustic = () => new Promise<void>(resolve => {
+  const waitAcoustic = (until = fetchUntil) => new Promise<void>(resolve => {
     const finish = () => { clearTimeout(timer); acousticWaiters.delete(finish); resolve(); };
-    const timer = setTimeout(finish, Math.max(0, fetchUntil - now()));
+    const timer = setTimeout(finish, Math.max(0, Math.min(fetchUntil, until) - now()));
     acousticWaiters.add(finish);
   });
   const recoWorker = async () => {
@@ -535,6 +579,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       if (recoCtx.lane.pausedUntil >= fetchUntil) return;
     }
   };
+  const truncated: Query[] = [];
   const mbWorker = async () => {
     const todo = missOrder.filter(q => !reusesMb(partial.get(`${q.artistKey}\u0000${q.songKey}`)));
     for (let i = 0; i < todo.length && open(); i += MUSICBRAINZ_GROUP) {
@@ -542,8 +587,20 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       const groupCtx = { ...mbCtx, failed: false, timedOut: false };
       const rows = await fetchMusicBrainzGroup(group.map(q => q.original), groupCtx);
       if (open() && groupCtx.failed) for (const q of group) { const k = `${q.artistKey}\u0000${q.songKey}`; providerIncomplete.add(k); if (groupCtx.timedOut) providerTimeout.add(k); mbDone.set(k, null); }
-      if (open() && rows) group.forEach((q, j) => { const k = `${q.artistKey}\u0000${q.songKey}`; mbDone.set(k, rows[j] ?? null); if (rows[j]?.incomplete) providerIncomplete.add(k); });
-      if (mbCtx.lane.pausedUntil >= fetchUntil) return;
+      if (open() && rows) group.forEach((q, j) => { const k = `${q.artistKey}\u0000${q.songKey}`; mbDone.set(k, rows[j] ?? null); if (rows[j]?.incomplete) truncated.push(q); });
+      if (mbCtx.lane.pausedUntil >= fetchUntil) break;
+    }
+    // A popular song's many recordings can fill a grouped page (limit 100) before another song's match appears. Those
+    // songs get one paced single-song search each while the provider window is open; never a replay of a failure.
+    for (const q of truncated) {
+      const k = `${q.artistKey}\u0000${q.songKey}`;
+      if (!open() || mbCtx.lane.pausedUntil >= fetchUntil) { providerIncomplete.add(k); count("musicbrainz", "truncated"); continue; }
+      const oneCtx = { ...mbCtx, failed: false, timedOut: false };
+      const rows = await fetchMusicBrainzGroup([q.original], oneCtx, 25);
+      if (!open()) { providerIncomplete.add(k); continue; }
+      if (oneCtx.failed || !rows) { providerIncomplete.add(k); if (oneCtx.timedOut) providerTimeout.add(k); continue; }
+      mbDone.set(k, rows[0] ?? null);
+      if (rows[0]?.incomplete) { providerIncomplete.add(k); count("musicbrainz", "truncated"); }
     }
   };
   // One estimate lane starts from completed acoustic gaps, independently
@@ -554,11 +611,16 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   let aiClosed = false;
   const estimates = new Map<string, AiEstimate>();
   let aiFailed = false, aiLate = false;
+  const finalAt = aiUntil - L.aiFinalMs;
   const estimateMissing = async () => {
     const attemptedAi = new Set<string>();
-    let firstGroup = true;
+    let firstGroup = true, sentGroups = 0;
     const work = async () => {
       while (!aiClosed && now() < aiUntil) {
+        // After the first (evidence-first) group, or at the final dispatch point, every remaining row lacking acoustic
+        // facts joins the next group even while its provider search is pending: at most two serial model start-ups per
+        // chunk instead of one per trickling miss (live: a third serial group started at 13.7 s and missed 14.75 s).
+        const final = now() >= finalAt || sentGroups > 0;
         // Coalesce simultaneously completing acoustic workers before paying model startup for one row.
         // A single short timer yield (not a provider barrier) keeps quick 8-row misses in one estimate.
         if (firstGroup && recoDone.size > 0 && !acousticSettled && !fetchClosed && missOrder.length > 1) {
@@ -566,16 +628,20 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
           await new Promise(resolve => setTimeout(resolve, Math.min(25, Math.max(0, aiUntil - now()))));
           continue;
         }
+        const settled = acousticSettled || fetchClosed;
         const group = missOrder.filter(q => {
           const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k), reco = recoDone.get(k);
-          return !attemptedAi.has(k) && (recoDone.has(k) || acousticSettled || fetchClosed) &&
+          // At the final dispatch point rows whose provider search is still pending join speculatively; provider facts
+          // that arrive later still outrank the estimate (AI only fills gaps), and no row is estimated twice.
+          return !attemptedAi.has(k) && (recoDone.has(k) || settled || final) &&
             ((prev?.energy ?? reco?.energy) == null || (prev?.danceability ?? reco?.danceability) == null);
         }).slice(0, 8);
         if (!group.length) {
-          if (acousticSettled || fetchClosed) return;
-          await waitAcoustic();
+          if (settled || final) return;
+          await waitAcoustic(finalAt);
           continue;
         }
+        sentGroups++;
         for (const q of group) attemptedAi.add(`${q.artistKey}\u0000${q.songKey}`);
         const keep = (i: number, value: AiEstimate) => {
           const q = group[i]; if (aiClosed || now() >= aiUntil || !q || !value) return;
@@ -666,8 +732,8 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   if (needAi.length) {
     const settled = await within(aiWork, aiUntil, now);
     if (settled === LATE) { aiLate = true; aiClosed = true; aiCtrl.abort(); }
-    if (aiLate) timeout("ai");
-    if (aiFailed) { (status.failed ??= []).push("ai"); status.complete = false; }
+    if (aiLate) { timeout("ai"); count("ai", "deadline"); }
+    if (aiFailed) { (status.failed ??= []).push("ai"); status.complete = false; count("ai", "unavailable"); }
     needAi.forEach(({ q, k }) => {
       const a = estimates.get(k);
       if (aiLate || aiFailed) unfinished.add(k);
