@@ -68,12 +68,19 @@ export function buildRecommendExisting<T extends ExistingFeatured>(
 
 /** Only explicit transport rate/server errors are retryable. Validation/unknown failures
  * stop this generation's suggestion lane; never replay an unchanged malformed request. */
-export function suggestionFailure(error: unknown): { retryable: boolean; message: string } {
-  const e = error && typeof error === "object" ? error as { status?: number; statusCode?: number; issues?: unknown; message?: string } : {};
+export function suggestionFailure(error: unknown): { retryable: boolean; kind: "validation" | "transient" | "timeout" | "terminal"; message: string } {
+  const e = error && typeof error === "object" ? error as { status?: number; statusCode?: number; issues?: unknown; message?: string; code?: string } : {};
   const status = e.status ?? e.statusCode;
   const validation = !!e.issues || /too_big|validation|schema|existing.*500/i.test(e.message ?? "");
   const retryable = !validation && (status === 429 || (typeof status === "number" && status >= 500 && status < 600));
-  return { retryable, message: validation ? "Suggestions stopped because the request did not pass validation. Existing requests and known track details were kept." : retryable ? "Suggestions are temporarily unavailable; a bounded retry will run. Known track details were kept." : "Suggestions could not complete; no further suggestion requests were sent. Existing requests and known track details were kept." };
+  // A client or server suggestion deadline only ends that section's request; it is never replayed immediately.
+  const timeout = !validation && !retryable && (e.code === "SUGGESTION_DEADLINE" || /SUGGESTION_DEADLINE|time limit reached|deadline reached/i.test(e.message ?? ""));
+  const kind = validation ? "validation" : retryable ? "transient" : timeout ? "timeout" : "terminal";
+  const message = kind === "validation" ? "Suggestions stopped because the request did not pass validation. Existing requests and known track details were kept."
+    : kind === "transient" ? "Suggestions are temporarily unavailable; a bounded retry will run. Known track details were kept."
+    : kind === "timeout" ? "A suggestion request for one section ran out of time; other sections continued and any finished suggestions were kept."
+    : "Suggestions could not complete; no further suggestion requests were sent. Existing requests and known track details were kept.";
+  return { retryable, kind, message };
 }
 
 /**

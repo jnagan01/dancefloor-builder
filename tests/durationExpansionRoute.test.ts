@@ -36,7 +36,9 @@ it('actual route metadata-rejected first suggestions are replaced by later exact
  const reject=tt.slice(0,60);reject.forEach(t=>t.bpm='180');h.lib=vdj.buildLibrary(tt);h.library(h.lib);await h.flush();
  await h.current.generate();await h.flush();expect(seconds(h)).toEqual([5400,14400,7200]);expect(sections.flatMap(k=>h.current.result[k]).some(s=>reject.some(t=>t.artist===s.artist))).toBe(false);h.unmount();
 },30000);
-it('actual route hung suggestion provider terminates at bounded waits and never claims duration coverage',async()=>{vi.useFakeTimers();try{const {h}=await setup({tracks:[],recommend:()=>new Promise(()=>{})});const generating=h.current.generate();await vi.advanceTimersByTimeAsync(13000);await generating;await h.flush();expect(seconds(h)).toEqual([0,0,0]);expect(h.warnings.join(' ')).toMatch(/Preparation is short/);h.unmount();}finally{vi.useRealTimers();}},30000);
+it('actual route hung suggestion provider terminates at bounded waits and never claims duration coverage',async()=>{vi.useFakeTimers();try{const sent:Record<string,number>={};const {h}=await setup({tracks:[],recommend:({data}:any)=>{sent[data.section]=(sent[data.section]??0)+1;return new Promise(()=>{});}});const generating=h.current.generate();
+ // Coordinated deadlines: each lane waits its server deadline plus transport margin, at most two timeouts per lane, within the fixed repair window.
+ await vi.advanceTimersByTimeAsync(120000);await generating;await h.flush();expect(Object.values(sent).every(n=>n>=1&&n<=2)).toBe(true);expect(seconds(h)).toEqual([0,0,0]);expect(h.warnings.join(' ')).toMatch(/Preparation is short/);h.unmount();}finally{vi.useRealTimers();}},30000);
 it.each(['empty','duplicates'])('actual route %s favourite response still runs general usable-file sourcing',async(mode)=>{
  const tt=tracks(120).map(t=>({...t,bpm:''}));let general=0,favourites=0;
  // Use tags with unknown BPM, upgraded by the real enrichment pass only for AI offers.

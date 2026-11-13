@@ -2,7 +2,8 @@ import { stripArtistFromTitle } from "./danceFloor";
 import { targetsNote } from "./vibes";
 import { eventTypeNote } from "./eventTypes";
 import { createServerFn } from "@tanstack/react-start";
-import { generateObject, NoObjectGeneratedError } from "ai";
+import { streamObject, NoObjectGeneratedError } from "ai";
+import { SUGGESTION_DEADLINE_CODE, SUGGESTION_SERVER_DEADLINE_MS } from "./prep/suggestionLanes";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -72,6 +73,8 @@ export const RecommendInputSchema = z.object({
     )
     .max(60)
     .default([]),
+  /** Client-coordinated server deadline; the server never runs longer than SUGGESTION_SERVER_DEADLINE_MS. */
+  deadlineMs: z.number().int().min(1_000).max(SUGGESTION_SERVER_DEADLINE_MS).optional(),
 });
 
 
@@ -423,8 +426,25 @@ Rules:
     };
 
 
+    // Stream so a deadline keeps every COMPLETED suggestion instead of discarding a healthy, slower reply.
+    // Items before the last streamed one are complete; each still passes the full item schema (no invented fields).
+    const itemSchema = SuggestionSchema.shape.suggestions.element;
+    const completeItems = (rows: unknown[], dropLast: boolean): RecommendedSong[] =>
+      (dropLast ? rows.slice(0, -1) : rows).flatMap((row) => { const parsed = itemSchema.safeParse(row); return parsed.success ? [parsed.data] : []; });
+    const finish = (list: RecommendedSong[], partial: boolean, note: string): { suggestions: RecommendedSong[]; partial?: boolean } => {
+      const filtered = enforceOnly(list.filter((s) => s.popularity == null || s.popularity >= 6)).slice(0, data.count);
+      if (filtered.length !== list.length || note) console.warn(`[recommendSongsForSection] ${note}kept ${filtered.length}/${list.length} (popularity/artist filter) section=${data.section} requested=${data.count}`);
+      return partial ? { suggestions: filtered, partial: true } : { suggestions: filtered };
+    };
+    const deadlineMs = Math.min(SUGGESTION_SERVER_DEADLINE_MS, data.deadlineMs ?? SUGGESTION_SERVER_DEADLINE_MS);
+    const controller = new AbortController();
+    const aborted = new Promise<"deadline">((resolve) => controller.signal.addEventListener("abort", () => resolve("deadline"), { once: true }));
+    const timer = setTimeout(() => controller.abort(), deadlineMs);
+    let latest: unknown[] = [];
+    let streamError: unknown;
+    let timedOut = false;
     try {
-      const result = await generateObject({
+      const result = streamObject({
         model: gateway("google/gemini-3-flash-preview"),
         schema: SuggestionSchema,
         prompt,
@@ -433,32 +453,38 @@ Rules:
         // Without this, Gemini truncates mid-list (finishReason=length) and the
         // caller gets fewer songs than it asked for, leaving the playlist short.
         maxOutputTokens: 8192,
+        abortSignal: controller.signal,
+        onError: ({ error }) => { if (!controller.signal.aborted) streamError ??= error; },
       });
-
-      if (result.finishReason && result.finishReason !== "stop") {
-        console.warn(
-          `[recommendSongsForSection] non-stop finishReason=${result.finishReason} section=${data.section} requested=${data.count} got=${result.object.suggestions.length}`,
-        );
+      const objectResult = Promise.resolve(result.object);
+      objectResult.catch(() => {}); // settled below or abandoned at the deadline; never unhandled
+      const iterator = result.partialObjectStream[Symbol.asyncIterator]();
+      for (;;) {
+        // Race every step against the deadline: a provider that ignores the abort cannot hold the request open.
+        const step = await Promise.race([iterator.next(), aborted]).catch((error: unknown) => { if (!controller.signal.aborted) streamError ??= error; return { done: true as const, value: undefined }; });
+        if (step === "deadline") { timedOut = true; void Promise.resolve(iterator.return?.()).catch(() => {}); break; }
+        if (step.done) break;
+        const rows = (step.value as { suggestions?: unknown } | undefined)?.suggestions;
+        if (Array.isArray(rows)) latest = rows;
       }
-
-      const filtered = enforceOnly(result.object.suggestions.filter((s) => s.popularity == null || s.popularity >= 6));
-      if (filtered.length !== result.object.suggestions.length) {
-        console.warn(
-          `[recommendSongsForSection] dropped ${result.object.suggestions.length - filtered.length} picks (popularity/artist filter) section=${data.section}`,
-        );
+      if (!timedOut) {
+        const settled = await Promise.race([objectResult.then((object) => ({ object }), (error: unknown) => ({ error })), aborted]);
+        if (settled === "deadline") timedOut = true;
+        else if ("object" in settled) {
+          const finishReason = await Promise.resolve(result.finishReason).catch(() => undefined);
+          return finish(settled.object.suggestions, false, finishReason && finishReason !== "stop" ? `non-stop finishReason=${finishReason}; ` : "");
+        } else if (NoObjectGeneratedError.isInstance(settled.error)) {
+          const recovered = fallbackParseSuggestions(settled.error.text ?? "");
+          if (recovered) return finish(recovered, false, "recovered nonconforming AI output; ");
+          streamError ??= settled.error;
+        } else streamError ??= settled.error;
       }
-      return { suggestions: filtered };
-    } catch (error) {
-      if (NoObjectGeneratedError.isInstance(error)) {
-        const recovered = fallbackParseSuggestions(error.text ?? "");
-        if (recovered) {
-          const filtered = enforceOnly(recovered.filter((s) => s.popularity == null || s.popularity >= 6));
-          console.warn(
-            `[recommendSongsForSection] recovered ${filtered.length}/${recovered.length} suggestions from nonconforming AI output section=${data.section} requested=${data.count}`,
-          );
-          return { suggestions: filtered };
-        }
-      }
-      throw error;
+    } finally {
+      clearTimeout(timer);
     }
+    // Deadline or stream failure: keep only fully streamed items (the last one may be cut off mid-field).
+    const kept = completeItems(latest, true);
+    if (kept.length) return finish(kept, true, timedOut ? `deadline ${deadlineMs}ms reached; ` : "stream failed after partial output; ");
+    if (timedOut) throw Object.assign(new Error(`Suggestion server deadline reached (${SUGGESTION_DEADLINE_CODE})`), { code: SUGGESTION_DEADLINE_CODE });
+    throw streamError ?? new Error("Suggestions could not be generated");
   });

@@ -118,5 +118,11 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
     previous = pending.catch(() => {});
     return pending;
   }
-  return { gather, get: (r: { artist: string; song: string }) => results.get(factsKey(r)), wasAttempted: (r: { artist: string; song: string }) => attempted.has(factsKey(r)), get anyFailure() { return anyFailure; } };
+  /**
+   * Start a new bounded phase ending at `endAt` (absolute). The client-request phase and the expansion phase
+   * each get their own window, so long local preparation between them cannot consume expansion lookup time.
+   * The budget, attempted keys and the sticky hung-request stop are shared and never reset.
+   */
+  function beginPhase(endAt: number) { if (Number.isFinite(endAt)) end = endAt; }
+  return { gather, beginPhase, get: (r: { artist: string; song: string }) => results.get(factsKey(r)), wasAttempted: (r: { artist: string; song: string }) => attempted.has(factsKey(r)), get anyFailure() { return anyFailure; } };
 }

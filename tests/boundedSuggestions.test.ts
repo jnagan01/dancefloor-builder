@@ -55,10 +55,10 @@ for(const mode of ['cold','mixed','warm']) it(`actual route and handler ${mode}:
   expect(h.errors).toEqual([]);console.info(`SYNTHETIC short-track ${mode}: seconds=${seconds.join('/')} requested=${seen.length} suggestions=${sends}`);h.unmount();
 },30000);
 
-it('terminal actual validator rejection is sent once, retains requests and reports honest shortage',async()=>{
+it('terminal actual validator rejection is sent at most once per section lane, never replayed, retains requests and reports honest shortage',async()=>{
   let sends=0;const server=recommendHandler(async()=>({object:{suggestions:[]}}));
   const h=harness({rows:{A:structuredClone(base)},services:{recommend:async(r:any)=>{sends++;return server.call({data:{...r.data,existing:Array.from({length:501},()=>clients[0])}});}}});
-  await h.flush();await h.current.generate();await h.flush();expect(sends).toBe(1);expect(h.infos.some((m:string)=>m.includes('did not pass validation'))).toBe(true);expect(h.warnings.some((m:string)=>m.includes('short'))).toBe(true);
+  await h.flush();await h.current.generate();await h.flush();expect(sends).toBeGreaterThanOrEqual(1);expect(sends).toBeLessThanOrEqual(3);expect(h.infos.some((m:string)=>m.includes('did not pass validation'))).toBe(true);expect(h.warnings.some((m:string)=>m.includes('short'))).toBe(true);
   expect(sections.flatMap(k=>h.current.result[k]).filter((s:any)=>s.fromUpload)).toHaveLength(34);h.unmount();
 });
 
@@ -78,8 +78,8 @@ for (const latency of [6000,12000,15000]) it(`independent recording lag and ${la
 
 it('transient recommendation failure waits, retries once, then succeeds through actual handler',async()=>{
   vi.useFakeTimers();let sends=0;const times:number[]=[];
-  const server=recommendHandler(async()=>{times.push(Date.now());sends++;if(sends===1)throw Object.assign(new Error('synthetic transient'),{status:503});return {object:{suggestions:[]}};});
-  const h=harness({rows:{A:structuredClone(base)},services:{recommend:server.call}});await h.flush();const p=h.current.generate();await vi.advanceTimersByTimeAsync(100000);await p;await h.flush();
+  const server=recommendHandler(async()=>{sends++;if(sends===1)throw Object.assign(new Error('synthetic transient'),{status:503});return {object:{suggestions:[]}};});
+  const h=harness({rows:{A:structuredClone(base)},services:{recommend:(r:any)=>{if(r.data.section==='Warm Up')times.push(Date.now());return server.call(r);}}});await h.flush();const p=h.current.generate();await vi.advanceTimersByTimeAsync(100000);await p;await h.flush();
   expect(sends).toBeGreaterThanOrEqual(2);expect(times[1]-times[0]).toBeGreaterThanOrEqual(1000);expect(h.infos.some((s:string)=>s.includes('temporarily unavailable'))).toBe(true);h.unmount();
 });
 
@@ -92,11 +92,11 @@ for(const boundary of ['event','account'] as const) for(const outcome of ['rejec
     throw Object.assign(new Error('synthetic unavailable'),{status:503});
   });
   const h=harness({rows:{A:structuredClone(base),B:{...structuredClone(base),id:'B'}},contract:true,services:{recommend:server.call}});
-  await h.flush();const pending=h.current.generate();await vi.advanceTimersByTimeAsync(outcome==='retry-wait'?200:1000);expect(sends).toBe(1);
+  await h.flush();const pending=h.current.generate();await vi.advanceTimersByTimeAsync(outcome==='retry-wait'?200:1000);expect(sends).toBe(3);
   h.switchTo(boundary==='account'?'other':'owner',boundary==='event'?'B':'A');await h.flush();
   const before={result:JSON.stringify(h.current.result),writes:h.requests.length,infos:[...h.infos],errors:[...h.errors],warnings:[...h.warnings]};
   await vi.advanceTimersByTimeAsync(100000);await pending;await h.flush();
-  expect(sends).toBe(1);expect(h.requests).toHaveLength(before.writes);expect(JSON.stringify(h.current.result)).toBe(before.result);
+  expect(sends).toBe(3);expect(h.requests).toHaveLength(before.writes);expect(JSON.stringify(h.current.result)).toBe(before.result);
   expect(h.infos).toEqual(before.infos);expect(h.errors).toEqual(before.errors);expect(h.warnings).toEqual(before.warnings);h.unmount();
 });
 

@@ -2,6 +2,7 @@ import { buildResolver, intended, cleanReason, requiresClean, seasonal, type Pre
 import { freshEvent, validateEventChoices, clientPlanningCoverage } from "@/lib/freshEvent";
 import { assertPreparationActivation, supportsPreparationPolicy, POLICY_UPDATE_GUIDANCE } from "@/lib/preparationCapability";
 import { exportReadiness, classifySelectedRow, readinessText, summaryText, type Availability } from "@/lib/exportReadiness";
+import { createSuggestionLanes } from "@/lib/prep/suggestionLanes";
 import { allocateFreshClients, durationTotals, fillRankedDuration, type DurationTargets } from "@/lib/prep/durationFill";
 import { isBlocked, applyVarietyReranker } from "@/lib/danceFloor";
 import { allowedForEventType } from "@/lib/eventTypes";
@@ -185,6 +186,10 @@ const SECTION_FILES: Record<SectionKey, string> = {
   peak: "peak",
 };
 const MAX_AI_RECOMMENDATION_BATCH_SIZE = 40;
+/** Optional neighbour/crowd context must finish within this window before ranking starts. */
+const CONTEXT_PHASE_MS = 15_000;
+/** Per-round lookup share for candidates without an approved known-length file (review-only for coverage). */
+const REVIEW_LOOKUPS_PER_ROUND = 16;
 type ListType = "dance" | "cocktail" | "dinner";
 const AVG_BACKGROUND_SONG_MIN = 3.5;
 const LIST_TYPE_LABEL: Record<ListType, string> = { dance: "Dance Floor", cocktail: "Cocktail Hour", dinner: "Dinner" };
@@ -1053,16 +1058,37 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const durationTargets: DurationTargets = background
       ? { warmUp: minutesNum * 60, transition: 0, peak: 0 }
       : { warmUp: timeShares.warmUp * 60 * buffer, transition: timeShares.transition * 60 * buffer, peak: timeShares.peak * 60 * buffer };
+    // The library, roots and policy are fixed for this generation and every match below depends only on the
+    // exact artist/title, so match once per exact pair. Repeated ranking/sorting over a large index otherwise
+    // re-runs fuzzy matching thousands of times before any expansion lookup can start.
+    const generationMatches = new Map<string, SongMatch>();
+    const generationMatch = (row: { artist: string; song: string }): SongMatch => {
+      const key = `${row.artist}\u0000${row.song}`;
+      let m = generationMatches.get(key);
+      if (!m) { m = policyMatch(row, mergedLibrary); generationMatches.set(key, m); }
+      return m;
+    };
+    const rawMatches = new Map<string, SongMatch>();
+    const rawMatch = (row: { artist: string; song: string }): SongMatch => {
+      const key = `${row.artist}\u0000${row.song}`;
+      let m = rawMatches.get(key);
+      if (!m) { m = matchSong(row, mergedLibrary); rawMatches.set(key, m); }
+      return m;
+    };
+    const filesMemo = new Map<string, Array<{ identity: string; seconds: number }>>();
     const generationFiles = (row: ResultSong) => {
       if (!matcherOn) return [];
-      const match = policyMatch(row, mergedLibrary);
-      if (!exportApproved(match) || match.trackIndex === undefined) return [];
-      const t = mergedLibrary.tracks[match.trackIndex];
-      if (!t || !intended(row, t) || cleanReason(t, requiresClean(generationPolicy))) return [];
-      return [{ identity: trackIdentity(t.filePath, rankRoots), seconds: Number(t.songLength) }];
+      const key = `${row.artist}\u0000${row.song}`;
+      const known = filesMemo.get(key);
+      if (known) return known;
+      const match = generationMatch(row);
+      const t = exportApproved(match) && match.trackIndex !== undefined ? mergedLibrary.tracks[match.trackIndex] : undefined;
+      const files = !t || !intended(row, t) || cleanReason(t, requiresClean(generationPolicy)) ? [] : [{ identity: trackIdentity(t.filePath, rankRoots), seconds: Number(t.songLength) }];
+      filesMemo.set(key, files);
+      return files;
     };
     const generationPath = (row: ResultSong) => {
-      const m = policyMatch(row, mergedLibrary);
+      const m = generationMatch(row);
       const t = m.trackIndex === undefined ? undefined : mergedLibrary.tracks[m.trackIndex];
       return t && (row.fromUpload || intended(row, t)) ? trackIdentity(t.filePath, rankRoots) : undefined;
     };
@@ -1083,7 +1109,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     };
     const enrichFromLibrary = (s: ResultSong): ResultSong => {
       if (!mergedLibrary) return s;
-      const m = matchSong({ artist: s.artist, song: s.song }, mergedLibrary);
+      const m = rawMatch(s);
       if (!musicalMatchApproved(m) || m.trackIndex == null) return s;
       const t = mergedLibrary.tracks[m.trackIndex];
       if (!t) return s;
@@ -1174,7 +1200,6 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
 
 
-        const failed: SectionKey[] = [];
         const favoriteArtists = (prefs.artists ?? []).filter(Boolean);
         // Shared mapper so the favorites pass and the general pass produce
         // identical song records.
@@ -1239,20 +1264,24 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             return true;
           }).slice(0, 20);
           if (uniqueSeeds.length) {
+            // Bounded context phase: neighbour/crowd evidence is optional, so a slow provider cannot delay expansion.
+            const contextEnd = Date.now() + CONTEXT_PHASE_MS;
+            const withinContext = <T,>(work: Promise<T>, fallback: T): Promise<T> => {
+              let t: ReturnType<typeof setTimeout> | undefined;
+              return Promise.race([work.catch(() => fallback), new Promise<T>((resolve) => { t = setTimeout(() => resolve(fallback), Math.max(0, contextEnd - Date.now())); })]).finally(() => clearTimeout(t));
+            };
             // AI cluster and Last.fm crowd data in parallel: the model knows
             // vibe and context, Last.fm knows what real listeners actually
             // play together.
             // Track-level Last.fm evidence: only bounded artist/title seeds from distinct client requests.
             const trackSeeds = seedsFromRequests(uniqueSongs);
             const [simTrackRes, res, crowdRes] = await Promise.all([
-              trackSeeds.length ? similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }).catch(() => null) : Promise.resolve(null),
+              trackSeeds.length ? withinContext(similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }), null) : Promise.resolve(null),
               // Each provider fails on its own: an AI neighbour outage must not discard valid Last.fm track evidence.
-              neighborsFn({
+              withinContext(neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
-              }).catch((err) => { console.warn("AI neighbour map unavailable", err); return { clusters: [] as Array<{ artist: string; neighbors: string[] }> }; }),
-              crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }).catch(
-                () => ({ available: false, artists: [] as ArtistCrowd[] }),
-              ),
+              }).catch((err) => { console.warn("AI neighbour map unavailable", err); return { clusters: [] as Array<{ artist: string; neighbors: string[] }> }; }), { clusters: [] as Array<{ artist: string; neighbors: string[] }> }),
+              withinContext(crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }), { available: false, artists: [] as ArtistCrowd[] }),
             ]);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
             rankSimilarTracks = simEvidence;
@@ -1300,9 +1329,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             try {
               const topNeighbors = neighborArtists.slice(0, 20);
               const extra = topNeighbors.length
-                ? await crowdFn({
+                ? await withinContext(crowdFn({
                     data: { artists: topNeighbors, perArtistSimilar: 0 },
-                  }).catch(() => ({ available: false, artists: [] as ArtistCrowd[] }))
+                  }), { available: false, artists: [] as ArtistCrowd[] })
                 : { available: false, artists: [] as ArtistCrowd[] };
               const seenCrowd = new Set<string>();
               crowdArtists = [...crowdRes.artists, ...extra.artists]
@@ -1427,34 +1456,26 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         };
         const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
         const repairEnd = Date.now() + 90_000;
+        // Expansion lookups get their own bounded window; long local preparation before this point no longer
+        // consumes it (the client-request phase had its own window).
+        facts.beginPhase(repairEnd);
         const backgroundLookups = new Set<string>();
-        let suggestionsStopped = false, suggestionReason = "";
-        const suggestionAttempts = new Map<string, number>();
-        const boundedRecommend = async (request: Parameters<typeof recommendFn>[0], section: SectionKey): Promise<{ suggestions: RecommendedSong[] }> => {
-          if (suggestionsStopped || genTokenRef.current !== myToken || accountRef.current !== accountAtStart || Date.now() >= repairEnd) return { suggestions: [] };
-          let timer: ReturnType<typeof setTimeout> | undefined;
-          try {
-            const reply = await Promise.race([recommendFn(request), new Promise<never>((_, reject) => {
-              timer = setTimeout(() => reject(new Error("Suggestion time limit reached")), Math.max(1, Math.min(12_000, repairEnd - Date.now())));
-            })]);
-            if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart || Date.now() >= repairEnd) return { suggestions: [] };
-            return reply;
-          } catch (err) {
-            if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart || Date.now() >= repairEnd) return { suggestions: [] };
-            const failure = suggestionFailure(err);
-            const attempts = (suggestionAttempts.get(section) ?? 0) + 1;
-            suggestionAttempts.set(section, attempts);
-            suggestionReason = failure.message;
-            toast.info(failure.message);
-            if (!failure.retryable || attempts >= 2) suggestionsStopped = true;
-            else {
-              if (timer !== undefined) { clearTimeout(timer); timer = undefined; }
-              await new Promise(resolve => setTimeout(resolve, Math.min(1000 * attempts, Math.max(0, repairEnd - Date.now()))));
-              return boundedRecommend(request, section);
-            }
-            return { suggestions: [] };
-          } finally { if (timer !== undefined) clearTimeout(timer); }
-        };
+        let communityNoticed = false;
+        let suggestionReason = "";
+        const suggestionToasts = new Set<string>();
+        // One in-flight request per section lane, lanes side by side, coordinated client/server deadlines.
+        // Healthy slow replies contribute; a timeout only ends its own lane; validation stops all lanes.
+        const lanes = createSuggestionLanes<Parameters<typeof recommendFn>[0], RecommendedSong>({
+          send: (request, signal) => recommendFn({ ...request, signal } as Parameters<typeof recommendFn>[0]),
+          classify: suggestionFailure,
+          isCurrent: () => genTokenRef.current === myToken && accountRef.current === accountAtStart,
+          end: repairEnd,
+          maxCount: MAX_AI_RECOMMENDATION_BATCH_SIZE,
+          onFailure: ({ message }) => {
+            suggestionReason = message;
+            if (!suggestionToasts.has(message)) { suggestionToasts.add(message); toast.info(message); }
+          },
+        });
         for (let round = 0; round <= maxRounds; round++) {
         // Attach facts BEFORE strict eligibility, ranking and energy ordering: every non-owned candidate (provider years/BPM
         // feed strict limits) and every owned candidate missing facts the active ranking uses,
@@ -1469,7 +1490,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // Prefer known usable files, then shared relevance; zero-length review discoveries cannot
         // monopolize preparation lookup time. Sufficient catalogue facts need no acoustic upgrade.
         const usable = new Set(lookupRanked.filter(p => generationFiles(p.row).some(f => Number.isFinite(f.seconds) && f.seconds > 0)));
-        const needFacts = [...lookupRanked.filter(p => p.row.aiSuggestion), ...lookupRanked.filter(p => !p.row.aiSuggestion && usable.has(p)), ...lookupRanked.filter(p => !p.row.aiSuggestion && !usable.has(p))].slice(0, 64).filter(p => {
+        // Review-only candidates (no approved known-length file) cannot add counted minutes, so a bounded share per
+        // round keeps them from delaying suggestions and usable files; later rounds continue them.
+        const reviewOnly = lookupRanked.filter(p => !p.row.aiSuggestion && !usable.has(p));
+        const needFacts = [...lookupRanked.filter(p => p.row.aiSuggestion), ...lookupRanked.filter(p => !p.row.aiSuggestion && usable.has(p)), ...(matcherOn && mergedLibrary.tracks.length ? reviewOnly.slice(0, REVIEW_LOOKUPS_PER_ROUND) : reviewOnly)].slice(0, 64).filter(p => {
           // Keep half of the EXISTING 600 lookup allowance for later recommendations.
           // Repeated rounds reuse cached attempts; library saturation cannot exhaust discovery's reserve.
           const key = factsKey(p.row);
@@ -1515,6 +1539,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             else if (!c) { if (cg.wasAttempted(p.row)) unavailable++; else unattempted++; }
           }
           const s = (n: number) => (n === 1 ? "" : "s");
+          // Later rounds re-check the same bounded budget; each community notice is reported once per generation.
+          if (communityNoticed) disabled = unavailable = unattempted = 0;
+          if (disabled || unavailable || unattempted) communityNoticed = true;
           if (disabled) toast.info(`Last.fm isn't available, so community tags and listener counts weren't checked for ${disabled} candidate track${s(disabled)}. Only that community evidence is unknown; other details are kept.`);
           if (unavailable) toast.info(`Last.fm community tags couldn't be checked for ${unavailable} candidate track${s(unavailable)} (no reply in time or an error). Only that community evidence is unknown; other details are kept.`);
           if (unattempted) toast.info(`${unattempted} lower-ranked candidate track${s(unattempted)} weren't checked on Last.fm (per-run limit of 40). Their community evidence is unknown; nothing was assumed.`);
@@ -1561,49 +1588,44 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         admitOwned();
         // Continue the relevant queued owned work before asking for more suggestions when
         // it can fill the gap. Known unsuitable attempts still release discovery capacity.
-        if (lookupRanked.some(p => !facts.wasAttempted(p.row)) && needFacts.length && !strictDropped && !rankStats.hidden?.uncertainDance) continue;
-        for (const { key, label } of sectionMap) {
-          await (async () => {
-            const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: r.peak }, poolRows());
-            // PASS 1 — favourite artists (max FAVORITE_ARTIST_CAP per artist across rows and candidates).
-            if (favoriteArtists.length) {
-              for (let favAttempt = 0; round === 0 && favAttempt < 3; favAttempt++) {
-                if (remaining(key) <= 0) break;
-                const counts = new Map<string, number>();
-                for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...poolRows()]) { const hit = favoriteArtists.find((f) => isFavoriteArtist(s.artist, [f])); if (hit) counts.set(hit, (counts.get(hit) ?? 0) + 1); }
-                const eligible = favoriteArtists.filter((f) => (counts.get(f) ?? 0) < FAVORITE_ARTIST_CAP);
-                if (!eligible.length) break;
-                const requestCount = Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE, eligible.length * FAVORITE_ARTIST_CAP);
-                if (requestCount <= 0) break;
-                try {
-                  const res = await boundedRecommend({ data: { section: label, count: requestCount, prefs, existing: existingNow(), onlyArtists: eligible, neighborArtists, crowdArtists } }, key);
-                  let added = 0;
-                  for (const sug of res.suggestions) {
-                    const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
-                    if (!owner || (counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
-                    if (offer(toAiSong(sug) as PRow, key)) { counts.set(owner, (counts.get(owner) ?? 0) + 1); added++; }
-                  }
-                  if (added === 0) break;
-                } catch (err) { console.error("Favorite-artist recommend failed", err); break; }
+        // Review-only rows (no counted file) never hold suggestions back.
+        if (lookupRanked.some(p => !facts.wasAttempted(p.row) && (usable.has(p) || p.row.aiSuggestion)) && needFacts.length && !strictDropped && !rankStats.hidden?.uncertainDance) continue;
+        // Every deficient section gets its own lane in the same round, so a slow first section can no longer
+        // starve later ones. Offers are synchronous after each fenced reply; local dedupe stays complete.
+        const runLane = async ({ key, label }: { key: SectionKey; label: FillLabel }) => {
+          const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: r.peak }, poolRows());
+          // PASS 1 — favourite artists (max FAVORITE_ARTIST_CAP per artist across rows and candidates).
+          if (favoriteArtists.length) {
+            for (let favAttempt = 0; round === 0 && favAttempt < 3; favAttempt++) {
+              if (remaining(key) <= 0 || !lanes.open(key)) break;
+              const counts = new Map<string, number>();
+              for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...poolRows()]) { const hit = favoriteArtists.find((f) => isFavoriteArtist(s.artist, [f])); if (hit) counts.set(hit, (counts.get(hit) ?? 0) + 1); }
+              const eligible = favoriteArtists.filter((f) => (counts.get(f) ?? 0) < FAVORITE_ARTIST_CAP);
+              if (!eligible.length) break;
+              const requestCount = Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE, eligible.length * FAVORITE_ARTIST_CAP);
+              if (requestCount <= 0) break;
+              const res = await lanes.request(key, requestCount, (count, deadlineMs) => ({ data: { section: label, count, deadlineMs, prefs, existing: existingNow(), onlyArtists: eligible, neighborArtists, crowdArtists } }));
+              if (!res) break;
+              let added = 0;
+              for (const sug of res.suggestions) {
+                const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
+                if (!owner || (counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
+                if (offer(toAiSong(sug) as PRow, key)) { counts.set(owner, (counts.get(owner) ?? 0) + 1); added++; }
               }
+              // Favourites exhausted: fall through to the general pass for this lane.
+              if (added === 0) break;
             }
-            // PASS 2 — general gap-driven candidates for whatever is still uncovered.
-            let gotAny = false;
-            if (remaining(key) > 0 && round < maxRounds) {
-
-              try {
-                const gaps = buildGapProfile(r[key], [...r.warmUp, ...r.transition, ...r.peak], gapSection(label), { favoriteArtists });
-                const res = await boundedRecommend({ data: { section: label, count: Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE), prefs, existing: existingNow(), gaps, favoriteArtists, neighborArtists, crowdArtists } }, key);
-                if (!res.suggestions.length) { failed.push(key); return; }
-                gotAny = true;
-                let added = 0;
-                for (const sug of res.suggestions) if (offer(toAiSong(sug) as PRow, key)) added++;
-                if (added === 0) return;
-              } catch (err) { console.error("AI recommend failed", err); }
-            }
-            if (!gotAny && remaining(key) > 0) failed.push(key);
-          })();
-        }
+          }
+          // PASS 2 — general gap-driven candidates for whatever is still uncovered.
+          if (remaining(key) > 0 && round < maxRounds && lanes.open(key)) {
+            const gaps = buildGapProfile(r[key], [...r.warmUp, ...r.transition, ...r.peak], gapSection(label), { favoriteArtists });
+            const res = await lanes.request(key, remaining(key), (count, deadlineMs) => ({ data: { section: label, count, deadlineMs, prefs, existing: existingNow(), gaps, favoriteArtists, neighborArtists, crowdArtists } }));
+            if (res) for (const sug of res.suggestions) offer(toAiSong(sug) as PRow, key);
+          }
+        };
+        await Promise.all(sectionMap.filter(({ key }) => remaining(key) > 0).map(runLane));
+        if (genTokenRef.current !== myToken) return;
+        if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
 
         if (suggestionReason && !durationReason.includes(suggestionReason)) durationReason += ` ${suggestionReason}`;
         if (![...pool.keys()].some(key => !before.has(key)) && !lookupRanked.some(p => !facts.wasAttempted(p.row))) { durationReason += " Sources returned no new candidates."; break; }
