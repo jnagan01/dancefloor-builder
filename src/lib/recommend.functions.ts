@@ -471,8 +471,9 @@ Rules:
         const settled = await Promise.race([objectResult.then((object) => ({ object }), (error: unknown) => ({ error })), aborted]);
         if (settled === "deadline") timedOut = true;
         else if ("object" in settled) {
-          const finishReason = await Promise.resolve(result.finishReason).catch(() => undefined);
-          return finish(settled.object.suggestions, false, finishReason && finishReason !== "stop" ? `non-stop finishReason=${finishReason}; ` : "");
+          // Completion metadata is advisory: a hung SDK metadata promise must not outlive the request.
+          const finishReason = await Promise.race([Promise.resolve(result.finishReason).catch(() => undefined), aborted]);
+          return finish(settled.object.suggestions, false, finishReason && finishReason !== "stop" && finishReason !== "deadline" ? `non-stop finishReason=${finishReason}; ` : "");
         } else if (NoObjectGeneratedError.isInstance(settled.error)) {
           const recovered = fallbackParseSuggestions(settled.error.text ?? "");
           if (recovered) return finish(recovered, false, "recovered nonconforming AI output; ");

@@ -1266,9 +1266,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           if (uniqueSeeds.length) {
             // Bounded context phase: neighbour/crowd evidence is optional, so a slow provider cannot delay expansion.
             const contextEnd = Date.now() + CONTEXT_PHASE_MS;
-            const withinContext = <T,>(work: Promise<T>, fallback: T): Promise<T> => {
+            const withinContext = <T,>(dispatch: () => Promise<T>, fallback: T): Promise<T> => {
+              if (Date.now() >= contextEnd || genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return Promise.resolve(fallback);
               let t: ReturnType<typeof setTimeout> | undefined;
-              return Promise.race([work.catch(() => fallback), new Promise<T>((resolve) => { t = setTimeout(() => resolve(fallback), Math.max(0, contextEnd - Date.now())); })]).finally(() => clearTimeout(t));
+              return Promise.race([dispatch().catch(() => fallback), new Promise<T>((resolve) => { t = setTimeout(() => resolve(fallback), Math.max(0, contextEnd - Date.now())); })]).finally(() => clearTimeout(t));
             };
             // AI cluster and Last.fm crowd data in parallel: the model knows
             // vibe and context, Last.fm knows what real listeners actually
@@ -1276,12 +1277,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             // Track-level Last.fm evidence: only bounded artist/title seeds from distinct client requests.
             const trackSeeds = seedsFromRequests(uniqueSongs);
             const [simTrackRes, res, crowdRes] = await Promise.all([
-              trackSeeds.length ? withinContext(similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }), null) : Promise.resolve(null),
+              trackSeeds.length ? withinContext(() => similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }), null) : Promise.resolve(null),
               // Each provider fails on its own: an AI neighbour outage must not discard valid Last.fm track evidence.
-              withinContext(neighborsFn({
+              withinContext(() => neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
               }).catch((err) => { console.warn("AI neighbour map unavailable", err); return { clusters: [] as Array<{ artist: string; neighbors: string[] }> }; }), { clusters: [] as Array<{ artist: string; neighbors: string[] }> }),
-              withinContext(crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }), { available: false, artists: [] as ArtistCrowd[] }),
+              withinContext(() => crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }), { available: false, artists: [] as ArtistCrowd[] }),
             ]);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
             rankSimilarTracks = simEvidence;
@@ -1329,7 +1330,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             try {
               const topNeighbors = neighborArtists.slice(0, 20);
               const extra = topNeighbors.length
-                ? await withinContext(crowdFn({
+                ? await withinContext(() => crowdFn({
                     data: { artists: topNeighbors, perArtistSimilar: 0 },
                   }), { available: false, artists: [] as ArtistCrowd[] })
                 : { available: false, artists: [] as ArtistCrowd[] };
@@ -1594,23 +1595,29 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // starve later ones. Offers are synchronous after each fenced reply; local dedupe stays complete.
         const runLane = async ({ key, label }: { key: SectionKey; label: FillLabel }) => {
           const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: r.peak }, poolRows());
+          const favoriteCounts = () => {
+            const counts = new Map<string, number>();
+            for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...poolRows()]) { const hit = favoriteArtists.find((f) => isFavoriteArtist(s.artist, [f])); if (hit) counts.set(hit, (counts.get(hit) ?? 0) + 1); }
+            return counts;
+          };
           // PASS 1 — favourite artists (max FAVORITE_ARTIST_CAP per artist across rows and candidates).
           if (favoriteArtists.length) {
             for (let favAttempt = 0; round === 0 && favAttempt < 3; favAttempt++) {
               if (remaining(key) <= 0 || !lanes.open(key)) break;
-              const counts = new Map<string, number>();
-              for (const s of [...r.warmUp, ...r.transition, ...r.peak, ...poolRows()]) { const hit = favoriteArtists.find((f) => isFavoriteArtist(s.artist, [f])); if (hit) counts.set(hit, (counts.get(hit) ?? 0) + 1); }
+              const counts = favoriteCounts();
               const eligible = favoriteArtists.filter((f) => (counts.get(f) ?? 0) < FAVORITE_ARTIST_CAP);
               if (!eligible.length) break;
               const requestCount = Math.min(remaining(key), MAX_AI_RECOMMENDATION_BATCH_SIZE, eligible.length * FAVORITE_ARTIST_CAP);
               if (requestCount <= 0) break;
               const res = await lanes.request(key, requestCount, (count, deadlineMs) => ({ data: { section: label, count, deadlineMs, prefs, existing: existingNow(), onlyArtists: eligible, neighborArtists, crowdArtists } }));
               if (!res) break;
+              // Other lanes may have admitted favorites while this request awaited its reply.
+              const admissionCounts = favoriteCounts();
               let added = 0;
               for (const sug of res.suggestions) {
                 const owner = favoriteArtists.find((f) => isFavoriteArtist(sug.artist, [f]));
-                if (!owner || (counts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
-                if (offer(toAiSong(sug) as PRow, key)) { counts.set(owner, (counts.get(owner) ?? 0) + 1); added++; }
+                if (!owner || (admissionCounts.get(owner) ?? 0) >= FAVORITE_ARTIST_CAP) continue;
+                if (offer(toAiSong(sug) as PRow, key)) { admissionCounts.set(owner, (admissionCounts.get(owner) ?? 0) + 1); added++; }
               }
               // Favourites exhausted: fall through to the general pass for this lane.
               if (added === 0) break;

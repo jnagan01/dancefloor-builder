@@ -98,6 +98,65 @@ function scenario(opts: { mode: 'cold' | 'mixed' | 'warm'; delay?: (section: str
 }
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
+for (const boundary of ['deadline', 'event', 'account', 'short'] as const) it(`actual route gates extra neighbor crowd dispatch at ${boundary}`, async () => {
+  vi.useFakeTimers();
+  const crowdCalls: Array<{ at: number; extra: boolean }> = [];
+  let neighborStart = -1;
+  const delay = boundary === 'deadline' ? 15000 : 1000;
+  const h = createHarness(actual)({ rows: { A: structuredClone(base), B: { ...structuredClone(base), id: 'B' } }, services: {
+    neighbors: async () => { neighborStart = Date.now(); await new Promise(r => setTimeout(r, delay)); return { clusters: [{ artist: clients[0].artist, neighbors: ['TEST Adjacent'] }] }; },
+    crowd: async ({ data }: any) => { crowdCalls.push({ at: Date.now(), extra: data.perArtistSimilar === 0 }); return { artists: [] }; },
+  } });
+  await h.flush(); const pending = h.current.generate();
+  for (let i = 0; i < 20 && neighborStart < 0; i++) await vi.advanceTimersByTimeAsync(100);
+  expect(neighborStart).toBeGreaterThanOrEqual(0);
+  if (boundary === 'event' || boundary === 'account') { h.switchTo(boundary === 'account' ? 'other' : 'owner', boundary === 'event' ? 'B' : 'A'); await h.flush(); }
+  await vi.advanceTimersByTimeAsync(240000); await pending; await h.flush();
+  expect(crowdCalls.filter(c => !c.extra)).toHaveLength(1);
+  const extra = crowdCalls.filter(c => c.extra);
+  expect(extra).toHaveLength(boundary === 'short' ? 1 : 0);
+  if (boundary === 'short') expect(extra[0].at - neighborStart).toBe(1000);
+  h.unmount();
+});
+
+it('actual handler retains the completed object when advisory finishReason hangs, bounded by the original deadline', async () => {
+  vi.useFakeTimers();
+  const suggestions = [{ artist: 'TEST Finished', song: 'Complete', genre: 'Pop', decade: '2000s', energy: 8, danceability: 8, popularity: 8, valence: 7, reason: 'E8 D8' }];
+  const h = recommendHandler(async () => { await new Promise(r => setTimeout(r, 1000)); return { object: { suggestions } }; }, true, new Promise<string>(() => {}));
+  const started = Date.now(); let settled = false;
+  const pending = h.call({ data: { section: 'Peak', count: 1, prefs: {}, existing: [], deadlineMs: 12000 } }).then((out: any) => { settled = true; return out; });
+  await vi.advanceTimersByTimeAsync(11999); expect(settled).toBe(false);
+  await vi.advanceTimersByTimeAsync(1); const out = await pending;
+  expect(Date.now() - started).toBe(12000); expect(out.suggestions).toEqual(suggestions); expect(out.partial).not.toBe(true);
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it('actual route simultaneous favorite replies share the three-track admission cap before ranking, not just per-list final caps', async () => {
+  vi.useFakeTimers();
+  const favorite = 'TEST Favorite';
+  const observed = new Set<string>();
+  const favSends: string[] = [];
+  const observedHarness = createHarness({ ...actual, observeRanking: (args: any[]) => {
+    if (args[2].automaticExpansion) for (const p of args[0]) if (p.row.artist === favorite && p.row.aiSuggestion) observed.add(p.row.song);
+  } });
+  const h = observedHarness({ rows: { A: { ...structuredClone(base), inputs: { ...structuredClone(base.inputs), artistsInput: favorite } } }, services: {
+    enrich: async ({ data }: any) => ({ results: data.songs.map((s: any) => ({ ...s, energy: 8, danceability: 8, bpm: 120, year: 2005, genre: 'Pop', source: 'ReccoBeats', prov: { energy: 'provider', danceability: 'provider', bpm: 'provider', year: 'provider', genre: 'provider' } })) }),
+    recommend: async ({ data }: any) => {
+      if (!data.onlyArtists?.length) return { suggestions: [] };
+      favSends.push(data.section);
+      await new Promise(r => setTimeout(r, 1000));
+      return { suggestions: Array.from({ length: 3 }, (_, i) => ({ artist: favorite, song: `${data.section} Favorite ${i}`, genre: 'Pop', year: 2005, energy: 8, danceability: 8, popularity: 8, valence: 7, bpm: 120, reason: 'E8 D8' })) };
+    },
+  } });
+  await h.flush(); const pending = h.current.generate(); await vi.advanceTimersByTimeAsync(240000); await pending; await h.flush();
+  expect(favSends.sort()).toEqual(['Peak', 'Transition', 'Warm Up']);
+  expect(observed.size).toBe(3); expect(dance.FAVORITE_ARTIST_CAP).toBe(3);
+  const all = sections.flatMap(k => h.current.result[k]);
+  expect(all.filter((s: any) => s.fromUpload).map(factsKey).sort()).toEqual(clients.map(factsKey).sort());
+  expect(all.filter((s: any) => !s.fromUpload && s.artist === favorite).length).toBeLessThanOrEqual(3);
+  h.unmount();
+});
+
 for (const mode of ['cold', 'mixed', 'warm'] as const) it(`healthy 20-25 s replies fill every section to 90/240/120 min (${mode} metadata, 37,722 files)`, async () => {
   vi.useFakeTimers();
   const s = scenario({ mode });

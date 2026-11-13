@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Reviewed suggestion lifecycle edges
+- [x] Gate lazy context dispatch by deadline and captured event/account; bound advisory finishReason without dropping completed objects; recount shared favorite admissions after parallel replies.
+- [x] Synthetic actual-route/handler regressions: 35 focused, 984 full tests / 92 files; automatic compilation OK. Evidence: tests/fit/lifecycle-edges.md. No publication, production queries or native data actions.
+- [ ] Joe verifies final-head hosted Mac/CodeQL after commit; current reported runs cover ed8b4f8 only.
 ## Stale suggestion errors and beyond-context identity regression
 - [x] Fence suggestion rejection/timeout before diagnostics/retry; six actual-route fake-clock event/account rejection, timeout and retry-wait cases show no late diagnostics/results/saves/retries.
 - [x] Actual handler credit variant demonstrably outside <=500 context belongs to an observed admitted candidate; complete local intended identity rejects it. 17 focused and 966 full tests / 91 files pass; automatic compilation OK.

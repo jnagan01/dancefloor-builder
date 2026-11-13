@@ -12,7 +12,7 @@ import * as lanes from '@/lib/prep/suggestionLanes';
  * `{ object }` (all items at once when it resolves) or `{ stream, stepMs }` (one complete item every stepMs,
  * honouring the server's abort signal) so deadline-bounded partial retention is exercised for real.
  */
-function syntheticStreamObject(generate: (options: any) => Promise<any>) {
+function syntheticStreamObject(generate: (options: any) => Promise<any>, finishReason: Promise<string>) {
   return (options: any) => {
     let resolveObject!: (v: any) => void, rejectObject!: (e: unknown) => void;
     const object = new Promise((res, rej) => { resolveObject = res; rejectObject = rej; }); object.catch(() => {});
@@ -31,19 +31,19 @@ function syntheticStreamObject(generate: (options: any) => Promise<any>) {
       }
       yield out.object; resolveObject(out.object);
     }
-    return { partialObjectStream: partials(), object, finishReason: Promise.resolve('stop') };
+    return { partialObjectStream: partials(), object, finishReason };
   };
 }
 
 /** Real validator/handler; only framework, authentication transport and AI are synthetic. */
-export function recommendHandler(generate: (options: any) => Promise<any>, authenticated = true) {
+export function recommendHandler(generate: (options: any) => Promise<any>, authenticated = true, finishReason = Promise.resolve('stop')) {
   const require = createRequire(import.meta.url), ts = require('typescript');
   const module = { exports: {} as any };
   const code = ts.transpileModule(readFileSync('src/lib/recommend.functions.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const imports: Record<string, any> = {
     './danceFloor': { stripArtistFromTitle }, './vibes': { targetsNote }, './eventTypes': { eventTypeNote }, zod: { z }, './prep/suggestionLanes': lanes,
     './ai-gateway.server': { createLovableAiGatewayProvider: () => () => 'synthetic' },
-    ai: { streamObject: syntheticStreamObject(generate), NoObjectGeneratedError: { isInstance: () => false } },
+    ai: { streamObject: syntheticStreamObject(generate, finishReason), NoObjectGeneratedError: { isInstance: () => false } },
     '@/integrations/supabase/auth-middleware': { requireSupabaseAuth: async ({ next }: any) => { if (!authenticated) throw new Error('Unauthorized'); return next({ context: { userId: 'synthetic-owner' } }); } },
     '@tanstack/react-start': { createServerFn: () => {
       let validate: any, chain: any[] = [];
