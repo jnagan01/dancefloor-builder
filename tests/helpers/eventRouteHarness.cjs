@@ -7,7 +7,7 @@ function createEventRouteHarness(actual) {
   source = source.replace('  const withFileBpm =', '  capture({ applyReviewMode, updateMatch, toggleExclude, pickLocalFileForMatch, withAnalysis: (sec, songs) => withFileBpm(sec, songs), songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, exportSectionM3u, exportSectionXmlToVdj, previewReadiness, readiness, activeSection, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   source += '\nexport { SectionView };';
   if (actual.observeCoordinator) {
-    source = source.replace('while (!finished && live()) {', 'while (!finished && live()) { observeCoordinator({ loop: "worker", at: Date.now(), pendingEval, dirty, activeLanes, lookupsClosed, poolSize: pool.size });');
+    source = source.replace('while (!finished && live()) {', 'while (!finished && live()) { observeCoordinator({ loop: "worker", at: Date.now(), pendingEval, dirty, activeLanes, lookupsClosed, poolSize: pool.size, coveredAt, deficit: sectionOrder.map(deficitSec) });');
     source = source.replace('while (!finished && !lookupsClosed && live() && lanes.open(key) && sent < maxLaneRequests) {', 'while (!finished && !lookupsClosed && live() && lanes.open(key) && sent < maxLaneRequests) { observeCoordinator({ loop: key, at: Date.now(), sent });');
   }
     const readiness = require(path.join(root, "node_modules/typescript"));

@@ -80,7 +80,7 @@ function providerFacts(s: { artist: string; song: string }) {
   }
   const lane = laneIndex.get(`${s.artist}||${s.song}`);
   if (lane !== undefined) {
-    // ~80% of linked suggestions verify eligible (live: 55 of 64), with mixed provenance; the rest fail verified
+    // High-yield synthetic control only; 55/64 final selected rows is NOT a suggestion eligibility denominator.
     // decade/BPM, carry verified slow evidence, or stay unresolved (estimates only, never counted as verified).
     const c = lane % 10, odd = lane % 20 >= 10;
     if (c <= 3) return full({ energy: 8, danceability: 8, bpm: 112 + (lane % 15), year: 2000 + c, popularity: 7, genre: 'Pop' });
@@ -94,17 +94,18 @@ function providerFacts(s: { artist: string; song: string }) {
   return { ...s, source: 'none' };
 }
 type Call = { section: string; start: number; end: number; count: number; deadlineMs?: number; existing: number; returned: number; only: number };
-type Opts = { mode: 'cold' | 'mixed' | 'warm'; baseline?: boolean; laneFiles?: number; outage?: boolean; harYield?: boolean; immediate?: boolean; failure?: (section: string, n: number) => 'transient' | 'validation' | undefined; favorites?: boolean };
+type Opts = { mode: 'cold' | 'mixed' | 'warm'; baseline?: boolean; laneFiles?: number; outage?: boolean; harYield?: boolean; lowYield?: boolean; estimatedCatalogue?: boolean; immediate?: boolean; failure?: (section: string, n: number) => 'transient' | 'validation' | undefined; favorites?: boolean };
 
 function scenario(o: Opts) {
   const laneFiles = o.laneFiles ?? 200;
   const lib = library(laneFiles);
+  if (o.estimatedCatalogue) for (const t of lib.tracks) if (t.artist.startsWith('TEST Lane')) { t.year = '2005'; t.bpm = '120'; }
   const before = JSON.stringify(lib.tracks);
   const calls: Call[] = [], lookups: Array<{ at: number; end: number; songs: string[] }> = [];
   const cursor: Record<string, number> = { 'Warm Up': 0, Transition: 0, Peak: 0 };
   const n: Record<string, number> = { 'Warm Up': 0, Transition: 0, Peak: 0 };
   const suggested: string[] = [];
-  const iterations: Array<{ loop: string; at: number; sent?: number }> = [];
+  const iterations: Array<{ loop: string; at: number; sent?: number; coveredAt?: number; deficit?: number[] }> = [];
   const sameTime = new Map<string, { at: number; count: number }>();
   const observeCoordinator = (step: { loop: string; at: number; sent?: number }) => {
     iterations.push(step);
@@ -157,6 +158,18 @@ function scenario(o: Opts) {
   const harCounts = { warmUp: { checked: 11, year: 5, bpm: 4, bpmStart: 3 }, transition: { checked: 27, year: 13, bpm: 15, bpmStart: 8 }, peak: { checked: 15, year: 5, bpm: 9, bpmStart: 3 } };
   const harObserved: Record<string, Array<{ year: boolean; bpm: boolean }>> = { warmUp: [], transition: [], peak: [] };
   const outcomes = (s: { artist: string; song: string }) => {
+    if (o.estimatedCatalogue) {
+      const i = laneIndex.get(`${s.artist}||${s.song}`);
+      if (i !== undefined && i % 10 < 6) { const fields = { energy: 2, danceability: 2, year: 2005, bpm: 120 }; return { ...s, ...fields, source: 'ReccoBeats', prov: P(fields) }; }
+    }
+    if (o.lowYield) {
+      const i = laneIndex.get(`${s.artist}||${s.song}`);
+      if (i !== undefined) {
+        const c = i % 10;
+        const fields = { energy: c === 9 ? 2 : 8, danceability: c === 9 ? 2 : 8, year: c >= 4 && c <= 6 ? 1985 : 2005, bpm: c >= 7 && c <= 8 ? 96 : 120, genre: 'Pop' };
+        return { ...s, ...fields, source: 'ReccoBeats', prov: P(fields) };
+      }
+    }
     if (o.harYield) {
       for (const k of sections) {
         const index = laneIndex.get(`${s.artist}||${s.song}`);
@@ -171,7 +184,8 @@ function scenario(o: Opts) {
     }
     return providerFacts(s);
   };
-  const h = createHarness({ ...actual, observeRanking, observeCoordinator, routeSource: o.baseline ? readFileSync('tests/fit/archived/events.new.5e46335.txt', 'utf8') : undefined })({ rows: { A: o.favorites ? { ...structuredClone(base), inputs: { ...structuredClone(base.inputs), artistsInput: FAVE } } : structuredClone(base), B: { ...structuredClone(base), id: 'B' } }, contract: true, services: {
+  const fixtureDance = o.estimatedCatalogue ? { ...dance, catalogueCandidates: () => sections.flatMap(k => Array.from({ length: 24 }, (_, i) => { const t = laneTrack(k, i); return { row: { artist: t.artist, song: t.title, energy: 8, danceability: 8, year: 2005, bpm: 120, metaProv: { energy: 'estimate', danceability: 'estimate', year: 'tags', bpm: 'tags' } }, prefer: k }; })) } : dance;
+  const h = createHarness({ ...actual, dance: fixtureDance, observeRanking, observeCoordinator, routeSource: o.baseline ? readFileSync('tests/fit/archived/events.new.5e46335.txt', 'utf8') : undefined })({ rows: { A: o.favorites ? { ...structuredClone(base), inputs: { ...structuredClone(base.inputs), artistsInput: FAVE } } : structuredClone(base), B: { ...structuredClone(base), id: 'B' } }, contract: true, services: {
     enrich: async ({ data }: any) => {
       const songs: string[] = data.songs.map(factsKey);
       const entry = { at: Date.now(), end: -1, songs }; lookups.push(entry);
@@ -195,8 +209,8 @@ function scenario(o: Opts) {
     const t0 = Date.now(); let settled = false;
     const pending = h.current.generate().finally(() => { settled = true; doneAt = Date.now(); });
     // Short progress steps; never await an unresolved generation after blindly advancing 300 seconds.
-    for (let tick = 0; tick < 120 && !settled; tick++) await vi.advanceTimersByTimeAsync(1000);
-    expect(settled, `generation did not terminate by 120s; iterations=${iterations.length}, last=${JSON.stringify(iterations.at(-1))}`).toBe(true);
+    for (let tick = 0; tick < 510 && !settled; tick++) await vi.advanceTimersByTimeAsync(1000);
+    expect(settled, `generation did not terminate by hard ceiling; iterations=${iterations.length}, last=${JSON.stringify(iterations.at(-1))}`).toBe(true);
     await pending; await h.flush();
     // Model transport fixture does not implement caller abort; let already-sent server handlers finish within
     // their own 30s deadline before inspecting returned counts (no new generation work can start).
@@ -283,7 +297,8 @@ it('cold cache: bounded staging is measured and either reaches every target or r
   if (short) expect(s.h.warnings.some((m: string) => /Preparation is short/.test(m))).toBe(true);
   else expect(s.h.warnings.some((m: string) => /Preparation is short/.test(m))).toBe(false);
   const first = Math.min(...s.calls.map(c => c.start));
-  expect(Math.max(...s.calls.map(c => c.end), ...s.lookups.map(l => l.end)) - first).toBeLessThanOrEqual(90000);
+  expect(Math.max(...s.calls.map(c => c.end), ...s.lookups.map(l => l.end)) - first).toBeLessThanOrEqual(480000);
+  sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
   invariants(s);
   s.h.unmount();
 }, 120000);
@@ -373,7 +388,7 @@ it('simultaneous favourite replies across lanes share the three-track favourite 
   s.h.unmount();
 }, 120000);
 
-it('overlapping native HAR failures retain progress and terminate with an honest bounded gap', async () => {
+it('overlapping native HAR failures continue to complete coverage without claiming source exhaustion', async () => {
   vi.useFakeTimers();
   const s = scenario({ mode: 'mixed', harYield: true });
   const t0 = await s.run();
@@ -387,7 +402,8 @@ it('overlapping native HAR failures retain progress and terminate with an honest
   }
   const short = sec.some((v, i) => v < TARGETS[i]);
   expect(s.h.warnings.some((m: string) => /Preparation is short/.test(m))).toBe(short);
-  expect(s.doneAt() - t0).toBeLessThan(120000);
+  expect(s.doneAt() - t0).toBeLessThan(510000);
+  sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
   invariants(s); s.h.unmount();
 }, 20000);
 
@@ -405,6 +421,45 @@ it('actual handler keeps selected 2000s and BPM 110–130 ahead of the Warm Up e
   expect(result.suggestions[0].bpm).toBeGreaterThanOrEqual(110);
   expect(result.suggestions[0].bpm).toBeLessThanOrEqual(130);
 });
+
+it('40% linked suggestion yield: archived baseline fails, finite cold continuation fills every selected section', async () => {
+  vi.useFakeTimers();
+  const old = scenario({ mode: 'cold', lowYield: true, baseline: true });
+  const oldStart = await old.run();
+  const oldSec = report('baseline low-yield cold', old, oldStart);
+  expect(oldSec.some((v, i) => v < TARGETS[i])).toBe(true); old.h.unmount();
+  const s = scenario({ mode: 'cold', lowYield: true });
+  const t0 = await s.run();
+  const sec = report('continuation low-yield cold', s, t0);
+  sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
+  const checked = s.lookups.flatMap(l => l.songs).filter(k => !k.startsWith('TEST Request'));
+  expect(new Set(checked).size).toBe(checked.length);
+  expect(checked.length).toBeLessThanOrEqual(600);
+  const linked = checked.map(k => laneIndex.get(k)).filter((i): i is number => i !== undefined);
+  expect(linked.length).toBeGreaterThan(100);
+  expect(linked.filter(i => i % 10 < 4).length / linked.length).toBeLessThanOrEqual(0.4);
+  expect(s.doneAt() - t0).toBeLessThan(510000);
+  expect(s.h.infos.some((m: string) => /Continuing preparation/.test(m))).toBe(true);
+  invariants(s); s.h.unmount();
+}, 30000);
+
+it('refinement reopens coverage invalidated by verified slow evidence and resumes live section sourcing', async () => {
+  vi.useFakeTimers();
+  const s = scenario({ mode: 'cold', estimatedCatalogue: true });
+  const t0 = await s.run();
+  report('reopened estimated coverage', s, t0);
+  const covered = s.iterations.findIndex(x => x.loop === 'worker' && x.coveredAt !== undefined);
+  expect(covered).toBeGreaterThanOrEqual(0);
+  const reopened = s.iterations.slice(covered + 1).find(x => x.loop === 'worker' && x.coveredAt === undefined && x.deficit?.some(v => v > 0));
+  expect(reopened).toBeDefined();
+  expect(s.calls.some(c => c.start >= (reopened?.at ?? Infinity))).toBe(true);
+  s.seconds().forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
+  for (const k of sections) for (const row of h_counted(s, k)) {
+    const i = laneIndex.get(factsKey(row));
+    if (i !== undefined && i % 10 < 6 && row.metaProv.energy === 'provider') expect(row.energy).toBeGreaterThan(2);
+  }
+  invariants(s); s.h.unmount();
+}, 20000);
 
 it('immediately settled metadata cannot spin the actual worker or starve a pending timer', async () => {
   vi.useFakeTimers();

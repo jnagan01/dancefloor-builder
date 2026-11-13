@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Lower-yield progress-aware continuation
+- [x] Correct denominator evidence; actual-route 40% linked eligibility baseline 3120/7500/3540s fails; repair 5640/14400/7260s fills in 283.1s.
+- [x] Finite 90s progress grants inside 480s ceiling, shared 600 lookup budget; invalidated coverage reopens sourcing and fills 5460/14610/7410s in 227.8s.
+- [x] 1000 full tests / 93 files, TypeScript and automatic compilation pass; evidence in tests/fit/coordinated-staging.md.
+- [ ] Exact-head hosted Mac/CodeQL requires GitHub after commit; no native, production or publication actions.
 ## Scheduler liveness and explicit recommendation limits follow-up
 - [x] Short bounded probes, synchronous iteration guards and 1ms timer yields after 16 same-time turns; archived baseline and exact duration assertions preserved.
 - [x] Selected decade/BPM limits override prompt defaults; overlapping HAR counts reproduced with honest 4920/11370/6720-second shortage.

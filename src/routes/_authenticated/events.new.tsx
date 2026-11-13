@@ -1468,19 +1468,21 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
         const durationBase = r;
         const reviewTargets = { warmUp: sectionTargetFor(r, "warmUp"), transition: sectionTargetFor(r, "transition"), peak: sectionTargetFor(r, "peak") };
-        const maxLaneRequests = Math.max(4, ...sectionOrder.map(k => Math.ceil(sectionTargetFor(r, k) / MAX_AI_RECOMMENDATION_BATCH_SIZE) + 3));
+        const maxLaneRequests = Math.ceil(FACTS_BUDGET / MAX_AI_RECOMMENDATION_BATCH_SIZE) + 3;
         const community = new Map<string, CommunityEvidence>();
         const baseCandidate = (p: Pooled) => {
           if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
           return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
         };
         const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
-        const repairEnd = Date.now() + 90_000;
+        const coordinationStart = Date.now();
+        const hardEnd = coordinationStart + 480_000;
+        let repairEnd = coordinationStart + 90_000;
         // Coordinated staging inside one fixed window: suggestion lanes and the metadata worker run side by side;
         // each reply is offered and looked up as soon as it lands (never behind the slowest section), and the last
         // FINAL_RESERVE_MS always remain for the final ranking. Expansion lookups get their own window, so long
         // local preparation before this point no longer consumes it.
-        const workEnd = repairEnd - FINAL_RESERVE_MS;
+        let workEnd = repairEnd - FINAL_RESERVE_MS;
         facts.beginPhase(workEnd);
         const live = () => genTokenRef.current === myToken && accountRef.current === accountAtStart;
         const familiarityActive = !!normalizeEventFit(eventFit)?.familiarity;
@@ -1494,6 +1496,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         let suggestionReason = "", stopReason = "";
         const suggestionToasts = new Set<string>();
         const progress = { lookupsSent: 0, usableLooked: 0, usableEligible: 0, reviewLooked: 0, requests: 0, returned: 0 };
+        let lastUsefulAt = coordinationStart, usefulHigh = 0, continuations = 0;
         // Wake-ups between the metadata worker and section lanes (bounded waits; nothing polls the network).
         let wakers: Array<() => void> = [];
         const notify = () => { const w = wakers; wakers = []; w.forEach(f => f()); };
@@ -1520,7 +1523,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // A lookup cannot fix a strict failure already decided by equal-or-stronger evidence (tags/user/provider).
         const lookupCanHelp = lookupCanPass;
         const pendingLookup = (p: Pooled) => addedAllowed(p.row) && !facts.wasAttempted(p.row) &&
-          (needsFacts(p.row, familiarityActive) || !!strictLimitFailure(p.row, strictLimits)) && lookupCanHelp(p.row);
+          (needsFacts(p.row, familiarityActive) || !!strictLimitFailure(p.row, strictLimits) ||
+            (fitNow?.avoidSlow && ["energy", "danceability"].some(attr => sourceRank(attrSource(p.row, attr as "energy" | "danceability")) < sourceRank("provider")))) && lookupCanHelp(p.row);
         // Observed yield of looked-up candidates with counted files (Laplace-smoothed; starts at one half).
         const yieldEstimate = () => (progress.usableEligible + 1) / (progress.usableLooked + 2);
         // Section-preferred candidates still awaiting facts (suggestions/catalogue for that lane), in seconds.
@@ -1544,7 +1548,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
          *  usable owned files, then a bounded share of review-only rows (no counted file) when nothing else waits. */
         const nextChunk = (refining = false): Pooled[] => {
           const order = lookupOrder().filter(pendingLookup);
-          const usable = order.filter(p => usableSeconds(p) > 0);
+          const selectedKeys = new Set([...r.warmUp, ...r.transition, ...r.peak].map(factsKey));
+          const usable = order.filter(p => usableSeconds(p) > 0).sort((a, b) => Number(selectedKeys.has(factsKey(b.row))) - Number(selectedKeys.has(factsKey(a.row))));
           const chosen: Pooled[] = [];
           const planned: Record<SectionKey, number> = { warmUp: 0, transition: 0, peak: 0 };
           const byLane = new Map<SectionKey, Pooled[]>(sectionOrder.map(k => [k, usable.filter(p => p.prefer === k && deficitSec(k) > 0)]));
@@ -1673,7 +1678,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           send: (request, signal) => recommendFn({ ...request, signal } as Parameters<typeof recommendFn>[0]),
           classify: suggestionFailure,
           isCurrent: () => live() && !finished,
-          end: repairEnd,
+          end: hardEnd,
           latestEnd: suggestionEnd,
           maxCount: MAX_AI_RECOMMENDATION_BATCH_SIZE,
           onFailure: ({ message }) => {
@@ -1702,7 +1707,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             while (!finished && !lookupsClosed && live() && lanes.open(key) && sent < maxLaneRequests) {
               const turn = timerTurnIfNeeded(key); if (turn) { await turn; continue; }
               const deficit = deficitSec(key);
-              if (deficit <= 0) break;
+              if (!libraryOn && r[key].length >= reviewTargets[key] && sent > 0) break;
+              if (deficit <= 0) { await waitChange(Math.min(1000, Math.max(1, workEnd - Date.now()))); continue; }
               // Backpressure: replies already waiting for facts (scaled by observed yield) count against the deficit,
               // and this section's waiting replies must still be checkable before the work end.
               const pending = pendingFor(key);
@@ -1766,6 +1772,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           let coveredAt: number | undefined;
           while (!finished && live()) {
             const turn = timerTurnIfNeeded("worker"); if (turn) { await turn; continue; }
+            if (Date.now() - lastUsefulAt >= 90_000 && coveredAt === undefined) { stopReason ||= " No newly verified eligible files in the last 90 seconds; remaining sources were not declared exhausted."; break; }
             const lookupEnd = coveredAt === undefined ? workEnd : Math.min(workEnd, coveredAt + REFINE_MS);
             const chunk = Date.now() < lookupEnd && !lookupsClosed ? nextChunk(coveredAt !== undefined) : [];
             if (chunk.length) {
@@ -1781,7 +1788,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               }
               pendingEval += chunk.length;
               // Nothing was sent (time limit, cooldown beyond the end, or a hung provider): lookups are over.
-              if (rep && rep.requested === 0) { if (coveredAt === undefined) stopReason ||= " Online lookups stopped at the time limit or because the provider stopped responding; unchecked candidates were not counted."; lookupsClosed = true; }
+              if (rep && rep.requested === 0) { if (coveredAt === undefined) stopReason ||= rep.skippedByBudget ? " The 600-candidate lookup budget was reached; remaining sources were not declared exhausted." : " Online lookups stopped at the time limit or because the provider stopped responding; unchecked candidates were not counted."; lookupsClosed = true; }
             }
             // Re-rank after new replies/evidence at once; batch fast lookups (bounded CPU on large pools) but never
             // leave looked-up facts unranked when the queue pauses or a slow chunk lands.
@@ -1790,8 +1797,20 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               dirty = false; pendingEval = 0; lastEvalAt = Date.now();
               startCommunity();
               evaluate(false);
+              const covered = sectionOrder.every(k => deficitSec(k) <= 0);
+              const useful = progress.usableEligible;
+              if (useful > usefulHigh) { usefulHigh = useful; lastUsefulAt = Date.now(); }
+              // A depleted short phase is not source exhaustion. Continue only after measured useful verified
+              // yield, with work left, inside a fixed eight-minute ceiling and the original shared lookup budget.
+              if (!covered && !lookupsClosed && facts.remainingBudget > 0 && Date.now() - lastUsefulAt < 90_000 && usefulHigh > 0 &&
+                  workEnd - Date.now() < 40_000 && repairEnd < hardEnd) {
+                repairEnd = Math.min(hardEnd, repairEnd + 90_000); workEnd = repairEnd - FINAL_RESERVE_MS;
+                facts.beginPhase(workEnd); continuations++;
+                toast.info(`Continuing preparation: ${Math.round(durationTotals(r, generationFiles).warmUp / 60)} / ${Math.round(durationTotals(r, generationFiles).transition / 60)} / ${Math.round(durationTotals(r, generationFiles).peak / 60)} minutes ready; ${progress.lookupsSent} of ${FACTS_BUDGET} candidates checked. Your limits stay unchanged.`);
+              }
               // Covered: lanes send nothing new; replies already in flight may still land within the refinement window.
-              if (coveredAt === undefined && sectionOrder.every(k => deficitSec(k) <= 0)) { coveredAt = Date.now(); stopReason = ""; }
+              if (covered && coveredAt === undefined) { coveredAt = Date.now(); stopReason = ""; }
+              if (!covered) coveredAt = undefined;
               notify();
               continue;
             }
@@ -1799,11 +1818,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             if (coveredAt !== undefined) {
               // Covered: finish once refinement has nothing left and no reply is still in flight, or its window ends.
               const refineEnd = Math.min(workEnd, coveredAt + REFINE_MS);
-              if (activeLanes === 0 || Date.now() >= refineEnd) break;
+              if (lanes.inFlight === 0 || Date.now() >= refineEnd) break;
               await waitChange(Math.min(1000, Math.max(0, refineEnd - Date.now())));
               continue;
             }
             if (Date.now() >= workEnd) { stopReason ||= " Bounded time limit reached."; break; }
+            if (Date.now() - lastUsefulAt >= 90_000) { stopReason ||= " No newly verified eligible files in the last 90 seconds; remaining sources were not declared exhausted."; break; }
             if (lookupsClosed && activeLanes === 0) break;
             if (!chunk.length && activeLanes === 0) { stopReason ||= " Sources returned no new usable candidates."; break; }
             await waitChange(Math.min(1000, Math.max(0, workEnd - Date.now())));
@@ -1813,7 +1833,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         // deficits and wire context reflect it. Synchronous: no network wait precedes the first suggestions.
         evaluate(false); dirty = false;
         // Lanes register before the worker's first idle check, so it never mistakes "not yet started" for "done".
-        const laneRuns = sectionOrder.every(k => deficitSec(k) <= 0) ? [] : sectionMap.map(laneLoop);
+        const laneRuns = sectionMap.map(laneLoop);
         await Promise.all([worker().finally(() => { finished = true; lanes.close(); notify(); }), ...laneRuns]);
         if (genTokenRef.current !== myToken) return;
         if (accountRef.current !== accountAtStart) { toast.error("Account changed during generation; nothing was applied."); return; }
@@ -1836,7 +1856,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           (shortLanes.length ? ` ${shortLanes.join(", ")}: no further suggestions were requested because too little time remained for useful results.` : "") +
           (barrenLanes.length ? ` ${barrenLanes.join(", ")}: recent suggestions had no new songs with counted files in your library, so no more were requested.` : "") +
           (suggestionReason ? ` ${suggestionReason}` : "") + stopReason;
-        console.info("[expansion] coordinated staging", { ...progress, metadataChunks: metadataLatencies.length, averageChunkMs: Math.round(chunkMs()), stop: stopReason.trim() || "covered" });
+        console.info("[expansion] coordinated staging", { ...progress, continuations, elapsedMs: Date.now() - coordinationStart, remainingLookupBudget: facts.remainingBudget, metadataChunks: metadataLatencies.length, averageChunkMs: Math.round(chunkMs()), stop: stopReason.trim() || "covered" });
 
       }
     }

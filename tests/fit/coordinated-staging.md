@@ -34,8 +34,8 @@ Mixed repaired: 112 expansion lookups, all with counted files, 80 eligible; no r
 still deliver; every request returned songs; no request under 8 songs; first three requests within 1 s.
 
 ## Remaining limits
-- Serial cold metadata throughput (~8 songs / 5.5 s) caps verified additions per 90 s window; lower linked yield
-  than ~70% cannot fill 314 min of expansion in mixed/cold and is reported as an honest gap.
+- Historical 90s-only coordination could stop with eligible sources remaining. Phase expiry was a throughput
+  limit, not proof of source exhaustion; progress-aware continuation below supersedes that limit.
 - Pass/fail of the mixed case depends on owned files with unverified years being looked up during idle time; the
   coordination alone measured 5130 / 14160 / 6780 (short) on the same fixture.
 - After coverage, lookups stop after a 20 s refinement; ranking alternatives beyond that are not checked.
@@ -54,10 +54,44 @@ still deliver; every request returned songs; no request under 8 songs; first thr
 - Overlapping HAR rejection fixture separately asserts Warm Up 11 checked / 5 outside year / 4 outside BPM;
   Transition 27 / 13 / 15; Peak 15 / 5 / 9, including overlaps (not summed as distinct exclusions).
   It yields **4920 / 11370 / 6720 seconds**, 62 eligible of 112 usable expansion lookups, six suggestion calls,
-  79.4s total: an explicitly reported shortage, not fictitious coverage. Sufficient total catalogue supply alone
-  cannot guarantee verification within fixed cold throughput. No limits, concurrency or time window were relaxed.
+  79.4s total under the historical 90s-only coordinator: unfinished verification, NOT genuine source exhaustion.
+  The continuation repair below completes the same fixture without relaxing eligibility or per-call timeouts.
 - Recommendation prompt now places explicit selected decades and BPM ahead of section era defaults, neighbor
   tempo and score hints. With selected 2000s, it omits the contradictory pre-1990 audience instruction. Actual
   handler synthetic choice test asserts year 2005 and BPM within 110–130 (not a model-quality guarantee).
 - Final validation: 998 tests / 93 files with two workers, 116.1s; TypeScript check and automatic preview
   compilation pass. Hosted exact-head Mac/CodeQL remains external; no native verification or publication claimed.
+
+## Progress-aware continuation and lower-yield correction
+**55/64 was final selected rows including 34 client requests and catalogue rows, after filtering. It cannot
+estimate newly suggested eligibility.** The older 80% fixture is only a high-yield synthetic control, not live evidence.
+
+- New actual-route + real-handler fixture: 40% of linked newly suggested recordings meet verified 2000s,
+  BPM 110–130 and dance/avoid-slow limits; remaining linked rows fail year/BPM or slow evidence. Unlinked,
+  request duplicates, credited duplicates and live-version variants remain in the replies. 37,722-file index,
+  34 requests, actual 180–300 second files, HAR cold latency cycle unchanged.
+- Frozen baseline on identical lower-yield inputs: **3120 / 7500 / 3540 seconds**, 115.0s, fails every section.
+- Continuation: **5640 / 14400 / 7260 seconds**, **283.1s** including cold client lookups;
+  368 expansion candidates (402 including 34 requests), all keys unique, six suggestion calls, two continuation
+  grants, 232 candidate lookups unspent. Each section independently meets 5400 / 14400 / 7200 seconds.
+- HAR overlapping rejection-count fixture now reaches **5430 / 14550 / 7320 seconds** in **131.2s** instead
+  of reporting its historical phase-limited result as exhaustion.
+- Estimated-upbeat catalogue refinement fixture covers, receives verified slow evidence, reopens deficits,
+  sends a fresh Peak request after reopening, and ends at **5460 / 14610 / 7410 seconds**, **227.8s**.
+
+### Exact bounds and stop semantics
+- Initial 90s window, finite 90s grants up to **480s coordination ceiling**; final 3s reserve. Grant only with
+  newly verified eligible yield within the last 90s and remaining lookup budget; no-progress ends after 90s.
+- Original shared **600 distinct expansion-candidate lookups**, plus client-request allowance; no reset of
+  attempted keys, results or sticky hung-request stop between windows. Eight songs/serial lookup, 20s client
+  lookup cutoff; 30s server suggestion deadline/4s client margin; unchanged provider concurrency/pacing.
+- At most 18 suggestion requests per section, one in flight per section; wire existing context remains <=500
+  with complete local credit/version exclusion. Unlinked review lists stop at review capacity without counting time.
+- Retain measured queue backpressure, useful request sizing and final 20s refinement. Covered lanes pause rather
+  than irreversibly exit; selection invalidation resets refinement and resumes deficit sourcing. Selected estimated
+  tracks receive refinement priority. Continuation notices show ready section minutes and checked candidate count.
+- Time/budget/no-progress stops explicitly leave remaining sources unverified, never claim genuine exhaustion.
+  Outage, stale account/event, validation, duplicate-only and barren replies retain their existing fences/stops.
+- No production, native, publishing or saved-data actions. Exact-head hosted Mac/CodeQL awaits GitHub.
+- Final continuation head validation: **1000 tests / 93 files**, 115.9s with two workers; TypeScript and automatic
+  preview compilation pass. Prior high-yield numbers above are historical controls, not claims about native yield.

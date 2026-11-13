@@ -124,5 +124,5 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
    * The budget, attempted keys and the sticky hung-request stop are shared and never reset.
    */
   function beginPhase(endAt: number) { if (Number.isFinite(endAt)) end = endAt; }
-  return { gather, beginPhase, get: (r: { artist: string; song: string }) => results.get(factsKey(r)), wasAttempted: (r: { artist: string; song: string }) => attempted.has(factsKey(r)), get anyFailure() { return anyFailure; } };
+  return { gather, beginPhase, get remainingBudget() { return budgetLeft; }, get: (r: { artist: string; song: string }) => results.get(factsKey(r)), wasAttempted: (r: { artist: string; song: string }) => attempted.has(factsKey(r)), get anyFailure() { return anyFailure; } };
 }
