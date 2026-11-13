@@ -137,3 +137,17 @@ it.each([14000, 120000])('suggestion rate cooldown %ims is honored or stops with
   expect(starts).toEqual(cooldown === 14000 ? [0, 14000] : [0]);
   expect(reply?.suggestions ?? []).toEqual(cooldown === 14000 ? ['synthetic'] : []);
 });
+
+it('provider and estimate work together never exceeds six lanes; fast gaps survive slower unrelated recordings', async () => {
+  vi.useFakeTimers(); let active = 0, peak = 0;
+  const busy = async <T,>(ms: number, value: T) => { active++; peak = Math.max(peak, active); await sleep(ms); active--; return value; };
+  vi.stubGlobal('fetch', async (url: string) => {
+    const u = new URL(url);
+    if (u.host === 'musicbrainz.org') return busy(6000, json({ recordings: [] }));
+    return busy(100, json({ content: [] }));
+  });
+  const pending = runEnrichment(songs, { ...storage, estimate: async rows => busy(5000, rows.map(() => ({ energy: 7, danceability: 8 }))) });
+  await vi.advanceTimersByTimeAsync(16000); const out = await pending;
+  expect(peak).toBeLessThanOrEqual(6); expect(peak).toBeGreaterThanOrEqual(5);
+  expect(active).toBe(0); expect(out.results.every(r => r.energy === 7)).toBe(true);
+});

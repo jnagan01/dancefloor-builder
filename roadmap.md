@@ -1,8 +1,9 @@
 # Workspace rebuild
 ## Remaining online lookup timeouts
-- [ ] Start the single AI gap lane from completed acoustic misses, bound response bodies, and recheck shared provider cooldowns without increasing deadlines/concurrency.
-- [ ] Real pipeline/handler cold/warm/rate/outage/partial fixtures and actual-route 40% yield coverage; preserve native optional-expansion checks.
-- [ ] Focused/full tests, TypeScript, automatic compilation, evidence and final commit; exact-head hosted Mac/CodeQL requires GitHub access after commit.
+- [x] Start the single AI gap lane from completed acoustic misses, bound response bodies, and recheck shared provider cooldowns without increasing deadlines/concurrency; no hidden recommendation SDK retries.
+- [x] Real pipeline/handler cold/warm/rate/outage/partial fixtures and actual-route 40% yield reach 5640/14400/7260s cold/mixed and 5640/14490/7260s warm; native optional-expansion checks unchanged.
+- [x] 1017 full tests / 94 files (158.17s), 28 reporting tests, TypeScript and automatic preview compilation pass; evidence in tests/fit/lookup-recovery.md. Preserve platform suspension checkpoint.
+- [ ] Exact-head hosted Mac/CodeQL waits for platform repository synchronization after final reply; active automatic triggers verified, prior-head runs are not final-head validation.
 ## Already-covered client base
 - [x] Skip expansion coordination only when freshly allocated requested files cover every selected target; preserve automatic coverage refinement/reopening.
 - [x] Actual-route 40 known four-minute requests, 20/20/20 at 1×: slow/hung unrelated providers fail before fix, finish within 1s after fix; 40 client lookups only, no suggestions/additions/warnings; save/reopen unchanged.
