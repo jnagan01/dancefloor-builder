@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Scheduler liveness and explicit recommendation limits follow-up
+- [x] Short bounded probes, synchronous iteration guards and 1ms timer yields after 16 same-time turns; archived baseline and exact duration assertions preserved.
+- [x] Selected decade/BPM limits override prompt defaults; overlapping HAR counts reproduced with honest 4920/11370/6720-second shortage.
+- [x] 998 full synthetic tests / 93 files (two workers), TypeScript and automatic compilation pass; evidence in tests/fit/coordinated-staging.md.
+- [ ] Exact-head hosted Mac/CodeQL requires GitHub after final commit; no publication, installation or production access.
 ## Reviewed suggestion lifecycle edges
 - [x] Gate lazy context dispatch by deadline and captured event/account; bound advisory finishReason without dropping completed objects; recount shared favorite admissions after parallel replies.
 - [x] Synthetic actual-route/handler regressions: 35 focused, 984 full tests / 92 files; automatic compilation OK. Evidence: tests/fit/lifecycle-edges.md. No publication, production queries or native data actions.

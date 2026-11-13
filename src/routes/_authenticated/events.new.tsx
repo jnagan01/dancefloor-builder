@@ -1498,10 +1498,20 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         let wakers: Array<() => void> = [];
         const notify = () => { const w = wakers; wakers = []; w.forEach(f => f()); };
         const waitChange = (ms: number) => new Promise<void>((resolve) => {
-          const done = () => { clearTimeout(t); resolve(); };
-          const t = setTimeout(() => { wakers = wakers.filter(f => f !== done); resolve(); }, Math.max(0, ms));
+          // Single-use wake-ups: never race the next iteration against an already-settled promise.
+          const done = () => { clearTimeout(t); wakers = wakers.filter(f => f !== done); resolve(); };
+          const t = setTimeout(done, Math.max(1, ms));
           wakers.push(done);
         });
+        const loopTurns = new Map<string, { at: number; count: number }>();
+        const timerTurnIfNeeded = (key: string): Promise<void> | undefined => {
+          const at = Date.now(), last = loopTurns.get(key);
+          const count = last?.at === at ? last.count + 1 : 1;
+          loopTurns.set(key, { at, count });
+          // Immediate replies may legitimately consume several rows at one timestamp, but cannot monopolize
+          // the event loop indefinitely. After 16 such turns yield real/fake timers (not another microtask).
+          if (count >= 16) { loopTurns.delete(key); return new Promise(resolve => setTimeout(resolve, 1)); }
+        };
         const deficitSec = (k: SectionKey) => Math.max(0, durationTargets[k] - durationTotals(r, generationFiles)[k]);
         const averageSec = () => {
           const lengths = [...r.warmUp, ...r.transition, ...r.peak].filter(s => !s.fromUpload).flatMap(generationFiles).map(f => f.seconds).filter(s => Number.isFinite(s) && s > 0);
@@ -1690,6 +1700,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             let sent = 0, barren = 0, favoriteAttempts = favoriteArtists.length ? 0 : 3;
             // Once lookups have stopped, further replies could never be verified: the lane ends honestly.
             while (!finished && !lookupsClosed && live() && lanes.open(key) && sent < maxLaneRequests) {
+              const turn = timerTurnIfNeeded(key); if (turn) { await turn; continue; }
               const deficit = deficitSec(key);
               if (deficit <= 0) break;
               // Backpressure: replies already waiting for facts (scaled by observed yield) count against the deficit,
@@ -1754,6 +1765,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           // files (no new suggestion requests) so the shared ranking can choose better role fits; never past workEnd.
           let coveredAt: number | undefined;
           while (!finished && live()) {
+            const turn = timerTurnIfNeeded("worker"); if (turn) { await turn; continue; }
             const lookupEnd = coveredAt === undefined ? workEnd : Math.min(workEnd, coveredAt + REFINE_MS);
             const chunk = Date.now() < lookupEnd && !lookupsClosed ? nextChunk(coveredAt !== undefined) : [];
             if (chunk.length) {

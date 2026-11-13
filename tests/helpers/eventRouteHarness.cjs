@@ -6,6 +6,10 @@ function createEventRouteHarness(actual) {
   // Expose actual closures in the test VM only; no production test seam or replacement logic.
   source = source.replace('  const withFileBpm =', '  capture({ applyReviewMode, updateMatch, toggleExclude, pickLocalFileForMatch, withAnalysis: (sec, songs) => withFileBpm(sec, songs), songs, result, matches, savedEventId, saveState, stableCreate: stableCreate.current, restoreRecovery, clearWorkflowState, generate, setSongs, setEventName, setResult, userEdited, autosave, computeLiveTargets, liveTargets, eventSnapshot, recovery, dismissRecovery, handleFiles, setVdjDirHandle, exportAllZip, exportAllToVdj, exportSectionM3u, exportSectionXmlToVdj, previewReadiness, readiness, activeSection, persistOnExit, snapshotReadOnly, draftBlocked });\n  const withFileBpm =');
   source += '\nexport { SectionView };';
+  if (actual.observeCoordinator) {
+    source = source.replace('while (!finished && live()) {', 'while (!finished && live()) { observeCoordinator({ loop: "worker", at: Date.now(), pendingEval, dirty, activeLanes, lookupsClosed, poolSize: pool.size });');
+    source = source.replace('while (!finished && !lookupsClosed && live() && lanes.open(key) && sent < maxLaneRequests) {', 'while (!finished && !lookupsClosed && live() && lanes.open(key) && sent < maxLaneRequests) { observeCoordinator({ loop: key, at: Date.now(), sent });');
+  }
     const readiness = require(path.join(root, "node_modules/typescript"));
   const readinessModule = { exports: {} };
   const identityModule = { exports: {} };
@@ -86,7 +90,7 @@ function createEventRouteHarness(actual) {
     const module={exports:{}};
     const testWindow={addEventListener:(k,f)=>events.set(k,f),removeEventListener:k=>events.delete(k),confirm:()=>true};
     const events=new Map();
-    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},console,crypto,structuredClone,File,Blob,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:testWindow,get setTimeout(){return setTimeout;},get clearTimeout(){return clearTimeout;},get Date(){return Date;}});
+    vm.runInNewContext(compiled,{module,exports:module.exports,require:k=>modules[k]??stub,capture:v=>{captured=v},observeCoordinator:actual.observeCoordinator,console,crypto,structuredClone,File,Blob,AbortController,localStorage:storage,document:{getElementById:()=>null,querySelector:()=>null},window:testWindow,get setTimeout(){return setTimeout;},get clearTimeout(){return clearTimeout;},get Date(){return Date;}});
     const cleanup=old=>{for(const slot of old)slot?.cleanup?.();};
     function render() {
       slots=rootSlots;cursor=0;renderingRoot=true;

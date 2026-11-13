@@ -94,7 +94,7 @@ function providerFacts(s: { artist: string; song: string }) {
   return { ...s, source: 'none' };
 }
 type Call = { section: string; start: number; end: number; count: number; deadlineMs?: number; existing: number; returned: number; only: number };
-type Opts = { mode: 'cold' | 'mixed' | 'warm'; baseline?: boolean; laneFiles?: number; outage?: boolean; failure?: (section: string, n: number) => 'transient' | 'validation' | undefined; favorites?: boolean };
+type Opts = { mode: 'cold' | 'mixed' | 'warm'; baseline?: boolean; laneFiles?: number; outage?: boolean; harYield?: boolean; immediate?: boolean; failure?: (section: string, n: number) => 'transient' | 'validation' | undefined; favorites?: boolean };
 
 function scenario(o: Opts) {
   const laneFiles = o.laneFiles ?? 200;
@@ -104,6 +104,16 @@ function scenario(o: Opts) {
   const cursor: Record<string, number> = { 'Warm Up': 0, Transition: 0, Peak: 0 };
   const n: Record<string, number> = { 'Warm Up': 0, Transition: 0, Peak: 0 };
   const suggested: string[] = [];
+  const iterations: Array<{ loop: string; at: number; sent?: number }> = [];
+  const sameTime = new Map<string, { at: number; count: number }>();
+  const observeCoordinator = (step: { loop: string; at: number; sent?: number }) => {
+    iterations.push(step);
+    const last = sameTime.get(step.loop);
+    const count = last?.at === step.at ? last.count + 1 : 1;
+    sameTime.set(step.loop, { at: step.at, count });
+    // Fail in the production loop itself, before a microtask spin can starve Vitest's timeout timer.
+    if (count > 24 || iterations.length > 4000) throw new Error(`Coordinator failed liveness: ${JSON.stringify(step)}, same-time iterations=${count}, total=${iterations.length}`);
+  };
   const item = (artist: string, song: string) => ({ artist, song, genre: 'Pop', decade: '2000s', year: 2005, energy: 8, danceability: 8, popularity: 8, valence: 7, bpm: 120, reason: 'E8 D8 synthetic estimate' });
   const server = recommendHandler(async (options: any) => {
     const section = /for the "([^"]+)" portion/.exec(options.prompt)![1];
@@ -144,15 +154,32 @@ function scenario(o: Opts) {
   const faveAdmitted = new Set<string>();
   // Every shared ranking call sees the pool: a favourite song admitted anywhere is observed.
   const observeRanking = (args: any[]) => { for (const p of args[0]) if (p?.row?.artist === FAVE && p.row.aiSuggestion) faveAdmitted.add(p.row.song); };
-  const h = createHarness({ ...actual, observeRanking, routeSource: o.baseline ? readFileSync('tests/fit/archived/events.new.5e46335.txt', 'utf8') : undefined })({ rows: { A: o.favorites ? { ...structuredClone(base), inputs: { ...structuredClone(base.inputs), artistsInput: FAVE } } : structuredClone(base), B: { ...structuredClone(base), id: 'B' } }, contract: true, services: {
+  const harCounts = { warmUp: { checked: 11, year: 5, bpm: 4, bpmStart: 3 }, transition: { checked: 27, year: 13, bpm: 15, bpmStart: 8 }, peak: { checked: 15, year: 5, bpm: 9, bpmStart: 3 } };
+  const harObserved: Record<string, Array<{ year: boolean; bpm: boolean }>> = { warmUp: [], transition: [], peak: [] };
+  const outcomes = (s: { artist: string; song: string }) => {
+    if (o.harYield) {
+      for (const k of sections) {
+        const index = laneIndex.get(`${s.artist}||${s.song}`);
+        if (index === undefined || !s.artist.includes(SEC_SYL[k])) continue;
+        const rule = harCounts[k];
+        if (harObserved[k].length >= rule.checked) break;
+        const n = harObserved[k].length, year = n < rule.year, bpm = n >= rule.bpmStart && n < rule.bpmStart + rule.bpm;
+        harObserved[k].push({ year, bpm });
+        const fields = { energy: 8, danceability: 8, year: year ? 1985 : 2005, bpm: bpm ? 96 : 120, genre: 'Pop' };
+        return { ...s, ...fields, source: 'ReccoBeats', prov: P(fields) };
+      }
+    }
+    return providerFacts(s);
+  };
+  const h = createHarness({ ...actual, observeRanking, observeCoordinator, routeSource: o.baseline ? readFileSync('tests/fit/archived/events.new.5e46335.txt', 'utf8') : undefined })({ rows: { A: o.favorites ? { ...structuredClone(base), inputs: { ...structuredClone(base.inputs), artistsInput: FAVE } } : structuredClone(base), B: { ...structuredClone(base), id: 'B' } }, contract: true, services: {
     enrich: async ({ data }: any) => {
       const songs: string[] = data.songs.map(factsKey);
       const entry = { at: Date.now(), end: -1, songs }; lookups.push(entry);
       const expansion = songs.some(k => !k.startsWith('TEST Request'));
       if (o.outage && expansion) await new Promise(() => {});
       const latency = songs.every(warm) ? 300 : COLD[seq++ % COLD.length];
-      await new Promise(r => setTimeout(r, latency)); entry.end = Date.now();
-      return { results: data.songs.map(providerFacts) };
+      if (!o.immediate) await new Promise(r => setTimeout(r, latency)); entry.end = Date.now();
+      return { results: data.songs.map(outcomes) };
     },
     recommend: async (request: any) => {
       if (deny) throw new Error('stale request sent');
@@ -163,12 +190,21 @@ function scenario(o: Opts) {
   } });
   const seconds = () => sections.map(k => exportReadiness(h.current.result[k].map((song: any, i: number) => ({ song, match: h.current.matches[`${k}:${i}:${dance.dedupeKey(song.artist, song.song)}`] })), lib).knownSec);
   let doneAt = 0;
-  const run = async (advance = 300000) => {
+  const run = async () => {
     await h.flush(); h.library(lib); await h.flush();
-    const t0 = Date.now(); const pending = h.current.generate().then(() => { doneAt = Date.now(); }); await vi.advanceTimersByTimeAsync(advance); await pending; await h.flush();
+    const t0 = Date.now(); let settled = false;
+    const pending = h.current.generate().finally(() => { settled = true; doneAt = Date.now(); });
+    // Short progress steps; never await an unresolved generation after blindly advancing 300 seconds.
+    for (let tick = 0; tick < 120 && !settled; tick++) await vi.advanceTimersByTimeAsync(1000);
+    expect(settled, `generation did not terminate by 120s; iterations=${iterations.length}, last=${JSON.stringify(iterations.at(-1))}`).toBe(true);
+    await pending; await h.flush();
+    // Model transport fixture does not implement caller abort; let already-sent server handlers finish within
+    // their own 30s deadline before inspecting returned counts (no new generation work can start).
+    await vi.advanceTimersByTimeAsync(34000);
+    if (!o.baseline) { expect(iterations.length).toBeGreaterThan(0); expect(iterations.length).toBeLessThan(4000); }
     return t0;
   };
-  return { h, lib, before, calls, lookups, seconds, suggested, faveAdmitted, run, doneAt: () => doneAt, denyLater: () => { deny = true; } };
+  return { h, lib, before, calls, lookups, seconds, suggested, faveAdmitted, iterations, harObserved, harCounts, run, doneAt: () => doneAt, denyLater: () => { deny = true; } };
 }
 function report(label: string, s: ReturnType<typeof scenario>, t0: number) {
   const first = Math.min(...s.calls.map(c => c.start));
@@ -336,6 +372,55 @@ it('simultaneous favourite replies across lanes share the three-track favourite 
   invariants(s);
   s.h.unmount();
 }, 120000);
+
+it('overlapping native HAR failures retain progress and terminate with an honest bounded gap', async () => {
+  vi.useFakeTimers();
+  const s = scenario({ mode: 'mixed', harYield: true });
+  const t0 = await s.run();
+  const sec = report('overlapping HAR yield', s, t0);
+  for (const k of sections) {
+    const rule = s.harCounts[k], observed = s.harObserved[k];
+    expect(observed).toHaveLength(rule.checked);
+    expect(observed.filter(x => x.year)).toHaveLength(rule.year);
+    expect(observed.filter(x => x.bpm)).toHaveLength(rule.bpm);
+    expect(observed.some(x => x.year && x.bpm)).toBe(true);
+  }
+  const short = sec.some((v, i) => v < TARGETS[i]);
+  expect(s.h.warnings.some((m: string) => /Preparation is short/.test(m))).toBe(short);
+  expect(s.doneAt() - t0).toBeLessThan(120000);
+  invariants(s); s.h.unmount();
+}, 20000);
+
+it('actual handler keeps selected 2000s and BPM 110–130 ahead of the Warm Up era/tempo defaults', async () => {
+  const server = recommendHandler(async ({ prompt }: { prompt: string }) => {
+    // Synthetic model deliberately follows conflicting audience instructions if supplied, exposing the old prompt.
+    const conflictingEra = /Strongly favor pre-1990/.test(prompt);
+    const explicitBpm = /HARD BPM LIMIT: only suggest recordings between (\d+) and (\d+)/.exec(prompt);
+    const bpm = explicitBpm ? Number(explicitBpm[1]) : 96;
+    return { object: { suggestions: [{ artist: 'TEST Prompt Artist', song: 'TEST Prompt Recording', year: conflictingEra ? 1985 : 2005, decade: conflictingEra ? '1980s' : '2000s', bpm, energy: 7, danceability: 7, popularity: 7, valence: 7, genre: 'Pop', reason: 'synthetic constraint choice' }] } };
+  });
+  const result = await server.call({ data: { section: 'Warm Up', count: 8, prefs: { decades: ['2000s'], bpmRange: [110, 130] }, existing: [] } });
+  expect(result.suggestions).toHaveLength(1);
+  expect(result.suggestions[0].year).toBe(2005);
+  expect(result.suggestions[0].bpm).toBeGreaterThanOrEqual(110);
+  expect(result.suggestions[0].bpm).toBeLessThanOrEqual(130);
+});
+
+it('immediately settled metadata cannot spin the actual worker or starve a pending timer', async () => {
+  vi.useFakeTimers();
+  const s = scenario({ mode: 'warm', immediate: true });
+  let timerFired = false;
+  setTimeout(() => { timerFired = true; }, 1);
+  const t0 = await s.run();
+  expect(timerFired).toBe(true);
+  expect(s.lookups.length).toBeGreaterThan(16);
+  // Instrumentation throws synchronously above 24 same-timestamp loop turns; that catches microtask spins
+  // even when neither the fake-clock advance nor Vitest's timeout could run.
+  expect(s.iterations.filter(x => x.loop === 'worker').length).toBeGreaterThan(16);
+  s.seconds().forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
+  expect(s.doneAt() - t0).toBeLessThan(120000);
+  invariants(s); s.h.unmount();
+}, 20000);
 
 it('lane controller: measured pace skips windows that cannot return useful output, sizes counts to the window, sends integer deadlines, and close() aborts quietly', async () => {
   vi.useFakeTimers();

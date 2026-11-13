@@ -9,7 +9,7 @@ dance 6–10 / avoidSlow. No production data, accounts, saved events or music we
 - First replies: Warm Up 15 @ 12.5 s, Transition 40 @ 29.6 s, Peak 22 @ 18.5 s (3 s start-up + per-item streaming).
 - Cold lookup chunks 6143/1844/9149/2771/10396/3274/7457/3300 ms (cyclic); warm cache 300 ms.
 - ~20% of suggestions unlinked strangers / live-version variants / request duplicates / credited variants.
-- Linked files resolve with mixed provenance: ~80% verify eligible (live: 55 of 64); others verified decade/BPM
+- Linked files resolve with mixed provenance: ~80% verify eligible in the sufficient-supply fixture (not a measured live eligible fraction); others verified decade/BPM
   failures, verified slow, or unresolved (estimates only). Library shelf mostly ineligible.
 
 ## Diagnosis (baseline)
@@ -40,3 +40,24 @@ still deliver; every request returned songs; no request under 8 songs; first thr
   coordination alone measured 5130 / 14160 / 6780 (short) on the same fixture.
 - After coverage, lookups stop after a 20 s refinement; ranking alternatives beyond that are not checked.
 - Native behaviour not verified; hosted macOS and CodeQL run on the pushed commit.
+
+## Nov 13 follow-up: liveness and corrected native yield
+- Preserved the archived 5e46335 baseline unchanged: 4050 / 10290 / 5520 seconds, 85.4s. Sufficient-supply
+  mixed/warm/cold assertions remain unchanged and pass at the durations above.
+- Short isolated probes completed in 6–8 wall-clock seconds; no 400-second reruns. The actual-route harness
+  observes each worker/lane iteration and throws synchronously above 24 iterations at one timestamp or
+  4000 total, so a microtask spin cannot hide behind a starved test timeout. Generation advances in 1s fake-clock
+  steps and must settle by 120s before it is awaited. Existing duration fixtures now drive those timer turns too.
+- Immediately settled metadata exposed that a zero-delay yield need not advance fake time. Production yields
+  **1ms after 16 same-timestamp iterations**; each wake unregisters, and no settled promise is reused.
+  The immediate-metadata actual-route regression retains all duration/identity assertions and passes.
+- Overlapping HAR rejection fixture separately asserts Warm Up 11 checked / 5 outside year / 4 outside BPM;
+  Transition 27 / 13 / 15; Peak 15 / 5 / 9, including overlaps (not summed as distinct exclusions).
+  It yields **4920 / 11370 / 6720 seconds**, 62 eligible of 112 usable expansion lookups, six suggestion calls,
+  79.4s total: an explicitly reported shortage, not fictitious coverage. Sufficient total catalogue supply alone
+  cannot guarantee verification within fixed cold throughput. No limits, concurrency or time window were relaxed.
+- Recommendation prompt now places explicit selected decades and BPM ahead of section era defaults, neighbor
+  tempo and score hints. With selected 2000s, it omits the contradictory pre-1990 audience instruction. Actual
+  handler synthetic choice test asserts year 2005 and BPM within 110–130 (not a model-quality guarantee).
+- Final validation: 998 tests / 93 files with two workers, 116.1s; TypeScript check and automatic preview
+  compilation pass. Hosted exact-head Mac/CodeQL remains external; no native verification or publication claimed.
