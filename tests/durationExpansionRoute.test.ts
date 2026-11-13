@@ -75,16 +75,20 @@ it('actual route varied-energy files retain warm-up, transition and peak roles a
  const {h}=await setup({tracks:tt,enrich:async({data}:any)=>({results:provider(data.songs).results.map((s:any)=>({...s,energy:energy.get(s.artist)??8}))})});
  await generateBounded(h);await h.flush();expect(seconds(h)).toEqual([5400,14400,7200]);for(const [i,k] of sections.entries())expect(h.current.result[k].filter(s=>!s.fromUpload).every(s=>s.energy===[6,8,9][i])).toBe(true);h.unmount();
 },30000);
-it('actual route Mac optional-expansion regression: forty 240-second clients at 1h/1x stay forty, all sections covered, no warnings, passive membership unchanged',async()=>{
+it.each(['slow','hung'])('actual route Mac covered-client regression: unrelated %s providers never delay forty 240-second requests at 1h/1x',async(mode)=>{
  vi.useFakeTimers();try{
  const cc=Array.from({length:40},(_,i)=>({artist:`Client ${i}`,song:`Normal track ${i}`}));
- const inputs={songs:cc,hours:'1',buffer:1,listType:'dance',expand:true,eventName:'Covered expansion 1×'};
+ const inputs={songs:cc,hours:'1',buffer:1,split:{warmUp:20,transition:20,peak:20},listType:'dance',expand:true,eventName:'Covered expansion 1×'};
  const lists={warmUp:cc.map(s=>({...s,fromUpload:true})),transition:[],peak:[]};
- let recommendCalls=0;
- const h=harness({eventId:id,rows:{[id]:{id,inputs,lists}},contract:true,services:{enrich:async()=>({results:[]}),recommend:async()=>{recommendCalls++;return {suggestions:[]};}}});
- await h.flush();h.lib=vdj.buildLibrary(cc.map((s,i)=>({artist:s.artist,title:s.song,filePath:`/synthetic/client-${i}.mp3`,songLength:240})));h.library(h.lib);await h.flush();
+ let recommendCalls=0;const checked:string[]=[];
+ const unrelated=()=>new Promise<any>(resolve=>{if(mode==='slow')setTimeout(()=>resolve({results:[],suggestions:[]}),25000);});
+ const h=harness({eventId:id,rows:{[id]:{id,inputs,lists}},contract:true,services:{enrich:async({data}:any)=>{checked.push(...data.songs.map((s:any)=>s.artist));return data.songs.every((s:any)=>s.artist.startsWith('Client '))?{results:[]}:unrelated();},recommend:async()=>{recommendCalls++;return unrelated();}}});
+ await h.flush();h.lib=vdj.buildLibrary([...cc.map((s,i)=>({artist:s.artist,title:s.song,filePath:`/synthetic/client-${i}.mp3`,songLength:240})),...tracks(240)]);h.library(h.lib);await h.flush();
  expect(h.current.result.warmUp).toHaveLength(40);expect(h.current.result.transition).toEqual([]);expect(h.requests).toEqual([]);
- await generateBounded(h);await h.flush();expect(sections.flatMap(k=>h.current.result[k])).toHaveLength(40);expect(seconds(h)).toEqual([3120,3360,3120]);expect(h.warnings).toEqual([]);expect(recommendCalls).toBe(0);
+ let completed=false;const started=Date.now();const generating=h.current.generate().finally(()=>{completed=true;});
+ await vi.advanceTimersByTimeAsync(1000);expect(completed,'covered client base must finish without waiting for expansion providers').toBe(true);await generating;
+ expect(Date.now()-started).toBeLessThanOrEqual(1000);expect(checked).toHaveLength(40);expect(checked.every(a=>a.startsWith('Client '))).toBe(true);
+ await h.flush();expect(sections.flatMap(k=>h.current.result[k])).toHaveLength(40);expect(seconds(h)).toEqual([3120,3360,3120]);expect(h.warnings).toEqual([]);expect(h.errors).toEqual([]);expect(recommendCalls).toBe(0);
  expect(sections.flatMap(k=>h.current.result[k]).map(s=>`${s.artist}|${s.song}`).sort()).toEqual(cc.map(s=>`${s.artist}|${s.song}`).sort());
  await vi.advanceTimersByTimeAsync(1800);await h.flush();const saved=h.requests.at(-1);expect(saved.inputs.songs).toEqual(cc);
  const reopened=harness({eventId:id,rows:{[id]:{id,inputs:saved.inputs,lists:saved.lists}},contract:true});await reopened.flush();reopened.library(h.lib);await reopened.flush();expect(reopened.current.eventSnapshot(reopened.current.result,reopened.current.matches).lists).toEqual(saved.lists);expect(reopened.requests).toEqual([]);reopened.unmount();h.unmount();

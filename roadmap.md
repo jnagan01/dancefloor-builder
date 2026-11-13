@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Already-covered client base
+- [x] Skip expansion coordination only when freshly allocated requested files cover every selected target; preserve automatic coverage refinement/reopening.
+- [x] Actual-route 40 known four-minute requests, 20/20/20 at 1×: slow/hung unrelated providers fail before fix, finish within 1s after fix; 40 client lookups only, no suggestions/additions/warnings; save/reopen unchanged.
+- [x] 32 focused tests; 1001 full tests / 93 files (132.25s); TypeScript, preview compilation and HTTP 200 pass. Native check unchanged; commit narrow correction.
+- [ ] Exact final-head hosted Mac/CodeQL waits for Joe; native checks remain unchanged.
 ## Lower-yield progress-aware continuation
 - [x] Correct denominator evidence; actual-route 40% linked eligibility baseline 3120/7500/3540s fails; repair 5640/14400/7260s fills in 283.1s.
 - [x] Finite 90s progress grants inside 480s ceiling, shared 600 lookup budget; invalidated coverage reopens sourcing and fills 5460/14610/7410s in 227.8s.

@@ -1194,7 +1194,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
     if (fill) {
       if (!background) r = allocateFreshClients(r, durationTargets, generationFiles, clientCoverage.averageSeconds, { favoriteArtists: prefs.artists ?? [], eventType: prefs.eventType });
-      {
+      // Only the freshly allocated request base can bypass expansion. Coverage reached later by automatic
+      // additions still enters the coordinator's verification/refinement and can reopen sourcing.
+      const requestedSeconds = durationTotals(r, generationFiles);
+      if ((["warmUp", "transition", "peak"] as SectionKey[]).some(k => requestedSeconds[k] < durationTargets[k])) {
         type FillLabel = "Warm Up" | "Transition" | "Peak" | "Cocktail Hour" | "Dinner";
         const gapSection = (l: FillLabel) => (l === "Cocktail Hour" || l === "Dinner" ? "Warm Up" : l);
         const sectionMap: Array<{ key: SectionKey; label: FillLabel }> = background ? [{ key: "warmUp", label: bgLabel }] : [
