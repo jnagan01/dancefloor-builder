@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseCommunityTrackInfo, readCommunity, sameTrackIdentity } from "../src/lib/prep/communityEvidence";
 import { runCommunityBatch } from "../src/lib/prep/community.functions";
 import { evaluateFit, type FitFacts } from "../src/lib/prep/eventFit";
@@ -128,6 +128,9 @@ describe("community transport (synthetic)", () => {
     expect(r.map(x => [x.song, x.status])).toEqual([["Stayin' Alive (Clean) (Radio Edit)", "found"], ["Get Down On It (Calvo Remix) (Clean)", "none"], ["Yeah!", "found"]]);
   });
   it("fetch and json resolving AFTER the deadlines never write results or poison the cache; no scheduling after stop", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-17T09:00:00Z"));
+    try {
     __resetCommunityCache();
     const calls: string[] = [];
     const late = (ms: number, v: unknown) => new Promise(r => setTimeout(() => r(v), ms));
@@ -135,19 +138,31 @@ describe("community transport (synthetic)", () => {
       if (t === "SlowFetch") return late(150, ok(info("Z", t, 9e5, ["ballad"])));
       if (t === "SlowJson") return { ok: true, json: () => late(150, info("Z", t, 9e5, ["ballad"])) } as unknown as Response;
       return late(5, ok(info("Z", t, 9e5, []))); }) as never;
-    const r = await runCommunityBatch([{ artist: "Z", song: "SlowFetch" }, { artist: "Z", song: "SlowJson" }], "k", slowFetch, 1000, 40);
+    const first = runCommunityBatch([{ artist: "Z", song: "SlowFetch" }, { artist: "Z", song: "SlowJson" }], "k", slowFetch, 1000, 40);
+    // Flush transport microtasks and move Date.now and timers together to the exact per-call cutoff.
+    // Real sub-millisecond timer rounding under hosted load can wake one timeout before the wall-clock cutoff.
+    await vi.advanceTimersByTimeAsync(40);
+    const r = await first;
     expect(r.map(x => x.status)).toEqual(["timeout", "timeout"]);
     // overall deadline: 6 songs, 4 workers, all slow → nothing scheduled after stop
-    const r2 = await runCommunityBatch(["SlowFetch", "SlowJson", "A1", "A2", "A3", "A4"].map(song => ({ artist: "Z", song: song === "SlowFetch" ? "SlowFetch" : song })), "k", (async (u: URL) => { calls.push("o:" + u.searchParams.get("track")); return late(200, ok({})); }) as never, 60, 1000);
+    const second = runCommunityBatch(["SlowFetch", "SlowJson", "A1", "A2", "A3", "A4"].map(song => ({ artist: "Z", song: song === "SlowFetch" ? "SlowFetch" : song })), "k", (async (u: URL) => { calls.push("o:" + u.searchParams.get("track")); return late(200, ok({})); }) as never, 60, 1000);
+    await vi.advanceTimersByTimeAsync(59);
+    expect(calls.filter(c => c.startsWith("o:"))).toHaveLength(4);
+    await vi.advanceTimersByTimeAsync(1);
+    const r2 = await second;
     expect(r2.every(x => x.status === "timeout")).toBe(true);
     const before = calls.length;
-    await late(300, 0);
+    await vi.advanceTimersByTimeAsync(300);
     expect(calls.length).toBe(before);
     expect(calls.filter(c => c.startsWith("o:"))).toHaveLength(4);
     expect(r2).toEqual(r2.map(x => ({ ...x, status: "timeout" })));
     // same keys again with a fast provider: cache was not poisoned by the late replies
     const r3 = await runCommunityBatch([{ artist: "Z", song: "SlowFetch" }, { artist: "Z", song: "SlowJson" }], "k", (async (u: URL) => ok(info("Z", u.searchParams.get("track")!, 7000, ["dance"]))) as never, 1000, 500);
     expect(r3.map(x => x.evidence?.upbeatTags)).toEqual([["dance"], ["dance"]]);
+    } finally {
+      vi.useRealTimers();
+      __resetCommunityCache();
+    }
   });
 });
 

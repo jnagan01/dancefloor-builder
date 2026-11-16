@@ -1,9 +1,10 @@
 # Workspace rebuild
 ## Weekly structured synthetic preparation checks
+- [x] Hosted Mac 43978609184 deadline fixture: fake timers couple timer callbacks and Date.now at exact 40ms/60ms cutoffs; all original assertions retained plus four-start assertion at 59ms; 20 focused repeats, 41 related tests, 35 reporting tests, 1066 full tests, TypeScript and preview pass; no production changes.
 - [x] Emit six identity-bound category cases from actual route/handlers/shared admission; validate numeric rules, section targets and safe causes, fail closed on missing/stale/invalid evidence.
 - [x] Stable category fingerprints, bounded 20-run history/lifetime occurrences, same-run attempt idempotence/high-water guard and reopening; quiet success/dry-run/schedules/secrets preserved.
 - [x] 35 reporting tests, six focused cases, 1066/1066 full tests with two workers, TypeScript and preview OK; manual final-head fixed-seed dry-run instructions in weekly README.
-- [ ] Exact final-head hosted Mac/CodeQL and manual weekly seed 20261116 plus report dry-run: blocked by unavailable GitHub CLI/token in this environment; Joe runs documented Actions steps after sync.
+- [ ] New exact final-head hosted Mac/security and weekly seed 20261116 plus report dry-run after fixture commit: no GitHub CLI/token available here; prior-head Mac 43978609184 failed, security passed 180991fd, weekly 43978778257 is prior-head and not final acceptance; Joe runs documented Actions steps after sync.
 ## Source-aware fresh automatic dance admission
 - [x] Reproduce heuristic 6/7 admission, require supported positive dance evidence, and upgrade heuristic cache gaps without changing requests/restores.
 - [x] Actual route/handler coverage, provenance/conflict/identity regressions; focused/full tests, TypeScript and preview compilation; record evidence and commit.
