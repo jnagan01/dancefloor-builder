@@ -102,6 +102,20 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('authenticated handler service-only metadata cache', () => {
+  it.each(['provider', 'ai', 'outage'] as const)('cached heuristics get bounded %s upgrade through authenticated adapter and real pipeline', async mode => {
+    vi.useFakeTimers();
+    const heuristic = { ...warm(), energy: 6, danceability: 7, source: encodeCacheSource('ReccoBeats+AI', { energy: 'estimate', danceability: 'estimate', bpm: 'provider', year: 'provider' }) };
+    const io = database([heuristic]);
+    if (mode === 'provider') providers();
+    else vi.stubGlobal('fetch', async () => new Response(mode === 'outage' ? '{}' : '{"content":[],"recordings":[]}', { status: mode === 'outage' ? 503 : 200 }));
+    state.ai.mockReturnValue({ textStream: (async function* () { yield mode === 'ai' ? '{"items":[{"i":0,"energy":2,"danceability":3}]}' : '{"items":[]}'; })() });
+    const pending = handler().call({ songs: [song] }); await vi.advanceTimersByTimeAsync(16000); const out = await pending;
+    expect(out.results[0]).toMatchObject({ bpm: 122, year: 2004, prov: { bpm: 'provider', year: 'provider' } });
+    if (mode === 'provider') expect(out.results[0]).toMatchObject({ energy: 8, danceability: 7, prov: { energy: 'provider', danceability: 'provider' } });
+    if (mode === 'ai') expect(out.results[0]).toMatchObject({ energy: 2, danceability: 3, prov: { energy: 'ai', danceability: 'ai' } });
+    if (mode === 'outage') { expect(out.results[0]).toMatchObject({ energy: 6, danceability: 7, incomplete: true, prov: { energy: 'estimate', danceability: 'estimate' } }); expect(out.status.complete).toBe(false); expect(io.writes).toBe(0); }
+    else expect(io.writes).toBe(1);
+  });
   it('warm complete cache returns known facts without provider/AI calls or user SELECT', async () => {
     const io = database([warm(), { ...warm(), artist_key: 'unrequested', energy: 1 }]);
     const fetch = providers(); const h = handler();

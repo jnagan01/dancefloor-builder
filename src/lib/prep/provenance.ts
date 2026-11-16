@@ -10,7 +10,7 @@ export type MetaAttr = (typeof META_ATTRS)[number];
 export type MetaProv = Partial<Record<MetaAttr, MetaSource>>;
 export type ProvRow = { metaSource?: string; metaProv?: MetaProv; catalogueDecade?: string } & { [K in MetaAttr]?: unknown };
 
-const RANK: Record<string, number> = { user: 6, measured: 5, tags: 4, virtualdj: 4, provider: 3, catalogue: 2, filename: 1, estimate: 1, ai: 1, unknown: 0 };
+const RANK: Record<string, number> = { user: 6, measured: 5, tags: 4, virtualdj: 4, provider: 3, catalogue: 2, filename: 1, estimate: 1, ai: 1.5, unknown: 0 };
 export const sourceRank = (s: MetaSource | undefined) => RANK[s ?? "unknown"] ?? 0;
 const has = (v: unknown) => v !== undefined && v !== null && v !== "" && !(typeof v === "number" && !Number.isFinite(v));
 const SOURCES = new Set(Object.keys(RANK));
@@ -26,7 +26,7 @@ export function attrSource(row: ProvRow, attr: MetaAttr): MetaSource {
 
 /**
  * Merge incoming attribute values: a value replaces the current one only when its source ranks higher
- * (user edit > measured > file tags > provider > catalogue > estimates/AI > unknown). Ties keep the current value,
+ * (user edit > measured > file tags > provider > catalogue > AI > heuristics > unknown). Ties keep the current value,
  * so user edits and earlier verified values are never overwritten by AI estimates. Missing values never erase.
  */
 export function mergeMeta<T extends ProvRow>(row: T, values: { [K in MetaAttr]?: unknown }, src: MetaSource | MetaProv): T {

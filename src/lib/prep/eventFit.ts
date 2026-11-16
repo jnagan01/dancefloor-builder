@@ -95,18 +95,31 @@ export function catalogueFitFacts(s: { energy?: number; danceability?: number })
 /** Similarity ceiling when avoid-slow is active but upbeat dance suitability is not adequately supported. */
 export const UNCERTAIN_DANCE_SIMILARITY_CAP = 2;
 
-/** Fresh automatic expansion only. A withheld unknown is NOT a classification as slow.
- * Positive curated/provider/estimated acoustic evidence can support fit; tempo, reissue
- * year, popularity and artist/title resemblance cannot. Conflicting slow tags fail closed. */
+/** Positive acoustic support is source-aware. Generic heuristics (including legacy cached
+ * values) never establish fit. Curated pairs are advisory; AI pairs need both values >=7
+ * and remain unverified. Verified danceability can support a lower-energy groove. */
+function supportedDance(f: FitFacts): boolean {
+  const e = num10(f.energy), d = num10(f.danceability);
+  const strongE = !!f.energySource && STRONG.has(f.energySource);
+  const strongD = !!f.danceabilitySource && STRONG.has(f.danceabilitySource);
+  if (f.community?.slowTags.length || (strongD && d !== undefined && d <= 4)) return false;
+  if (e !== undefined && d !== undefined && e <= 4 && d <= 4) return false;
+  const pairSource = (s: MetaSource | undefined) => !!s && (STRONG.has(s) || s === "catalogue" || s === "ai");
+  const pair = e !== undefined && d !== undefined && pairSource(f.energySource) && pairSource(f.danceabilitySource)
+    && e >= 5 && d >= 5 && (e >= 7 || d >= 7)
+    && ((f.energySource !== "ai" && f.danceabilitySource !== "ai") || (e >= 7 && d >= 7));
+  const groove = strongD && d !== undefined && d >= 7 && !(strongE && e !== undefined && e < 4);
+  const tags = !!f.community?.upbeatTags.length && !(strongE && e !== undefined && e <= 4);
+  return pair || groove || tags;
+}
+
+/** Fresh automatic expansion only. Withheld uncertainty is NOT a slow classification.
+ * Tempo, popularity, artist resemblance and generic heuristic values cannot establish fit. */
 export function automaticDanceFailure(fit: EventFit | undefined, facts: FitFacts | undefined): string | undefined {
   if (!fit?.avoidSlow) return undefined;
-  const f = facts ?? {}, e = num10(f.energy), d = num10(f.danceability);
-  const es = strength(f.energySource, e !== undefined), ds = strength(f.danceabilitySource, d !== undefined);
+  const f = facts ?? {};
   if (f.community?.slowTags.length) return "Conflicting slow/ballad evidence: automatic dance suitability not established";
-  const supported = e !== undefined && d !== undefined && es !== "unknown" && ds !== "unknown" && e >= 5 && d >= 5 && (e >= 7 || d >= 7);
-  const groove = d !== undefined && ds === "strong" && d >= 7 && (e === undefined || e > 4);
-  const tags = !!f.community?.upbeatTags.length && !(e !== undefined && e <= 4) && !(d !== undefined && d <= 4);
-  return supported || groove || tags ? undefined : "Upbeat dance suitability unestablished — withheld from automatic expansion, not classified slow";
+  return supportedDance(f) ? undefined : "Upbeat dance suitability unestablished — withheld from automatic expansion, not classified slow";
 }
 
 export interface FitResult {
@@ -160,12 +173,11 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
       else if (r.lines.some(l => l.kind === "slowEstimate")) (r.uncertain ??= []).push(`Last.fm community tags ${tags} agree with the slow-risk estimate (advisory, not counted twice)`);
       else { r.lines.push({ kind: "slowEstimate", text: `Last.fm community tags ${tags} for this exact track — ranked lower, not confirmed slow (advisory)`, points: -2 }); r.similarityCap = 1; }
     } else if (cm?.upbeatTags.length && r.lines.some(l => l.kind === "slowEstimate")) (r.uncertain ??= []).push(`Last.fm community tags ${cm.upbeatTags.map(t => `"${t}"`).join(", ")} contradict the low energy/danceability estimate: slow risk uncertain`);
-    const communitySlow = !!cm?.slowTags.length && !cm.upbeatTags.length;
     const conflict = e !== undefined && d !== undefined && ((e <= 4 && d >= 7) || (d <= 4 && e >= 7));
     if (conflict) (r.uncertain ??= []).push(`Energy ${e}/10 (${sourceLabel(f.energySource)}) and danceability ${d}/10 (${sourceLabel(f.danceabilitySource)}) conflict for slow avoidance: a groove is possible; not classified slow or penalised`);
     // Positive estimates cannot rescue questionable/unknown fit. Verified popularity still describes recognition,
     // not dance suitability; retain half of its familiarity points when upbeat support is absent.
-    const supported = e !== undefined && d !== undefined && es !== "unknown" && ds !== "unknown" && e >= 5 && d >= 5 && (e >= 7 || d >= 7) && !communitySlow;
+    const supported = supportedDance(f);
     for (const l of r.lines) if (l.kind === "familiarTrack" && l.points > 0 && /^Last\.fm listeners/.test(l.text) && !supported) { l.points = 0; (r.uncertain ??= []).push("Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported"); }
     for (const l of r.lines) if (l.kind === "familiarTrack" && l.points > 0 && /Track popularity/.test(l.text) && !supported) {
       if (ps === "estimate") { l.points = 0; (r.uncertain ??= []).push("Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported"); }
@@ -174,10 +186,7 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
     // Uncertain dance suitability (avoid-slow only): similarity says a track resembles the requests, not that it suits
     // an upbeat floor. Without adequate positive upbeat support, bound ALL similarity together. Not a slow verdict, no
     // extra penalty, never excludes; stricter slow-risk caps (low-both / community tags) are kept, never stacked.
-    const groove = d !== undefined && ds !== "unknown" && d >= 7 && !communitySlow;
-    // Tag-only support needs purely upbeat tags: mixed slow+party tags are a conflict, never positive support.
-    const tagUpbeat = !!cm?.upbeatTags.length && !cm.slowTags.length && !(e !== undefined && d !== undefined && e <= 4 && d <= 4);
-    if (!r.exclude && r.similarityCap === undefined && !supported && !groove && !tagUpbeat) {
+    if (!r.exclude && r.similarityCap === undefined && !supported) {
       r.similarityCap = UNCERTAIN_DANCE_SIMILARITY_CAP; r.similarityCapReason = "uncertainDance";
       const attr = (n: string, v: number | undefined, src: MetaSource | undefined) => v === undefined ? `${n} unknown` : `${n} ${v}/10 (${sourceLabel(src)})`;
       const why = e === undefined && d === undefined ? "no energy or danceability data"

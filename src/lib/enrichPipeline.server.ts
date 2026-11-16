@@ -521,8 +521,10 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   //    order), popularity-only upgrades last. Partials always keep their cached values if the upgrade doesn't finish.
   const partial = new Map<string, EnrichedSong>();
   const popOnly = new Set<string>();
+  const acousticGap = (row: EnrichedSong | undefined, attr: "energy" | "danceability") =>
+    row?.[attr] == null || sourceRank(row.prov?.[attr] ?? "estimate") <= sourceRank("estimate");
   for (const [k, c] of cache) {
-    if (c.energy == null || c.danceability == null) { partial.set(k, c); cache.delete(k); }
+    if (acousticGap(c, "energy") || acousticGap(c, "danceability")) { partial.set(k, c); cache.delete(k); }
     else if (opts.needPopularity && c.popularity == null) { partial.set(k, c); popOnly.add(k); cache.delete(k); }
   }
   const missSet = new Set<string>();
@@ -634,7 +636,8 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
           // At the final dispatch point rows whose provider search is still pending join speculatively; provider facts
           // that arrive later still outrank the estimate (AI only fills gaps), and no row is estimated twice.
           return !attemptedAi.has(k) && (recoDone.has(k) || settled || final) &&
-            ((prev?.energy ?? reco?.energy) == null || (prev?.danceability ?? reco?.danceability) == null);
+            ((acousticGap(prev, "energy") && (reco?.energy == null || !reco.exact)) ||
+              (acousticGap(prev, "danceability") && (reco?.danceability == null || !reco.exact)));
         }).slice(0, 8);
         if (!group.length) {
           if (settled || final) return;
@@ -728,7 +731,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   // 3b) AI acoustic estimate for anything still missing energy/danceability — bounded and abortable; a late answer is ignored.
   const needAi = missOrder
     .map((q) => ({ q, k: `${q.artistKey}\u0000${q.songKey}` }))
-    .filter(({ k }) => { const e = fetched.get(k); return !e || e.energy == null || e.danceability == null; });
+    .filter(({ k }) => { const e = fetched.get(k); return acousticGap(e, "energy") || acousticGap(e, "danceability"); });
   if (needAi.length) {
     const settled = await within(aiWork, aiUntil, now);
     if (settled === LATE) { aiLate = true; aiClosed = true; aiCtrl.abort(); }
@@ -743,7 +746,9 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       const prov: MetaProv = { ...(e.prov ?? {}) };
       let filled = false;
       const fill = <A extends "energy" | "danceability" | "valence" | "bpm" | "genre" | "year">(attr: A) => {
-        if (e[attr] != null) return e[attr];
+        // Preserve verified/curated/earlier AI facts; recording-aware AI may replace a generic heuristic.
+        if (e[attr] != null && sourceRank(prov[attr] ?? "estimate") >= sourceRank("ai")) return e[attr];
+        if (a[attr] == null) return e[attr];
         if (a[attr] != null) { prov[attr] = "ai"; filled = true; }
         return a[attr];
       };

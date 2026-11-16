@@ -21,6 +21,7 @@ import { encodeCacheSource } from '@/lib/prep/provenance';
 import { pacedCount } from '@/lib/prep/suggestionLanes';
 import { runEnrichment as baselineEnrichment } from './fit/archived/enrichPipeline.376d12b';
 import { estimateItems, gatewayStream } from './helpers/gatewayStream';
+import { enrichHandler } from './helpers/enrichHandler';
 
 /*
  * Native-shaped coordination regression, all synthetic (no production data, no real accounts/files):
@@ -108,7 +109,8 @@ type Opts = { mode: 'cold' | 'mixed' | 'warm'; realPipeline?: boolean; baseline?
   /** Every 7th ReccoBeats search meets 429 Retry-After 2 s (shared lane cooldown). */
   ratePressure?: boolean;
   /** Run the frozen 376d12b pipeline (astra low-reasoning estimate, measured 14.2 s first delta) for before/after. */
-  baselinePipeline?: boolean };
+  baselinePipeline?: boolean;
+  observedHeuristic?: boolean };
 /** Live measured first-delta latency per estimate model (2026-11-13, 8-song production prompt). */
 const ESTIMATE_STARTUP: Record<string, number> = { 'openai/gpt-6-astra': 14185, 'google/gemini-3-flash-preview': 600 };
 const STUBBORN = new Set([30, 31, 32, 33].map(i => `TEST Request ${i}||Client ${i}`));
@@ -118,7 +120,13 @@ function scenario(o: Opts) {
   const bpm: [number, number] = o.bpm ?? [110, 130], bpmFail = bpm[0] - 14;
   const statuses: any[] = [];
   const stubbornReplies = new Map<string, any>();
-  const lib = library(laneFiles);
+  let lib = library(laneFiles);
+  const observed = { artist: 'Rihanna', song: 'Desperado (Clean)', fromUpload: false, bpm: 126, year: 2016, energy: 6, danceability: 7, metaSource: 'Estimated', metaProv: { bpm: 'tags', year: 'tags', energy: 'estimate', danceability: 'estimate' } };
+  if (o.observedHeuristic) {
+    // Replace only synthetic distractors; preserve the 37,722-entry index and every client file.
+    lib.tracks[0] = { artist: observed.artist, title: observed.song, filePath: '/synthetic/rihanna-desperado.mp3', bpm: '126', year: '2016', songLength: 240 };
+    lib = vdj.buildLibrary(lib.tracks);
+  }
   if (o.estimatedCatalogue) for (const t of lib.tracks) if (t.artist.startsWith('TEST Lane')) { t.year = '2005'; t.bpm = '120'; }
   const before = JSON.stringify(lib.tracks);
   const calls: Call[] = [], lookups: Array<{ at: number; end: number; songs: string[] }> = [];
@@ -179,6 +187,7 @@ function scenario(o: Opts) {
   const harCounts = { warmUp: { checked: 11, year: 5, bpm: 4, bpmStart: 3 }, transition: { checked: 27, year: 13, bpm: 15, bpmStart: 8 }, peak: { checked: 15, year: 5, bpm: 9, bpmStart: 3 } };
   const harObserved: Record<string, Array<{ year: boolean; bpm: boolean }>> = { warmUp: [], transition: [], peak: [] };
   const outcomes = (s: { artist: string; song: string }) => {
+    if (o.observedHeuristic && s.artist === observed.artist) return { ...s, source: 'none' };
     if (o.estimatedCatalogue) {
       const i = laneIndex.get(`${s.artist}||${s.song}`);
       if (i !== undefined && i % 10 < 6) { const fields = { energy: 2, danceability: 2, year: 2005, bpm: 120 }; return { ...s, ...fields, source: 'ReccoBeats', prov: P(fields) }; }
@@ -205,11 +214,11 @@ function scenario(o: Opts) {
     }
     return providerFacts(s);
   };
-  const fixtureDance = o.estimatedCatalogue ? { ...dance, catalogueCandidates: () => sections.flatMap(k => Array.from({ length: 24 }, (_, i) => { const t = laneTrack(k, i); return { row: { artist: t.artist, song: t.title, energy: 8, danceability: 8, year: 2005, bpm: 120, metaProv: { energy: 'estimate', danceability: 'estimate', year: 'tags', bpm: 'tags' } }, prefer: k }; })) } : dance;
+  const fixtureDance = o.observedHeuristic ? { ...dance, catalogueCandidates: () => [{ row: observed, prefer: 'warmUp' }] } : o.estimatedCatalogue ? { ...dance, catalogueCandidates: () => sections.flatMap(k => Array.from({ length: 24 }, (_, i) => { const t = laneTrack(k, i); return { row: { artist: t.artist, song: t.title, energy: 8, danceability: 8, year: 2005, bpm: 120, metaProv: { energy: 'estimate', danceability: 'estimate', year: 'tags', bpm: 'tags' } }, prefer: k }; })) } : dance;
   const requested = new Map<string, { artist: string; song: string }>();
   let reccoSearches = 0;
   const gateway = gatewayStream({ startupMs: m => ESTIMATE_STARTUP[m] ?? 600, chunkMs: 60,
-    content: req => estimateItems(req.prompt, () => ({ energy: 8, danceability: 8, valence: 7, bpm: 120, genre: 'Pop', year: 2005 })) });
+    content: req => estimateItems(req.prompt, (_artist, song) => ({ energy: song.includes('Desperado') ? 2 : 8, danceability: song.includes('Desperado') ? 3 : 8, valence: 7, bpm: 120, genre: 'Pop', year: 2005 })) });
   if (o.realPipeline) vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
     const u = new URL(url);
     const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers });
@@ -217,6 +226,7 @@ function scenario(o: Opts) {
       if (u.host === 'ai.gateway.lovable.dev') return gateway(init);
       await new Promise(r => setTimeout(r, u.host === 'musicbrainz.org' ? 1200 : u.pathname.endsWith('/search') ? 700 : 500));
       if (u.pathname.endsWith('/search') && o.ratePressure && ++reccoSearches % 7 === 0) return json({}, 429, { 'retry-after': '2' });
+      if (o.observedHeuristic && u.pathname.endsWith('/search') && (u.searchParams.get('searchText') ?? '').includes('Desperado')) return json({}, 503);
       const stubborn = (title: string) => { const s = requested.get(title); return !!s && STUBBORN.has(factsKey(s)); };
       if (u.pathname.endsWith('/search') && stubborn(u.searchParams.get('searchText') ?? '')) return json({ content: [] });
       if (u.host === 'musicbrainz.org') {
@@ -242,7 +252,11 @@ function scenario(o: Opts) {
     return json({ energy: f.energy === undefined ? undefined : (f.energy - 1) / 9, danceability: f.danceability === undefined ? undefined : (f.danceability - 1) / 9, tempo: f.bpm });
   });
   const rowA = structuredClone(base); rowA.inputs.bpmRange = [...bpm]; if (o.favorites) (rowA.inputs as any).artistsInput = FAVE;
+  if (o.observedHeuristic) rowA.inputs.decades = ['2000s', '2010s'];
   const savedInputs = JSON.stringify(rowA.inputs);
+  let cacheRows: CacheRow[] = [];
+  const rpc = enrichHandler({ readRows: async () => cacheRows, upsert: async () => {},
+    ...(o.providerTiming ? {} : { estimate: async (group: unknown[]) => group.map(() => null) }) }, o.baselinePipeline ? baselineEnrichment : runEnrichment);
   const h = createHarness({ ...actual, dance: fixtureDance, observeRanking, observeCoordinator, routeSource: o.baseline ? readFileSync('tests/fit/archived/events.new.5e46335.txt', 'utf8') : undefined })({ rows: { A: rowA, B: { ...structuredClone(base), id: 'B' } }, contract: true, services: {
     enrich: async ({ data }: any) => {
       const songs: string[] = data.songs.map(factsKey);
@@ -258,9 +272,9 @@ function scenario(o: Opts) {
           const f = outcomes(s) as any;
           return { artist_key: dance.normalizeKey(s.artist), song_key: dance.normalizeKey(s.song), energy: f.energy ?? null, danceability: f.danceability ?? null, bpm: f.bpm ?? null, year: f.year ?? null, popularity: 8, valence: null, camelot: null, genre: 'Pop', fetched_at: new Date().toISOString(), source: encodeCacheSource('ReccoBeats+MusicBrainz', f.prov ?? {}) };
         });
-        const storage = { readRows: async () => rows, upsert: async () => {} };
-        const out = o.providerTiming ? await (o.baselinePipeline ? baselineEnrichment : runEnrichment)(data.songs, storage)
-          : await runEnrichment(data.songs, { ...storage, estimate: async group => group.map(() => null) });
+        if (o.observedHeuristic && data.songs.some((s: any) => s.artist === observed.artist)) rows.push({ artist_key: 'rihanna', song_key: 'desperado (clean)', energy: 6, danceability: 7, bpm: 126, year: 2016, popularity: 7, valence: 4, camelot: null, genre: 'Pop', fetched_at: new Date().toISOString(), source: encodeCacheSource('ReccoBeats+AI', { energy: 'estimate', danceability: 'estimate', bpm: 'provider', year: 'provider' }) });
+        cacheRows = rows;
+        const out = await rpc({ songs: data.songs });
         entry.end = Date.now(); statuses.push(out.status);
         for (const r of out.results) if (STUBBORN.has(factsKey(r))) stubbornReplies.set(factsKey(r), r);
         return out;
@@ -323,7 +337,7 @@ function invariants(s: ReturnType<typeof scenario>) {
   expect(all.some((x: any) => x.artist.includes('feat. TEST Guest'))).toBe(false);
   // Counted additions are verified within every strict limit (no estimated lengths/facts, no raw padding).
   for (const k of sections) h_counted(s, k).forEach((x: any) => {
-    expect(x.year).toBeGreaterThanOrEqual(2000); expect(x.year).toBeLessThan(2010);
+    expect(x.year).toBeGreaterThanOrEqual(2000); expect(x.year).toBeLessThan(s.rowA.inputs.decades.includes('2010s') ? 2020 : 2010);
     expect(x.bpm).toBeGreaterThanOrEqual(s.bpm[0]); expect(x.bpm).toBeLessThanOrEqual(s.bpm[1]);
     expect(['provider', 'tags', 'user', 'measured', 'virtualdj']).toContain(x.metaProv?.year);
     expect(['provider', 'tags', 'user', 'measured', 'virtualdj']).toContain(x.metaProv?.bpm);
@@ -622,6 +636,20 @@ it('same timed provider/estimate fixture through the actual route: frozen 376d12
   // Exact partial provenance: estimate-only facts come back AI-labelled and complete for the unchanged requests.
   for (const r of stubbornReplies(s)) { expect(r).toMatchObject({ source: 'AI', energy: 8, danceability: 8 }); expect(r.prov).toMatchObject({ energy: 'ai', danceability: 'ai', bpm: 'ai', year: 'ai' }); expect(r.incomplete).toBeUndefined(); }
   sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
+  invariants(s); s.h.unmount();
+}, 60000);
+
+for (const bpm of [[85, 130], [110, 130]] as Array<[number, number]>) for (const mode of ['cold', 'mixed', 'warm'] as const)
+it(`source-aware fresh automatic repair: real route and handlers retain 90/240/120 at ${bpm.join('–')} (${mode}), heuristic ballad never admitted`, async () => {
+  vi.useFakeTimers(); vi.stubEnv('LOVABLE_API_KEY', 'synthetic-not-a-key');
+  await import('ai'); await import('@ai-sdk/openai-compatible'); await import('@/lib/ai-gateway.server');
+  const s = scenario({ mode, bpm, lowYield: true, realPipeline: true, providerTiming: true, ratePressure: true, observedHeuristic: true });
+  const t0 = await s.run(); const sec = report(`source-aware ${mode} ${bpm.join('-')}`, s, t0);
+  sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
+  expect(sections.flatMap(k => s.h.current.result[k]).some(r => r.artist === 'Rihanna' && r.song === 'Desperado (Clean)')).toBe(false);
+  expect(s.lookups.some(l => l.songs.includes('Rihanna||Desperado (Clean)'))).toBe(true);
+  expect(s.lookups.reduce((n, l) => n + l.songs.filter(k => !k.startsWith('TEST Request')).length, 0)).toBeLessThanOrEqual(600);
+  expect(s.doneAt() - t0).toBeLessThan(510000); expect(aiTimeouts(s)).toBe(0);
   invariants(s); s.h.unmount();
 }, 60000);
 
