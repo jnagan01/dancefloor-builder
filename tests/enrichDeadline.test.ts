@@ -126,6 +126,21 @@ describe('server pipeline end-to-end deadline (real runEnrichment)', () => {
     expect(status.timedOut).toContain('cacheRead'); expect(results[0].energy).toBe(8); expect(results[0].year).toBeUndefined();
   });
 
+  it('cached heuristic rows: no provider re-fetch, AI upgrade joins after genuine gaps and touches only energy/danceability', async () => {
+    const log: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => { log.push(new URL(url).host); return json(404, {}); });
+    const groups: string[][] = [];
+    const estimate = async (s: Array<{ artist: string; song: string }>) => { groups.push(s.map(x => x.song)); return s.map(x => x.song === 'Heur Song' ? { energy: 8, danceability: 8, year: 2020, bpm: 99, genre: 'AI' } : { energy: 7, danceability: 7 }); };
+    const row = { [key(A('Heur Song'), 'Heur Song')]: { energy: 6, danceability: 7, year: 1999, bpm: 120, source: V2({ energy: 'estimate', danceability: 'estimate', year: 'estimate', bpm: 'provider' }) } };
+    const { results, status } = await runEnrichment([{ artist: A('Heur Song'), song: 'Heur Song' }, { artist: A('Gap Song'), song: 'Gap Song' }], deps(row, { estimate }));
+    // Only the genuine miss reached providers; the heuristic row never displaced it from the first estimate group.
+    expect(log.length).toBeGreaterThan(0); expect(groups[0][0]).toBe('Gap Song');
+    expect(results[0]).toMatchObject({ energy: 8, danceability: 8, year: 1999, bpm: 120, prov: { energy: 'ai', danceability: 'ai', year: 'estimate', bpm: 'provider' } });
+    expect(results[0].genre).toBeUndefined();
+    expect(results[1]).toMatchObject({ energy: 7, danceability: 7, prov: { energy: 'ai', danceability: 'ai' } });
+    expect(status.unfinished).toBe(0);
+  });
+
   it('warm cache without popularity: fetched once only when familiarity is active; cached values/provenance kept if the upgrade hangs', async () => {
     const log: string[] = [];
     stubNet({}, log);

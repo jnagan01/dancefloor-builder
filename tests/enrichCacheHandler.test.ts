@@ -102,19 +102,29 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('authenticated handler service-only metadata cache', () => {
-  it.each(['provider', 'ai', 'outage'] as const)('cached heuristics get bounded %s upgrade through authenticated adapter and real pipeline', async mode => {
+  // Policy: complete cached rows whose energy/danceability are generic heuristics stay warm cache hits (no provider
+  // re-fetch, which would re-spend lookup time on every run); recording-aware AI may upgrade them opportunistically.
+  // A provider re-fetch that is already warranted (missing popularity under a familiarity choice) still upgrades them.
+  it.each(['provider', 'ai', 'warm', 'outage'] as const)('cached heuristics: bounded %s path through authenticated adapter and real pipeline', async mode => {
     vi.useFakeTimers();
-    const heuristic = { ...warm(), energy: 6, danceability: 7, source: encodeCacheSource('ReccoBeats+AI', { energy: 'estimate', danceability: 'estimate', bpm: 'provider', year: 'provider' }) };
+    const heuristic = { ...warm(), energy: 6, danceability: 7, ...(mode === 'provider' ? { popularity: null } : {}), source: encodeCacheSource('ReccoBeats+AI', { energy: 'estimate', danceability: 'estimate', bpm: 'provider', year: 'provider' }) };
     const io = database([heuristic]);
-    if (mode === 'provider') providers();
-    else vi.stubGlobal('fetch', async () => new Response(mode === 'outage' ? '{}' : '{"content":[],"recordings":[]}', { status: mode === 'outage' ? 503 : 200 }));
-    state.ai.mockReturnValue({ textStream: (async function* () { yield mode === 'ai' ? '{"items":[{"i":0,"energy":2,"danceability":3}]}' : '{"items":[]}'; })() });
-    const pending = handler().call({ songs: [song] }); await vi.advanceTimersByTimeAsync(16000); const out = await pending;
+    const fetch = providers();
+    if (mode === 'outage') state.ai.mockImplementation(() => { throw new Error('synthetic AI outage'); });
+    else state.ai.mockReturnValue({ textStream: (async function* () { yield mode === 'ai' ? '{"items":[{"i":0,"energy":2,"danceability":3}]}' : '{"items":[]}'; })() });
+    const pending = handler().call({ songs: [song], needPopularity: mode === 'provider' }); await vi.advanceTimersByTimeAsync(16000); const out = await pending;
     expect(out.results[0]).toMatchObject({ bpm: 122, year: 2004, prov: { bpm: 'provider', year: 'provider' } });
-    if (mode === 'provider') expect(out.results[0]).toMatchObject({ energy: 8, danceability: 7, prov: { energy: 'provider', danceability: 'provider' } });
-    if (mode === 'ai') expect(out.results[0]).toMatchObject({ energy: 2, danceability: 3, prov: { energy: 'ai', danceability: 'ai' } });
-    if (mode === 'outage') { expect(out.results[0]).toMatchObject({ energy: 6, danceability: 7, incomplete: true, prov: { energy: 'estimate', danceability: 'estimate' } }); expect(out.status.complete).toBe(false); expect(io.writes).toBe(0); }
-    else expect(io.writes).toBe(1);
+    if (mode === 'provider') { expect(fetch).toHaveBeenCalled(); expect(out.results[0]).toMatchObject({ energy: 8, danceability: 7, popularity: 8, prov: { energy: 'provider', danceability: 'provider' } }); expect(io.writes).toBe(1); return; }
+    // Warm heuristic rows never trigger a provider re-fetch.
+    expect(fetch).not.toHaveBeenCalled();
+    if (mode === 'ai') { expect(out.results[0]).toMatchObject({ energy: 2, danceability: 3, prov: { energy: 'ai', danceability: 'ai' } }); expect(io.writes).toBe(1); }
+    else {
+      // No usable estimate (empty or unavailable AI): cached heuristics stay labelled heuristic, nothing is written or
+      // invented, and nothing is reported missing; the automatic dance gate still withholds them.
+      expect(out.results[0]).toMatchObject({ energy: 6, danceability: 7, prov: { energy: 'estimate', danceability: 'estimate' } });
+      expect(out.results[0].incomplete).toBeUndefined(); expect(io.writes).toBe(0);
+      if (mode === 'outage') expect(out.status.causes?.ai).toMatchObject({ unavailable: 1 });
+    }
   });
   it('warm complete cache returns known facts without provider/AI calls or user SELECT', async () => {
     const io = database([warm(), { ...warm(), artist_key: 'unrequested', energy: 1 }]);

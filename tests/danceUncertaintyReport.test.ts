@@ -12,12 +12,20 @@ it("reproduces the uncertain-dance-suitability report on identical pools without
   const prev = (v: any, t: string) => v.before.find((r: any) => r.track === t);
   // Nothing excluded by uncertainty: same counts both sides.
   expect(d.current14.after).toHaveLength(14); expect(d.heldOut.familiarAvoidSlow.after).toHaveLength(11);
-  // Weak 6/6 estimate ranks below verified upbeat, estimated upbeat and the lower-energy groove, with identical similarity.
+  // Weak 6/6 estimate ranks below verified upbeat and the corroborated AI 7/8 pair, with identical similarity.
   const ho = d.heldOut.avoidSlowOnly;
-  for (const up of ["HX Cedar|Neon Steps", "HX Fir|Bright Arc", "HX Elm|Slow Burn Funk", "HX Alder|Quiet Road (Club Remix)"])
+  for (const up of ["HX Cedar|Neon Steps", "HX Fir|Bright Arc"])
     expect(row(ho, up).rank).toBeLessThan(row(ho, "HX Alder|Quiet Road").rank);
-  // Confident upbeat and grooves keep their previous score exactly.
-  for (const up of ["HX Cedar|Neon Steps", "HX Fir|Bright Arc", "HX Elm|Slow Burn Funk", "HX Ivy|Candle"]) expect(row(ho, up).score).toBe(prev(ho, up).score);
+  // Confident upbeat keeps its previous score exactly; the low-both slow-risk cap is unchanged.
+  for (const up of ["HX Cedar|Neon Steps", "HX Fir|Bright Arc", "HX Ivy|Candle"]) expect(row(ho, up).score).toBe(prev(ho, up).score);
+  // New policy (after 9780e18): an AI-only 4/8 groove and a remix's own heuristic 8/8 values no longer establish upbeat
+  // support. They are bounded as uncertain — lower score, no slow penalty, never excluded or called slow.
+  for (const t of ["HX Elm|Slow Burn Funk", "HX Alder|Quiet Road (Club Remix)"]) {
+    expect(row(ho, t).score).toBeLessThan(prev(ho, t).score);
+    expect(row(ho, t).uncertain.join(" ")).toMatch(/Dance suitability uncertain.*not classified slow/);
+    expect(row(ho, t).evidence.some((e: any) => e.kind === "slowEstimate")).toBe(false);
+  }
+  expect(ho.after).toHaveLength(ho.before.length);
   // Half/double BPM never changes the outcome.
   expect(row(ho, "HX Gum|Halftime").score).toBe(row(ho, "HX Hazel|Doubletime").score);
   // Explanations say uncertain, never "slow".

@@ -523,14 +523,19 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const popOnly = new Set<string>();
   const acousticGap = (row: EnrichedSong | undefined, attr: "energy" | "danceability") =>
     row?.[attr] == null || sourceRank(row.prov?.[attr] ?? "estimate") <= sourceRank("estimate");
+  // Complete cached rows whose acoustic values are only generic heuristics stay cache hits (no provider re-fetch, so a
+  // warm cache stays warm); they join the estimate lane last, opportunistically, after every genuine gap is ready.
+  const upgrade = new Map<string, EnrichedSong>();
   for (const [k, c] of cache) {
-    if (acousticGap(c, "energy") || acousticGap(c, "danceability")) { partial.set(k, c); cache.delete(k); }
+    if (c.energy == null || c.danceability == null) { partial.set(k, c); cache.delete(k); }
     else if (opts.needPopularity && c.popularity == null) { partial.set(k, c); popOnly.add(k); cache.delete(k); }
+    else if (acousticGap(c, "energy") || acousticGap(c, "danceability")) upgrade.set(k, c);
   }
   const missSet = new Set<string>();
-  const first: Query[] = [], last: Query[] = [];
+  const first: Query[] = [], last: Query[] = [], upgradeOrder: Query[] = [];
   for (const q of queries) {
     const k = `${q.artistKey}\u0000${q.songKey}`;
+    if (upgrade.has(k) && !missSet.has(k)) { missSet.add(k); upgradeOrder.push(q); continue; }
     if (!q.artistKey || !q.songKey || cache.has(k) || missSet.has(k)) continue;
     missSet.add(k);
     (popOnly.has(k) ? last : first).push(q);
@@ -631,11 +636,13 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
           continue;
         }
         const settled = acousticSettled || fetchClosed;
-        const group = missOrder.filter(q => {
-          const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k), reco = recoDone.get(k);
+        // Heuristic-upgrade rows never delay or displace genuine gaps: they are ready only once every miss is.
+        const gapsReady = settled || final || missOrder.every(m => recoDone.has(`${m.artistKey}\u0000${m.songKey}`));
+        const group = [...missOrder, ...upgradeOrder].filter(q => {
+          const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k) ?? upgrade.get(k), reco = recoDone.get(k);
           // At the final dispatch point rows whose provider search is still pending join speculatively; provider facts
           // that arrive later still outrank the estimate (AI only fills gaps), and no row is estimated twice.
-          return !attemptedAi.has(k) && (recoDone.has(k) || settled || final) &&
+          return !attemptedAi.has(k) && (upgrade.has(k) ? gapsReady : (recoDone.has(k) || settled || final)) &&
             ((acousticGap(prev, "energy") && (reco?.energy == null || !reco.exact)) ||
               (acousticGap(prev, "danceability") && (reco?.danceability == null || !reco.exact)));
         }).slice(0, 8);
@@ -651,7 +658,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
           estimates.set(`${q.artistKey}\u0000${q.songKey}`, value);
         };
         const items = await (deps.estimate ?? estimateWithAi)(group.map(q => {
-          const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k), mb = mbDone.get(k), reco = recoDone.get(k);
+          const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k) ?? upgrade.get(k), mb = mbDone.get(k), reco = recoDone.get(k);
           return { ...q.original, genre: prev?.genre ?? mb?.genre, year: prev?.year ?? mb?.year, bpm: prev?.bpm ?? reco?.bpm };
         }), aiCtrl.signal, keep);
         items.forEach((v, i) => { if (v) keep(i, v); });
@@ -674,7 +681,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     acousticChanged();
     if (got === LATE) timeout("fetch");
     status.retryAfterMs = Math.max(0, recoCtx.lane.pausedUntil - now(), mbCtx.lane.pausedUntil - now());
-  }
+  } else if (upgradeOrder.length) aiWork = estimateMissing();
   // Assemble from whatever each provider completed. Per-field provenance priority: a fresh value replaces a known one
   // only when its source ranks at least as high, so a loose-match estimate never downgrades cached provider facts.
   const unfinished = new Set<string>(providerIncomplete);
@@ -732,39 +739,57 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const needAi = missOrder
     .map((q) => ({ q, k: `${q.artistKey}\u0000${q.songKey}` }))
     .filter(({ k }) => { const e = fetched.get(k); return acousticGap(e, "energy") || acousticGap(e, "danceability"); });
-  if (needAi.length) {
+  // Only acoustic values may replace a lower-ranked heuristic; other attributes are filled only when absent, and only
+  // for rows that genuinely lacked an acoustic fact (a heuristic-upgrade row never gains AI year/BPM/genre).
+  const applyAi = (e: EnrichedSong, a: AiEstimate, gapRow: boolean) => {
+    const prov: MetaProv = { ...(e.prov ?? {}) };
+    let filled = false;
+    const fill = <A extends "energy" | "danceability" | "valence" | "bpm" | "genre" | "year">(attr: A) => {
+      if (a[attr] == null) return e[attr];
+      const acoustic = attr === "energy" || attr === "danceability";
+      if (e[attr] != null ? !acoustic || sourceRank(prov[attr] ?? "estimate") >= sourceRank("ai") : !gapRow) return e[attr];
+      prov[attr] = "ai"; filled = true;
+      return a[attr];
+    };
+    const next: EnrichedSong = {
+      ...e,
+      energy: fill("energy") as number | undefined,
+      danceability: fill("danceability") as number | undefined,
+      valence: fill("valence") as number | undefined,
+      bpm: fill("bpm") as number | undefined,
+      genre: fill("genre") as string | undefined,
+      year: fill("year") as number | undefined,
+      prov,
+    };
+    return { next, filled };
+  };
+  const lacksAcoustic = (e: EnrichedSong | undefined) => e?.energy == null || e?.danceability == null;
+  if (needAi.length || upgradeOrder.length) {
     const settled = await within(aiWork, aiUntil, now);
     if (settled === LATE) { aiLate = true; aiClosed = true; aiCtrl.abort(); }
-    if (aiLate) { timeout("ai"); count("ai", "deadline"); }
-    if (aiFailed) { (status.failed ??= []).push("ai"); status.complete = false; count("ai", "unavailable"); }
+    // Only rows still missing an acoustic value are unfinished; an unfinished upgrade leaves cached heuristics advisory.
+    const gapRows = needAi.some(({ k }) => lacksAcoustic(fetched.get(k)));
+    if (aiLate) { count("ai", "deadline"); if (gapRows) timeout("ai"); }
+    if (aiFailed) { count("ai", "unavailable"); if (gapRows) { (status.failed ??= []).push("ai"); status.complete = false; } }
     needAi.forEach(({ q, k }) => {
       const a = estimates.get(k);
-      if (aiLate || aiFailed) unfinished.add(k);
+      const prior = fetched.get(k);
+      if ((aiLate || aiFailed) && lacksAcoustic(prior)) unfinished.add(k);
       if (!a) return;
-      const e: EnrichedSong = fetched.get(k) ?? { artist: q.original.artist, song: q.original.song, source: "none" as const };
-      // AI only fills gaps and every filled attribute is labelled an AI estimate.
-      const prov: MetaProv = { ...(e.prov ?? {}) };
-      let filled = false;
-      const fill = <A extends "energy" | "danceability" | "valence" | "bpm" | "genre" | "year">(attr: A) => {
-        // Preserve verified/curated/earlier AI facts; recording-aware AI may replace a generic heuristic.
-        if (e[attr] != null && sourceRank(prov[attr] ?? "estimate") >= sourceRank("ai")) return e[attr];
-        if (a[attr] == null) return e[attr];
-        if (a[attr] != null) { prov[attr] = "ai"; filled = true; }
-        return a[attr];
-      };
-      fetched.set(k, {
-        ...e,
-        energy: fill("energy") as number | undefined,
-        danceability: fill("danceability") as number | undefined,
-        valence: fill("valence") as number | undefined,
-        bpm: fill("bpm") as number | undefined,
-        genre: fill("genre") as string | undefined,
-        year: fill("year") as number | undefined,
-        source: e.source === "none" || e.source === "MusicBrainz" ? "AI" : e.source,
-        prov,
-      });
+      const e: EnrichedSong = prior ?? { artist: q.original.artist, song: q.original.song, source: "none" as const };
+      const { next, filled } = applyAi(e, a, lacksAcoustic(e));
+      fetched.set(k, { ...next, source: e.source === "none" || e.source === "MusicBrainz" ? "AI" : e.source });
       if (filled) fresh.add(k);
     });
+    for (const q of upgradeOrder) {
+      const k = `${q.artistKey}\u0000${q.songKey}`, a = estimates.get(k), c = cache.get(k);
+      if (!a || !c) continue;
+      const { next, filled } = applyAi(c, a, false);
+      if (!filled) continue;
+      cache.delete(k);
+      fetched.set(k, { ...next, artist: q.original.artist, song: q.original.song });
+      fresh.add(k);
+    }
   }
 
   // 4) Upsert data gained this call (service role bypasses RLS). Bounded: the response never waits on a hung write;

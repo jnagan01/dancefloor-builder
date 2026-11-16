@@ -16,16 +16,18 @@ import { REQUESTS } from "./fit/fitComparison";
 const harness = createRequire(import.meta.url)("./helpers/eventRouteHarness.cjs").createEventRouteHarness({vdj,dance:{...dance,catalogueCandidates:()=>[]},audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions});
 const id="10000000-0000-4000-8000-000000000077";
 const requests=REQUESTS.map(r=>({...r,fromUpload:true}));
-// TEST-ONLY renamed synthetic owned files with identical positive estimated feel; only community evidence differs.
+// TEST-ONLY renamed synthetic owned files with identical positive recording-aware AI feel (8/8, labelled "ai" exactly as
+// the real pipeline labels AI estimates); only community evidence differs. Generic heuristic labels are covered below.
 const extras=[["Held Out Tagged","Q"],["Held Out Plain","R"],["Held Out Wrong","S"]].map(([a,s])=>({artist:`TEST ${a}`,song:s}));
 const library=vdj.buildLibrary(extras.map(c=>({artist:c.artist,title:c.song,filePath:`/synthetic/${c.song}.mp3`,year:"1985",genre:"Pop"})) as vdj.VdjTrack[]);
 const inputBase={songs:requests,hours:"1.5",buffer:1,listType:"dance",expand:true,eventName:"TEST ONLY community",artistsInput:"",genresInput:"",decades:["1970s","1980s","1990s","2000s","2010s","2020s"],notes:"",doNotPlayInput:""};
 const all=(r:any)=>[...r.warmUp,...r.transition,...r.peak];
-const enrich=async({data}:any)=>({results:data.songs.flatMap((s:any)=>extras.some(c=>c.artist===s.artist)?[{...s,energy:8,danceability:8,source:"AI",prov:{energy:"estimate",danceability:"estimate"}}]:[])});
-async function run(fit:any, community:any){
+const enrichAs=(label:string)=>async({data}:any)=>({results:data.songs.flatMap((s:any)=>extras.some(c=>c.artist===s.artist)?[{...s,energy:8,danceability:8,source:"AI",prov:{energy:label,danceability:label}}]:[])});
+const enrich=enrichAs("ai");
+async function run(fit:any, community:any, enrichFn:any=enrich){
   const row={id,name:inputBase.eventName,updated_at:"2026-11-04T00:00:00Z",inputs:{...inputBase,...(fit?{eventFit:fit}:{})},lists:{warmUp:requests,transition:[],peak:[]}};
   const calls:any[]=[];
-  const services={recommend:async()=>({suggestions:[]}),enrich,similarTracks:async()=>({availability:"ok",seeds:REQUESTS.slice(0,1).map(s=>({seed:{artist:s.artist,title:s.song},status:"ok",similar:extras.map(c=>({artist:c.artist,title:c.song,match:1}))}))}),community:async(r:any)=>{calls.push(r.data.songs);return community(r);}};
+  const services={recommend:async()=>({suggestions:[]}),enrich:enrichFn,similarTracks:async()=>({availability:"ok",seeds:REQUESTS.slice(0,1).map(s=>({seed:{artist:s.artist,title:s.song},status:"ok",similar:extras.map(c=>({artist:c.artist,title:c.song,match:1}))}))}),community:async(r:any)=>{calls.push(r.data.songs);return community(r);}};
   vi.useFakeTimers();
   try{
     const h=harness({eventId:id,rows:{[id]:row},services,contract:true});await h.flush();h.library(library);await h.flush();await h.current.generate();await h.flush();
@@ -47,6 +49,15 @@ it("community slow tags reach rankPool before ranking, stay out of the snapshot,
   const t=result.find((r:any)=>r.artist==="TEST Held Out Plain");expect([t.energy,t.danceability]).toEqual([8,8]);
   const reopened=harness({eventId:id,rows:{[id]:{...row,inputs:saved.inputs,lists:saved.lists}},contract:true});await reopened.flush();
   expect(all(reopened.current.result).filter((r:any)=>r.fromUpload)).toHaveLength(REQUESTS.length);expect(reopened.requests).toEqual([]);reopened.unmount();
+});
+it("new policy: the same 8/8 values labelled as generic heuristics never establish automatic dance fit (withheld, not slow)",async()=>{
+  const {result}=await run({avoidSlow:true},async(r:any)=>r.data.songs.map((s:any)=>({...s,status:"none"})),enrichAs("estimate"));
+  const adds=result.filter((r:any)=>!r.fromUpload).map((r:any)=>r.artist);
+  for (const a of ["TEST Held Out Tagged","TEST Held Out Plain","TEST Held Out Wrong"]) expect(adds).not.toContain(a);
+  expect(result.filter((r:any)=>r.fromUpload)).toHaveLength(REQUESTS.length);
+  // Purely upbeat exact community tags remain positive support even when acoustic values are heuristic.
+  const tag=await run({avoidSlow:true},async(r:any)=>r.data.songs.map((s:any)=>s.artist==="TEST Held Out Plain"?{...s,status:"found",evidence:{source:"lastfm",listeners:90000,slowTags:[],upbeatTags:["dance"]}}:{...s,status:"none"}),enrichAs("estimate"));
+  expect(tag.result.filter((r:any)=>!r.fromUpload).map((r:any)=>r.artist)).toContain("TEST Held Out Plain");
 });
 it("no fit choices: no community lookups at all (legacy/neutral)",async()=>{
   const {calls}=await run(undefined,tagged);expect(calls).toEqual([]);
@@ -82,8 +93,8 @@ it("budget: at most 40 distinct lookups, preliminary-rank priority, unattempted 
     h.unmount();
   }finally{vi.useRealTimers();}
 });
-// TEST-ONLY renamed synthetic files: "Weak" has identical-request similarity (match 1) but estimated 6/6 feel; "Up" has
-// weaker similarity and estimated upbeat 8/8. Only the new uncertain-dance bound and community evidence differ.
+// TEST-ONLY renamed synthetic files: "Weak" has identical-request similarity (match 1) but AI-estimated 6/6 feel; "Up" has
+// weaker similarity and AI-estimated upbeat 8/8. Only the new uncertain-dance bound and community evidence differ.
 const ud=[["TEST UD Weak","W1",6,6,1],["TEST UD Up","U1",8,8,0.8]] as const;
 const udLib=vdj.buildLibrary(ud.map(([a,s])=>({artist:a,title:s,filePath:`/synthetic/ud/${s}.mp3`,year:"2006",genre:"Pop"})) as vdj.VdjTrack[]);
 const late=async<T>(v:T)=>{for(let i=0;i<40;i++)await Promise.resolve();return v;};
@@ -91,7 +102,7 @@ async function runUD(community:any){
   const row={id,name:inputBase.eventName,updated_at:"2026-11-04T00:00:00Z",inputs:{...inputBase,eventFit:{avoidSlow:true}},lists:{warmUp:requests,transition:[],peak:[]}};
   const calls:any[]=[];
   const services={recommend:async()=>({suggestions:[]}),
-    enrich:async({data}:any)=>({results:data.songs.flatMap((s:any)=>{const u=ud.find(x=>x[0]===s.artist);return u?[{...s,energy:u[2],danceability:u[3],source:"AI",prov:{energy:"estimate",danceability:"estimate"}}]:[];})}),
+    enrich:async({data}:any)=>({results:data.songs.flatMap((s:any)=>{const u=ud.find(x=>x[0]===s.artist);return u?[{...s,energy:u[2],danceability:u[3],source:"AI",prov:{energy:"ai",danceability:"ai"}}]:[];})}),
     similarTracks:async()=>({availability:"ok",seeds:REQUESTS.slice(0,1).map(s=>({seed:{artist:s.artist,title:s.song},status:"ok",similar:ud.map(([a,t,,,m])=>({artist:a,title:t,match:m}))}))}),
     community:async(r:any)=>{calls.push(...r.data.songs);return community(r);}};
   vi.useFakeTimers();

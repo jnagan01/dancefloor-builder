@@ -32,7 +32,11 @@ describe("active avoid-slow held-out evidence boundaries", () => {
   });
   it("estimated popularity cannot rescue unknown/low/moderate feel; verified popularity is not dance proof", () => {
     for (const index of [0, 5, 8]) expect(evaluateFit({ familiarity: "familiar", avoidSlow: true }, matrix[index]).lines.filter(l => l.kind === "familiarTrack").reduce((s,l) => s+l.points,0)).toBe(0);
-    expect(evaluateFit({ familiarity: "familiar", avoidSlow: true }, matrix[9]).lines[0].points).toBe(0.35);
+    // New policy: a generic heuristic danceability (matrix J: catalogue 5 + heuristic 7) no longer counts as upbeat
+    // support, so its estimated popularity adds nothing; a curated pair with the same values keeps half points.
+    const pop = (c: typeof matrix[number]) => evaluateFit({ familiarity: "familiar", avoidSlow: true }, c).lines.filter(l => l.kind === "familiarTrack").reduce((s, l) => s + l.points, 0);
+    expect(pop(matrix[9])).toBe(0);
+    expect(pop({ ...matrix[9], fit: { ...matrix[9].fit, danceabilitySource: "catalogue" } })).toBe(0.35);
     const r = evaluateFit({ familiarity: "familiar", avoidSlow: true }, matrix[6]);
     expect(r.exclude).toBeUndefined(); expect(r.lines[0].points).toBe(1); expect(r.uncertain?.join()).toMatch(/recognition, not/);
     const verifiedSlow = { ...matrix[2], fit: { ...matrix[2].fit, popularity: 10, popularitySource: "provider" as const } };

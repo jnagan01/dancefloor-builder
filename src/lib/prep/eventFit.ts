@@ -97,19 +97,22 @@ export const UNCERTAIN_DANCE_SIMILARITY_CAP = 2;
 
 /** Positive acoustic support is source-aware. Generic heuristics (including legacy cached
  * values) never establish fit. Curated pairs are advisory; AI pairs need both values >=7
- * and remain unverified. Verified danceability can support a lower-energy groove. */
-function supportedDance(f: FitFacts): boolean {
+ * and remain unverified. Verified danceability can support a lower-energy groove.
+ * Admission fails closed on any slow tag; advisory ranking keeps numeric support under mixed
+ * slow+upbeat tags (only purely slow tags remove it). Tag-only support needs purely upbeat tags. */
+function supportedDance(f: FitFacts, mode: "admission" | "ranking" = "admission"): boolean {
   const e = num10(f.energy), d = num10(f.danceability);
   const strongE = !!f.energySource && STRONG.has(f.energySource);
   const strongD = !!f.danceabilitySource && STRONG.has(f.danceabilitySource);
-  if (f.community?.slowTags.length || (strongD && d !== undefined && d <= 4)) return false;
+  const slowTags = !!f.community?.slowTags.length, upbeatTags = !!f.community?.upbeatTags.length;
+  if ((slowTags && (mode === "admission" || !upbeatTags)) || (strongD && d !== undefined && d <= 4)) return false;
   if (e !== undefined && d !== undefined && e <= 4 && d <= 4) return false;
   const pairSource = (s: MetaSource | undefined) => !!s && (STRONG.has(s) || s === "catalogue" || s === "ai");
   const pair = e !== undefined && d !== undefined && pairSource(f.energySource) && pairSource(f.danceabilitySource)
     && e >= 5 && d >= 5 && (e >= 7 || d >= 7)
     && ((f.energySource !== "ai" && f.danceabilitySource !== "ai") || (e >= 7 && d >= 7));
   const groove = strongD && d !== undefined && d >= 7 && !(strongE && e !== undefined && e < 4);
-  const tags = !!f.community?.upbeatTags.length && !(strongE && e !== undefined && e <= 4);
+  const tags = upbeatTags && !slowTags && !(strongE && e !== undefined && e <= 4);
   return pair || groove || tags;
 }
 
@@ -177,7 +180,7 @@ export function evaluateFit(fit: EventFit | undefined, c: { origin: "library" | 
     if (conflict) (r.uncertain ??= []).push(`Energy ${e}/10 (${sourceLabel(f.energySource)}) and danceability ${d}/10 (${sourceLabel(f.danceabilitySource)}) conflict for slow avoidance: a groove is possible; not classified slow or penalised`);
     // Positive estimates cannot rescue questionable/unknown fit. Verified popularity still describes recognition,
     // not dance suitability; retain half of its familiarity points when upbeat support is absent.
-    const supported = supportedDance(f);
+    const supported = supportedDance(f, "ranking");
     for (const l of r.lines) if (l.kind === "familiarTrack" && l.points > 0 && /^Last\.fm listeners/.test(l.text) && !supported) { l.points = 0; (r.uncertain ??= []).push("Community listener count adds no points: upbeat fit is unknown, conflicting or weakly supported"); }
     for (const l of r.lines) if (l.kind === "familiarTrack" && l.points > 0 && /Track popularity/.test(l.text) && !supported) {
       if (ps === "estimate") { l.points = 0; (r.uncertain ??= []).push("Estimated popularity adds no familiarity points: upbeat fit is unknown, conflicting or weakly supported"); }

@@ -15,8 +15,16 @@ describe("uncertain dance suitability (avoid-slow only)", () => {
     }
   });
   it("leaves supported upbeat, grooves and dance-tagged tracks unbounded", () => {
-    for (const f of [est(8, 8, "provider"), est(7, 8, "ai"), est(4, 8, "ai"), est(7, 5), { community: { slowTags: [], upbeatTags: ["dance"] } }])
+    for (const f of [est(8, 8, "provider"), est(7, 8, "ai"), est(4, 8, "provider"), est(7, 5, "catalogue"), { community: { slowTags: [], upbeatTags: ["dance"] } }])
       expect(ev({ avoidSlow: true }, f).similarityCap).toBeUndefined();
+  });
+  it("new policy: generic heuristics and AI-only grooves no longer count as upbeat support (bounded, never excluded)", () => {
+    // Before 9780e18 these lifted the bound: a heuristic 7/5 pair and an AI-only danceability-8 "groove".
+    for (const f of [est(7, 5), est(8, 8), est(4, 8, "ai"), est(6, 7, "ai")]) {
+      const r = ev({ avoidSlow: true }, f);
+      expect(r.similarityCap).toBe(UNCERTAIN_DANCE_SIMILARITY_CAP); expect(r.similarityCapReason).toBe("uncertainDance");
+      expect(r.exclude).toBeUndefined();
+    }
   });
   it("keeps the stricter slow-risk cap without stacking", () => {
     const r = ev({ avoidSlow: true }, est(3, 3)); expect(r.similarityCap).toBe(1); expect(r.similarityCapReason).toBe("slowRisk");
@@ -47,7 +55,9 @@ describe("uncertain dance suitability: community tag conflicts and wording", () 
   });
   it("purely upbeat tags lift it; numeric groove support still stands under mixed tags", () => {
     expect(ev({ avoidSlow: true }, { ...est(6, 6), ...cm([], ["party"]) }).similarityCap).toBeUndefined();
-    expect(ev({ avoidSlow: true }, { ...est(5, 8, "ai"), ...cm(["slow"], ["party"]) }).similarityCap).toBeUndefined();
+    expect(ev({ avoidSlow: true }, { ...est(5, 8, "provider"), ...cm(["slow"], ["party"]) }).similarityCap).toBeUndefined();
+    // New policy: an AI-only groove is advisory and no longer lifts the bound, with or without mixed tags.
+    expect(ev({ avoidSlow: true }, { ...est(5, 8, "ai"), ...cm(["slow"], ["party"]) }).similarityCap).toBe(2);
   });
   it("describes each attribute's own source; no 'moderate'/'estimates' mislabel and no point counts", () => {
     const t = ev({ avoidSlow: true }, { energy: 9, energySource: "provider", danceability: 3, danceabilitySource: "ai" }).uncertain!.find(u => u.startsWith("Dance suitability"))!;
