@@ -9,8 +9,10 @@ import re
 import sys
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+from categories import collect
 
 SUITES = {
+    "categories": ["bunx", "vitest", "run", "tests/coordinatedExpansion.test.ts", "tests/automaticDanceEvidence.test.ts", "tests/weeklyLookupEvidence.test.ts", "-t", "weekly structured", "--reporter=json", "--outputFile=test-results/weekly/categories-vitest.json"],
     "reporting": ["python3", "-m", "unittest", "discover", "-s", ".github/weekly", "-p", "test_*.py", "-v"],
     "vitest": ["bunx", "vitest", "run", "--reporter=default", "--reporter=json", "--outputFile=test-results/weekly/vitest.json"],
     "adversarial": ["bunx", "vitest", "run", "tests/weeklyAdversarial.test.ts", "--reporter=json", "--outputFile=test-results/weekly/adversarial.json"],
@@ -37,10 +39,10 @@ def resolve_seed(explicit=None, now=None):
 
 
 def initial_result(seed):
-    return {"schema": 1, "commit": os.environ.get("GITHUB_SHA", "local"),
+    return {"schema": 2, "commit": os.environ.get("GITHUB_SHA", "local"),
             "run_id": os.environ.get("GITHUB_RUN_ID", "local"), "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", "1"), "seed": seed,
             "limits": {"records": 100000, "import_bytes": 5242880, "minutes": 45},
-            "suites": {name: {"status": "not_run"} for name in SUITES}}
+            "suites": {name: {"status": "not_run"} for name in SUITES}, "categories": {}}
 
 
 def initialize():
@@ -74,8 +76,15 @@ def main():
         entry.update(status="running")
         persist()
         start = time.monotonic()
+        env = dict(os.environ)
+        if name == "categories":
+            directory = output / "category-cases"
+            directory.mkdir(exist_ok=True)
+            for stale in directory.glob('*.json'):
+                stale.unlink()
+            env['WEEKLY_EVIDENCE_DIR'] = str(directory)
         with (output / f"{name}.log").open("w") as log:
-            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env)
             try:
                 code = proc.wait(timeout=min(12 * 60, max(1, end - start)))
                 entry.update(status="passed" if code == 0 else "failed", exit_code=code)
@@ -104,6 +113,10 @@ def main():
                 proc.wait()
                 entry["status"] = "timeout"
         entry["seconds"] = round(time.monotonic() - start, 2)
+        if name == 'categories':
+            result['categories'] = collect(output / 'category-cases', result)
+            if any(c.get('status') != 'passed' for c in result['categories'].values()):
+                entry['status'] = 'incomplete' if entry['status'] == 'passed' else entry['status']
         persist()
     return 0 if all(s["status"] == "passed" for s in result["suites"].values()) else 1
 

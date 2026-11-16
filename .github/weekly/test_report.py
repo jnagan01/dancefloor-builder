@@ -5,6 +5,7 @@ import urllib.request
 import report
 import run_tests
 import auth_check
+from categories import CASES, RULES, expected_check
 
 
 def now(value="2026-11-03T14:00:00+00:00"):
@@ -12,13 +13,25 @@ def now(value="2026-11-03T14:00:00+00:00"):
 
 
 def run(**overrides):
-    return {"id": 12, "run_attempt": 1, "head_sha": "synthetic-sha", "event": "schedule", "head_branch": "main",
+    return {"id": 12, "run_attempt": 1, "head_sha": "synthetic-sha", "html_url": "https://github.com/synthetic/repo/actions/runs/12", "event": "schedule", "head_branch": "main",
             "created_at": "2026-11-03T09:00:00Z", "status": "completed", "conclusion": "success", **overrides}
 
 
 def evidence(**overrides):
-    return {"schema": 1, "commit": "synthetic-sha", "run_id": "12", "run_attempt": "1",
-            "suites": {s: {"status": "passed"} for s in report.REQUIRED}, **overrides}
+    base = {"schema": 2, "commit": "synthetic-sha", "run_id": "12", "run_attempt": "1", "seed": "20261116",
+            "suites": {s: {"status": "passed"} for s in report.REQUIRED}}
+    base['categories'] = {case: {**{k: base[k] for k in ('commit', 'run_id', 'run_attempt', 'seed')}, 'schema': 1,
+        'id': case, 'category': category, 'status': 'passed', 'checks': [{'rule': r, 'actual': 1, 'expected': 1, 'passed': True} for r in RULES[case]],
+        'sections': [] if case in ('admission', 'partial-outage') else [{'section': s, 'seconds': t, 'target': t} for s, t in [('warmUp', 5400), ('transition', 14400), ('peak', 7200)]], 'causes': {}} for case, category in CASES.items()}
+    for item in base['categories'].values():
+        for c in item['checks']:
+            for value in (0, 1, 2, 3, 8, 34, 600, 2005, 6000, 20000, 120000, 510000, 6):
+                if expected_check(c['rule'], value, value):
+                    c.update(actual=value, expected=value); break
+            else:
+                limit = {'generation-ceiling-ms': 510000, 'handler-deadline-ms': 20000}[c['rule']]
+                c.update(actual=1, expected=limit)
+    return {**base, **overrides}
 
 
 class Decisions(unittest.TestCase):

@@ -2,3 +2,4 @@
 - Keep weekly orchestration and reporting independent of push/PR/release workflows; only hosted synthetic tests may run, so user profiles and deployment gates remain untouched.
 - Require complete structured suite evidence before declaring health; persist mail delivery state only after SMTP acceptance, so skipped tests and failed delivery remain visible.
 - Keep credential authentication in a mutually exclusive manual read-only job and permit explicit test-run overrides only in identity-validated manual dry-runs, so setup checks cannot send mail or weaken scheduled reporting.
+- Require closed category-case contracts from actual route/handler and shared admission tests; key bounded recurrence by observed run, not injected provider error or seed, so mock outages never become uptime claims and retries cannot inflate counts.

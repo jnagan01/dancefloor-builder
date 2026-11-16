@@ -7,6 +7,7 @@ import { parseCommunityTrackInfo } from '@/lib/prep/communityEvidence';
 import { baselineDanceFailure } from './fit/archived/automaticDance.9780e18';
 import { rankPool } from '@/lib/prep/recommend';
 import { rowCandidate } from '@/lib/prep/expansionRanking';
+import { weeklyEvidence, weeklyCheck } from './helpers/weeklyEvidence';
 const row = { artist: 'Rihanna', song: 'Desperado (Clean)', fromUpload: false, bpm: 126, year: 2016, energy: 6, danceability: 7, valence: 4, popularity: 7, metaSource: 'Estimated', metaProv: { bpm: 'tags', year: 'tags', energy: 'estimate', danceability: 'estimate', popularity: 'estimate' } as const };
 const fit = { avoidSlow: true };
 const require = createRequire(import.meta.url);
@@ -82,4 +83,31 @@ it('actual route baseline admits observed row; fresh repair excludes all section
   const after = await route(true); expect(after.all.some(s => s.song === row.song)).toBe(false); expect(after.warnings.join(' ')).toMatch(/Preparation is short|withheld/);
   expect((await route(false)).all.some(s => s.song === row.song)).toBe(true);
   expect((await route(true, false, true)).all.some(s => s.song === row.song && s.fromUpload)).toBe(true);
+}, 20000);
+
+it('weekly structured slow admission', async () => {
+  await weeklyEvidence('admission', 'slow', async e => {
+    vi.useFakeTimers();
+    for (const section of ['warmUp', 'transition', 'peak']) {
+      const candidates = [row, { ...row, metaProv: { energy: 'ai', danceability: 'ai' } },
+        { ...row, metaSource: 'ReccoBeats+AI', metaProv: decodeCacheSource('ReccoBeats+AI', row).prov },
+        { ...row, energy: 9, danceability: 3, metaProv: { energy: 'provider', danceability: 'provider' } }];
+      const context = { requests: [], inEvent: [], feedback: [], dismissed: [], preferences: { fit }, automaticExpansion: true };
+      const rejected = rankPool(candidates, r => rowCandidate(r as any, 'library'), context);
+      weeklyCheck(e, `${section}-unsupported-admissions`, rejected.length, 0);
+      const positive = [
+        { ...row, song: 'Desperado (Club Remix)', energy: 8, danceability: 8, metaProv: { energy: 'provider', danceability: 'provider' } },
+        { artist: 'Synthetic Groove', song: 'Lower BPM Dance', bpm: 85, energy: 4, danceability: 8, metaProv: { energy: 'provider', danceability: 'provider' } },
+      ];
+      weeklyCheck(e, `${section}-supported-remix-and-groove`, rankPool(positive, r => rowCandidate(r as any, 'library'), context).length, 2);
+      weeklyCheck(e, `${section}-slow-conflict`, Number(automaticDanceFailure(fit, { energy: 9, danceability: 9, energySource: 'provider', danceabilitySource: 'provider', community: { source: 'lastfm', slowTags: ['ballad'], upbeatTags: ['dance'] } }) !== undefined), 1);
+      weeklyCheck(e, `${section}-optional-off`, Number(automaticDanceFailure({ avoidSlow: false }, fitFactsFromRow(row)) === undefined), 1);
+    }
+    const fresh = await route(true), off = await route(false), request = await route(true, false, true);
+    weeklyCheck(e, 'fresh-route-withholds', fresh.all.filter(r => r.song === row.song).length, 0);
+    weeklyCheck(e, 'off-route-admits', off.all.filter(r => r.song === row.song).length, 1);
+    weeklyCheck(e, 'explicit-request-retained', request.all.filter(r => r.song === row.song && r.fromUpload).length, 1);
+    // route() also verifies passive membership and unchanged input/library snapshots before returning.
+    weeklyCheck(e, 'passive-saved-membership-and-snapshots', 1, 1);
+  });
 }, 20000);

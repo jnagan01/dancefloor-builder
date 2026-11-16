@@ -22,6 +22,7 @@ import { pacedCount } from '@/lib/prep/suggestionLanes';
 import { runEnrichment as baselineEnrichment } from './fit/archived/enrichPipeline.376d12b';
 import { estimateItems, gatewayStream } from './helpers/gatewayStream';
 import { enrichHandler } from './helpers/enrichHandler';
+import { weeklyEvidence, weeklyCheck } from './helpers/weeklyEvidence';
 
 /*
  * Native-shaped coordination regression, all synthetic (no production data, no real accounts/files):
@@ -110,7 +111,7 @@ type Opts = { mode: 'cold' | 'mixed' | 'warm'; realPipeline?: boolean; baseline?
   ratePressure?: boolean;
   /** Run the frozen 376d12b pipeline (astra low-reasoning estimate, measured 14.2 s first delta) for before/after. */
   baselinePipeline?: boolean;
-  observedHeuristic?: boolean };
+  observedHeuristic?: boolean; weeklySeed?: number };
 /** Live measured first-delta latency per estimate model (2026-11-13, 8-song production prompt). */
 const ESTIMATE_STARTUP: Record<string, number> = { 'openai/gpt-6-astra': 14185, 'google/gemini-3-flash-preview': 600 };
 const STUBBORN = new Set([30, 31, 32, 33].map(i => `TEST Request ${i}||Client ${i}`));
@@ -121,6 +122,8 @@ function scenario(o: Opts) {
   const statuses: any[] = [];
   const stubbornReplies = new Map<string, any>();
   let lib = library(laneFiles);
+  // Seed changes harmless synthetic archive order and cold latency phase, never policy or eligible inventory.
+  if (o.weeklySeed !== undefined) { const offset = o.weeklySeed % 1000; lib.tracks = [...lib.tracks.slice(offset), ...lib.tracks.slice(0, offset)]; lib = vdj.buildLibrary(lib.tracks); }
   const observed = { artist: 'Rihanna', song: 'Desperado (Clean)', fromUpload: false, bpm: 126, year: 2016, energy: 6, danceability: 7, metaSource: 'Estimated', metaProv: { bpm: 'tags', year: 'tags', energy: 'estimate', danceability: 'estimate' } };
   if (o.observedHeuristic) {
     // Replace only synthetic distractors; preserve the 37,722-entry index and every client file.
@@ -178,7 +181,7 @@ function scenario(o: Opts) {
     await new Promise(r => setTimeout(r, STARTUP_MS));
     return { stream: rows, stepMs: PER_ITEM[section] };
   });
-  let seq = 0;
+  let seq = (o.weeklySeed ?? 0) % COLD.length;
   const warm = (k: string) => o.mode === 'warm' || (o.mode === 'mixed' && !k.startsWith('TEST Lane') && !k.startsWith('TEST Stranger'));
   let deny = false;
   const faveAdmitted = new Set<string>();
@@ -639,6 +642,55 @@ it('same timed provider/estimate fixture through the actual route: frozen 376d12
   sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
   invariants(s); s.h.unmount();
 }, 60000);
+
+for (const mode of ['cold', 'mixed', 'warm'] as const) it(`weekly structured recovery ${mode}`, async () => {
+  await weeklyEvidence(`recovery-${mode}`, 'lookup', async e => {
+    vi.useFakeTimers(); vi.stubEnv('LOVABLE_API_KEY', 'synthetic-not-a-key');
+    await import('ai'); await import('@ai-sdk/openai-compatible'); await import('@/lib/ai-gateway.server');
+    const seed = Number(process.env.WEEKLY_SEED ?? 20261116);
+    const s = scenario({ mode, weeklySeed: seed, lowYield: true, realPipeline: true, providerTiming: true, ratePressure: true,
+      bpm: seed % 2 ? [85, 130] : [110, 130], observedHeuristic: true,
+      failure: (section, n) => n === 0 ? section === 'Peak' ? 'stall' : section === 'Warm Up' ? 'transient' : undefined : undefined });
+    try {
+      const t0 = await s.run();
+      e.sections = s.seconds().map((seconds, i) => ({ section: sections[i], seconds, target: TARGETS[i] }));
+      for (const st of s.statuses) for (const [provider, causes] of Object.entries(st.causes ?? {})) {
+        const dest = e.causes[provider] ?? (e.causes[provider] = {});
+        for (const [cause, count] of Object.entries(causes as Record<string, number>)) dest[cause] = (dest[cause] ?? 0) + count;
+      }
+      weeklyCheck(e, 'targets-covered', e.sections.filter(x => x.seconds >= x.target).length, 3);
+      const spent = s.lookups.reduce((n, l) => n + l.songs.filter(k => !k.startsWith('TEST Request')).length, 0);
+      weeklyCheck(e, 'lookup-budget', spent, 600, spent <= 600);
+      const elapsed = s.doneAt() - t0;
+      weeklyCheck(e, 'generation-ceiling-ms', elapsed, 510000, elapsed < 510000);
+      weeklyCheck(e, 'ai-timeouts', aiTimeouts(s), 0);
+      weeklyCheck(e, 'heuristic-ballad-admissions', sections.flatMap(k => s.h.current.result[k]).filter(r => !r.fromUpload && r.artist === 'Rihanna' && r.song === 'Desperado (Clean)').length, 0);
+      weeklyCheck(e, 'preserved-requests', sections.flatMap(k => s.h.current.result[k]).filter(r => r.fromUpload).length, 34);
+      // Actual handler streams partials under deadlines; lane-local stalls/503 are expected stimuli, not findings.
+      weeklyCheck(e, 'partial-recovery', s.calls.filter(c => c.returned > 0).length, 1, s.calls.some(c => c.returned > 0));
+      invariants(s);
+      weeklyCheck(e, 'identity-provenance-and-snapshot-invariants', 1, 1);
+    } finally { s.h.unmount(); }
+  });
+}, 60000);
+
+it('weekly structured constrained coverage', async () => {
+  await weeklyEvidence('constrained', 'coverage', async e => {
+    vi.useFakeTimers();
+    const s = scenario({ mode: 'mixed', laneFiles: 12, weeklySeed: Number(process.env.WEEKLY_SEED ?? 20261116) });
+    try {
+      const t0 = await s.run();
+      e.sections = s.seconds().map((seconds, i) => ({ section: sections[i], seconds, target: TARGETS[i] }));
+      weeklyCheck(e, 'genuine-shortage', e.sections.filter(x => x.seconds < x.target).length, 1, e.sections.some(x => x.seconds < x.target));
+      // This is UI behaviour asserted directly, never a source of report evidence parsed from logs.
+      weeklyCheck(e, 'honest-shortage', Number(s.h.warnings.some((m: string) => /Preparation is short/.test(m) && /constraints were not relaxed/.test(m))), 1);
+      const perLane = Math.max(...['Warm Up', 'Transition', 'Peak'].map(label => s.calls.filter(c => c.section === label).length));
+      weeklyCheck(e, 'bounded-exhaustion-calls', perLane, 6, perLane <= 6);
+      weeklyCheck(e, 'bounded-exhaustion-ms', s.doneAt() - t0, 120000, s.doneAt() - t0 <= 120000);
+      invariants(s); weeklyCheck(e, 'identity-provenance-and-snapshot-invariants', 1, 1);
+    } finally { s.h.unmount(); }
+  });
+}, 30000);
 
 for (const bpm of [[85, 130], [110, 130]] as Array<[number, number]>) for (const mode of ['cold', 'mixed', 'warm'] as const)
 it(`source-aware fresh automatic repair: real route and handlers retain 90/240/120 at ${bpm.join('–')} (${mode}), heuristic ballad never admitted`, async () => {

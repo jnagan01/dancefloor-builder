@@ -12,9 +12,10 @@ import ssl
 import urllib.request
 from urllib.parse import urlsplit
 import zipfile
+from categories import findings as category_findings, recurrence
 
 ZONE = ZoneInfo("America/Chicago")
-REQUIRED = ("reporting", "vitest", "adversarial", "native", "offline", "race", "prep")
+REQUIRED = ("categories", "reporting", "vitest", "adversarial", "native", "offline", "race", "prep")
 
 
 def tuesday(now):
@@ -51,6 +52,8 @@ def explicit_dry_run(api, run_id, event, dry):
 
 
 def problems(run, evidence=None):
+    if not isinstance(evidence, dict):
+        evidence = None
     if run is None:
         return [("run-absent", "incomplete", "No scheduled test run for this Central-time Tuesday")]
     if run.get("status") != "completed":
@@ -63,11 +66,22 @@ def problems(run, evidence=None):
                  if name in REQUIRED and item.get("status") != "passed"]
         missing = [(f"suite-{name}", "incomplete", f"{name}: no completed suite evidence")
                    for name in REQUIRED if name not in (evidence or {}).get("suites", {})]
-        return [(f"run-{conclusion}", "incomplete" if conclusion in ("cancelled", "timed_out", None) else "failure", f"Test run concluded {conclusion}")] + found + missing
-    if not evidence or evidence.get("schema") != 1 or evidence.get("commit") != run.get("head_sha") or str(evidence.get("run_id")) != str(run["id"]) or str(evidence.get("run_attempt")) != str(run.get("run_attempt", 1)):
+        return [(f"run-{conclusion}", "incomplete" if conclusion in ("cancelled", "timed_out", None) else "failure", f"Test run concluded {conclusion}")] + found + missing + (category_findings(evidence) if matching_evidence(run, evidence) else [("category-evidence-missing", "incomplete", "No identity-matched category evidence")])
+    if not matching_evidence(run, evidence):
         return [("evidence-missing", "incomplete", "Successful job lacks matching structured evidence")]
     return [(f"suite-{name}", "incomplete", f"{name} did not pass with complete evidence")
-            for name in REQUIRED if evidence.get("suites", {}).get(name, {}).get("status") != "passed"]
+            for name in REQUIRED if evidence.get("suites", {}).get(name, {}).get("status") != "passed"] + category_findings(evidence)
+
+
+def matching_evidence(run, evidence):
+    if not isinstance(evidence, dict):
+        return False
+    seed = evidence.get('seed')
+    return (isinstance(evidence, dict) and evidence.get('schema') == 2
+            and evidence.get('commit') == run.get('head_sha') and str(evidence.get('run_id')) == str(run['id'])
+            and str(evidence.get('run_attempt')) == str(run.get('run_attempt', 1))
+            and isinstance(seed, str) and seed.isascii() and seed.isdecimal() and len(seed) <= 10 and int(seed) <= 4294967295
+            and isinstance(evidence.get('suites'), dict) and all(isinstance(v, dict) for v in evidence['suites'].values()))
 
 
 def delivery_key(day, findings):
@@ -217,10 +231,10 @@ def main():
             issue = next((i for i in issues if "pull_request" not in i and tag in (i.get("body") or "")), None)
             body = (f"{tag}\nClassification: {classification}\nSeverity: {'high' if classification == 'failure' else 'medium'}\n"
                     f"Expected: full unit, reporting, adversarial and four native suites pass with complete evidence.\nActual: {actual}\n"
-                    f"First seen: {str(day) if issue is None else (issue.get('body') or '').split('First seen: ')[-1].splitlines()[0]}\n"
-                    f"Last seen: {day}\nRepro: dispatch Weekly synthetic break tests with seed {(evidence or {}).get('seed') or day.strftime('%Y%m%d')}.\n"
+                    + (recurrence((issue or {}).get('body', ''), run, day, (evidence or {}).get('seed')) or f"First seen: {day}\nLast seen: {day}\n")
+                    + f"Repro: dispatch Weekly synthetic break tests with seed {(evidence or {}).get('seed') or day.strftime('%Y%m%d')}.\n"
                     f"Commit: {run.get('head_sha', 'unavailable') if run else 'unavailable'}\nRun/artifacts: {run_url}\n"
-                    "Synthetic evidence only; no automatic fix or deployment.")
+                    "Synthetic controlled providers only; not real user-session or external service uptime monitoring. Injected errors are expected stimuli; findings describe observed test regressions only. No automatic fix or deployment.")
             if issue:
                 comments = api.pages(f"/issues/{issue['number']}/comments")
                 sent = sent or any(marker in c.get("body", "") for c in comments)
