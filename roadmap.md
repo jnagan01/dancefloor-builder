@@ -1,8 +1,9 @@
 # Workspace rebuild
 ## Weekly structured synthetic preparation checks
-- [ ] Emit identity-bound category evidence from actual route/handler and shared admission tests; fail closed on missing or invalid cases.
-- [ ] Report stable category regressions with bounded idempotent recurrence history; preserve quiet success, dry-run, schedules and secret handling.
-- [ ] Run reporting, focused synthetic, full suite and TypeScript; commit and document exact-head hosted/manual dry-run validation instructions if GitHub is unavailable.
+- [x] Emit six identity-bound category cases from actual route/handlers/shared admission; validate numeric rules, section targets and safe causes, fail closed on missing/stale/invalid evidence.
+- [x] Stable category fingerprints, bounded 20-run history/lifetime occurrences, same-run attempt idempotence/high-water guard and reopening; quiet success/dry-run/schedules/secrets preserved.
+- [x] 35 reporting tests, six focused cases, 1066/1066 full tests with two workers, TypeScript and preview OK; manual final-head fixed-seed dry-run instructions in weekly README.
+- [ ] Exact final-head hosted Mac/CodeQL and manual weekly seed 20261116 plus report dry-run: blocked by unavailable GitHub CLI/token in this environment; Joe runs documented Actions steps after sync.
 ## Source-aware fresh automatic dance admission
 - [x] Reproduce heuristic 6/7 admission, require supported positive dance evidence, and upgrade heuristic cache gaps without changing requests/restores.
 - [x] Actual route/handler coverage, provenance/conflict/identity regressions; focused/full tests, TypeScript and preview compilation; record evidence and commit.
