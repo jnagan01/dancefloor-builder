@@ -214,7 +214,8 @@ function scenario(o: Opts) {
     }
     return providerFacts(s);
   };
-  const fixtureDance = o.observedHeuristic ? { ...dance, catalogueCandidates: () => [{ row: observed, prefer: 'warmUp' }] } : o.estimatedCatalogue ? { ...dance, catalogueCandidates: () => sections.flatMap(k => Array.from({ length: 24 }, (_, i) => { const t = laneTrack(k, i); return { row: { artist: t.artist, song: t.title, energy: 8, danceability: 8, year: 2005, bpm: 120, metaProv: { energy: 'estimate', danceability: 'estimate', year: 'tags', bpm: 'tags' } }, prefer: k }; })) } : dance;
+  // Refinement fixture uses recording-aware AI support, not generic heuristics now withheld before coverage.
+  const fixtureDance = o.observedHeuristic ? { ...dance, catalogueCandidates: () => [{ row: observed, prefer: 'warmUp' }] } : o.estimatedCatalogue ? { ...dance, catalogueCandidates: () => sections.flatMap(k => Array.from({ length: 24 }, (_, i) => { const t = laneTrack(k, i); return { row: { artist: t.artist, song: t.title, energy: 8, danceability: 8, year: 2005, bpm: 120, metaProv: { energy: 'ai', danceability: 'ai', year: 'tags', bpm: 'tags' } }, prefer: k }; })) } : dance;
   const requested = new Map<string, { artist: string; song: string }>();
   let reccoSearches = 0;
   const gateway = gatewayStream({ startupMs: m => ESTIMATE_STARTUP[m] ?? 600, chunkMs: 60,
