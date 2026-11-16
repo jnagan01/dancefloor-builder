@@ -1,7 +1,8 @@
 # Workspace rebuild
 ## Source-aware fresh automatic dance admission
-- [ ] Reproduce heuristic 6/7 admission, require supported positive dance evidence, and upgrade heuristic cache gaps without changing requests/restores.
-- [ ] Actual route/handler coverage, provenance/conflict/identity regressions; focused/full tests, TypeScript and preview compilation; record evidence and commit.
+- [x] Reproduce heuristic 6/7 admission, require supported positive dance evidence, and upgrade heuristic cache gaps without changing requests/restores.
+- [x] Actual route/handler coverage, provenance/conflict/identity regressions; focused/full tests, TypeScript and preview compilation; record evidence and commit.
+- [x] Resolve 13 full-suite regressions: cached heuristics stay warm hits (AI-only upgrade after genuine gaps, energy/danceability only, never unfinished); ranking keeps numeric support under mixed tags; obsolete heuristic/AI-groove expectations replaced with explicit new-policy assertions; 1060/1060 tests, TypeScript, preview OK.
 - [ ] Exact-head hosted Mac/CodeQL after repository synchronization; no publishing or production/native data actions.
 ## Remaining metadata/suggestion timeouts after 376d12be
 - [x] Measure estimate/suggestion latency live; switch estimate to the measured fast zero-retention model, cap serial estimate start-ups at two per chunk with a final reserve.
