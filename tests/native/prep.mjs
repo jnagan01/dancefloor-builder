@@ -7,7 +7,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'setarchitect-native-prep-')), bundle = path.join(temp, 'bundle');
 fs.mkdirSync(bundle); fs.writeFileSync(path.join(temp, 'ISOLATED'), 'synthetic only');
 const stub = path.join(root, 'tests/native/fixtures/prep-services.tsx');
-const stubbed = ['@/lib/prep/lookup.functions', '@/lib/lastfm.functions', '@tanstack/react-router', '@tanstack/react-start', '@/lib/pageHead', 'sonner', '@/components/workspace/WaveformPlayer', '@/components/workspace/TrackTagEditor', '@/lib/audioMatch'];
+const stubbed = ['@/lib/generationDiagnostics/relay.functions', '@/integrations/supabase/client', '@/lib/prep/lookup.functions', '@/lib/lastfm.functions', '@tanstack/react-router', '@tanstack/react-start', '@/lib/pageHead', 'sonner', '@/components/workspace/WaveformPlayer', '@/components/workspace/TrackTagEditor', '@/lib/audioMatch'];
 await build({ entryPoints: [path.join(root, 'tests/native/fixtures/prep-entry.tsx')], bundle: true, platform: 'browser', format: 'esm', target: 'es2022', outfile: path.join(bundle, 'app.js'), jsx: 'automatic', alias: { '@': path.join(root, 'src') }, logLevel: 'error',
   plugins: [{ name: 'isolated', setup(b) { b.onResolve({ filter: /.*/ }, a => { if (stubbed.includes(a.path) || /(^|\/)WorkspaceContext$/.test(a.path) || /(^|\/)WaveformPlayer$/.test(a.path)) return { path: stub }; }); } }] });
 const css = await compile(fs.readFileSync(path.join(root, 'src/styles.css'), 'utf8'), { base: path.join(root, 'src'), onDependency: () => {} });
@@ -43,6 +43,21 @@ const narrow = async label => { await page.setViewportSize({ width: 390, height:
 
 try {
   await launch();
+  await check('persistent activity reload and sanitized copy never alter synthetic preparation', async () => {
+    const before = await page.evaluate(() => JSON.stringify(window.__fixture.tracks));
+    await page.evaluate(() => window.__addActivity());
+    await page.reload(); await page.getByRole('button', {name:'Go library'}).waitFor();
+    await page.getByRole('button', {name:'Recent generation activity'}).click();
+    await page.getByText('Completed with warnings', {exact:true}).click();
+    await expect(page.getByRole('dialog')).toContainText('Transition: 14400 / 14400 seconds');
+    await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', {configurable:true,value:{writeText:async text => {window.__activityCopy=text;}}}); });
+    await page.getByRole('button', {name:'Copy diagnostics'}).click();
+    const copied = await page.evaluate(() => window.__activityCopy);
+    expect(JSON.parse(copied).requested).toBe(34);
+    expect(copied).not.toMatch(/filePath|\/synthetic\/|Queen|token|accountId|eventName/);
+    expect(await page.evaluate(() => JSON.stringify(window.__fixture.tracks))).toBe(before);
+    await page.keyboard.press('Escape');
+  });
   await check('VirtualDJ SongLength parsed by real DOMParser in Electron', async () => {
     const r = await page.evaluate(() => window.__parseVdj(`<VirtualDJ_Database><Song FilePath="/x/a.mp3"><Tags Author="A" Title="T"/><Infos SongLength="215.6"/></Song><Song FilePath="/x/b.mp3"><Tags Author="B" Title="U"/><Infos SongLength="nope"/></Song></VirtualDJ_Database>`));
     expect(r.map(t => t.songLength ?? null)).toEqual(['216', null]);

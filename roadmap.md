@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Persistent generation activity
+- [ ] Separate bounded local history/outbox, safe allowlisted relay and accessible in-place activity/copy panel.
+- [ ] Instrument handled notices and terminal outcomes without changing event, library or preparation rules.
+- [ ] Isolated lifecycle, storage, transport, route/UI and redaction tests; full suite and preview validation; commit for hosted native checks.
+- [ ] Better Stack delivery configuration awaits Joe's server-only source token and ingestion host; no publication or installer.
 ## Weekly structured synthetic preparation checks
 - [x] Hosted Mac 43978609184 deadline fixture: fake timers couple timer callbacks and Date.now at exact 40ms/60ms cutoffs; all original assertions retained plus four-start assertion at 59ms; 20 focused repeats, 41 related tests, 35 reporting tests, 1066 full tests, TypeScript and preview pass; no production changes.
 - [x] Emit six identity-bound category cases from actual route/handlers/shared admission; validate numeric rules, section targets and safe causes, fail closed on missing/stale/invalid evidence.

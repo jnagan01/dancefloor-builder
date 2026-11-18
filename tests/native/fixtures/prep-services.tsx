@@ -8,6 +8,8 @@ w.__lookup = w.__lookup ?? { mbDelay: 50, lfDelay: 50, crowdDelay: 50, mbCalls: 
 export function createFileRoute() { return (options: any) => options; }
 export function useNavigate() { return async () => {}; }
 export function useServerFn(fn: any) { return fn; }
+export const supabase = { auth: { onAuthStateChange: () => ({ data: { subscription: { unsubscribe() {} } } }), getSession: async () => ({ data: { session: null } }) } };
+export async function sendGenerationDiagnostics() { return { accepted: [], state: 'not configured' }; }
 export function pageHead() { return {}; }
 export const toast = Object.assign((t: any) => w.__toasts.push(['info', String(t)]), {
   error: (t: any) => w.__toasts.push(['error', String(t)]), success: (t: any) => w.__toasts.push(['success', String(t)]),

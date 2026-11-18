@@ -107,7 +107,9 @@ import { buildRecommendExisting, nextWorkflowInstanceId, suggestionFailure } fro
 import { toCamelot, parseBpm, KEY_OPTIONS } from "@/lib/musicTheory";
 import type { ResultSong } from "@/lib/danceFloor";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
-import { APP_VERSION, formatBuildDate } from "@/lib/appVersion";
+import { GenerationActivity } from "@/components/GenerationActivity";
+import { beginGenerationDiagnostics } from "@/lib/generationDiagnostics/store";
+import { APP_VERSION, APP_BUILD_ID, formatBuildDate } from "@/lib/appVersion";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktopBridge";
 import { getWorkflow, saveWorkflowSafely } from "@/lib/history.functions";
@@ -421,6 +423,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   matchesRef.current = matches;
   // Guards against a slow in-flight generate() overwriting newer state.
   const genTokenRef = useRef(0);
+  const diagnosticRunRef = useRef<ReturnType<typeof beginGenerationDiagnostics>>(null);
+  useEffect(() => () => { diagnosticRunRef.current?.finish("cancelled"); }, []);
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [vdjDirName, setVdjDirName] = useState<string | null>(null);
   const [vdjDirSavedAt, setVdjDirSavedAt] = useState<number | null>(null);
@@ -999,6 +1003,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       toast.error(background ? "Enter how many minutes the list should cover" : "Enter a valid dance floor length");
       return;
     }
+    diagnosticRunRef.current?.finish("cancelled");
+    let activity: ReturnType<typeof beginGenerationDiagnostics> = null;
+    let diagnosticFinished = false;
     const myToken = ++genTokenRef.current;
     setIsGenerating(true);
     try {
@@ -1017,6 +1024,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (!gate.ok) { toast.error(gate.message); return; }
       feedbackOwner = gate.owner;
     }
+    activity = beginGenerationDiagnostics(accountAtStart, APP_VERSION, APP_BUILD_ID, uniqueSongs.length, () => genTokenRef.current === myToken && accountRef.current === accountAtStart);
+    diagnosticRunRef.current = activity;
     let fbCache: { k: unknown; fb: ExpansionFeedback } | null = null;
     const liveFeedback = (): ExpansionFeedback => {
       if (!fill) return expansionFeedback(null, feedbackEvent);
@@ -1143,6 +1152,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
         const started = Date.now();
         const reply = await enrichFn({ data: { songs, needPopularity } });
+        if (genTokenRef.current === myToken && accountRef.current === accountAtStart) activity?.causes(reply.status?.causes);
         // Reserve enough remaining generation time for observed service latency plus transport margin.
         metadataDispatchMs = Math.min(20_000, Math.max(metadataDispatchMs, Date.now() - started + 1_000));
         metadataLatencies.push(Date.now() - started);
@@ -1162,6 +1172,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const rep = await facts.gather(list);
       lastFactsReport = rep;
       if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return map;
+      if (rep.timedOutSongs) activity?.notice("metadata_timeout", rep.timedOutSongs, "metadata");
+      if (rep.failedSongs > rep.timedOutSongs) activity?.notice("metadata_failed", rep.failedSongs - rep.timedOutSongs, "metadata");
+      if (rep.incompleteSongs) activity?.notice("metadata_incomplete", rep.incompleteSongs, "metadata");
+      if (rep.skippedByBudget && !budgetWarned) activity?.notice("lookup_budget", rep.skippedByBudget);
+      if (rep.skippedAfterTimeout && !timeoutWarned) activity?.notice("lookup_window", rep.skippedAfterTimeout);
       if (rep.failedSongs && !enrichFailed) {
         enrichFailed = true;
         console.warn("Online enrichment failed for", rep.failedSongs, "songs — their details stay unknown/estimated");
@@ -1303,7 +1318,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             rankSimilar = similarArtistEvidence(crowdRes.artists, uniqueSongs.map((s) => s.artist));
             if (trackSeeds.length) {
               const availability = simTrackRes?.availability ?? "unavailable";
-              if (availability !== "ok") toast.info(availabilityNote(availability, trackSeeds.length));
+              if (availability !== "ok") { activity?.notice(availability === "missingKey" ? "community_disabled" : "community_failed", trackSeeds.length, "lastfm"); toast.info(availabilityNote(availability, trackSeeds.length)); }
             }
             const seedKeys = new Set(uniqueSeeds.map((a) => normalizeKey(a)));
             const seenNeighbor = new Set<string>();
@@ -1620,6 +1635,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             // Each community notice is reported once per generation.
             if (communityNoticed) disabled = unavailable = unattempted = 0;
             if (disabled || unavailable || unattempted) communityNoticed = true;
+            if (disabled) activity?.notice("community_disabled", disabled, "lastfm");
+            if (unavailable) activity?.notice("community_failed", unavailable, "lastfm");
+            if (unattempted) activity?.notice("community_budget", unattempted, "lastfm");
             if (disabled) toast.info(`Last.fm isn't available, so community tags and listener counts weren't checked for ${disabled} candidate track${s(disabled)}. Only that community evidence is unknown; other details are kept.`);
             if (unavailable) toast.info(`Last.fm community tags couldn't be checked for ${unavailable} candidate track${s(unavailable)} (no reply in time or an error). Only that community evidence is unknown; other details are kept.`);
             if (unattempted) toast.info(`${unattempted} lower-ranked candidate track${s(unattempted)} weren't checked on Last.fm (per-run limit of 40). Their community evidence is unknown; nothing was assumed.`);
@@ -1684,7 +1702,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           end: hardEnd,
           latestEnd: suggestionEnd,
           maxCount: MAX_AI_RECOMMENDATION_BATCH_SIZE,
-          onFailure: ({ message }) => {
+          onFailure: ({ message, kind, lane }) => {
+            activity?.notice(kind === "timeout" ? "suggestions_timeout" : "suggestions_failed", 1, "suggestions", lane === "warmUp" || lane === "transition" || lane === "peak" ? lane : undefined);
             suggestionReason = message;
             if (!suggestionToasts.has(message)) { suggestionToasts.add(message); toast.info(message); }
           },
@@ -1739,6 +1758,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   favoriteAttempts++; sent++;
                   const res = await lanes.request(key, requestCount, (count, deadlineMs) => ({ data: { section: label, count, deadlineMs, prefs, existing: existingNow(), onlyArtists: allowed, neighborArtists, crowdArtists } }));
                   if (!live() || finished) return;
+                  if (res?.partial) activity?.notice("suggestions_partial", res.suggestions.length, "suggestions", key);
                   // Other lanes may have admitted favourites while this request awaited its reply.
                   const admission = favoriteCounts();
                   const added = res ? offerReply(key, res.suggestions, (sug) => {
@@ -1757,6 +1777,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               sent++;
               const res = await lanes.request(key, want, (count, deadlineMs) => ({ data: { section: label, count, deadlineMs, prefs, existing: existingNow(), gaps, favoriteArtists, neighborArtists, crowdArtists } }));
               if (!live() || finished) return;
+              if (res?.partial) activity?.notice("suggestions_partial", res.suggestions.length, "suggestions", key);
               // A reply with nothing new (all duplicates/known) ends this lane: repeating it cannot add coverage.
               if (res && offerReply(key, res.suggestions) === 0 && res.suggestions.length) { stopReason ||= " Sources returned no new candidates."; break; }
               // Two consecutive replies without a single new song that has a counted library file: further requests
@@ -1809,6 +1830,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   workEnd - Date.now() < 40_000 && repairEnd < hardEnd) {
                 repairEnd = Math.min(hardEnd, repairEnd + 90_000); workEnd = repairEnd - FINAL_RESERVE_MS;
                 facts.beginPhase(workEnd); continuations++;
+                activity?.notice("continuation");
+                activity?.coverage(durationTargets, durationTotals(r, generationFiles));
                 toast.info(`Continuing preparation: ${Math.round(durationTotals(r, generationFiles).warmUp / 60)} / ${Math.round(durationTotals(r, generationFiles).transition / 60)} / ${Math.round(durationTotals(r, generationFiles).peak / 60)} minutes ready; ${progress.lookupsSent} of ${FACTS_BUDGET} candidates checked. Your limits stay unchanged.`);
               }
               // Covered: lanes send nothing new; replies already in flight may still land within the refinement window.
@@ -1921,6 +1944,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) {
         r[section] = r[section].filter(t => t.fromUpload || !strictLimitFailure(t, strictLimits) || (dropped++, false)).map(t => (t.metaProv ? { ...t, metaSource: metaLabel(t) as ResultSong["metaSource"] } : t));
       }
+      if (dropped) activity?.notice("strict_excluded", dropped);
       if (dropped) toast.info(`${dropped} added track${dropped === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`); }
 
     // A newer generate() (or a workflow reset) started while we were awaiting
@@ -1942,6 +1966,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const fb = expansionFeedback(settled, feedbackEvent);
       let removed = 0; for (const section of ["warmUp", "transition", "peak"] as SectionKey[]) { const c = recheckAdditions(r[section], fb); removed += c.removed; r[section] = c.kept; }
       if (removed) refillAfterFeedback?.();
+      if (removed) activity?.notice("choices_excluded", removed);
       if (removed) toast.info(`${removed} added track${removed === 1 ? " was" : "s were"} left out because of your Never or dismiss choices made during generation.`);
     }
 
@@ -1977,6 +2002,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const fs = r.finalShortfall;
     const actualSeconds = durationTotals(r, generationFiles);
     const durationGaps = (["warmUp", "transition", "peak"] as SectionKey[]).filter(k => actualSeconds[k] < durationTargets[k]);
+    activity?.coverage(durationTargets, actualSeconds);
+    const diagnosticShort = expand ? durationGaps.length > 0 : clientCoverage.baselineShortSeconds > 0;
+    if (diagnosticShort) activity?.notice("short", durationGaps.length || 1);
+    activity?.finish(diagnosticShort ? "short" : "completed");
+    diagnosticFinished = true;
     setGenerationShortage(expand && durationGaps.length ? durationReason : null);
     if (expand ? durationGaps.length > 0 : clientCoverage.baselineShortSeconds > 0) {
       const parts: string[] = [];
@@ -1993,7 +2023,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     setTimeout(() => {
       document.getElementById("results")?.scrollIntoView({ behavior: "smooth" });
     }, 100);
+    } catch (error) {
+      activity?.finish("failed"); diagnosticFinished = true;
+      throw error;
     } finally {
+      if (!diagnosticFinished) activity?.finish("cancelled");
       setIsGenerating(false);
     }
   }
@@ -2825,6 +2859,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   return (
     <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
+      <div className="flex justify-end"><GenerationActivity account={account} /></div>
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
         <div className="min-w-0"><p className="eyebrow">Events / Builder</p><h1 className="mt-2 break-words font-display text-3xl tracking-tight sm:text-4xl">{eventName||"New event"}</h1></div>

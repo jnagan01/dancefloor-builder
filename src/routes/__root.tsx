@@ -13,6 +13,7 @@ import * as React from "react";
 
 import appCss from "../styles.css?url";
 import { APP_BUILD_TIME } from "@/lib/appVersion";
+import { GenerationDiagnosticDelivery } from "@/components/GenerationActivity";
 import { AppearanceProvider } from "@/components/AppearanceProvider";
 import { appearanceScript } from "@/lib/appearance";
 
@@ -188,7 +189,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppearanceProvider><Outlet /></AppearanceProvider>
+      <AppearanceProvider><GenerationDiagnosticDelivery /><Outlet /></AppearanceProvider>
     </QueryClientProvider>
   );
 }
