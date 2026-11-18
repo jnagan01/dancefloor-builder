@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Whole-request metadata timeout recovery
+- [x] Replace permanent timeout stop with settlement-fenced bounded recovery; preserve attempts/budgets, discard late facts and callback pressure/diagnostic side effects; suggestions wait behind unresolved timed-out metadata.
+- [x] Final focused 88/88, actual 25s first-eight transport reaches 5400/14400/7200, concurrency/cancellation/rejection races pass. One full attempt 1170 passed/1 failed, not accepted; original hung-suggestion assertion passes unchanged after integration fix (1/1). Evidence in tests/fit/request-timeout-recovery.md.
+- [ ] Final-code hosted Mac/production/native UI and independent frozen real-input replay: external execution pending; no release before acceptance.
 ## Mac pacing regression follow-up
 - [x] providerLatency retains baseline 0/24 with 3 timeouts and repaired 24/24 with 0 timeouts, exactly 3 calls; cleanup group 46/46 passes. User-reported afd009a Apple Silicon: 1149 passed/3 failed (two obsolete batching expectations and obsolete >3 calls assertion); credit passed, production and both CodeQL analyses passed on that prior head.
 - [x] Repair bounded batching; new initial-complete-hit regression fails before gap-anchored collection and passes after; 50ms pacing/250ms collection unchanged. Credit compilation moved to fixture setup, original 5s and all dataset/identity assertions retained.

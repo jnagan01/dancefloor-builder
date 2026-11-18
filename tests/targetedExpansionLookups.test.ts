@@ -17,6 +17,8 @@ import { encodeCacheSource } from '@/lib/prep/provenance';
 import { createFactsGatherer, factsKey } from '@/lib/prep/factsGather';
 import { automaticDanceFailure } from '@/lib/prep/eventFit';
 import { rankPool } from '@/lib/prep/recommend';
+import { createDiagnosticStore } from '@/lib/generationDiagnostics/store';
+import { copyDiagnostics } from '@/lib/generationDiagnostics/schema';
 
 const require = createRequire(import.meta.url);
 const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
@@ -60,6 +62,37 @@ describe('actual event route useful facts under slow service latency',()=>{
     h.unmount();
   },30000);
 });
+
+it('actual route recovers after first eight-client transport settles at 25s; late pressure discarded and all targets reached', async () => {
+  vi.useFakeTimers(); const start = Date.now(), looked: string[] = []; let active = 0, peak = 0, calls = 0;
+  const useful = Array.from({ length: 40 }, (_, i) => ({ artist: `Z Recovery ${i}`, title: `Floor ${i}`, filePath: `/synthetic/recovery/${i}.mp3`, year: '2005', bpm: '120', genre: 'Pop', songLength: 900 }));
+  const lib = vdj.buildLibrary(useful), saved = structuredClone(base), before = JSON.stringify(saved);
+  const store = createDiagnosticStore({ read: async () => [], write: async () => {}, remove: async () => {} }); await store.activate('owner');
+  const loggedHarness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions, diagnostics: { beginGenerationDiagnostics: (...args: any[]) => store.begin(args[0], args[1], args[2], args[3], args[4]) } });
+  const h = loggedHarness({ rows: { A: saved }, contract: true, services: { enrich: async ({ data }: any) => {
+    const n = ++calls; active++; peak = Math.max(peak, active); looked.push(...data.songs.map(factsKey));
+    try {
+      if (n === 1) await new Promise(r => setTimeout(r, 25_000));
+      return { results: data.songs.map((s: any) => ({ ...s, energy: n === 1 ? 1 : 8, danceability: n === 1 ? 1 : 8, popularity: 8, bpm: 120, year: 2005, source: 'ReccoBeats', prov: { energy: 'provider', danceability: 'provider', popularity: 'provider', bpm: 'provider', year: 'provider' } })), status: n === 1 ? { causes: { reccobeats: { rate: 8 } }, retryAfterMs: 480_000 } : { complete: true, timedOut: [], pacing: {} } };
+    } finally { active--; }
+  } } });
+  await h.flush(); h.library(lib); await h.flush(); const pending = h.current.generate();
+  await vi.advanceTimersByTimeAsync(24_999); expect(calls).toBe(1);
+  await vi.advanceTimersByTimeAsync(100_001); await pending; await h.flush();
+  expect(seconds(h, lib)).toEqual([5400, 14400, 7200]); expect(peak).toBe(1); expect(active).toBe(0);
+  expect(looked.filter(k => k.startsWith('Z Recovery'))).toHaveLength(40); expect(new Set(looked).size).toBe(looked.length);
+  expect(looked.length).toBeLessThanOrEqual(634); expect(calls).toBeGreaterThan(1);
+  expect(all(h).filter((s: any) => s.fromUpload).map(factsKey).sort()).toEqual(clients.map(factsKey).sort());
+  expect(all(h).filter((s: any) => !s.fromUpload).every((s: any) => s.energy === 8)).toBe(true);
+  expect(h.infos.join(' ')).not.toMatch(/rate limit/i); expect([...h.warnings, ...h.infos].join(' ')).toMatch(/timed out/i);
+  expect(h.warnings.join(' ')).toContain('All selected section preparation targets were reached.');
+  const run = store.get().rows[0].run;
+  expect(run.notices).toContainEqual({ code: 'metadata_timeout', count: 8, provider: 'metadata' });
+  expect(run.coverage.map(c => c.achievedSeconds)).toEqual([5400, 14400, 7200]); expect(run.causes).toEqual([]);
+  expect(copyDiagnostics(run)).not.toMatch(/TEST Client|Z Recovery|synthetic\/recovery/);
+  expect(JSON.stringify(saved)).toBe(before); expect(h.errors).toEqual([]);
+  console.info(`SYNTHETIC 25s recovery: calls=${calls} looked=${looked.length} targets=${seconds(h,lib).join('/')} simulatedEnd=${Date.now()-start}`); h.unmount();
+}, 30000);
 
 it('real pipeline completes twelve-second AI after quick misses within unchanged request end; partial cache facts survive',async()=>{
   vi.useFakeTimers();vi.stubGlobal('fetch',async()=>new Response(JSON.stringify({content:[],recordings:[]})));

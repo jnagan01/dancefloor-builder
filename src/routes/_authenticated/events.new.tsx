@@ -1154,11 +1154,11 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const metadataLatencies: number[] = [];
     let lastFactsReport: GatherReport | undefined;
     const facts = createFactsGatherer<EnrichedSong>(
-      async (songs) => {
+      async (songs, acceptsReply) => {
         if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
         const started = Date.now();
         const reply = await enrichFn({ data: { songs, needPopularity, pacing: remainingPacing(metadataPacing, Date.now()) } });
-        if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
+        if (!acceptsReply() || genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
         activity?.causes(reply.status?.causes);
         metadataWarnings.response(reply.status?.causes, reply.status?.timedOut);
         // Only this generation carries sanitized, expiring pressure between serial chunks. Warm cache still bypasses lanes.
@@ -1794,6 +1794,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 }
                 favoriteAttempts = 3;
               }
+              // A timed-out transport may recover, but do not source more suggestions behind it while unresolved.
+              while (facts.transportBlocked && live() && !finished && Date.now() < workEnd) await waitChange(Math.min(100, workEnd - Date.now()));
+              if (!live() || finished || Date.now() >= workEnd) return;
               // PASS 2 — general gap-driven candidates for whatever is still uncovered.
               const gaps = buildGapProfile(r[key], [...r.warmUp, ...r.transition, ...r.peak], gapSection(label), { favoriteArtists });
               sent++;

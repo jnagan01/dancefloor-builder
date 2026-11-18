@@ -7,8 +7,8 @@
  *   total per-generation request budget. Songs beyond the budget are NOT looked up: they stay unknown and are counted.
  * - Each exact "artist||song" key is attempted at most once per generation, including misses and failures, so a later
  *   pass never re-requests a known-attempted result.
- * - Each chunk has a deadline (`timeoutMs`). A late result/rejection is ignored; after a timeout no further chunks are
- *   sent this generation (the transport can't abort), and unsent songs are reported as skippedAfterTimeout.
+ * - Each chunk has a deadline (`timeoutMs`). Late payloads are ignored; a timed-out transport blocks new work until
+ *   all outstanding transports settle. Waiting for recovery stays inside the current phase and generation fence.
  * - A failed/timed-out chunk leaves its songs unknown (never fabricated) and is reported via `failed`.
  */
 export interface FactsRow { artist: string; song: string; energy?: number | null; danceability?: number | null; popularity?: number | null }
@@ -38,7 +38,7 @@ export function needsFacts(r: FactsRow, familiarityActive: boolean): boolean {
   return r.energy == null || r.danceability == null || (familiarityActive && r.popularity == null);
 }
 
-export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: string; song: string }>) => Promise<E[]>, keyOf: (e: E) => string, opts: GatherOptions<E> = {}) {
+export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: string; song: string }>, acceptsReply: () => boolean) => Promise<E[]>, keyOf: (e: E) => string, opts: GatherOptions<E> = {}) {
   const batchSize = Math.max(1, Math.min(200, opts.batchSize ?? FACTS_BATCH));
   // A dynamic cooldown belongs to the previous response: never overlap its dispatches.
   const concurrency = opts.readyAt ? 1 : Math.max(1, Math.min(2, opts.concurrency ?? FACTS_CONCURRENCY));
@@ -49,12 +49,18 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
   const overallMs = Math.max(1, opts.overallMs ?? 90_000);
   let end = Infinity, nextStart = 0;
   let anyFailure = false;
-  let timedOut = false; // sticky per generation: never schedule more requests behind an un-abortable hung one
+  const transports = new Set<Promise<E[]>>();
+  let blocked = false;
 
   /** Rows are looked up in the given order (callers pass a deterministic order); duplicates collapse to one key. */
   async function runGather(rows: Array<{ artist: string; song: string }>): Promise<GatherReport> {
     if (end === Infinity) end = Date.now() + overallMs;
     const report: GatherReport = { requested: 0, found: 0, failedSongs: 0, timedOutSongs: 0, skippedAfterTimeout: 0, skippedCancelled: 0, skippedByBudget: 0, alreadyAttempted: 0, incompleteSongs: 0 };
+    // A new gather may recover, but never behind an unresolved request from the previous gather.
+    while (blocked && Date.now() < end && opts.isCurrent?.() !== false) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(100, end - Date.now())));
+    }
+    let stopped = blocked;
     const todo: Array<{ artist: string; song: string }> = [];
     const seen = new Set<string>();
     for (const r of rows) {
@@ -63,7 +69,7 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
       seen.add(k);
       if (attempted.has(k)) { report.alreadyAttempted++; continue; }
       if (opts.isCurrent?.() === false) { report.skippedCancelled++; continue; }
-      if (timedOut || Date.now() >= end) { report.skippedAfterTimeout++; continue; }
+      if (stopped || Date.now() >= end) { report.skippedAfterTimeout++; continue; }
       if (todo.length >= budgetLeft) { report.skippedByBudget++; continue; }
       todo.push({ artist: r.artist, song: r.song });
     }
@@ -78,13 +84,13 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
         try {
           // Cooldown is pre-dispatch, outside the RPC deadline. Poll the current fence during
           // waits; an out-of-budget cooldown has no pending callback that can later send.
-          while (!timedOut && Date.now() < end && opts.isCurrent?.() !== false) {
+          while (!stopped && Date.now() < end && opts.isCurrent?.() !== false) {
             const ready = Math.max(nextStart, opts.readyAt?.() ?? 0);
             if (ready <= Date.now() || ready >= end) break;
             await new Promise(resolve => setTimeout(resolve, Math.min(100, ready - Date.now(), end - Date.now())));
           }
           if (opts.isCurrent?.() === false) { report.skippedCancelled += chunk.length; continue; }
-          if (timedOut || Date.now() >= end || Math.max(nextStart, opts.readyAt?.() ?? 0) >= end || end - Date.now() < Math.max(0, opts.minDispatchMs?.() ?? 0)) {
+          if (stopped || Date.now() >= end || Math.max(nextStart, opts.readyAt?.() ?? 0) >= end || end - Date.now() < Math.max(0, opts.minDispatchMs?.() ?? 0)) {
             report.skippedAfterTimeout += chunk.length;
             continue;
           }
@@ -93,11 +99,16 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
           budgetLeft -= chunk.length;
           for (const c of chunk) attempted.add(factsKey(c));
           report.requested += chunk.length;
-          const call = Promise.resolve(fetchChunk(chunk));
-          call.catch(() => {}); // a late rejection after the deadline must never become unhandled
+          let accepting = true;
+          const acceptsReply = () => accepting && opts.isCurrent?.() !== false;
+          const call = Promise.resolve(fetchChunk(chunk, acceptsReply));
+          transports.add(call);
+          const settled = () => { transports.delete(call); if (!transports.size) blocked = false; };
+          // Both branches consume late rejection and release only the transport gate, never apply late facts.
+          void call.then(settled, settled);
           const deadline = new Promise<typeof TIMEOUT>((res) => { timer = setTimeout(() => res(TIMEOUT), Math.min(timeoutMs, Math.max(1, end - Date.now()))); });
           const got = await Promise.race([call, deadline]);
-          if (got === TIMEOUT) { timedOut = true; anyFailure = true; report.failedSongs += chunk.length; report.timedOutSongs += chunk.length; continue; }
+          if (got === TIMEOUT) { accepting = false; stopped = true; blocked = transports.size > 0; anyFailure = true; report.failedSongs += chunk.length; report.timedOutSongs += chunk.length; continue; }
           if (opts.isCurrent?.() === false) continue;
           const want = new Set(chunk.map(factsKey));
           for (const e of got) { const k = keyOf(e); if (want.has(k) && !results.has(k)) { results.set(k, e); report.found++; if (opts.isIncomplete?.(e)) report.incompleteSongs++; } }
@@ -121,8 +132,8 @@ export function createFactsGatherer<E>(fetchChunk: (songs: Array<{ artist: strin
   /**
    * Start a new bounded phase ending at `endAt` (absolute). The client-request phase and the expansion phase
    * each get their own window, so long local preparation between them cannot consume expansion lookup time.
-   * The budget, attempted keys and the sticky hung-request stop are shared and never reset.
+   * The budget, attempted keys and unsettled transport gate are shared and never reset.
    */
   function beginPhase(endAt: number) { if (Number.isFinite(endAt)) end = endAt; }
-  return { gather, beginPhase, get remainingBudget() { return budgetLeft; }, get: (r: { artist: string; song: string }) => results.get(factsKey(r)), wasAttempted: (r: { artist: string; song: string }) => attempted.has(factsKey(r)), get anyFailure() { return anyFailure; } };
+  return { gather, beginPhase, get transportBlocked() { return blocked; }, get remainingBudget() { return budgetLeft; }, get: (r: { artist: string; song: string }) => results.get(factsKey(r)), wasAttempted: (r: { artist: string; song: string }) => attempted.has(factsKey(r)), get anyFailure() { return anyFailure; } };
 }
