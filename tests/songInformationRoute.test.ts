@@ -7,7 +7,7 @@ const require=createRequire(import.meta.url);
 const actual={vdj,dance,audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions};
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 it('actual route repeat uses local durable facts with unchanged section coverage, requests and selected identity',async()=>{
- vi.useFakeTimers();
+ vi.useFakeTimers();vi.stubGlobal('indexedDB',{});
  // Minimal isolated IndexedDB-shaped storage used through the real local coordinator is tested separately in Electron.
  const local=localInformation(); const memory=new Map();
  const read=vi.spyOn(local,'read').mockImplementation(async(a,k)=>({entry:memory.get(a+':'+k)??null,failed:false}));
@@ -26,5 +26,5 @@ it('actual route repeat uses local durable facts with unchanged section coverage
   expect(JSON.stringify(base)).toBe(original);expect(h.requests).toEqual([]);h.unmount();
   if(n===0)expect(checks).toBe(74);
  }
- expect(checks).toBe(74);expect(results[1]).toEqual(results[0]);console.info('SYNTHETIC repeat metadata external track checks: 74 -> 0; section seconds 5400/14400/7200 unchanged');read.mockRestore();write.mockRestore();
+ expect(checks).toBe(74);expect(results[1]).toEqual(results[0]);console.info('SYNTHETIC repeat metadata requested track checks (not HTTP requests): 74 -> 0; section seconds 5400/14400/7200 unchanged');read.mockRestore();write.mockRestore();
 },30000);

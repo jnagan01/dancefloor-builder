@@ -12,7 +12,7 @@ import { parseCommunityTrackInfo, providerQueryTitle, type CommunityEvidence } f
 export const COMMUNITY_BATCH = 20;
 const Input = z.object({ songs: z.array(z.object({ artist: z.string().max(200), song: z.string().max(300) })).max(COMMUNITY_BATCH) });
 export type CommunityStatus = "found" | "none" | "failed" | "timeout" | "disabled";
-export interface CommunityRow { artist: string; song: string; status: CommunityStatus; evidence?: CommunityEvidence; reuse?: ReuseCounts }
+export interface CommunityRow { artist: string; song: string; status: CommunityStatus; evidence?: CommunityEvidence; reuse?: ReuseCounts; updatedAt?:number; stale?:boolean }
 import { emptyCounts, type ReuseCounts } from "../songInformation/schema";
 import { informationKey } from "../songInformation/schema";
 import { bounded } from "../songInformation/reuse";
@@ -44,9 +44,9 @@ export async function runCommunityBatch(songs: Array<{ artist: string; song: str
       if (durable) {
         const { communityEvidence } = await import('../songInformation/lastfm.server');
         try {
-          const result = await communityEvidence(key,s.artist,s.song,Math.min(end,Date.now()+callMs),fetcher);
-          if(!stopped&&Date.now()<end)out[i]={...s,status:'found',evidence:result.value,reuse:result.counts};
-        } catch {if(!stopped&&Date.now()<end)out[i]={...s,status:'failed',reuse:{...emptyCounts(),refreshFailed:1}};}
+          const result = await communityEvidence(key,s.artist,s.song,Math.min(end,Date.now()+callMs),fetcher,durable);
+          if(!stopped&&Date.now()<end)out[i]={...s,status:'found',evidence:result.value,reuse:result.counts,updatedAt:result.at,stale:result.stale};
+        } catch (error) {const e=error as {category?:string;name?:string;message?:string;reuse?:ReuseCounts};if(!stopped&&Date.now()<end)out[i]={...s,status:e.category==='none'?'none':e.name==='TimeoutError'||e.message==='Information time limit'?'timeout':'failed',reuse:e.reuse??{...emptyCounts(),refreshFailed:1}};}
         continue;
       }
       let hit = cache.get(ck);

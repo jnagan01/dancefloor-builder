@@ -59,12 +59,14 @@ const num = (v: unknown): number => {
 async function callLastfm(
   key: string,
   params: Record<string, string>,
+  dispatch:()=>void,
 ): Promise<Record<string, unknown> | null> {
   const url = new URL(API);
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   url.searchParams.set("api_key", key);
   url.searchParams.set("format", "json");
   try {
+    dispatch();
     const res = await fetch(url.toString(), {
       headers: { "User-Agent": "DancefloorBuilder/1.0" },
       signal: AbortSignal.timeout(8000),
@@ -80,20 +82,20 @@ async function fetchArtist(
   key: string,
   artist: string,
   perArtistSimilar: number,
-): Promise<{value:ArtistCrowd;counts:ReuseCounts} | null> {
+): Promise<{value:ArtistCrowd|null;counts:ReuseCounts;updatedAt:number;stale:boolean} | null> {
   const { createEvidenceStorage } = await import('./songInformation/cache.server');
   try {
-  const reused = await createEvidenceReuse(createEvidenceStorage(), shared)<ArtistCrowd>('artist', informationKey('artist', artist, '', String(perArtistSimilar)), async () => {
+  const reused = await createEvidenceReuse(createEvidenceStorage(), shared)<ArtistCrowd>('artist', informationKey('artist', artist, '', String(perArtistSimilar)), async dispatch => {
 
   const [info, sim] = await Promise.all([
-    callLastfm(key, { method: "artist.getinfo", artist, autocorrect: "1" }),
+    callLastfm(key, { method: "artist.getinfo", artist, autocorrect: "0" },dispatch),
     perArtistSimilar > 0
       ? callLastfm(key, {
           method: "artist.getsimilar",
           artist,
-          autocorrect: "1",
+          autocorrect: "0",
           limit: String(perArtistSimilar),
-        })
+        },dispatch)
       : Promise.resolve(null),
   ]);
 
@@ -133,14 +135,14 @@ async function fetchArtist(
   if (!value || (perArtistSimilar > 0 && !sim)) throw new Error('Artist information unavailable');
   return value;
   }, Date.now() + 9000);
-  return {value:reused.value,counts:reused.counts};
-  } catch { return null; }
+  return {value:reused.value,counts:reused.counts,updatedAt:reused.at,stale:reused.stale};
+  } catch (error) {return {value:null,counts:(error as {reuse?:ReuseCounts}).reuse??{...emptyCounts(),refreshFailed:1},updatedAt:0,stale:false}; }
 }
 
 export const getArtistCrowdData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => InputSchema.parse(data))
-  .handler(async ({ data }): Promise<{ available: boolean; artists: ArtistCrowd[]; reuse?: ReuseCounts }> => {
+  .handler(async ({ data }): Promise<{ available: boolean; artists: ArtistCrowd[]; reuse?: ReuseCounts; evidence?: Array<{artist:string;at:number;stale:boolean}> }> => {
     const key = process.env["LASTFM_API_KEY"];
     if (!key) return { available: false, artists: [] };
 
@@ -148,19 +150,19 @@ export const getArtistCrowdData = createServerFn({ method: "POST" })
     if (!artists.length) return { available: true, artists: [] };
 
     // Keep Last.fm happy: small concurrency instead of 80 parallel requests.
-    const out: ArtistCrowd[] = []; const counts=emptyCounts();
+    const out: ArtistCrowd[] = []; const counts=emptyCounts();const evidence: Array<{artist:string;at:number;stale:boolean}>=[];
     const queue = [...artists];
     const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
       for (;;) {
         const next = queue.shift();
         if (!next) return;
         const got = await fetchArtist(key, next, data.perArtistSimilar);
-        if (got) {out.push(got.value);for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=got.counts[k];}else counts.refreshFailed++;
+        if (got) {if(got.value){out.push(got.value);evidence.push({artist:next,at:got.updatedAt,stale:got.stale});}for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=got.counts[k];}else counts.refreshFailed++;
       }
     });
     await Promise.all(workers);
 
-    return { available: true, artists: out, reuse:counts };
+    return { available: true, artists: out, reuse:counts,evidence };
   });
 
 // ---- Track-level similarity (track.getSimilar) -------------------------------------------
@@ -170,21 +172,21 @@ const TrackSeedsSchema = z.object({
   perSeed: z.number().int().min(1).max(SIMILAR_LIMITS.perSeed).default(20),
 });
 // Each request hydrates an isolated bounded map; storage is not worker-lifetime state.
-async function durableSimilar(key: string | undefined, seeds: Array<{artist:string;title:string}>, perSeed: number): Promise<SimilarTracksResponse> {
-  if (!key) return {availability:'missingKey',seeds:[]};
+async function durableSimilar(key: string | undefined, seeds: Array<{artist:string;title:string}>, perSeed: number): Promise<SimilarTracksResponse & {reuse:ReuseCounts;evidence?:Array<{artist:string;title:string;at:number;stale:boolean}>}> {
+  if (!key) return {availability:'missingKey',seeds:[],reuse:emptyCounts()};
   const { similarEvidence } = await import('./songInformation/lastfm.server');
-  const queue=[...seeds], runs: SimilarTracksResponse['seeds']=[];
+  const queue=[...seeds], runs: SimilarTracksResponse['seeds']=[];const reuse=emptyCounts(),evidence:Array<{artist:string;title:string;at:number;stale:boolean}>=[];
   await Promise.all(Array.from({length:Math.min(3,queue.length)},async()=>{
     for (;;) {const seed=queue.shift();if(!seed)return;
-      try {const result=await similarEvidence(key,seed.artist,seed.title,Date.now()+6500);runs.push({...result.value,similar:result.value.similar.slice(0,perSeed)});}
-      catch {runs.push({seed,status:'error',similar:[]});}
+      try {const result=await similarEvidence(key,seed.artist,seed.title,Date.now()+6500);for(const k of Object.keys(reuse) as Array<keyof ReuseCounts>)reuse[k]+=result.counts[k];evidence.push({...seed,at:result.at,stale:result.stale});runs.push({...result.value,similar:result.value.similar.slice(0,perSeed)});}
+      catch (error) {const counts=(error as {reuse?:ReuseCounts}).reuse;if(counts)for(const k of Object.keys(reuse) as Array<keyof ReuseCounts>)reuse[k]+=counts[k];runs.push({seed,status:'error',similar:[]});}
     }
   }));
-  return {availability:runs.every(r=>r.status!=='error')?'ok':runs.some(r=>r.status!=='error')?'partial':'unavailable',seeds:runs};
+  return {availability:runs.every(r=>r.status!=='error')?'ok':runs.some(r=>r.status!=='error')?'partial':'unavailable',seeds:runs,reuse,evidence};
 }
 
 export const getSimilarTracks = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => TrackSeedsSchema.parse(data))
-  .handler(async ({ data }): Promise<SimilarTracksResponse> =>
+  .handler(async ({ data }) =>
     durableSimilar(process.env["LASTFM_API_KEY"], data.seeds, data.perSeed));

@@ -42,5 +42,3 @@
 - Gate automatic expansion on this owner's READY prep knowledge (await queued writes); isolate providers; keep per-attribute metadata provenance (verified outranks AI; strict limits need verified values), because requests stay unfiltered and estimates are not evidence.
 - Rank via `rankPool`; absent fit=no-op; fresh avoidSlow expansion requires supported dance fit; lookup priority may investigate unknowns without classifying slow. Preserve requests, saved selections and frozen quality context.
 - Gather facts via `factsGather` before rankPool; server enrich ends before the client cutoff (else hits are lost).
-
-- Keep reusable parsed public song evidence in service-only cloud cache and separate account-scoped IndexedDB with exact recording/shape keys; retain field dates and bound unresolved shared work, because reuse must not touch events, files or preparation policy.

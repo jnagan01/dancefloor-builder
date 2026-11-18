@@ -7,7 +7,7 @@ afterEach(()=>vi.useRealTimers());
 describe('bounded public evidence reuse',()=>{
  it('cold then service recreation reuses durable successful facts without a provider call',async()=>{
   const rows=new Map(),storage={read:async(keys:string[])=>keys.flatMap(k=>rows.has(k)?[rows.get(k)]:[]),write:async(e:any)=>{rows.set(e.key,e);}};
-  const load=vi.fn(async()=>fact),key=informationKey('metadata',fact.artist,fact.song);
+  const load=vi.fn(async(dispatch:()=>void)=>{dispatch();return fact;}),key=informationKey('metadata',fact.artist,fact.song);
   const first=await createEvidenceReuse(storage)('metadata',key,load,Date.now()+1000);
   const second=await createEvidenceReuse(storage)('metadata',key,load,Date.now()+1000);
   expect(load).toHaveBeenCalledTimes(1);expect(first.counts.external).toBe(1);expect(second.counts.database).toBe(1);
@@ -21,7 +21,7 @@ describe('bounded public evidence reuse',()=>{
   }
  });
  it('unavailable schema/read/write are counted separately, not provider misses or saved claims',async()=>{
-  const result=await createEvidenceReuse({read:async()=>{throw Error('schema unavailable');},write:async()=>{throw Error('quota');}})('metadata','key',async()=>fact,Date.now()+1000);
+  const result=await createEvidenceReuse({read:async()=>{throw Error('schema unavailable');},write:async()=>{throw Error('quota');}})('metadata',informationKey('metadata',fact.artist,fact.song),async dispatch=>{dispatch();return fact;},Date.now()+1000);
   expect(result.counts).toMatchObject({readFailed:1,writeFailed:1,external:1,database:0,missing:0});
  });
  it('identity never merges full credits, remixes, live, acoustic, clean or differing shapes',()=>{
@@ -37,7 +37,7 @@ describe('bounded public evidence reuse',()=>{
   expect(freshMetadata({...fact,prov:{energy:'ai',danceability:'ai'}},at)).toBe(false);
  });
  it('validation strips private metadata and rejects raw evidence shapes, oversized or corrupt entries',()=>{
-  const e=validatedEntry({key:'k',kind:'metadata',value:{...fact,path:'/private',token:'secret'},at:Date.now()});
+  const e=validatedEntry({key:informationKey('metadata',fact.artist,fact.song),kind:'metadata',value:{...fact,path:'/private',token:'secret'},at:Date.now()});
   expect(JSON.stringify(e)).not.toMatch(/private|secret|token/);
   expect(validatedEntry({key:'k',kind:'community',value:{source:'lastfm',raw:'payload'},at:Date.now()})).toBeNull();
   expect(validatedEntry({key:'k'.repeat(2000),kind:'metadata',value:fact,at:Date.now()})).toBeNull();
@@ -60,10 +60,39 @@ describe('bounded public evidence reuse',()=>{
  });
  it('local recreation reads isolated owner data and fences old account completion',async()=>{
   const rows=new Map(),storage={read:async(a:string,k:string)=>rows.get(a+':'+k),write:async(a:string,e:any)=>{rows.set(a+':'+e.key,e);}};
-  const first=createLocalInformation(storage),current=first.session('A'),entry={key:'k',kind:'metadata' as const,value:fact,at:Date.now()};
+  const first=createLocalInformation(storage),current=first.session('A'),entry={key:informationKey('metadata',fact.artist,fact.song),kind:'metadata' as const,value:fact,at:Date.now()};
   expect(await first.write('A',entry,current,Date.now()+1000)).toBe(true);
-  const next=createLocalInformation(storage),live=next.session('A');expect((await next.read('A','k','metadata',live,Date.now()+1000)).entry?.value).toEqual(fact);
-  next.activate('B');expect((await next.read('A','k','metadata',live,Date.now()+1000)).entry).toBeNull();
-  expect((await next.read('B','k','metadata',next.session('B'),Date.now()+1000)).entry).toBeNull();
+  const next=createLocalInformation(storage),live=next.session('A');expect((await next.read('A',entry.key,'metadata',live,Date.now()+1000)).entry?.value).toEqual(fact);
+  next.activate('B');expect((await next.read('A',entry.key,'metadata',live,Date.now()+1000)).entry).toBeNull();
+  expect((await next.read('B',entry.key,'metadata',next.session('B'),Date.now()+1000)).entry).toBeNull();
  });
+});
+
+it('rejects corrupt storage returning another valid recording without modifying it',async()=>{
+ const key=informationKey('metadata','TEST','Exact'),wrong={kind:'metadata' as const,key:informationKey('metadata',fact.artist,fact.song),value:fact,at:Date.now()};
+ const write=vi.fn(),local=createLocalInformation({read:async()=>wrong,write});
+ const hit=await local.read('A',key,'metadata',local.session('A'),Date.now()+1000);
+ expect(hit.entry).toBeNull();expect(hit.retained).toBeNull();expect(write).not.toHaveBeenCalled();expect(wrong.value.song).toBe('Exact (Live)');
+});
+it('dispatches for B when A cancels before producer microtask',async()=>{
+ const run=createSharedWork();let aCurrent=true;const send=vi.fn(async()=>8);
+ const a=run('same',send,Date.now()+1000,()=>aCurrent).catch(()=>null);
+ const b=run('same',send,Date.now()+2000);aCurrent=false;
+ expect(await a).toBeNull();expect(await b).toBe(8);expect(send).toHaveBeenCalledTimes(1);
+});
+
+import { localInformation } from '@/lib/songInformation/local';
+import { reuseDetails, reusePublicEvidence } from '@/lib/songInformation/client';
+it('actual local details consumer exposes canonical similarity to generation and stale refresh retains its date',async()=>{
+ const local=localInformation(),rows=new Map<string,any>(),at=Date.now()-2*DAY,artist='TEST Local',title='Exact (Live)';
+ const read=vi.spyOn(local,'read').mockImplementation(async(a,k,kind)=>{const e=rows.get(a+':'+k);return {entry:e&&Date.now()-e.at<3600000?e:null,retained:e??null,failed:false};});
+ const write=vi.spyOn(local,'write').mockImplementation(async(a,e,current)=>{if(!current())return false;rows.set(a+':'+e.key,e);return true;});
+ try{
+  const compatible={kind:'similar' as const,key:informationKey('similar',artist,title,'30:exact'),value:{seed:{artist,title},status:'ok',similar:[{artist:'TEST Neighbor',title:'Related',match:0.8}]},at};
+  await reuseDetails('A','lastfm',artist,title,async()=>({ok:true as const,items:{available:true,tags:['dance'],similar:[],url:null,compatible:[compatible]},compatible:[compatible],updatedAt:at}),()=>true,Date.now()+1000);
+  const send=vi.fn(async()=>{throw Error('cloud offline');});
+  const got=await reusePublicEvidence('A','similar',artist,title,'30:exact',send,()=>true,Date.now()+1000);
+  expect(got.at).toBe(at);expect(got.stale).toBe(true);expect(got.value).toEqual(compatible.value);expect(send).toHaveBeenCalledTimes(1);
+  await expect(reusePublicEvidence('B','similar',artist,title,'30:exact',send,()=>true,Date.now()+1000)).rejects.toThrow();
+ }finally{read.mockRestore();write.mockRestore();}
 });

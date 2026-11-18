@@ -1,7 +1,7 @@
 import { localInformation } from '@/lib/songInformation/local';
 import { informationKey } from '@/lib/songInformation/schema';
 import type { SeedResult } from '@/lib/prep/similarTracks';
-import { reuseMetadata } from '@/lib/songInformation/client';
+import { reuseMetadata, reusePublicEvidence } from '@/lib/songInformation/client';
 import { reuseSummary, emptyCounts, type ReuseCounts } from '@/lib/songInformation/schema';
 import { buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
 import { openedEventName } from '@/lib/eventName';
@@ -1328,16 +1328,44 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               if (!contextCurrent()) return;
               for (const k of Object.keys(counts) as Array<keyof ReuseCounts>) { informationCounts[k] += counts[k]; if(counts[k])activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0], counts[k]); }
             };
+            // Queue same-turn consumers into the existing bounded server batches (3/5 provider lanes).
+            const batchContext=<Q,R>(send:(q:Q[])=>Promise<R>)=>{
+              let queue:Array<{q:Q;resolve:(r:R)=>void;reject:(e:unknown)=>void}>=[];
+              return (q:Q)=>new Promise<R>((resolve,reject)=>{
+                queue.push({q,resolve,reject});if(queue.length!==1)return;
+                void Promise.resolve().then(()=>{const group=queue;queue=[];void send(group.map(x=>x.q)).then(r=>group.forEach(x=>x.resolve(r)),e=>group.forEach(x=>x.reject(e)));});
+              });
+            };
+            const countedContext=new Set<unknown>();
+            const contextCounts=(reply:{reuse?:ReuseCounts})=>{if(countedContext.has(reply))return undefined;countedContext.add(reply);return reply.reuse;};
+            const batchedTracks=batchContext((seeds:Array<{artist:string;title:string}>)=>similarTracksFn({data:{seeds,perSeed:30}}));
+            const batchedArtists=batchContext((artists:string[])=>crowdFn({data:{artists,perArtistSimilar:10}}));
             const reusableTracks = async () => {
-              const local = localInformation(), session = local.session(accountAtStart as string), liveContext = () => session() && contextCurrent();
-              const cached = await Promise.all(trackSeeds.map(seed => local.read(accountAtStart as string,informationKey('similar',seed.artist,seed.title,'20:exact'),'similar',liveContext,contextEnd)));
-              const missing = trackSeeds.filter((_,i)=>!cached[i].entry);
-              const reply = missing.length ? await similarTracksFn({data:{seeds:missing,perSeed:20}}) : {availability:'ok' as const,seeds:[]};
-              if(!liveContext()) return {availability:'unavailable' as const,seeds:[]};
-              const counts = emptyCounts(); counts.local=cached.filter(h=>h.entry).length;counts.readFailed=cached.filter(h=>h.failed).length;
-              for(const row of reply.seeds) if(row.status!=='error' && !await local.write(accountAtStart as string,{key:informationKey('similar',row.seed.artist,row.seed.title,'20:exact'),kind:'similar',value:row,at:Date.now()},liveContext,contextEnd))counts.writeFailed++;
-              addReuse(counts);
-              return {...reply,seeds:[...cached.flatMap(h=>h.entry?[h.entry.value as SeedResult]:[]),...reply.seeds]};
+              const rows=await Promise.all(trackSeeds.map(async seed=>{
+                try {
+                  const result=await reusePublicEvidence<SeedResult>(accountAtStart as string,'similar',seed.artist,seed.title,'30:exact',async()=>{
+                    const reply=await batchedTracks(seed);
+                    const found=reply.seeds.find(r=>r.seed.artist===seed.artist&&(r.seed.title??(r.seed as {song?:string}).song)===seed.title),row=found?{...found,seed}:undefined,meta=reply.evidence?.find(r=>r.artist===seed.artist&&r.title===seed.title);
+                    if(!row&&reply.availability==='ok')return {value:{seed,status:'notFound' as const,similar:[]},at:Date.now(),counts:contextCounts(reply)};
+                    if(!row||row.status==='error')throw Object.assign(Error('Similarity unavailable'),{reuse:reply.reuse});
+                    return {value:row,at:meta?.at??Date.now(),counts:contextCounts(reply),stale:meta?.stale};
+                  },contextCurrent,contextEnd);
+                  addReuse(result.counts);return result.value;
+                }catch(error){const c=(error as {reuse?:ReuseCounts}).reuse;if(c)addReuse(c);return {seed,status:'error' as const,similar:[]};}
+              }));
+              if(rows.every(r=>r.status==='error'))throw Error('Similarity unavailable');return {availability:rows.every(r=>r.status!=='error')?'ok' as const:'partial' as const,seeds:rows};
+            };
+            const reusableArtists=async()=>{
+              const artists=await Promise.all(uniqueSeeds.map(async artist=>{
+                try{
+                  const result=await reusePublicEvidence<ArtistCrowd>(accountAtStart as string,'artist',artist,'','10',async()=>{
+                    const reply=await batchedArtists(artist),row=reply.artists.find(r=>r.name.toLowerCase()===artist.toLowerCase()),meta=reply.evidence?.find(r=>r.artist===artist);
+                    if(!row&&reply.available!==false)return {value:{name:artist,listeners:0,playcount:0,tags:[],similar:[]},at:Date.now(),counts:contextCounts(reply)};
+                    if(!row)throw Object.assign(Error('Artist information unavailable'),{reuse:reply.reuse});
+                    return {value:row,at:meta?.at??Date.now(),counts:contextCounts(reply),stale:meta?.stale};
+                  },contextCurrent,contextEnd);addReuse(result.counts);return result.value;
+                }catch(error){const c=(error as {reuse?:ReuseCounts}).reuse;if(c)addReuse(c);return null;}
+              }));if(artists.every(a=>a===null))throw Error('Artist information unavailable');return {available:true,artists:artists.filter((a):a is ArtistCrowd=>a!==null)};
             };
             // AI cluster and Last.fm crowd data in parallel: the model knows
             // vibe and context, Last.fm knows what real listeners actually
@@ -1350,15 +1378,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               withinContext(() => neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
               }), { clusters: [] as Array<{ artist: string; neighbors: string[] }> }, 'ai'),
-              withinContext(() => crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }), { available: false, artists: [] as ArtistCrowd[] }, 'lastfm'),
+              withinContext(reusableArtists, { available: false, artists: [] as ArtistCrowd[] }, 'lastfm'),
             ]);
-            if (crowdRes && 'reuse' in crowdRes && crowdRes.reuse) addReuse(crowdRes.reuse as ReuseCounts);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
             rankSimilarTracks = simEvidence;
             rankSimilar = similarArtistEvidence(crowdRes.artists, uniqueSongs.map((s) => s.artist));
             if (trackSeeds.length) {
-              const availability = simTrackRes?.availability ?? "unavailable";
-              if (availability !== "ok") { activity?.notice(availability === "missingKey" ? "community_disabled" : "community_failed", trackSeeds.length, "lastfm"); toast.info(availabilityNote(availability, trackSeeds.length)); }
+              const availability:import('@/lib/prep/similarTracks').SimilarAvailability = simTrackRes?.availability ?? "unavailable";
+              if (availability !== "ok") { activity?.notice('community_failed', trackSeeds.length, "lastfm"); toast.info(availabilityNote(availability, trackSeeds.length)); }
             }
             const seedKeys = new Set(uniqueSeeds.map((a) => normalizeKey(a)));
             const seenNeighbor = new Set<string>();
@@ -1535,13 +1562,20 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
         };
         const cg = createFactsGatherer<CommunityRow>(async (songs, acceptsReply) => {
-          const local=localInformation(),session=local.session(accountAtStart as string),current=()=>session()&&live()&&acceptsReply(),end=Date.now()+12_000;
-          const hits=await Promise.all(songs.map(s=>local.read(accountAtStart as string,informationKey('community',s.artist,s.song),'community',current,end)));
-          const missing=songs.filter((_,i)=>!hits[i].entry);
-          const rows=missing.length?await communityFn({data:{songs:missing}}):[];
-          if(!current())return [];
-          for(const row of rows) if(row.evidence&&row.status==='found')await local.write(accountAtStart as string,{key:informationKey('community',row.artist,row.song),kind:'community',value:row.evidence,at:Date.now()},current,end);
-          return [...songs.flatMap((s,i)=>hits[i].entry?[{...s,status:'found' as const,evidence:hits[i].entry?.value as CommunityEvidence}]:[]),...rows];
+          const current=()=>live()&&acceptsReply(),end=Date.now()+12_000;
+          let batch:Promise<CommunityRow[]>|undefined;const counted=new Set<unknown>();
+          const results=await Promise.all(songs.map(async song=>{
+            try{
+              const result=await reusePublicEvidence<CommunityEvidence>(accountAtStart as string,'community',song.artist,song.song,'',async()=>{
+                const rows=await (batch??=communityFn({data:{songs}})),row=rows.find(r=>r.artist===song.artist&&r.song===song.song);
+                if(!row?.evidence||row.status!=='found')throw Object.assign(Error('Community unavailable'),{row,reuse:row?.reuse});
+                return {value:row.evidence,at:row.updatedAt??Date.now(),counts:row.reuse,stale:row.stale};
+              },current,end);
+              if(current())for(const k of Object.keys(result.counts) as Array<keyof ReuseCounts>){informationCounts[k]+=result.counts[k];if(result.counts[k])activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0],result.counts[k]);}
+              return {...song,status:'found' as const,evidence:result.value};
+            }catch(error){const e=error as {row?:CommunityRow;reuse?:ReuseCounts};if(current()&&e.reuse)for(const k of Object.keys(e.reuse) as Array<keyof ReuseCounts>){informationCounts[k]+=e.reuse[k];if(e.reuse[k])activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0],e.reuse[k]);}return e.row??{...song,status:'failed' as const};}
+          }));return current()?results:[];
+
         }, factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
         const coordinationStart = Date.now();
         const hardEnd = coordinationStart + 480_000;

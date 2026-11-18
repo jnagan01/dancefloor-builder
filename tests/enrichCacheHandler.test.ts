@@ -18,16 +18,16 @@ const ts = require('typescript');
 const song = { artist: 'TEST ONLY Artist', song: 'Synthetic Recording' };
 const warm = (): CacheRow => ({ artist_key: 'test only artist', song_key: 'synthetic recording', energy: 8,
   danceability: 7, valence: 6, popularity: 8, bpm: 122, camelot: null, genre: 'Pop', year: 2004,
-  source: encodeCacheSource('ReccoBeats+MusicBrainz', { energy: 'provider', danceability: 'provider', bpm: 'provider', year: 'provider' }),
+  source: encodeCacheSource('ReccoBeats+MusicBrainz', { energy: 'provider', danceability: 'provider', valence:'provider',popularity:'provider',camelot:'provider',genre:'provider', bpm: 'provider', year: 'provider' }),
   fetched_at: new Date().toISOString() });
 function database(initial: CacheRow[] = []) {
-  let rows = initial;
+  let rows = initial;const evidence=new Map<string,any>();
   const io = { reads: 0, writes: 0, readError: false, writeError: false, hangRead: false, hangWrite: false,
     filters: [] as unknown[], rows: () => rows };
   state.from.mockReset().mockImplementation((table: string) => {
     if (table === 'track_evidence_cache') return {
-      select: () => ({ in: async () => ({ data: [], error: null }) }),
-      upsert: async () => ({ error: null }),
+      select: () => ({ in: async (_:string,keys:string[]) => ({data:keys.flatMap(k=>evidence.has(k)?[evidence.get(k)]:[]),error:null}) }),
+      upsert: async (row:any) => {io.writes++;if(io.hangWrite)return new Promise(()=>{});if(io.writeError)return {error:{}};evidence.set(row.cache_key,row);return {error:null};},
     };
     expect(table).toBe('song_metadata_cache');
     return {
@@ -147,7 +147,7 @@ describe('authenticated handler service-only metadata cache', () => {
     const first = await h.call({ songs: [song] }); const count = fetch.mock.calls.length;
     expect(count).toBe(3); expect(io.writes).toBe(1);
     const second = await h.call({ songs: [song] });
-    expect(second.results).toEqual(first.results); expect(fetch).toHaveBeenCalledTimes(count);
+    expect(second.results[0]).toMatchObject({energy:8,bpm:122,year:2004}); expect(fetch).toHaveBeenCalledTimes(count);
     expect(state.ai).not.toHaveBeenCalled();
     expect(io.reads).toBe(2); expect(io.writes).toBe(1); expect(h.userQuery).not.toHaveBeenCalled();
   });
@@ -222,4 +222,21 @@ describe('authenticated handler service-only metadata cache', () => {
     expect(out.status.timedOut).toEqual([phase === 'read' ? 'cacheRead' : 'upsert']);
     expect(io.reads).toBe(1); expect(io.writes).toBe(1);
   });
+});
+it('actual pipeline rejects stripped legacy identity for credited live and remix requests',async()=>{
+ const fetch=vi.fn(async()=>new Response('{}',{status:503}));vi.stubGlobal('fetch',fetch);
+ const out=await runEnrichment([{artist:'TEST ONLY Artist & Guest',song:'Synthetic Recording (Live)'},{artist:song.artist,song:'Synthetic Recording (Remix)'}],{readRows:async()=>[warm()],upsert:async()=>{},estimate:async()=>[]});
+ expect(fetch).toHaveBeenCalled();expect(out.results.every(r=>r.energy!==8 && r.bpm!==122 && r.year!==2004)).toBe(true);
+});
+it.each([['AI',40],['ReccoBeats',400]] as const)('actual pipeline refreshes aged %s fields at %i days',async(source,days)=>{
+ const fetch=providers();const row={...warm(),source:encodeCacheSource(source,{energy:source==='AI'?'ai':'provider',danceability:source==='AI'?'ai':'provider'}),fetched_at:new Date(Date.now()-days*86400000).toISOString()};
+ await runEnrichment([song],{readRows:async()=>[row],upsert:async()=>{},estimate:async()=>[]});expect(fetch).toHaveBeenCalled();
+});
+
+it('unchanged successful popularity check persists freshness without changing its provenance date',async()=>{
+ const row={...warm(),fetched_at:new Date(Date.now()-8*86400000).toISOString()};database([row]);const f=providers(),h=handler();
+ const first=await h.call({songs:[song],needPopularity:true});const checks=f.mock.calls.length;
+ expect(checks).toBeGreaterThan(0);expect(first.results[0].updated?.popularity).toBe(Date.parse(row.fetched_at));
+ expect(first.results[0].checked?.popularity).toBeGreaterThan(Date.parse(row.fetched_at));
+ const second=await h.call({songs:[song],needPopularity:true});expect(f).toHaveBeenCalledTimes(checks);expect(second.results[0].popularity).toBe(8);
 });

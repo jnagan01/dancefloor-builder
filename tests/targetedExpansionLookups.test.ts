@@ -28,7 +28,7 @@ const seconds = (h:any, lib:vdj.VdjLibrary) => sections.map(k=>exportReadiness(h
 const clients = Array.from({length:34},(_,i)=>({artist:`TEST Client ${i}`,song:`Request ${i}`}));
 const inputs = { songs:clients, hours:'3.75',buffer:2,listType:'dance',expand:true,split:{warmUp:45,transition:120,peak:60},genresInput:'Pop',decades:['2000s'],bpmRange:[110,130],danceRange:[6,10],eventFit:{avoidSlow:true,familiarity:'familiar'} };
 const base = { id:'A',inputs,lists:{warmUp:clients.map(s=>({...s,fromUpload:true})),transition:[],peak:[],selections:{}} };
-const cacheRow = (s:{artist:string;song:string}, complete=true):CacheRow => ({artist_key:dance.normalizeKey(s.artist),song_key:dance.normalizeKey(s.song),energy:complete?8:null,danceability:complete?8:null,popularity:8,bpm:120,year:2005,genre:'Pop',camelot:null,valence:null,source:encodeCacheSource('ReccoBeats',{energy:'provider',danceability:'provider',popularity:'provider',bpm:'provider',year:'provider',genre:'provider'}),fetched_at:new Date().toISOString()});
+const cacheRow = (s:{artist:string;song:string}, complete=true):CacheRow => ({artist_key:s.artist.toLowerCase(),song_key:s.song.toLowerCase(),energy:complete?8:null,danceability:complete?8:null,popularity:8,bpm:120,year:2005,genre:'Pop',camelot:null,valence:null,source:encodeCacheSource('ReccoBeats',{energy:'provider',danceability:'provider',popularity:'provider',bpm:'provider',year:'provider',genre:'provider'}),fetched_at:new Date().toISOString()});
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 
 describe('actual event route useful facts under slow service latency',()=>{

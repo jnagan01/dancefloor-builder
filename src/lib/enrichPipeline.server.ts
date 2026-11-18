@@ -11,6 +11,7 @@ import { boundedPressure, PROVIDER_INTERVAL_MS, type MetadataPacing, type Provid
 
 export type EnrichSource =
   | "ReccoBeats+MusicBrainz"
+  | "ReccoBeats+AI"
   | "ReccoBeats"
   | "MusicBrainz"
   | "AI"
@@ -31,6 +32,7 @@ export interface EnrichedSong {
   source: EnrichSource;
   /** Per-attribute provenance. Absent from older servers; clients then decode `source` conservatively. */
   prov?: MetaProv;
+  checked?: Partial<Record<typeof META_ATTRS[number], number>>;
   updated?: Partial<Record<typeof META_ATTRS[number], number>>;
   /** The online lookup for this song didn't finish in time; values (if any) are only what was already known. */
   incomplete?: boolean;
@@ -453,7 +455,7 @@ function pickSource(
 export interface CacheRow {
   artist_key: string; song_key: string; energy: number | null; danceability: number | null; valence: number | null;
   popularity: number | null; bpm: number | null; camelot: string | null; genre: string | null; year: number | null;
-  source: string; fetched_at: string | null; updated?: Partial<Record<typeof META_ATTRS[number], number>>;
+  source: string; fetched_at: string | null; checked?: Partial<Record<typeof META_ATTRS[number], number>>; updated?: Partial<Record<typeof META_ATTRS[number], number>>;
 }
 /** Internal error with optional recovered rows; never print this object or its payload. */
 export class EnrichCacheError extends Error {
@@ -495,7 +497,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
 
   // Build normalized keys and de-dupe (multiple identical songs in one batch).
   type Query = { original: { artist: string; song: string }; artistKey: string; songKey: string };
-  const queries: Query[] = songs.map((s) => ({ original: s, artistKey: normalizeKey(s.artist), songKey: normalizeKey(s.song) }));
+  const queries: Query[] = songs.map((s) => ({ original: s, artistKey: s.artist.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase(), songKey: s.song.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase() }));
 
   // 1) Cache read (bounded; a hung read means "no cache knowledge", never a fabricated hit).
   const cacheKeys = Array.from(new Set(queries.filter((q) => q.artistKey && q.songKey).map((q) => `${q.artistKey}\u0000${q.songKey}`)));
@@ -506,7 +508,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     let rows: CacheRow[] | null = null;
     try {
       const got = await within(Promise.resolve().then(() => deps.readRows(artistKeys, songKeys)), Math.min(end, start + L.cacheReadMs), now);
-      if (got === LATE) timeout("cacheRead"); else rows = got;
+      if (got === LATE) {timeout("cacheRead");reuse.readFailed++;} else rows = got;
     } catch (err) {
       cacheFailure('cacheRead'); reuse.readFailed++;
       rows = err instanceof EnrichCacheError ? err.rows : null;
@@ -515,6 +517,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     for (const row of rows ?? []) {
       const fetchedMs = row.fetched_at ? new Date(row.fetched_at).getTime() : 0;
       if (!Number.isFinite(fetchedMs) || fetchedMs > now() + 60_000) continue;
+      if(!cacheKeys.includes(`${row.artist_key}\u0000${row.song_key}`))continue;
       const values = {
         energy: row.energy ?? undefined, danceability: row.danceability ?? undefined, valence: row.valence ?? undefined,
         popularity: row.popularity ?? undefined, bpm: row.bpm ?? undefined, camelot: row.camelot ?? undefined,
@@ -522,9 +525,11 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       };
       // Cached rows keep their recorded per-attribute provenance (legacy rows decode conservatively).
       const { summary, prov } = decodeCacheSource(row.source, values);
-      const updated = Object.fromEntries(META_ATTRS.filter(a=>values[a]!=null).map(a=>[a,row.updated?.[a]??fetchedMs]));
-      if (opts.needPopularity && values.popularity != null && now()-(updated.popularity??fetchedMs)>=fieldLifetime('popularity',prov.popularity)) stalePopularity.add(`${row.artist_key}\u0000${row.song_key}`);
-      cache.set(`${row.artist_key}\u0000${row.song_key}`, { artist: "", song: "", ...values, source: (summary as EnrichSource) || "none", prov, updated });
+      const validDate=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=now()+60000?v:fetchedMs;
+      const updated = Object.fromEntries(META_ATTRS.filter(a=>values[a]!=null).map(a=>[a,validDate(row.updated?.[a])]));
+      const checked = Object.fromEntries(META_ATTRS.filter(a=>values[a]!=null).map(a=>[a,validDate(row.checked?.[a]??updated[a])]));
+      if (opts.needPopularity && values.popularity != null && now()-(checked.popularity??fetchedMs)>=fieldLifetime('popularity',prov.popularity)) stalePopularity.add(`${row.artist_key}\u0000${row.song_key}`);
+      cache.set(`${row.artist_key}\u0000${row.song_key}`, { artist: "", song: "", ...values, source: (summary as EnrichSource) || "none", prov, updated, checked });
     }
   }
 
@@ -540,7 +545,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   // warm cache stays warm); they join the estimate lane last, opportunistically, after every genuine gap is ready.
   const upgrade = new Map<string, EnrichedSong>();
   for (const [k, c] of cache) {
-    if (c.energy == null || c.danceability == null) { partial.set(k, c); cache.delete(k); }
+    if (c.energy == null || c.danceability == null || META_ATTRS.some(a=>a!=='popularity'&&c[a]!=null&&now()-(c.checked?.[a]??c.updated?.[a]??0)>=fieldLifetime(a,c.prov?.[a]))) { partial.set(k, c); cache.delete(k); }
     else if (opts.needPopularity && (c.popularity == null || stalePopularity.has(k))) { partial.set(k, c); popOnly.add(k); cache.delete(k); }
     else if (acousticGap(c, "energy") || acousticGap(c, "danceability")) upgrade.set(k, c);
   }
@@ -576,7 +581,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const recoDone = new Map<string, ReccoBeatsFeatures | null>();
   const mbDone = new Map<string, MusicBrainzInfo | null>();
   const open = () => !fetchClosed && now() < fetchUntil;
-  const reusesMb = (prev: EnrichedSong | undefined) => !!(prev && (prev.genre || prev.year));
+  const reusesMb = (prev: EnrichedSong | undefined) => !!(prev && (prev.genre || prev.year) && (['genre','year'] as const).every(a=>prev[a]==null||now()-(prev.checked?.[a]??prev.updated?.[a]??0)<fieldLifetime(a,prev.prov?.[a])));
   let recoCursor = 0;
   const providerIncomplete = new Set<string>();
   const providerTimeout = new Set<string>();
@@ -680,6 +685,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
           const q = group[i]; if (aiClosed || now() >= aiUntil || !q || !value) return;
           estimates.set(`${q.artistKey}\u0000${q.songKey}`, value);
         };
+        reuse.external++;
         const items = await (deps.estimate ?? estimateWithAi)(group.map(q => {
           const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k) ?? upgrade.get(k), mb = mbDone.get(k), reco = recoDone.get(k);
           return { ...q.original, genre: prev?.genre ?? mb?.genre, year: prev?.year ?? mb?.year, bpm: prev?.bpm ?? reco?.bpm };
@@ -732,9 +738,10 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     const ms = mb?.exact ? "provider" : "estimate";
     const prov: MetaProv = {};
     let gained = false;
+    const checked={...prev?.checked},updated={...prev?.updated};
     const take = <A extends keyof MetaProv>(a: A, freshV: unknown, src: MetaProv[A], old: unknown) => {
       const oldSrc = old != null ? prev?.prov?.[a] ?? "estimate" : undefined;
-      if (freshV != null && (old == null || sourceRank(src) >= sourceRank(oldSrc))) { prov[a] = src; if (freshV !== old || src !== oldSrc) gained = true; return freshV; }
+      if (freshV != null && (old == null || sourceRank(src) >= sourceRank(oldSrc))) { prov[a] = src; checked[a]=now(); gained=true; if(freshV!==old||src!==oldSrc)updated[a]=now();return freshV; }
       if (old != null) { prov[a] = oldSrc; return old; }
       return undefined;
     };
@@ -751,7 +758,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       genre: take("genre", mb?.genre, ms, prev?.genre) as string | undefined,
       year: take("year", mb?.year, ms, prev?.year) as number | undefined,
       source: "none",
-      prov,
+      prov, checked, updated,
     };
     const recoEnergy = reco?.energy != null && prov.energy === rs;
     e.source = prev?.energy != null && !recoEnergy ? prev.source : pickSource(reco?.energy != null, !!(mb?.genre || mb?.year));
@@ -826,14 +833,16 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
         artist_key, song_key,
         energy: e.energy ?? null, danceability: e.danceability ?? null, valence: e.valence ?? null, popularity: e.popularity ?? null,
         bpm: e.bpm ?? null, camelot: e.camelot ?? null, genre: e.genre ?? null, year: e.year ?? null,
+        checked: Object.fromEntries(META_ATTRS.filter(a=>e[a]!=null).map(a=>[a,e.checked?.[a]??(partial.get(k)??cache.get(k))?.checked?.[a]??now()])),
         updated: Object.fromEntries(META_ATTRS.filter(a=>e[a]!=null).map(a=>{
           const previous = partial.get(k) ?? cache.get(k);
           return [a,previous && previous[a]===e[a] && previous.prov?.[a]===e.prov?.[a] ? previous.updated?.[a]??start : now()];
         })),
         source: encodeCacheSource(e.source, e.prov ?? {}),
-        fetched_at: new Date().toISOString(),
+        fetched_at: new Date(now()).toISOString(),
       };
     });
+  for(const row of toUpsert){const value=fetched.get(`${row.artist_key}\u0000${row.song_key}`);if(value){value.updated=row.updated;value.checked=row.checked;}}
   if (toUpsert.length) {
     try {
       const got = await within(Promise.resolve().then(() => deps.upsert(toUpsert)), Math.min(end, now() + L.upsertMs), now);

@@ -87,7 +87,7 @@ function createEventRouteHarness(actual) {
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/prep/community.functions':{COMMUNITY_BATCH:20,lookupCommunityBatch:services.community ?? (async r=>r.data.songs.map(x=>({...x,status:'disabled'})))},
       '@/lib/enrich.functions':{enrichSongs:services.enrich ?? (async()=>({results:[]}))},
-      '@/lib/songInformation/local':loadShared('songInformation/local'), '@/lib/songInformation/client':actual.songInformation ?? loadShared('songInformation/client'), '@/lib/songInformation/schema':loadShared('songInformation/schema'),
+      '@/lib/songInformation/local':loadShared('songInformation/local'), '@/lib/songInformation/client':{...loadShared('songInformation/client'),...actual.songInformation}, '@/lib/songInformation/schema':loadShared('songInformation/schema'),
       '@/lib/providerPacing':loadShared('providerPacing'), '@/lib/generationDiagnostics/presentation':loadShared('generationDiagnostics/presentation'),
       '@/lib/neighbors.functions':{getArtistNeighbors:services.neighbors ?? (async()=>({clusters:[]}))},
       '@/lib/recommend.functions':{recommendSongsForSection:services.recommend ?? (async()=>({suggestions:[]}))},
