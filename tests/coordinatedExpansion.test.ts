@@ -562,6 +562,12 @@ for (const mode of ['cold', 'mixed', 'warm'] as const) it(`real pipeline + route
   const t0 = await s.run(); const sec = report(`real pipeline low yield ${mode}`, s, t0);
   sec.forEach((v, i) => expect(v).toBeGreaterThanOrEqual(TARGETS[i]));
   expect(s.lookups.reduce((n, l) => n + l.songs.filter(k => !k.startsWith('TEST Request')).length, 0)).toBeLessThanOrEqual(600);
+  if (mode === 'warm') {
+    // Paced partial-cache lookups can populate owned candidates before suggestions arrive. First-time promotion
+    // is progress, not an exhausted source: Peak must continue beyond the formerly terminal second reply.
+    expect(s.calls.filter(c => c.section === 'Peak')).toHaveLength(4);
+    expect(new Set(s.lookups.flatMap(l => l.songs)).size).toBe(s.lookups.reduce((n, l) => n + l.songs.length, 0));
+  }
   invariants(s); s.h.unmount();
 }, 30000);
 

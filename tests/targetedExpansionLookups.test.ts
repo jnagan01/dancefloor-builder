@@ -65,7 +65,7 @@ it('real pipeline completes twelve-second AI after quick misses within unchanged
   vi.useFakeTimers();vi.stubGlobal('fetch',async()=>new Response(JSON.stringify({content:[],recordings:[]})));
   const s={artist:'TEST Partial',song:'Exact (Radio Version)'}, writes:CacheRow[]=[];const start=Date.now();
   const p=runEnrichment([s],{readRows:async()=>[cacheRow(s,false)],upsert:async r=>{writes.push(...r);},estimate:async()=>{await new Promise(r=>setTimeout(r,12_000));return [{energy:8,danceability:7}];}});
-  await vi.advanceTimersByTimeAsync(12_001);const result=await p;
+  await vi.advanceTimersByTimeAsync(12_051);const result=await p;
   expect(Date.now()-start).toBeLessThan(16_000);expect(result.status).toMatchObject({complete:true,timedOut:[],unfinished:0});
   expect(result.results[0]).toMatchObject({energy:8,danceability:7,bpm:120,year:2005,prov:{energy:'ai',year:'provider'}});expect(writes).toHaveLength(1);
 });
@@ -127,7 +127,7 @@ it('rate pressure is failed/unavailable not timedout; independent cached/provide
 it('rejected AI with streamed partials remains failed/incomplete, returned partials cached once and never retried in generation',async()=>{
   vi.useFakeTimers();vi.stubGlobal('fetch',async()=>new Response(JSON.stringify({content:[],recordings:[]})));let estimates=0;const writes:CacheRow[]=[];
   const g=createFactsGatherer(async chunk=>(await runEnrichment(chunk,{readRows:async()=>[],upsert:async rows=>{writes.push(...rows);},estimate:async(_s,_signal,emit)=>{estimates++;emit?.(0,{energy:8});throw new Error('synthetic denial');}})).results,factsKey,{isIncomplete:r=>!!r.incomplete});
-  const s=[{artist:'TEST Denied',song:'Exact'}];const report=await g.gather(s);
+  const s=[{artist:'TEST Denied',song:'Exact'}];const pending=g.gather(s);await vi.advanceTimersByTimeAsync(50);const report=await pending;
   expect(report).toMatchObject({found:1,incompleteSongs:1,timedOutSongs:0});expect(g.get(s[0])).toMatchObject({energy:8,prov:{energy:'ai'},incomplete:true});
   expect((await g.gather(s)).alreadyAttempted).toBe(1);expect(estimates).toBe(1);expect(writes).toHaveLength(1);
 });

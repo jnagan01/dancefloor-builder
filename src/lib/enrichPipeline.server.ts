@@ -626,18 +626,22 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const finalAt = aiUntil - L.aiFinalMs;
   const estimateMissing = async () => {
     const attemptedAi = new Set<string>();
-    let firstGroup = true, sentGroups = 0;
+    let firstGroup = true, collected = false, sentGroups = 0;
     const work = async () => {
       while (!aiClosed && now() < aiUntil) {
         // After the first (evidence-first) group, or at the final dispatch point, every remaining row lacking acoustic
         // facts joins the next group even while its provider search is pending: at most two serial model start-ups per
         // chunk instead of one per trickling miss (live: a third serial group started at 13.7 s and missed 14.75 s).
-        const final = now() >= finalAt || sentGroups > 0;
-        // Coalesce simultaneously completing acoustic workers before paying model startup for one row.
-        // A single short timer yield (not a provider barrier) keeps quick 8-row misses in one estimate.
+        const final = now() >= finalAt || sentGroups > 0 || collected;
+        // Give paced quick misses one bounded collection window, rather than paying model startup for one row.
+        // Wake on progress, stop early when settled, and never wait beyond the final dispatch reserve.
         if (firstGroup && recoDone.size > 0 && !acousticSettled && !fetchClosed && missOrder.length > 1) {
           firstGroup = false;
-          await new Promise(resolve => setTimeout(resolve, Math.min(25, Math.max(0, aiUntil - now()))));
+          const collectUntil = Math.min(finalAt, now() + Math.max(25, Math.min(250, PROVIDER_INTERVAL_MS * (Math.min(8, missOrder.length) - 1))));
+          while (!aiClosed && !acousticSettled && !fetchClosed && now() < collectUntil) await waitAcoustic(collectUntil);
+          // A completed acoustic miss anchors the batch; fill its remaining slots speculatively after the bounded
+          // collection wait. Later verified provider facts still win, and attemptedAi prevents duplicate estimates.
+          collected = missOrder.some(q => { const k = `${q.artistKey}\u0000${q.songKey}`; const r = recoDone.get(k); return recoDone.has(k) && (!r?.exact || r.energy == null || r.danceability == null); });
           continue;
         }
         const settled = acousticSettled || fetchClosed;

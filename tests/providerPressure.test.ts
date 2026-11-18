@@ -6,6 +6,28 @@ import { enrichHandler } from './helpers/enrichHandler';
 const json = (data: unknown, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers });
 const deps = { readRows: async () => [], upsert: vi.fn(async () => {}), estimate: async () => [] };
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
+it.each([false, true])('paced acoustic misses form one useful bounded batch despite a slow sibling: %s', async slow => {
+  vi.useFakeTimers(); const origin = Date.now(), starts: number[] = [], groups: Array<{ at: number; songs: string[] }> = [];
+  const songs = Array.from({ length: 8 }, (_, i) => ({ artist: `Fixture ${i}`, song: `Synthetic ${i}` }));
+  vi.stubGlobal('fetch', async (input: string) => {
+    const url = new URL(input);
+    if (url.hostname === 'musicbrainz.org') return new Promise<Response>(() => {});
+    starts.push(Date.now() - origin);
+    if (slow && url.searchParams.get('searchText') === 'Synthetic 7') return new Promise<Response>(() => {});
+    return json({ content: [] });
+  });
+  const pending = runEnrichment(songs, { ...deps, estimate: async (group, _signal, emit) => {
+    groups.push({ at: Date.now() - origin, songs: group.map(s => s.song) });
+    await new Promise(r => setTimeout(r, 6000));
+    const values = group.map(() => ({ energy: 8, danceability: 8 })); values.forEach((v, i) => emit?.(i, v)); return values;
+  } });
+  await vi.advanceTimersByTimeAsync(16_000); const out = await pending;
+  expect(groups).toEqual([{ at: 300, songs: songs.map(s => s.song) }]);
+  expect(starts.every((at, i) => i === 0 || at - starts[i - 1] >= 50)).toBe(true);
+  expect(out.results).toHaveLength(8); expect(out.results.every(r => r.energy === 8 && r.danceability === 8 && r.prov?.energy === 'ai')).toBe(true);
+  expect(out.status.timedOut).not.toContain('ai');
+  const frozen = JSON.stringify(out); await vi.advanceTimersByTimeAsync(20_000); expect(JSON.stringify(out)).toBe(frozen);
+});
 it('coordinates all four workers with 50ms healthy dispatch spacing', async () => {
   vi.useFakeTimers(); const origin = Date.now(), starts: number[] = [];
   const lane = createProviderLane(Date.now, origin + 16_000, new AbortController().signal, PROVIDER_INTERVAL_MS);

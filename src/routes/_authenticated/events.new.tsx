@@ -118,7 +118,7 @@ import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktopBridge";
 import { getWorkflow, saveWorkflowSafely } from "@/lib/history.functions";
 import { SAVE_REJECTED_PREFIX } from "@/lib/eventSchemas";
-import { repeatedRequestRows } from "@/lib/additionIdentity";
+import { AdditionKeySet, repeatedRequestRows } from "@/lib/additionIdentity";
 import { pageHead } from "@/lib/pageHead";
 import { WaveformPlayer } from "@/components/workspace/WaveformPlayer";
 import { MATCH_LIMIT_KEY, MATCH_AUTO_KEY, DJ_SOFTWARE_KEY } from "./settings";
@@ -1724,13 +1724,20 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           },
         });
         const existingNow = () => buildRecommendExisting({ warmUp: r.warmUp, transition: r.transition, peak: r.peak }, [...retiredRows.slice(-200), ...poolRows()]);
+        const offeredDiscoveries = new AdditionKeySet();
         let lastUsableAdded = 0;
         const barrenLanes: string[] = [];
         const offerReply = (key: SectionKey, rows: RecommendedSong[], accept: (s: RecommendedSong) => boolean = () => true) => {
           let added = 0; lastUsableAdded = 0;
           for (const sug of rows) {
             const row = toAiSong(sug) as PRow;
-            if (accept(sug) && offer(row, key)) { added++; if (generationFiles(row).some(f => Number.isFinite(f.seconds) && f.seconds > 0)) lastUsableAdded++; }
+            if (!accept(sug)) continue;
+            const freshDiscovery = offeredDiscoveries.tryAdd(row.artist, row.song);
+            const inserted = offer(row, key);
+            // A first discovery may promote an existing owned candidate into a section without inserting a row.
+            // Count that useful sourcing progress once; repeated/retired identities still cannot keep a lane alive.
+            const promoted = freshDiscovery && poolRows().some(p => songIdentity(p.artist, p.song) === songIdentity(row.artist, row.song));
+            if (inserted || promoted) { added++; if (generationFiles(row).some(f => Number.isFinite(f.seconds) && f.seconds > 0)) lastUsableAdded++; }
           }
           progress.returned += rows.length;
           if (added) { poolVersion++; dirty = true; notify(); }

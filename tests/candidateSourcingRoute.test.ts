@@ -41,7 +41,7 @@ it('actual route: >14 alternatives compete for duration-bounded review slots; ev
  mkdirSync('test-results',{recursive:true});writeFileSync('test-results/candidate-stage.json',JSON.stringify(report,null,2));
 },30000);
 it('actual route: provider failure retains catalogue provenance, owned promotion keeps file tags, expand-off retains requests and neutral does not infer fit',async()=>{
- const failed=await run({failure:true});expect(all(failed.result).filter(r=>!r.fromUpload)).toHaveLength(14);expect(failed.warnings.join(' ')).toMatch(/Couldn't reach/);
+ const failed=await run({failure:true});expect(all(failed.result).filter(r=>!r.fromUpload)).toHaveLength(14);expect(failed.warnings.join(' ')).toContain('Some online track details could not be checked.');
  const owned=await run({owned:true});expect(all(owned.result).find(r=>r.song==='Recording 29')).toMatchObject({genre:'Funk',catalogueDecade:'1980s',metaProv:{genre:'tags',energy:'provider'}});
  const off=await run({off:true});expect(all(off.result)).toHaveLength(10);expect(off.looked).toHaveLength(10);
  const neutral=await run({neutral:true});expect(neutral.saved.inputs.eventFit).toBeUndefined();expect(all(neutral.result).filter(r=>!r.fromUpload)).toHaveLength(14);expect(all(neutral.result).some(r=>/dance suitability uncertain/.test(r.rankWhy??''))).toBe(false);

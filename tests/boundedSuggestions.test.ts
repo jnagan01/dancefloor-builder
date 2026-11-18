@@ -94,7 +94,7 @@ for (const latency of [6000,12000,15000]) it(`independent recording lag and ${la
   vi.stubGlobal('fetch',async url=>{if(isHost(url,'musicbrainz.org'))return new Promise(()=>{});return new Response(JSON.stringify({content:[]}));});
   const p=runEnrichment([{artist:'TEST Lag',song:'Exact'}],{readRows:async()=>[],upsert:async()=>{},estimate:async(_s,_signal,emit)=>{calls++;aiStart=Date.now()-start;await new Promise(r=>setTimeout(r,3000));emit?.(0,{energy:8});await new Promise(r=>setTimeout(r,latency-3000));return [{energy:8,danceability:8}];}});
   await vi.advanceTimersByTimeAsync(17000);const out=await p;
-  expect(aiStart).toBe(0);expect(calls).toBe(1);expect(out.results[0]).toMatchObject({energy:8,prov:{energy:'ai'},incomplete:true});
+  expect(aiStart).toBe(50);expect(calls).toBe(1);expect(out.results[0]).toMatchObject({energy:8,prov:{energy:'ai'},incomplete:true});
   if(latency<15000){expect(out.results[0].danceability).toBe(8);expect(out.status.timedOut).not.toContain('ai');}else{expect(out.results[0].danceability).toBeUndefined();expect(out.status.timedOut).toContain('ai');}
 });
 

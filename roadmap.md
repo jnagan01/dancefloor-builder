@@ -1,4 +1,7 @@
 # Workspace rebuild
+## Mac pacing regression follow-up
+- [ ] Reproduce and repair bounded acoustic batching and fake-clock settlement without changing limits or targets.
+- [ ] Compare synthetic warm 40%-yield coverage with pre-pacing baseline; run four affected files and pacing/diagnostic checks, then commit.
 ## Approved provider pacing and cause-aware activity
 - [x] Coordinate and carry bounded generation-local provider pressure without replay or deadline changes.
 - [x] Aggregate cause-aware warnings and show final target outcomes in activity; preserve sanitized copy.
