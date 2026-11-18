@@ -3,7 +3,8 @@
 - [x] providerLatency retains baseline 0/24 with 3 timeouts and repaired 24/24 with 0 timeouts, exactly 3 calls; cleanup group 46/46 passes. User-reported afd009a Apple Silicon: 1149 passed/3 failed (two obsolete batching expectations and obsolete >3 calls assertion); credit passed, production and both CodeQL analyses passed on that prior head.
 - [x] Repair bounded batching; new initial-complete-hit regression fails before gap-anchored collection and passes after; 50ms pacing/250ms collection unchanged. Credit compilation moved to fixture setup, original 5s and all dataset/identity assertions retained.
 - [x] Record baseline warm 5640/14490/7320 vs paced 5640/14400/6780 vs repaired 5520/14430/7410; final three affected files 40/40 and pacing/diagnostic group 158/158 pass.
-- [ ] Final full coordinatedExpansion/Mac acceptance: combined local attempt exceeded 600s; separate file execution interrupted without summary. Prior 36/36 is not final-head acceptance. Hosted production/CodeQL also remain pending; guards unchanged.
+- [x] Execution steering: only providerPressure/providerLatency/metadataPresentation rerun, 28/28 passed in 3.81s; identified superseded coordinated synthetic runner and its worker stopped, no unrelated processes touched.
+- [ ] Final hosted Mac/native UI/production/CodeQL acceptance: combined local attempt exceeded 600s; separate coordinated runner continued after tool interruption and was explicitly stopped without a summary. Neither is a pass. No further large local runs; hosted gate mandatory before release.
 ## Approved provider pacing and cause-aware activity
 - [x] Coordinate and carry bounded generation-local provider pressure without replay or deadline changes.
 - [x] Aggregate cause-aware warnings and show final target outcomes in activity; preserve sanitized copy.
