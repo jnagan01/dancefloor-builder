@@ -7,6 +7,8 @@ export function useNavigate(){return async(options:any)=>{w.__testState.page='ev
 export function useBlocker(){return {};}
 export function useAuth(){return {user:{id:w.__testState.account}};}
 export function useServerFn(fn:any){return fn;}
+// Diagnostics exercise the real UI/IndexedDB store, but never production auth or ingestion.
+export async function sendGenerationDiagnostics(){return {accepted:[],state:'not configured' as const};}
 export async function getWorkflow(request:any){return w.testBackend.read(request.data.id);}
 import {parseSafeSaveRequest} from '../../../src/lib/eventSchemas';
 // The real server-side request contract runs before the synthetic backend; a rejected payload never reaches it.
@@ -14,7 +16,7 @@ import {parseSafeSaveRequest} from '../../../src/lib/eventSchemas';
 const FIXTURE_UUID='00000000-0000-4000-8000-000000000000';
 export async function saveWorkflowSafely(request:any){const d=request.data;parseSafeSaveRequest({...d,id:/^[0-9a-f-]{36}$/i.test(d.id)?d.id:FIXTURE_UUID});return w.testBackend.write(d);}
 const listeners=new Set<any>();
-export const supabase={auth:{getUser:async()=>({data:{user:{id:w.__testState.account}}}),onAuthStateChange:(f:any)=>{listeners.add(f);return {data:{subscription:{unsubscribe:()=>listeners.delete(f)}}};}},from:(table:string)=>({
+export const supabase={auth:{getSession:async()=>({data:{session:w.__testState.account?{user:{id:w.__testState.account}}:null}}),getUser:async()=>({data:{user:{id:w.__testState.account}}}),onAuthStateChange:(f:any)=>{listeners.add(f);return {data:{subscription:{unsubscribe:()=>listeners.delete(f)}}};}},from:(table:string)=>({
  select:()=>({eq:(_key:string,account:string)=>({limit:async()=>w.testBackend.list(account),maybeSingle:async()=>{if(w.__fixture.delayProfile)await new Promise(resolve=>{w.__releaseProfile=resolve;});w.__profileReturned=true;return {data:w.__fixture.profile??null};}})}),
  update:()=>({eq:async()=>({error:null})})
 })};
@@ -28,7 +30,7 @@ export const lookupMusicBrainz=async()=>({ok:false,error:'Lookups are disabled i
 export function useDebounce(v:any){return v;}
 export function useProfileSettings(){return {settings:null};}
 export function DjAccountBar(){return null;}export function SpotifyExportDialog(){return null;}export function ProfileSettingsDialog(){return null;}
-export const APP_VERSION='isolated-test',formatBuildDate=()=>'';
+export const APP_VERSION='isolated-test',APP_BUILD_ID='synthetic-native-build',formatBuildDate=()=>'';
 export function Toaster(){return null;}
 export function WaveformPlayer(){return null;}
 export const MATCH_LIMIT_KEY='test:limit',MATCH_AUTO_KEY='test:auto',DJ_SOFTWARE_KEY='test:software';
