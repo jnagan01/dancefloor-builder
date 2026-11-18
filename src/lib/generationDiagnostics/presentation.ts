@@ -27,21 +27,24 @@ export function preparationOutcome(run: Pick<DiagnosticRun, 'status' | 'coverage
 /** One bounded summary per generation, from fixed categories only; never raw provider errors. */
 export function createMetadataWarnings() {
   const totals = new Map<string, { provider: 'reccobeats' | 'musicbrainz' | 'ai' | 'metadata'; cause: 'rate' | 'server' | 'network' | 'deadline' | 'denied' | 'http' | 'malformed' | 'unavailable'; count: number }>();
-  let incomplete = 0, failed = 0, clientTimeouts = 0;
+  let incomplete = 0, failed = 0, clientTimeouts = 0, phaseLimited = false;
   return {
     response(value: unknown, timedOut?: string[]) {
+      let knownPressure = false, knownDeadline = false;
       if (value && typeof value === 'object') for (const provider of ['reccobeats', 'musicbrainz', 'ai'] as const) {
         const bucket = (value as Record<string, unknown>)[provider];
         if (!bucket || typeof bucket !== 'object') continue;
         for (const cause of ['rate', 'server', 'network', 'deadline', 'denied', 'http', 'malformed', 'unavailable'] as const) {
           const count = safeCount((bucket as Record<string, unknown>)[cause]); if (!count) continue;
+          if (cause === 'rate' || cause === 'server' || cause === 'network') knownPressure = true;
+          if (cause === 'deadline') knownDeadline = true;
           const key = `${provider}:${cause}`, old = totals.get(key);
           totals.set(key, { provider, cause, count: safeCount((old?.count ?? 0) + count) });
         }
       }
       // A fetch phase can close while workers are parked by pressure: that is not a timed-out sent request.
-      const knownPressure = [...totals.values()].some(c => ['rate', 'server', 'network'].includes(c.cause));
-      if (timedOut?.some(phase => phase !== 'fetch' || !knownPressure) && ![...totals.values()].some(c => c.cause === 'deadline')) totals.set('metadata:deadline', { provider: 'metadata', cause: 'deadline', count: 1 });
+      // Classify this reply alone; legacy phase limits do not confirm an in-flight request timeout.
+      if (!knownDeadline && timedOut?.some(phase => phase !== 'fetch' || !knownPressure)) phaseLimited = true;
     },
     report(r: { incompleteSongs: number; failedSongs: number; timedOutSongs: number }) {
       incomplete += r.incompleteSongs; failed += r.failedSongs - r.timedOutSongs; clientTimeouts += r.timedOutSongs;
@@ -52,6 +55,7 @@ export function createMetadataWarnings() {
       if (categories.includes('rate')) parts.push('Online track checks were rate limited; remaining checks were paced.');
       if (categories.includes('server') || categories.includes('network')) parts.push('Some online track checks had temporary server or network failures.');
       if (clientTimeouts || categories.includes('deadline')) parts.push('Some online track checks actually timed out.');
+      if (phaseLimited) parts.push('Some online track checks reached a phase/window limit; a sent-request timeout was not confirmed.');
       if (failed || categories.some(c => ['denied', 'http', 'malformed', 'unavailable'].includes(c))) parts.push('Some online track details could not be checked.');
       if (!parts.length && incomplete) parts.push('Some online track details remain unknown; no timeout was reported.');
       return parts.length ? `${parts.join(' ')} Finished details were kept; unknown details were not guessed. ${outcome} See Recent generation activity for known service causes.` : null;
