@@ -6,11 +6,11 @@ export async function relayDiagnostics(input: unknown, config: { token?: string;
   if (!config.token || !config.host) return { accepted: [], state: 'not configured' };
   // Better Stack source hosts only. No credentials, port, path, query or arbitrary client URL.
   const host = config.host.replace(/^https:\/\//, '').replace(/\/$/, '');
-  if (!/^(?:[a-z0-9-]+\.)*in\.logs\.betterstack\.com$/.test(host)) return { accepted: [], state: 'not configured' };
+  if (!/^(?:(?:[a-z0-9-]+\.)*in\.logs\.betterstack\.com|s[0-9]+\.[a-z0-9-]+\.betterstackdata\.com)$/.test(host)) return { accepted: [], state: 'not configured' };
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const payload = runs.map(r => ({ ...r, dt: new Date(r.endedAt ?? r.startedAt).toISOString(), application: 'Set Architect', message: `Preparation ${r.status}`, notices: r.notices.map(n => ({ ...n, message: MESSAGES[n.code] })) }));
+    const payload = runs.map(r => ({ ...r, dt: new Date(r.endedAt ?? r.startedAt).toISOString(), application: 'Set Architect', level: 'info', synthetic: r.kind === 'synthetic_connection_check', message: r.kind === 'synthetic_connection_check' ? 'SYNTHETIC CONNECTION CHECK — no user data' : `Preparation ${r.status}`, notices: r.notices.map(n => ({ ...n, message: MESSAGES[n.code] })) }));
     const response = await Promise.race([
       transport(`https://${host}/`, { method: 'POST', redirect: 'manual', signal: controller.signal,
         headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),

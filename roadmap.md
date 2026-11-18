@@ -1,9 +1,10 @@
 # Workspace rebuild
 ## Persistent generation activity
-- [ ] Separate bounded local history/outbox, safe allowlisted relay and accessible in-place activity/copy panel.
-- [ ] Instrument handled notices and terminal outcomes without changing event, library or preparation rules.
-- [ ] Isolated lifecycle, storage, transport, route/UI and redaction tests; full suite and preview validation; commit for hosted native checks.
-- [ ] Better Stack delivery configuration awaits Joe's server-only source token and ingestion host; no publication or installer.
+- [x] Separate bounded local history/outbox, safe allowlisted relay and accessible in-place activity/copy panel.
+- [x] Instrument handled notices and terminal outcomes without changing event, library or preparation rules.
+- [x] 27 focused checks; full single-worker suite 1092/1092 (100 files), plus new authenticated-handler check; synthetic desktop/mobile reload/copy pass; preview build OK and client credential isolation verified.
+- [x] One empty informational synthetic connection report accepted by actual server handler/relay: reference 1a3f4890-d3bd-4381-ab96-c0a2b5bfd95f; stored secrets only, no account/session used, no publication or installer.
+- [ ] Final-head hosted native/CodeQL and separate production build/TypeScript acceptance: existing normal push workflow, no GitHub access here; local Electron absent. Automatic preview reports build OK, not a separately verified production build/typecheck.
 ## Weekly structured synthetic preparation checks
 - [x] Hosted Mac 43978609184 deadline fixture: fake timers couple timer callbacks and Date.now at exact 40ms/60ms cutoffs; all original assertions retained plus four-start assertion at 59ms; 20 focused repeats, 41 related tests, 35 reporting tests, 1066 full tests, TypeScript and preview pass; no production changes.
 - [x] Emit six identity-bound category cases from actual route/handlers/shared admission; validate numeric rules, section targets and safe causes, fail closed on missing/stale/invalid evidence.

@@ -107,3 +107,40 @@ it('hanging relay and missing configuration finish bounded without reading raw r
   const task = relayDiagnostics(input, { token: 'dummy', host: 'in.logs.betterstack.com' }, send);
   await vi.advanceTimersByTimeAsync(5000); expect(await task).toEqual({ accepted: [], state: 'retry later', retryAfterMs: 60000 });
 });
+it('regional Better Stack source host accepts only the empty, informational synthetic marker', async () => {
+  const f = fixture(); await f.store.activate('a'); f.store.begin('a', '1', 'b', 0)?.finish('completed');
+  const run = { ...f.store.get().rows[0].run, kind: 'synthetic_connection_check' };
+  const send = vi.fn(async (_url: any, init: any) => {
+    const records = JSON.parse(init.body);
+    expect(records).toHaveLength(1); expect(records[0].synthetic).toBe(true); expect(records[0].level).toBe('info');
+    expect(records[0].message).toBe('SYNTHETIC CONNECTION CHECK — no user data');
+    expect(records[0].coverage).toEqual([]); expect(records[0].requested).toBe(0);
+    return new Response(null, { status: 202 });
+  });
+  expect((await relayDiagnostics({ runs: [run] }, { token: 'dummy', host: 's2841587.us-west-2a.betterstackdata.com' }, send)).state).toBe('sent');
+  for (const host of ['s2841587.us-west-2a.betterstackdata.com.evil.test', 'https://user@in.logs.betterstack.com', 'in.logs.betterstack.com:443', 'in.logs.betterstack.com/path']) {
+    expect((await relayDiagnostics({ runs: [run] }, { token: 'dummy', host }, send)).state).toBe('not configured');
+  }
+  expect(send).toHaveBeenCalledTimes(1);
+  for (const invalid of [{ ...run, requested: 1 }, { ...run, status: 'failed' }, { ...run, notices: [{ code: 'failed', count: 1 }] }, { ...run, kind: 'arbitrary-message' }]) expect(BatchSchema.safeParse({ runs: [invalid] }).success).toBe(false);
+});
+it('queued delivery timeout remains retryable after reload and persisted backoff prevents a reconnect loop', async () => {
+  vi.useFakeTimers(); const f = fixture(); await f.store.activate('a'); f.store.begin('a', '1', 'b', 0)?.finish('completed');
+  const hung = vi.fn(() => new Promise<any>(() => {})); f.store.setSender(hung);
+  const flush = f.store.flush(); await vi.advanceTimersByTimeAsync(8000); await flush; await f.store.settled();
+  expect(f.store.get().rows[0].delivery).toBe('retry later'); expect(hung).toHaveBeenCalledTimes(1);
+  const reload = createDiagnosticStore(f.storage, () => 1800000000000);
+  const send = vi.fn(async runs => ({ state: 'sent' as const, accepted: runs.map(({ id, revision }: any) => ({ id, revision })) }));
+  reload.setSender(send); await reload.activate('a'); await reload.flush(); expect(send).not.toHaveBeenCalled();
+  f.advance(120000);
+  const retry = createDiagnosticStore(f.storage, () => 1800000120000); retry.setSender(send); await retry.activate('a'); await retry.flush(); await retry.settled();
+  expect(send).toHaveBeenCalledTimes(1); expect(retry.get().rows[0].delivery).toBe('sent');
+});
+it('late storage read cannot expose an earlier account after sign-out', async () => {
+  const f = fixture(); await f.store.activate('a'); f.store.begin('a', '1', 'b', 0)?.finish('completed'); await f.store.settled();
+  let resolve: (rows: unknown[]) => void = () => {};
+  const store = createDiagnosticStore({ ...f.storage, read: () => new Promise(r => { resolve = r; }) });
+  const pending = store.activate('a'); await Promise.resolve(); await store.activate(null);
+  resolve([...f.data.values()]); await pending;
+  expect(store.get().account).toBe(null); expect(store.get().rows).toEqual([]);
+});
