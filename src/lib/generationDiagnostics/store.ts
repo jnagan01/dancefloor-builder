@@ -42,6 +42,9 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
   let inFlight: number | undefined;
   const listeners = new Set<() => void>();
   const memory = new Map<string, LocalRun[]>();
+  // A bounded per-owner pruning watermark prevents failed deletes from reviving capped rows.
+  const pruned = new Map<string, { startedAt: number; id: string }>();
+  const order = (a: { startedAt: number; id: string }, b: { startedAt: number; id: string }) => a.startedAt - b.startedAt || a.id.localeCompare(b.id);
   const emit = () => { for (const l of listeners) { try { l(); } catch { /* Never interfere with preparation. */ } } };
   const persist = (owner: string, row: LocalRun) => {
     const copy = structuredClone(row);
@@ -52,8 +55,13 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
   const trim = (owner: string) => {
     rows.sort((a, b) => b.run.startedAt - a.run.startedAt);
     const kept = rows.filter(r => r.run.startedAt >= now() - RETENTION_MS).slice(0, MAX_RUNS);
-    for (const r of rows) if (!kept.includes(r)) writes = writes.then(() => storage.remove(owner, r.run.id)).catch(() => { fallback = true; emit(); });
+    for (const r of rows) if (!kept.includes(r)) {
+      const old = pruned.get(owner);
+      if (!old || order(r.run, old) > 0) pruned.set(owner, { startedAt: r.run.startedAt, id: r.run.id });
+      writes = writes.then(() => storage.remove(owner, r.run.id)).catch(() => { fallback = true; emit(); });
+    }
     rows = kept;
+    memory.set(owner, structuredClone(kept));
   };
   const update = (owner: string, row: LocalRun) => { row.delivery = 'queued'; row.nextAt = 0; row.run.revision++; persist(owner, row); emit(); };
   function finishRow(owner: string, row: LocalRun, status: DiagnosticRun['status']) {
@@ -73,16 +81,29 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
       if (!owner) return;
       ready = (async () => {
         let stored: unknown[] = [];
-        try { await writes; stored = await storage.read(owner); } catch { if (epoch === fence) fallback = true; stored = memory.get(owner) ?? []; }
+        try { await writes; stored = await storage.read(owner); } catch { if (epoch === fence) fallback = true; }
         if (epoch !== fence || account !== owner) return;
-        for (const value of stored) {
+        const merged = new Map<string, LocalRun>();
+        const ownedMemory = memory.get(owner) ?? [];
+        const memoryIds = new Set(ownedMemory.map(r => r.run.id));
+        const boundary = pruned.get(owner);
+        for (const value of [...stored, ...ownedMemory]) {
           const row = decode(value);
           if (!row) { warning = true; continue; } // Never overwrite malformed originals.
-          if (rows.some(r => r.run.id === row.run.id)) continue;
-          rows.push(row);
-          if (row.run.status === 'running') finishRow(owner, row, 'interrupted');
+          if (!memoryIds.has(row.run.id) && boundary && order(row.run, boundary) <= 0) continue;
+          const old = merged.get(row.run.id);
+          if (!old || row.run.revision > old.run.revision) merged.set(row.run.id, row);
+          else if (row.run.revision === old.run.revision) {
+            // Delivery changes do not increment the run revision. Preserve confirmed
+            // acceptance or the newest attempt/backoff, never a lower-revision ack.
+            const delivery = row.delivery === 'sent' || old.delivery === 'sent' ? 'sent' : row.attempts >= old.attempts ? row.delivery : old.delivery;
+            merged.set(row.run.id, { ...row, delivery, attempts: Math.max(old.attempts, row.attempts), nextAt: delivery === 'sent' ? 0 : Math.max(old.nextAt, row.nextAt) });
+          }
         }
-        trim(owner); emit();
+        rows = [...merged.values()];
+        trim(owner);
+        for (const row of rows) if (row.run.status === 'running') finishRow(owner, row, 'interrupted');
+        emit();
       })();
       await ready;
       if (epoch === fence) void api.flush();

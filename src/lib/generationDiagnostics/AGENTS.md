@@ -1,5 +1,6 @@
 # Preparation diagnostics
 - Keep diagnostics in a separate bounded account-local IndexedDB outbox; serialize owned writes and fence reads/acknowledgements by session and revision, because logging must never touch event or music persistence.
+- Merge owned session memory into successful reads by stable ID/revision and same-revision delivery progress; synchronize bounded memory on pruning and retain an owner pruning watermark, because quota failures can leave stale readable records after writes/deletes fail.
 - Rebuild remote/copy payloads from the shared allowlist; only the authenticated handler reads ingestion secrets, because raw provider errors and identifiers must never leave the device.
 - Diagnostic work is best-effort and independent of generation; transport deadlines/backoff never alter preparation budgets or recommendations.
 - Keep candidate exclusion high-water counts informational and separate from final selected-addition drops; fence context fallback notices by request settlement and generation/account identity, because retries/late replies must not duplicate or misattribute outcomes.

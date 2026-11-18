@@ -91,6 +91,63 @@ it('storage failure has explicit memory-only warning and retains current diagnos
   const store = createDiagnosticStore(broken); await store.activate('a'); const r = store.begin('a', '1', 'b', 1); r?.finish('completed'); await store.settled();
   expect(store.get().memoryOnly).toBe(true); await store.activate('b'); await store.activate('a'); expect(store.get().rows[0].run.id).toBe(r?.id);
 });
+it('successful reads after failed writes retain unsaved owned runs and newer revisions on account return', async () => {
+  const f = fixture(); await f.store.activate('a');
+  const old = f.store.begin('a', '1', 'b', 1); await f.store.settled();
+  const stale = structuredClone(f.store.get().rows[0]);
+  f.storage.write = async () => { throw Error('synthetic quota'); };
+  old?.notice('metadata_incomplete', 7); old?.finish('completed');
+  f.advance(1); const unsaved = f.store.begin('a', '1', 'b', 2); unsaved?.finish('short');
+  await f.store.settled(); expect(f.data.get(`a:${old?.id}`)).toEqual(stale);
+  const expected = f.store.get().rows;
+  await f.store.activate('b'); expect(f.store.get().rows).toEqual([]);
+  await f.store.activate('a'); expect(f.store.get().rows).toEqual(expected);
+  expect(f.store.get().rows.map(r => r.run.id)).toEqual([unsaved?.id, old?.id]);
+  expect(f.store.get().memoryOnly).toBe(true);
+});
+it.each(['sent', 'retry later'] as const)('account return retains same-revision %s metadata when writes fail but reads succeed', async state => {
+  const f = fixture(); await f.store.activate('a');
+  const run = f.store.begin('a', '1', 'b', 1); run?.finish('completed'); await f.store.settled();
+  const revision = f.store.get().rows[0].run.revision;
+  f.storage.write = async () => { throw Error('synthetic quota'); };
+  const send = vi.fn(async (runs: any[]) => ({ state, accepted: state === 'sent' ? runs.map(r => ({ id: r.id, revision: r.revision })) : [] }));
+  f.store.setSender(send); await f.store.flush(); await f.store.settled();
+  const expected = f.store.get().rows[0];
+  expect(expected.delivery).toBe(state); expect(expected.attempts).toBe(1); expect(expected.run.revision).toBe(revision);
+  expect(expected.nextAt).toBe(state === 'sent' ? 0 : 1800000120000);
+  await f.store.activate('b'); await f.store.activate('a'); await f.store.flush();
+  expect(f.store.get().rows[0]).toEqual(expected); expect(send).toHaveBeenCalledTimes(1);
+  expect(f.store.get().memoryOnly).toBe(true);
+});
+it('newer persisted revision wins over session memory and cannot inherit an older sent acknowledgement', async () => {
+  const f = fixture(); await f.store.activate('a');
+  const run = f.store.begin('a', '1', 'b', 1); run?.finish('completed'); await f.store.settled();
+  const saved = structuredClone(f.store.get().rows[0]);
+  f.store.setSender(async runs => ({ state: 'sent', accepted: runs.map(r => ({ id: r.id, revision: r.revision })) }));
+  await f.store.flush(); await f.store.settled(); f.store.setSender(undefined);
+  const newer = { ...saved, run: { ...saved.run, revision: saved.run.revision + 1, notices: [{ code: 'lookup_budget' as const, count: 600 }] }, delivery: 'retry later' as const, attempts: 2, nextAt: 1800000240000 };
+  f.data.set(`a:${saved.run.id}`, newer);
+  await f.store.activate('b'); await f.store.activate('a');
+  expect(f.store.get().rows).toEqual([newer]);
+});
+it('failed deletes and successful reads cannot resurrect capped or expired memory entries on account return', async () => {
+  const f = fixture(); await f.store.activate('a');
+  for (let i = 0; i < MAX_RUNS; i++) { f.advance(1); f.store.begin('a', '1', 'b', 1)?.finish('completed'); }
+  await f.store.settled(); const oldest = f.store.get().rows.at(-1)?.run.id;
+  f.storage.write = async () => { throw Error('synthetic quota'); };
+  f.storage.remove = async () => { throw Error('synthetic delete failure'); };
+  f.advance(1); const newer = f.store.begin('a', '1', 'b', 1); newer?.finish('completed');
+  await f.store.settled(); const kept = f.store.get().rows;
+  expect(kept).toHaveLength(50); expect(kept.map(r => r.run.id)).not.toContain(oldest);
+  await f.store.activate('b'); await f.store.activate('a');
+  expect(f.store.get().rows).toEqual(kept); expect(f.store.get().rows[0].run.id).toBe(newer?.id);
+  f.advance(RETENTION_MS + 1); await f.store.activate('b'); await f.store.activate('a');
+  expect(f.store.get().rows).toEqual([]);
+  f.advance(1); const fresh = f.store.begin('a', '1', 'b', 1); fresh?.finish('completed');
+  await f.store.activate('b'); await f.store.activate('a');
+  expect(f.store.get().rows.map(r => r.run.id)).toEqual([fresh?.id]);
+  expect(f.data.size).toBe(50); expect(f.store.get().memoryOnly).toBe(true);
+});
 it('relay/copy rebuild allowlist with sensitive dummy fields and rejects invalid batch/config', async () => {
   const f = fixture(); await f.store.activate('a'); f.store.begin('a', '1', 'b', 34)?.finish('completed');
   const r = { ...f.store.get().rows[0].run, account: 'SENSITIVE', eventName: 'SENSITIVE', songs: ['SENSITIVE'], token: 'SENSITIVE', path: 'SENSITIVE', stack: 'SENSITIVE' };
