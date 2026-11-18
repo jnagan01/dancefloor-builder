@@ -9,11 +9,18 @@ on:
         description: Optional exact uint32 seed (blank uses Central Tuesday YYYYMMDD)
         default: ''
         type: string
+      runner:
+        description: Hosted Mac pool (weekly default is Intel; release checks keep Apple Silicon)
+        type: choice
+        default: macos-15-intel
+        options:
+          - macos-15-intel
+          - macos-15
 permissions:
   contents: read
 jobs:
   synthetic:
-    runs-on: macos-15
+    runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.runner || 'macos-15-intel' }}
     timeout-minutes: 45
     env:
       WEEKLY_SEED: ${{ inputs.seed || '' }}
