@@ -66,9 +66,9 @@ it('stubborn "(Clean)" edits: frozen 376d12b estimate times out (source none); r
   expect(doneAt - t0).toBeLessThan(6000);
 }, 20000);
 
-it('multiple serial estimate start-ups per chunk across three chunks: baseline retains 0/24, repaired retains 24/24', async () => {
-  // Misses become known in three waves (0.9 s, 4.5 s, 8.0 s), so the single estimate lane pays several serial
-  // model start-ups inside one 16 s request — the native "AI timeout batches ~14.8–15 s" shape.
+it('one useful eight-track estimate batch per chunk: baseline retains 0/24, repaired retains 24/24 in three calls', async () => {
+  // Misses become known in three waves (0.9 s, 4.5 s, 8.0 s). Bounded gap collection fills one eight-track
+  // estimate batch per chunk instead of paying several serial model start-ups inside the fixed 16 s request.
   const wave = (title: string) => { const n = Number(/(\d+)/.exec(title)![1]) % 8; return n < 2 ? 450 : n < 5 ? 2250 : 4000; };
   const songsFor = (c: number) => stubborn.map((s, i) => ({ artist: `${s.artist} c${c}`, song: `Night Song ${i} (Clean)` }));
   const run = async (fn: typeof runEnrichment) => {
@@ -86,7 +86,7 @@ it('multiple serial estimate start-ups per chunk across three chunks: baseline r
   console.info(`SYNTHETIC serial start-ups: baseline ${before.kept}/24 kept, ${before.timeouts}/3 AI timeouts, ${before.calls} model calls; repaired ${after.kept}/24, ${after.timeouts}/3, ${after.calls} calls`);
   expect(before.kept).toBe(0); expect(before.timeouts).toBe(3);
   expect(after.kept).toBe(24); expect(after.timeouts).toBe(0);
-  expect(after.calls).toBeGreaterThan(3); // several serial start-ups per chunk still fit
+  expect(after.calls).toBe(3); // exactly one useful batch for each of the three chunks
 }, 30000);
 
 it('provider status diagnostics: catalogue miss is not a failure; rate, server, malformed and network causes are counted without payloads', async () => {

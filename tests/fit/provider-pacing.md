@@ -57,4 +57,16 @@ bunx vitest run tests/providerPressure.test.ts tests/metadataPresentation.test.t
 The combined four-file attempt exceeded the sandbox 600s wait without a final result. The subsequent coordinatedExpansion-only attempt was interrupted by the execution environment before a final summary; neither is a pass. Its observed warm 40%-yield case retained 5520/14430/7410 seconds. No long full suite was run; final full coordinated/Mac acceptance remains pending. Preview compilation reports build OK; diff whitespace check passes.
 
 ## Remaining authoritative gates
+Additional hosted evidence supplied by Joe: Apple Silicon `afd009a`, run 44372934213/job 135044336547, finished with 1149 passed/3 failed across 108 files. The original five-second credit fixture passed there; no production changes were made to accommodate cloud-host speed. Failures were the two obsolete absolute batching expectations and providerLatency's obsolete greater-than-three model-call assertion. Production validation and both CodeQL analyses passed on `afd009a`; these are prior-head results, not final-head acceptance.
+
+Final narrow cleanup:
+```text
+bunx vitest run tests/providerLatency.test.ts tests/providerPressure.test.ts tests/metadataPresentation.test.ts tests/boundedSuggestions.test.ts --maxWorkers=1
+  46/46 passed, 4 files, 29.73s.
+  Three-chunk latency baseline: 0/24 facts, 3 AI timeouts, 3 model calls.
+  Repaired: 24/24 facts, 0 AI timeouts, exactly 3 model calls.
+  Credit-variant fixture: 4238ms, unchanged 5000ms limit.
+```
+The latency fixture now asserts exactly one useful eight-track batch per chunk and retains its 30000ms limit. This follow-up changes only the latency test and validation documentation; no production scheduling, policy, dependency or workflow changes. Final-head hosted Mac/production/CodeQL results remain pending.
+
 Automatic preview compilation reports build OK. Frozen hosted TypeScript no-emit, production build, `.output/public` secrecy scan, required Mac/full regressions and CodeQL are not verified for the final commit here: no GitHub credentials/results, and sandbox instructions prohibit manual project build/typecheck. Existing workflow/guards are unchanged and must pass. No deployment, publication, installer, dependency/lockfile, database, permission, offline-schema or saved-data changes.
