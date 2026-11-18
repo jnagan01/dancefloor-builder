@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import * as vdj from '@/lib/virtualDj';
 import * as dance from '@/lib/danceFloor';
@@ -19,10 +19,16 @@ import { AdditionKeySet, additionKeys } from '@/lib/additionIdentity';
 import { recommendHandler } from './helpers/recommendHandler';
 const require = createRequire(import.meta.url);
 const harness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions });
+// Compile the observed route once as fixture setup, not inside the five-second generation check.
+const admitted = new AdditionKeySet();
+const observedHarness = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions, observeRanking: (args:any[]) => {
+  if (args[2].automaticExpansion) for (const p of args[0]) admitted.add(p.row.artist, p.row.song);
+} });
 const sections = ['warmUp','transition','peak'] as const;
 const clients = Array.from({length:34},(_,i)=>({artist:`TEST Request ${i}`,song:`Client ${i}`}));
 const base = {id:'A',inputs:{songs:clients,hours:'3.75',buffer:2,listType:'dance',expand:true,split:{warmUp:45,transition:120,peak:60},genresInput:'Pop',decades:['2000s'],bpmRange:[110,130],danceRange:[6,10],eventFit:{avoidSlow:true}},lists:{warmUp:clients.map(s=>({...s,fromUpload:true})),transition:[],peak:[],selections:{}}};
 const cacheRow = (s:any):CacheRow => ({artist_key:dance.normalizeKey(s.artist),song_key:dance.normalizeKey(s.song),energy:8,danceability:8,popularity:8,bpm:120,year:2005,genre:'Pop',camelot:null,valence:null,source:encodeCacheSource('ReccoBeats',{energy:'provider',danceability:'provider',popularity:'provider',bpm:'provider',year:'provider',genre:'provider'}),fetched_at:new Date().toISOString()});
+beforeAll(async () => { const h = observedHarness(); await h.flush(); h.unmount(); });
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 
 // Exact-host check for fetch mocks: parses string/URL/Request inputs and compares the
@@ -125,10 +131,6 @@ for(const boundary of ['event','account'] as const) for(const outcome of ['rejec
 it('actual handler returns credit variant demonstrably outside max500 wire; local intended identity rejects it',async()=>{
   const tracks=Array.from({length:1800},(_,i)=>({artist:`TEST Indexed ${i}`,title:`Recording ${i}`,filePath:`/synthetic/wire/${i}.mp3`,year:'2005',bpm:'120',genre:'Pop',songLength:10}));
   const lib=vdj.buildLibrary(tracks);let wireChecks=0;let variant:any;
-  const admitted=new AdditionKeySet();
-  const observedHarness=require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({vdj,dance,audio,snapshots,drafts,input,autosave,vibes,isolation,theory,revisions,observeRanking:(args:any[])=>{
-    if(args[2].automaticExpansion)for(const p of args[0])admitted.add(p.row.artist,p.row.song);
-  }});
   const server=recommendHandler(async()=>({object:{suggestions:[{...variant,energy:8,danceability:8,popularity:8,genre:'Pop',decade:'2000s'}]}}));
   const h=observedHarness({rows:{A:structuredClone(base)},services:{
     enrich:async({data}:any)=>({results:data.songs.map((s:any)=>({...s,energy:8,danceability:8,source:'ReccoBeats',prov:{energy:'provider',danceability:'provider'}}))}),

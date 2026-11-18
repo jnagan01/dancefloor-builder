@@ -635,7 +635,12 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
         const final = now() >= finalAt || sentGroups > 0 || collected;
         // Give paced quick misses one bounded collection window, rather than paying model startup for one row.
         // Wake on progress, stop early when settled, and never wait beyond the final dispatch reserve.
-        if (firstGroup && recoDone.size > 0 && !acousticSettled && !fetchClosed && missOrder.length > 1) {
+        const completedGap = missOrder.some(q => {
+          const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k), reco = recoDone.get(k);
+          return recoDone.has(k) && ((acousticGap(prev, 'energy') && (reco?.energy == null || !reco.exact)) ||
+            (acousticGap(prev, 'danceability') && (reco?.danceability == null || !reco.exact)));
+        });
+        if (firstGroup && completedGap && !acousticSettled && !fetchClosed && missOrder.length > 1) {
           firstGroup = false;
           const collectUntil = Math.min(finalAt, now() + Math.max(25, Math.min(250, PROVIDER_INTERVAL_MS * (Math.min(8, missOrder.length) - 1))));
           while (!aiClosed && !acousticSettled && !fetchClosed && now() < collectUntil) await waitAcoustic(collectUntil);

@@ -6,14 +6,19 @@ import { enrichHandler } from './helpers/enrichHandler';
 const json = (data: unknown, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers });
 const deps = { readRows: async () => [], upsert: vi.fn(async () => {}), estimate: async () => [] };
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
-it.each([false, true])('paced acoustic misses form one useful bounded batch despite a slow sibling: %s', async slow => {
-  vi.useFakeTimers(); const origin = Date.now(), starts: number[] = [], groups: Array<{ at: number; songs: string[] }> = [];
-  const songs = Array.from({ length: 8 }, (_, i) => ({ artist: `Fixture ${i}`, song: `Synthetic ${i}` }));
+it.each([[false, false], [true, false], [true, true]])('paced acoustic misses form one useful bounded batch (slow=%s, initial hit=%s)', async (slow, initialHit) => {
+  vi.useFakeTimers(); const origin = Date.now(), starts: number[] = [], groups: Array<{ at: number; songs: string[] }> = []; let firstGap = -1;
+  const songs = Array.from({ length: initialHit ? 9 : 8 }, (_, i) => ({ artist: `Fixture ${i}`, song: `Synthetic ${i}` }));
   vi.stubGlobal('fetch', async (input: string) => {
     const url = new URL(input);
     if (url.hostname === 'musicbrainz.org') return new Promise<Response>(() => {});
     starts.push(Date.now() - origin);
-    if (slow && url.searchParams.get('searchText') === 'Synthetic 7') return new Promise<Response>(() => {});
+    if (initialHit && url.pathname.endsWith('/audio-features')) return json({ energy: 0.8, danceability: 0.8 });
+    if (initialHit && url.searchParams.get('searchText') === 'Synthetic 0') return json({ content: [{ id: 'hit', trackTitle: 'Synthetic 0', artists: [{ name: 'Fixture 0' }] }] });
+    if (slow && url.searchParams.get('searchText') === songs.at(-1)?.song) return new Promise<Response>(() => {});
+    // Let the first exact hit finish (including its separately paced feature request) before misses settle.
+    if (initialHit && url.searchParams.get('page') === '0') await new Promise(r => setTimeout(r, 250));
+    if (url.searchParams.get('page') === '1' && firstGap < 0) firstGap = Date.now() - origin;
     return json({ content: [] });
   });
   const pending = runEnrichment(songs, { ...deps, estimate: async (group, _signal, emit) => {
@@ -22,9 +27,11 @@ it.each([false, true])('paced acoustic misses form one useful bounded batch desp
     const values = group.map(() => ({ energy: 8, danceability: 8 })); values.forEach((v, i) => emit?.(i, v)); return values;
   } });
   await vi.advanceTimersByTimeAsync(16_000); const out = await pending;
-  expect(groups).toEqual([{ at: 300, songs: songs.map(s => s.song) }]);
+  expect(firstGap).toBeGreaterThanOrEqual(100);
+  expect(groups).toEqual([{ at: firstGap + 250, songs: songs.slice(initialHit ? 1 : 0).map(s => s.song) }]);
   expect(starts.every((at, i) => i === 0 || at - starts[i - 1] >= 50)).toBe(true);
-  expect(out.results).toHaveLength(8); expect(out.results.every(r => r.energy === 8 && r.danceability === 8 && r.prov?.energy === 'ai')).toBe(true);
+  expect(out.results).toHaveLength(songs.length); expect(out.results.slice(initialHit ? 1 : 0).every(r => r.energy === 8 && r.danceability === 8 && r.prov?.energy === 'ai')).toBe(true);
+  if (initialHit) expect(out.results[0].prov?.energy).toBe('provider');
   expect(out.status.timedOut).not.toContain('ai');
   const frozen = JSON.stringify(out); await vi.advanceTimersByTimeAsync(20_000); expect(JSON.stringify(out)).toBe(frozen);
 });

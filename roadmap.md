@@ -1,7 +1,8 @@
 # Workspace rebuild
 ## Mac pacing regression follow-up
-- [ ] Reproduce and repair bounded acoustic batching and fake-clock settlement without changing limits or targets.
-- [ ] Compare synthetic warm 40%-yield coverage with pre-pacing baseline; run four affected files and pacing/diagnostic checks, then commit.
+- [x] Repair bounded batching; new initial-complete-hit regression fails before gap-anchored collection and passes after; 50ms pacing/250ms collection unchanged. Credit compilation moved to fixture setup, original 5s and all dataset/identity assertions retained.
+- [x] Record baseline warm 5640/14490/7320 vs paced 5640/14400/6780 vs repaired 5520/14430/7410; final three affected files 40/40 and pacing/diagnostic group 158/158 pass.
+- [ ] Final full coordinatedExpansion/Mac acceptance: combined local attempt exceeded 600s; separate file execution interrupted without summary. Prior 36/36 is not final-head acceptance. Hosted production/CodeQL also remain pending; guards unchanged.
 ## Approved provider pacing and cause-aware activity
 - [x] Coordinate and carry bounded generation-local provider pressure without replay or deadline changes.
 - [x] Aggregate cause-aware warnings and show final target outcomes in activity; preserve sanitized copy.
