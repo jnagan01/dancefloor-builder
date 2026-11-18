@@ -25,6 +25,28 @@ const base = {id:'A',inputs:{songs:clients,hours:'3.75',buffer:2,listType:'dance
 const cacheRow = (s:any):CacheRow => ({artist_key:dance.normalizeKey(s.artist),song_key:dance.normalizeKey(s.song),energy:8,danceability:8,popularity:8,bpm:120,year:2005,genre:'Pop',camelot:null,valence:null,source:encodeCacheSource('ReccoBeats',{energy:'provider',danceability:'provider',popularity:'provider',bpm:'provider',year:'provider',genre:'provider'}),fetched_at:new Date().toISOString()});
 afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();});
 
+// Exact-host check for fetch mocks: parses string/URL/Request inputs and compares the
+// hostname only, so lookalike URLs (suffix, prefix, path, query or userinfo) never match.
+const isHost=(input:unknown,host:string):boolean=>{
+  try{
+    const raw=typeof input==='string'?input:input instanceof URL?input.href:input instanceof Request?input.url:null;
+    return raw!==null&&new URL(raw).hostname===host;
+  }catch{return false;}
+};
+
+it('fetch host matcher accepts only the exact hostname',()=>{
+  expect(isHost('https://musicbrainz.org/ws/2/recording/?query=x','musicbrainz.org')).toBe(true);
+  expect(isHost(new URL('https://musicbrainz.org/ws/2/artist/'),'musicbrainz.org')).toBe(true);
+  expect(isHost(new Request('https://musicbrainz.org/ws/2/release/'),'musicbrainz.org')).toBe(true);
+  expect(isHost('https://musicbrainz.org.evil.example/ws/2/','musicbrainz.org')).toBe(false);
+  expect(isHost('https://evil-musicbrainz.org/ws/2/','musicbrainz.org')).toBe(false);
+  expect(isHost('https://example.org/musicbrainz.org/ws/2/','musicbrainz.org')).toBe(false);
+  expect(isHost('https://example.org/?next=https://musicbrainz.org','musicbrainz.org')).toBe(false);
+  expect(isHost('https://musicbrainz.org@evil.example/','musicbrainz.org')).toBe(false);
+  expect(isHost('not a url','musicbrainz.org')).toBe(false);
+  expect(isHost(undefined,'musicbrainz.org')).toBe(false);
+});
+
 it('actual handler enforces max500 and auth before AI, bounded context retains selected requests',async()=>{
   const generate=vi.fn(async()=>({object:{suggestions:[]}}));const h=recommendHandler(generate);
   const rows=Array.from({length:2000},(_,i)=>({artist:`Act ${i}`,song:`Song ${i}`}));
@@ -69,7 +91,7 @@ it('only rate/server failures are retryable; schema and timeout never replay',()
 
 for (const latency of [6000,12000,15000]) it(`independent recording lag and ${latency}ms AI retain partials within fixed end`,async()=>{
   vi.useFakeTimers();const start=Date.now();let aiStart=-1;let calls=0;
-  vi.stubGlobal('fetch',async url=>{if(String(url).includes('musicbrainz.org'))return new Promise(()=>{});return new Response(JSON.stringify({content:[]}));});
+  vi.stubGlobal('fetch',async url=>{if(isHost(url,'musicbrainz.org'))return new Promise(()=>{});return new Response(JSON.stringify({content:[]}));});
   const p=runEnrichment([{artist:'TEST Lag',song:'Exact'}],{readRows:async()=>[],upsert:async()=>{},estimate:async(_s,_signal,emit)=>{calls++;aiStart=Date.now()-start;await new Promise(r=>setTimeout(r,3000));emit?.(0,{energy:8});await new Promise(r=>setTimeout(r,latency-3000));return [{energy:8,danceability:8}];}});
   await vi.advanceTimersByTimeAsync(17000);const out=await p;
   expect(aiStart).toBe(0);expect(calls).toBe(1);expect(out.results[0]).toMatchObject({energy:8,prov:{energy:'ai'},incomplete:true});
