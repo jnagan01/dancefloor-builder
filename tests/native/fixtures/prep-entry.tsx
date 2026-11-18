@@ -2,7 +2,7 @@
 // fenced synthetic Electron profile); every network/account service is a local stand-in.
 import React from 'react';
 import { GenerationActivity } from '../../../src/components/GenerationActivity';
-import { diagnosticStore } from '../../../src/lib/generationDiagnostics/store';
+import { diagnosticStore, createDiagnosticStore, indexedDiagnosticStorage } from '../../../src/lib/generationDiagnostics/store';
 import { createRoot } from 'react-dom/client';
 import { Route as LibraryRoute } from '../../../src/routes/_authenticated/library';
 import { EventPrepPanel, type PrepSectionKey } from '../../../src/components/prep/EventPrepPanel';
@@ -95,5 +95,13 @@ function Root() {
 await w.__switchAccount(w.__fixture.account ?? 'synthetic-a');
 await diagnosticStore().activate('synthetic-diagnostics');
 w.__activity = diagnosticStore();
-w.__addActivity = async () => { const run = diagnosticStore().begin('synthetic-diagnostics', '1.2.3', 'synthetic-build', 34); run?.notice('metadata_incomplete', 8); run?.coverage({warmUp:5400,transition:14400,peak:7200}, {warmUp:5400,transition:14400,peak:7200}); run?.finish('completed'); await diagnosticStore().settled(); };
+w.__addActivity = async () => {
+  let clock = Date.now();
+  const store = createDiagnosticStore(indexedDiagnosticStorage(), () => clock);
+  await store.activate('synthetic-diagnostics');
+  const run = store.begin('synthetic-diagnostics', 'desktop:1.2.99', 'synthetic-build', 34);
+  run?.notice('metadata_incomplete', 8);
+  run?.coverage({warmUp:5400,transition:14400,peak:7200}, {warmUp:5400,transition:14400,peak:7200});
+  clock += 125000; run?.finish('completed'); await store.settled();
+};
 createRoot(document.getElementById('root') as HTMLElement).render(<Root />);

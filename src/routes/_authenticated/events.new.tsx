@@ -109,6 +109,7 @@ import type { ResultSong } from "@/lib/danceFloor";
 import { ProfileSettingsDialog } from "@/components/ProfileSettingsDialog";
 import { GenerationActivity } from "@/components/GenerationActivity";
 import { beginGenerationDiagnostics } from "@/lib/generationDiagnostics/store";
+import { useDiagnosticVersion } from "@/lib/generationDiagnostics/version";
 import { APP_VERSION, APP_BUILD_ID, formatBuildDate } from "@/lib/appVersion";
 import { useWorkspace } from "@/components/workspace/WorkspaceContext";
 import { isDesktopApp, makeNativeDirHandle, vdjPlaylistsIn } from "@/lib/desktopBridge";
@@ -424,6 +425,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // Guards against a slow in-flight generate() overwriting newer state.
   const genTokenRef = useRef(0);
   const diagnosticRunRef = useRef<ReturnType<typeof beginGenerationDiagnostics>>(null);
+  const diagnosticVersion = useDiagnosticVersion();
   useEffect(() => () => { diagnosticRunRef.current?.finish("cancelled"); }, []);
   const [vdjDirHandle, setVdjDirHandle] = useState<DirHandleLike | null>(null);
   const [vdjDirName, setVdjDirName] = useState<string | null>(null);
@@ -1024,7 +1026,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (!gate.ok) { toast.error(gate.message); return; }
       feedbackOwner = gate.owner;
     }
-    activity = beginGenerationDiagnostics(accountAtStart, APP_VERSION, APP_BUILD_ID, uniqueSongs.length, () => genTokenRef.current === myToken && accountRef.current === accountAtStart);
+    activity = beginGenerationDiagnostics(accountAtStart, diagnosticVersion.current, APP_BUILD_ID, uniqueSongs.length, () => genTokenRef.current === myToken && accountRef.current === accountAtStart);
     diagnosticRunRef.current = activity;
     let fbCache: { k: unknown; fb: ExpansionFeedback } | null = null;
     const liveFeedback = (): ExpansionFeedback => {

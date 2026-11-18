@@ -49,11 +49,17 @@ try {
     await page.reload(); await page.getByRole('button', {name:'Go library'}).waitFor();
     await page.getByRole('button', {name:'Recent generation activity'}).click();
     await page.getByText('Completed with warnings', {exact:true}).click();
-    await expect(page.getByRole('dialog')).toContainText('Transition: 14400 / 14400 seconds');
+    await expect(page.getByRole('dialog')).toContainText('Transition: 4 hr / 4 hr');
+    await expect(page.getByRole('dialog')).toContainText('Warm Up: 1 hr 30 min / 1 hr 30 min');
+    await expect(page.getByRole('dialog')).toContainText('Installed desktop version 1.2.99');
+    await expect(page.getByRole('dialog')).toContainText('2 min 5 sec elapsed');
     await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', {configurable:true,value:{writeText:async text => {window.__activityCopy=text;}}}); });
     await page.getByRole('button', {name:'Copy diagnostics'}).click();
     const copied = await page.evaluate(() => window.__activityCopy);
     expect(JSON.parse(copied).requested).toBe(34);
+    expect(JSON.parse(copied).coverage[1]).toEqual({ section: 'transition', targetSeconds: 14400, achievedSeconds: 14400 });
+    expect(JSON.parse(copied).version).toBe('desktop:1.2.99');
+    expect(JSON.parse(copied).elapsedMs).toBe(125000);
     expect(copied).not.toMatch(/filePath|\/synthetic\/|Queen|token|accountId|eventName/);
     expect(await page.evaluate(() => JSON.stringify(window.__fixture.tracks))).toBe(before);
     await page.keyboard.press('Escape');

@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { diagnosticStore } from '@/lib/generationDiagnostics/store';
 import { sendGenerationDiagnostics } from '@/lib/generationDiagnostics/relay.functions';
 import { copyDiagnostics, MESSAGES } from '@/lib/generationDiagnostics/schema';
+import { diagnosticVersionLabel } from '@/lib/generationDiagnostics/version';
+import { activityDuration } from '@/lib/generationDiagnostics/duration';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { History, Copy } from 'lucide-react';
@@ -42,9 +44,9 @@ export function GenerationActivity({ account }: { account: string | null }) {
       {rows.map(({ run, delivery }) => <details key={run.id} className="border-b border-border py-3">
         <summary className="cursor-pointer text-sm"><span className="font-medium">{statuses[run.status]}</span> · {new Date(run.startedAt).toLocaleString()}<span className="block text-muted-foreground">{delivery === 'sent' ? 'Sent' : delivery === 'not configured' ? 'Not configured' : delivery === 'retry later' ? 'Retry later' : 'Queued'}</span></summary>
         <div className="space-y-2 pt-3 text-sm">
-          <p className="break-all text-muted-foreground">Version {run.version} · Web build {run.build}</p>
-          <p>{run.requested} requests · {Math.round(run.elapsedMs / 1000)} seconds</p>
-          {run.coverage.filter(s => s.targetSeconds > 0).map(s => <p key={s.section}>{names[s.section]}: {s.achievedSeconds} / {s.targetSeconds} seconds</p>)}
+          <p className="break-all text-muted-foreground">{diagnosticVersionLabel(run.version)} · Web build {run.build}</p>
+          <p>{run.requested} requests · {activityDuration(run.elapsedMs / 1000)} elapsed</p>
+          {run.coverage.filter(s => s.targetSeconds > 0).map(s => <p key={s.section}>{names[s.section]}: {activityDuration(s.achievedSeconds)} / {activityDuration(s.targetSeconds)}</p>)}
           {run.notices.map((n, i) => <p key={i}>{MESSAGES[n.code]} {n.count > 1 ? `(${n.count})` : ''}</p>)}
           <Button variant="outline" size="sm" onClick={async () => {
             setCopyState('');

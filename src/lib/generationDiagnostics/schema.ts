@@ -46,6 +46,7 @@ export type Delivery = 'queued' | 'sent' | 'not configured' | 'retry later';
 export const BatchSchema = z.object({ runs: z.array(RunSchema).min(1).max(5) }).strict();
 export type RelayReply = { accepted: Array<{ id: string; revision: number }>; state: Delivery; retryAfterMs?: number };
 export function safeVersion(value: unknown): string { return typeof value === 'string' && /^[a-zA-Z0-9._:-]{1,100}$/.test(value) ? value.slice(0, 80) : 'unknown'; }
+export function safeBuild(value: unknown): string { return typeof value === 'string' && /^[a-zA-Z0-9._:-]{1,100}$/.test(value) ? value : 'unknown'; }
 export function safeCount(value: unknown): number { return typeof value === 'number' && Number.isFinite(value) ? Math.min(1_000_000, Math.max(0, Math.round(value))) : 0; }
 export function copyDiagnostics(value: unknown): string {
   const r = RunSchema.parse(value);

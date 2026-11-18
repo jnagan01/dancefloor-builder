@@ -1,4 +1,4 @@
-import { CauseSchema, RunSchema, safeCount, safeVersion, type DiagnosticRun, type Delivery, type NoticeCode, type RelayReply } from './schema';
+import { CauseSchema, RunSchema, safeCount, safeVersion, safeBuild, type DiagnosticRun, type Delivery, type NoticeCode, type RelayReply } from './schema';
 
 export type LocalRun = { run: DiagnosticRun; delivery: Delivery; attempts: number; nextAt: number };
 export interface DiagnosticStorage { read(account: string): Promise<unknown[]>; write(account: string, value: LocalRun): Promise<void>; remove(account: string, id: string): Promise<void> }
@@ -90,7 +90,7 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
     begin(owner: string | null, version: unknown, build: unknown, requested: number, isCurrent = () => true) {
       if (!owner || owner !== account) return null;
       const fence = epoch;
-      const row: LocalRun = { run: { schema: 1, kind: 'generation', id: uuid(), revision: 0, startedAt: now(), version: safeVersion(version), build: safeVersion(build), status: 'running', elapsedMs: 0, requested: safeCount(requested), notices: [], causes: [], coverage: [] }, delivery: 'queued', attempts: 0, nextAt: 0 };
+      const row: LocalRun = { run: { schema: 1, kind: 'generation', id: uuid(), revision: 0, startedAt: now(), version: safeVersion(version), build: safeBuild(build), status: 'running', elapsedMs: 0, requested: safeCount(requested), notices: [], causes: [], coverage: [] }, delivery: 'queued', attempts: 0, nextAt: 0 };
       rows.unshift(row); persist(owner, row); trim(owner); emit();
       const live = () => {
         if (account !== owner || epoch !== fence || !rows.includes(row) || row.run.status !== 'running') return false;

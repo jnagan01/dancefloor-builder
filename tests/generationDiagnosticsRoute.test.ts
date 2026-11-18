@@ -5,14 +5,24 @@ import { createDiagnosticStore, type DiagnosticStorage } from '@/lib/generationD
 
 const require = createRequire(import.meta.url);
 const actual = { vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions };
-async function setup(enrich: (r: any) => Promise<any>, diagnosticThrows = false) {
+async function setup(enrich: (r: any) => Promise<any>, diagnosticThrows = false, diagnosticVersion = { current: 'web:1.1.0' }) {
   const data = new Map();
   const storage: DiagnosticStorage = { read: async a => [...data].filter(([key]) => key.startsWith(`${a}:`)).map(([, value]) => value), write: async (a, r) => { data.set(`${a}:${r.run.id}`, structuredClone(r)); }, remove: async (a, id) => { data.delete(`${a}:${id}`); } };
   const store = createDiagnosticStore(storage); await store.activate('owner');
-  const h = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ ...actual, diagnostics: { beginGenerationDiagnostics: diagnosticThrows ? () => null : (...args: any[]) => store.begin(args[0], args[1], args[2], args[3], args[4]) } })({ eventId: 'A', rows: { A: { id: 'A', inputs: { songs: [{ artist: 'Synthetic private client', song: 'PRIVATE title' }], hours: '1', buffer: 1, listType: 'dance', expand: false }, lists: { warmUp: [], transition: [], peak: [], selections: {} } } }, services: { enrich } });
+  const h = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ ...actual, diagnosticVersion, buildId: '2026-11-18T05:44:00.000Z.synthetic-exact-build', diagnostics: { beginGenerationDiagnostics: diagnosticThrows ? () => null : (...args: any[]) => store.begin(args[0], args[1], args[2], args[3], args[4]) } })({ eventId: 'A', rows: { A: { id: 'A', inputs: { songs: [{ artist: 'Synthetic private client', song: 'PRIVATE title' }], hours: '1', buffer: 1, listType: 'dance', expand: false }, lists: { warmUp: [], transition: [], peak: [], selections: {} } } }, services: { enrich } });
   await h.flush(); return { h, store, data };
 }
 afterEach(() => vi.useRealTimers());
+it.each(['desktop:1.2.99', 'web:1.1.0', 'desktop:unavailable'])('actual generation snapshots %s and exact web build without waiting on version status', async version => {
+  vi.useFakeTimers(); const ref = { current: version };
+  const { h, store } = await setup(async () => ({ results: [] }), false, ref);
+  await h.current.generate(); await h.flush();
+  expect(store.get().rows[0].run.version).toBe(version);
+  expect(store.get().rows[0].run.build).toBe('2026-11-18T05:44:00.000Z.synthetic-exact-build');
+  expect(h.current.result.warmUp).toHaveLength(1);
+  ref.current = 'desktop:9.9.9'; await h.flush();
+  expect(store.get().rows[0].run.version).toBe(version); h.unmount();
+});
 it('actual handled metadata failure/shortfall notices persist with safe copy and no diagnostic event save', async () => {
   vi.useFakeTimers(); const { h, store } = await setup(async () => { throw Error('PRIVATE raw token /path'); });
   expect(h.requests).toEqual([]); await h.current.generate(); await h.flush(); await store.settled();
