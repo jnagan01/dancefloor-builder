@@ -1305,7 +1305,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               let settled = false;
               const report = (code: 'context_failed' | 'context_timeout') => { if (!settled && contextCurrent()) activity?.notice(code, 1, provider); settled = true; };
               return Promise.race([
-                Promise.resolve().then(dispatch).then(value => { settled = true; return value; }, () => { report('context_failed'); return fallback; }),
+                Promise.resolve().then(() => {
+                  if (!contextCurrent()) { settled = true; return fallback; }
+                  return dispatch();
+                }).then(value => { settled = true; return value; }, () => { report('context_failed'); return fallback; }),
                 new Promise<T>((resolve) => { t = setTimeout(() => { report('context_timeout'); resolve(fallback); }, Math.max(0, contextEnd - Date.now())); }),
               ]).finally(() => clearTimeout(t));
             };

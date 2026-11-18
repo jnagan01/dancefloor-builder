@@ -56,7 +56,7 @@ it('diagnostics unavailable cannot change route result, recommendation choices o
   await h.current.generate(); await h.flush(); expect(h.current.result.warmUp).toHaveLength(1); expect(store.get().rows).toEqual([]); h.unmount();
 });
 
-async function expansionFixture(services: Record<string, unknown> = {}, logging = true) {
+async function expansionFixture(services: Record<string, unknown> = {}, logging = true, beforeContextDispatch?: () => void) {
   const data = new Map();
   const store = createDiagnosticStore({ read: async a => [...data].filter(([k]) => k.startsWith(`${a}:`)).map(([, v]) => v), write: async (a, r) => { data.set(`${a}:${r.run.id}`, structuredClone(r)); }, remove: async () => {} });
   await store.activate('owner');
@@ -66,7 +66,7 @@ async function expansionFixture(services: Record<string, unknown> = {}, logging 
     { artist: 'PRIVATE Slow', title: 'PRIVATE Slow Title', filePath: '/synthetic/slow.mp3', songLength: 240, bpm: '120', year: '2005', genre: 'Pop' },
     { artist: 'PRIVATE Strict', title: 'PRIVATE Strict Title', filePath: '/synthetic/strict.mp3', songLength: 240, genre: 'Pop' },
   ];
-  const h = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ ...actual, diagnostics: { beginGenerationDiagnostics: logging ? (...args: any[]) => store.begin(args[0], args[1], args[2], args[3], args[4]) : () => null } })({
+  const h = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ ...actual, beforeContextDispatch, diagnostics: { beginGenerationDiagnostics: logging ? (...args: any[]) => store.begin(args[0], args[1], args[2], args[3], args[4]) : () => null } })({
     eventId: 'A', rows: { A: { id: 'A', inputs: { songs: [request], hours: '0.5', buffer: 1, listType: 'dance', expand: true, genresInput: 'Pop', ownedOnlyExpansion: true, bpmRange: [110, 130], decades: ['2000s'], eventFit: { avoidSlow: true } }, lists: { warmUp: [], transition: [], peak: [], selections: {} } } },
     services: { enrich: async ({ data }: any) => ({ results: data.songs.map((s: any) => ({ ...s, source: 'ReccoBeats', energy: s.artist === 'PRIVATE Slow' ? 2 : 8, danceability: s.artist === 'PRIVATE Slow' ? 2 : 8, bpm: s.artist === 'PRIVATE Strict' ? 90 : 120, year: s.artist === 'PRIVATE Strict' ? 1990 : 2005, prov: { energy: 'provider', danceability: 'provider', bpm: 'provider', year: 'provider' } })) }), ...services },
   });
@@ -114,6 +114,28 @@ it('actual account cancellation fences late initial context errors instead of re
   expect(f.store.get().rows).toEqual([]); await f.store.activate('owner');
   expect(f.store.get().rows[0].run.status).toBe('cancelled');
   expect(f.store.get().rows[0].run.notices.filter(n => ['context_failed', 'context_timeout'].includes(n.code))).toEqual([]); f.h.unmount();
+});
+it('actual context microtask account switch starts no old provider request or cross-owner diagnostic', async () => {
+  vi.useFakeTimers(); let scheduled = false; let switchAccount = () => {};
+  const neighbors = vi.fn(async () => ({ clusters: [] }));
+  const crowd = vi.fn(async () => ({ artists: [] }));
+  const similarTracks = vi.fn(async () => ({ availability: 'ok', seeds: [] }));
+  const f = await expansionFixture({ neighbors, crowd, similarTracks }, true, () => {
+    if (scheduled) return;
+    scheduled = true; void Promise.resolve().then(() => switchAccount());
+  });
+  let activated = Promise.resolve();
+  switchAccount = () => { f.h.switchTo('other', 'B'); activated = f.store.activate('other'); };
+  const work = f.h.current.generate();
+  await vi.advanceTimersByTimeAsync(15001); await work; await activated;
+  expect(scheduled).toBe(true);
+  expect(neighbors).not.toHaveBeenCalled(); expect(crowd).not.toHaveBeenCalled(); expect(similarTracks).not.toHaveBeenCalled();
+  expect(f.store.get().account).toBe('other'); expect(f.store.get().rows).toEqual([]);
+  expect(f.h.current.result).toBe(null);
+  await f.store.activate('owner');
+  expect(f.store.get().rows[0].run.status).toBe('cancelled');
+  expect(f.store.get().rows[0].run.notices.filter(n => ['context_failed', 'context_timeout', 'context_window'].includes(n.code))).toEqual([]);
+  f.h.unmount();
 });
 it('actual optional extra neighbour crowd lookup failure retains a sanitized Last.fm category', async () => {
   vi.useFakeTimers(); let calls = 0;
