@@ -51,7 +51,18 @@ def explicit_dry_run(api, run_id, event, dry):
     return run
 
 
-def problems(run, evidence=None):
+def runner_never_started(jobs):
+    """Positive evidence of an unallocated hosted Mac, not a guess from absent logs."""
+    if not isinstance(jobs, list) or len(jobs) != 1:
+        return False
+    job = jobs[0]
+    return (isinstance(job, dict) and job.get("name") == "synthetic"
+            and job.get("status") == "completed" and job.get("conclusion") in ("cancelled", "failure", "timed_out")
+            and job.get("steps") == [] and job.get("runner_id") == 0
+            and bool(set(job.get("labels") or []) & {"macos-15", "macos-15-intel"}))
+
+
+def problems(run, evidence=None, jobs=None):
     if not isinstance(evidence, dict):
         evidence = None
     if run is None:
@@ -59,18 +70,31 @@ def problems(run, evidence=None):
     if run.get("status") != "completed":
         status = run.get("status", "unknown")
         return [("run-incomplete", "incomplete", f"Test run is {status}")]
-    if run.get("conclusion") != "success":
-        conclusion = run.get("conclusion", "unknown")
-        found = [(f"suite-{name}", "failure", f"{name}: {item.get('status', 'unknown')}")
-                 for name, item in (evidence or {}).get("suites", {}).items()
-                 if name in REQUIRED and item.get("status") != "passed"]
-        missing = [(f"suite-{name}", "incomplete", f"{name}: no completed suite evidence")
-                   for name in REQUIRED if name not in (evidence or {}).get("suites", {})]
-        return [(f"run-{conclusion}", "incomplete" if conclusion in ("cancelled", "timed_out", None) else "failure", f"Test run concluded {conclusion}")] + found + missing + (category_findings(evidence) if matching_evidence(run, evidence) else [("category-evidence-missing", "incomplete", "No identity-matched category evidence")])
     if not matching_evidence(run, evidence):
-        return [("evidence-missing", "incomplete", "Successful job lacks matching structured evidence")]
-    return [(f"suite-{name}", "incomplete", f"{name} did not pass with complete evidence")
-            for name in REQUIRED if evidence.get("suites", {}).get(name, {}).get("status") != "passed"] + category_findings(evidence)
+        if runner_never_started(jobs):
+            return [("runner-unavailable", "incomplete", "GitHub could not start the hosted Mac test job. No application checks ran; this is a testing infrastructure problem, not a confirmed app defect.")]
+        return [("evidence-missing", "incomplete", "Testing could not be verified: the run has no matching completed results. Missing results are not evidence of separate app defects.")]
+    # Only identity-matched evidence can establish individual regressions. One
+    # interrupted job must not manufacture a separate defect for every missing suite.
+    found = [(f"suite-{name}", "failure", f"{name}: failed")
+             for name in REQUIRED if evidence["suites"].get(name, {}).get("status") == "failed"]
+    incomplete = [name for name in REQUIRED if evidence["suites"].get(name, {}).get("status") not in ("passed", "failed")]
+    if incomplete:
+        found.append(("testing-incomplete", "incomplete", "Testing stopped or results were incomplete for: " + ", ".join(incomplete)))
+    categories = category_findings(evidence)
+    found.extend(item for item in categories if item[1] == "failure")
+    if any(item[1] == "incomplete" for item in categories) and "categories" not in incomplete:
+        found.append(("category-evidence-missing", "incomplete", "Preparation category results were missing, malformed or stale; no separate app defects are inferred."))
+    if run.get("conclusion") != "success" and not found:
+        found.append(("run-incomplete", "incomplete", "Recorded checks passed, but GitHub did not finish the complete test workflow successfully."))
+    return found
+
+
+def report_timing(now):
+    local = now.astimezone(ZONE)
+    due = datetime.combine(tuesday(now), datetime.min.time(), ZONE).replace(hour=8)
+    return {"scheduled_for": due.isoformat(), "generated_at": local.isoformat(),
+            "delay_minutes": max(0, int((now - due).total_seconds() // 60))}
 
 
 def matching_evidence(run, evidence):
@@ -122,7 +146,7 @@ class GitHub:
             content = response.read(20 * 1024 * 1024 + 1)
         if len(content) > 20 * 1024 * 1024:
             raise ValueError("API response exceeds bounded limit")
-        return content if raw else json.loads(content)
+        return content if raw else json.loads(content) if content else None
 
     def pages(self, path, key=None):
         out = []
@@ -152,6 +176,9 @@ class GitHub:
             if len(names) != 1 or archive.getinfo(names[0]).file_size > 1024 * 1024:
                 raise ValueError("Missing or oversized structured result")
             return json.loads(archive.read(names[0]))
+
+    def jobs(self, run):
+        return self.pages(f"/actions/runs/{run['id']}/attempts/{run.get('run_attempt', 1)}/jobs", "jobs")
 
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -190,6 +217,7 @@ def main():
     try:
         api = GitHub()
         now = datetime.now(timezone.utc)
+        diagnostic.update(report_timing(now))
         day = tuesday(now)
         dry = os.environ.get("WEEKLY_DRY_RUN", "true") == "true"
         run_id = os.environ.get("WEEKLY_TEST_RUN_ID", "").strip()
@@ -208,7 +236,13 @@ def main():
         try:
             evidence = api.evidence(run)
             if "findings" not in locals():
-                findings = problems(run, evidence)
+                jobs = None
+                if run and run.get("status") == "completed" and not matching_evidence(run, evidence):
+                    try:
+                        jobs = api.jobs(run)
+                    except Exception:
+                        pass  # Missing diagnostics remain one incomplete-testing finding.
+                findings = problems(run, evidence, jobs)
         except Exception:
             evidence = None
             findings = [("evidence-unavailable", "incomplete", "Could not read current run evidence")]
@@ -249,7 +283,11 @@ def main():
         if decision == "missing-secret":
             raise RuntimeError("Report required but GitHub Actions mail secret is unavailable")
         if decision == "send":
-            body = f"SetArchitect synthetic tests need attention ({day}, America/Chicago).\n" + "\n".join(f"- {p[2]}" for p in findings)
+            kind = "confirmed test failures" if any(p[1] == "failure" for p in findings) else "testing could not complete or be verified"
+            body = f"SetArchitect weekly synthetic tests: {kind} ({day}, America/Chicago).\n" + "\n".join(f"- {p[2]}" for p in findings)
+            body += f"\nReport scheduled for {diagnostic['scheduled_for']}; generated at {diagnostic['generated_at']}.\n"
+            if diagnostic["delay_minutes"] >= 15:
+                body += "GitHub started reporting late. Scheduled Actions can be delayed; this is not an app defect.\n"
             body += "\n" + "\n".join(i["html_url"] for i in matched) + f"\nRun/artifacts: {run_url}\n"
             send_mail(body)
             diagnostic.update(status="smtp-accepted", sent=True)
