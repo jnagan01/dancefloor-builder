@@ -53,7 +53,7 @@ jobs:
         run: bun run build
       - name: Verify production client excludes relay secrets
         if: ${{ !cancelled() }}
-        run: node scripts/check-diagnostic-client.mjs dist/client
+        run: node scripts/check-diagnostic-client.mjs .output/public
   regression:
     # Push, pull request, and reusable release checks retain Apple Silicon.
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.runner || 'macos-15' }}
