@@ -7,6 +7,7 @@ import { sendGenerationDiagnostics } from '@/lib/generationDiagnostics/relay.fun
 import { copyDiagnostics, MESSAGES } from '@/lib/generationDiagnostics/schema';
 import { diagnosticVersionLabel } from '@/lib/generationDiagnostics/version';
 import { activityDuration } from '@/lib/generationDiagnostics/duration';
+import { preparationOutcome, providerCauseMessages } from '@/lib/generationDiagnostics/presentation';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { History, Copy } from 'lucide-react';
@@ -51,7 +52,9 @@ export function GenerationActivity({ account }: { account: string | null }) {
         <div className="space-y-2 pt-3 text-sm">
           <p className="break-all text-muted-foreground">{diagnosticVersionLabel(run.version)} · Web build {run.build}</p>
           <p>{run.requested} requests · {activityDuration(run.elapsedMs / 1000)} elapsed</p>
+          <p>{preparationOutcome(run)}</p>
           {run.coverage.filter(s => s.targetSeconds > 0).map(s => <p key={s.section}>{names[s.section]}: {activityDuration(s.achievedSeconds)} / {activityDuration(s.targetSeconds)}</p>)}
+          {providerCauseMessages(run.causes).map((message, i) => <p key={`cause-${i}`}>{message}</p>)}
           {run.notices.map((n, i) => <p key={i}>{MESSAGES[n.code]} {n.count > 1 ? `(${n.count})` : ''}</p>)}
           <Button variant="outline" size="sm" onClick={async () => {
             const owner = account, seq = ++copySeq.current;

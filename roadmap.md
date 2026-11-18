@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Approved provider pacing and cause-aware activity
+- [x] Coordinate and carry bounded generation-local provider pressure without replay or deadline changes.
+- [x] Aggregate cause-aware warnings and show final target outcomes in activity; preserve sanitized copy.
+- [x] Synthetic scheduling 152/152, preservation 132/132, isolated Linux Electron 22/22; frozen install unchanged, native client scan passes.
+- [ ] Final-commit hosted frozen TypeScript/production/public-client scan and required read-only Mac/full suite: GitHub execution/results unavailable here; workflow and guards unchanged. No manual build/typecheck under sandbox rules, no publishing.
 ## Persistent generation activity
 - [x] Activation-read race: runs begun while saved history loads keep live identity and finish once; only restored runs become interrupted; pending-read account switch stays fenced. First version case warmed outside its unchanged 5s limit. Focused 55/55 + 5/5 pass; full local suite not repeated by request.
 - [x] Deferred context dispatch rechecks account/generation immediately before calling providers; exact microtask-switch actual-route regression passes, no old provider request or cross-owner notice. Focused group 51 pass/1 first-version setup timeout at unchanged 5s limit; isolated route repeats 12 pass/1 same timeout. Full suite not repeated for this correction.

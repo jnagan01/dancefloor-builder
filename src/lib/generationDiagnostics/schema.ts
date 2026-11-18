@@ -1,14 +1,14 @@
 import { z } from 'zod';
 
 export const MESSAGES = {
-  metadata_failed: 'Some online song details could not be checked. Finished details were kept.',
-  metadata_timeout: 'Some song detail checks did not reply in time. Finished details were kept.',
-  metadata_incomplete: 'Some online song details remain unknown. Finished details were kept.',
-  lookup_budget: 'The song lookup limit was reached. Existing details were kept.',
+  metadata_failed: 'Some online track details could not be checked. Finished details were kept.',
+  metadata_timeout: 'Some track detail checks actually timed out. Finished details were kept.',
+  metadata_incomplete: 'Some online track details remain unknown. This does not by itself mean a timeout. Finished details were kept.',
+  lookup_budget: 'The track lookup limit was reached. Existing details were kept.',
   lookup_window: 'The remaining lookup time or service wait prevented further checks.',
   community_disabled: 'Community tags and listener counts were not available.',
   community_failed: 'Some community checks could not finish. Other details were kept.',
-  community_budget: 'The community check limit was reached.',
+  community_budget: 'The optional community check limit was reached (not a service failure).',
   suggestions_failed: 'Some suggestions could not be obtained. Preparation continued with available tracks.',
   suggestions_timeout: 'Some suggestions did not arrive in time. Finished suggestions were kept.',
   suggestions_partial: 'Only the suggestions finished in time were kept.',

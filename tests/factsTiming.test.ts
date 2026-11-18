@@ -79,7 +79,7 @@ describe('owned-library facts are gathered BEFORE ranking (timing regression)', 
     const owned = all(h.current.result).filter((t: any) => t.artist.startsWith(OWNED));
     expect(owned).toEqual([]); // fresh avoid-slow fails closed; requests remain
     expect(all(h.current.result).filter((t:any)=>t.fromUpload)).toHaveLength(2);
-    expect(h.warnings.some((w: string) => /Couldn't reach the online music data service/.test(w))).toBe(true);
+    expect(h.warnings.some((w: string) => w.includes('Some online track details could not be checked.'))).toBe(true);
     h.unmount();
   });
 

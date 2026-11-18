@@ -93,12 +93,13 @@ it('shared cooldown extended by a later 429 cannot be bypassed by already-sleepi
 });
 
 it.each([429, 503])('%s respects a 14s shared cooldown across chunks, no failed-recording replay, other facts survive', async status => {
-  vi.useFakeTimers(); const origin = Date.now(); const starts: number[] = []; let count = 0, readyAt = 0;
+  vi.useFakeTimers(); const origin = Date.now(); const starts: number[] = []; let readyAt = 0;
   vi.stubGlobal('fetch', async (url: string) => {
     const u = new URL(url);
     if (u.host === 'musicbrainz.org') return json({ recordings: [] });
     starts.push(Date.now() - origin);
-    return count++ < 4 ? json({}, status, { 'retry-after': '14' }) : json({ content: [] });
+    // Pressure belongs to the first chunk, not a presumed four-request initial burst.
+    return !(u.searchParams.get('searchText') ?? '').endsWith(' second') ? json({}, status, { 'retry-after': '14' }) : json({ content: [] });
   });
   const g = createFactsGatherer(async chunk => {
     const out = await runEnrichment(chunk, { ...storage, estimate: async rows => rows.map(() => ({ energy: 7, danceability: 8 })) });
@@ -106,7 +107,7 @@ it.each([429, 503])('%s respects a 14s shared cooldown across chunks, no failed-
   }, factsKey, { readyAt: () => readyAt, overallMs: 60000, isIncomplete: s => !!s.incomplete });
   const input = [...songs, ...songs.map(s => ({ artist: s.artist + ' second', song: s.song + ' second' }))];
   const pending = g.gather(input); await vi.advanceTimersByTimeAsync(60000); const report = await pending;
-  expect(starts.slice(4).every(t => t >= 14000)).toBe(true);
+  expect(starts[0]).toBe(0); expect(starts.slice(1).every(t => t >= 14000)).toBe(true);
   expect(report.requested).toBe(16); expect(report.incompleteSongs).toBe(8);
   expect(input.every(s => g.get(s)?.energy === 7)).toBe(true);
   expect((await g.gather(input)).alreadyAttempted).toBe(16);
@@ -148,7 +149,8 @@ it('provider and estimate work together never exceeds six lanes; fast gaps survi
   vi.stubGlobal('fetch', async (url: string) => {
     const u = new URL(url);
     if (u.host === 'musicbrainz.org') return busy(6000, json({ recordings: [] }));
-    return busy(100, json({ content: [] }));
+    // Hold headers long enough for the four spaced acoustic workers to overlap with recording/AI lanes.
+    return busy(250, json({ content: [] }));
   });
   const pending = runEnrichment(songs, { ...storage, estimate: async rows => busy(5000, rows.map(() => ({ energy: 7, danceability: 8 }))) });
   await vi.advanceTimersByTimeAsync(16000); const out = await pending;

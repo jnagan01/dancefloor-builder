@@ -96,6 +96,8 @@ import { recommendSongsForSection, type RecommendedSong } from "@/lib/recommend.
 import { getArtistNeighbors } from "@/lib/neighbors.functions";
 import { getArtistCrowdData, getSimilarTracks, type ArtistCrowd } from "@/lib/lastfm.functions";
 import { enrichSongs, type EnrichedSong } from "@/lib/enrich.functions";
+import { capturePacing, remainingPacing } from '@/lib/providerPacing';
+import { createMetadataWarnings, preparationOutcome } from '@/lib/generationDiagnostics/presentation';
 import { lookupCommunityBatch, COMMUNITY_BATCH, type CommunityRow } from "@/lib/prep/community.functions";
 import type { CommunityEvidence } from "@/lib/prep/communityEvidence";
 import { importSpotifyPlaylist } from "@/lib/spotify.functions";
@@ -1141,12 +1143,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // Small helper: fetch online enrichment for a flat list of songs and
     // return a map keyed by "artist||song" (raw values). Best-effort — a
     // network failure returns an empty map so generation continues.
-    let enrichFailed = false, budgetWarned = false, timeoutWarned = false;
+    let budgetWarned = false, timeoutWarned = false;
+    const metadataWarnings = createMetadataWarnings();
     // One per-generation gatherer: small serial chunks, bounded concurrency, a total request budget, and each
     // exact artist||song attempted once (misses and failures included) so later passes never re-request them.
     // With an active familiarity choice the server also upgrades warm cache rows lacking track popularity (bounded).
     const needPopularity = !!normalizeEventFit(eventFit)?.familiarity;
-    let incompleteWarned = false;
+    let metadataPacing: ReturnType<typeof capturePacing> = {};
     let metadataReadyAt = 0, metadataDispatchMs = 0;
     const metadataLatencies: number[] = [];
     let lastFactsReport: GatherReport | undefined;
@@ -1154,13 +1157,18 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       async (songs) => {
         if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
         const started = Date.now();
-        const reply = await enrichFn({ data: { songs, needPopularity } });
-        if (genTokenRef.current === myToken && accountRef.current === accountAtStart) activity?.causes(reply.status?.causes);
+        const reply = await enrichFn({ data: { songs, needPopularity, pacing: remainingPacing(metadataPacing, Date.now()) } });
+        if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
+        activity?.causes(reply.status?.causes);
+        metadataWarnings.response(reply.status?.causes, reply.status?.timedOut);
+        // Only this generation carries sanitized, expiring pressure between serial chunks. Warm cache still bypasses lanes.
+        if (reply.status?.pacing) metadataPacing = capturePacing(reply.status.pacing, Date.now());
         // Reserve enough remaining generation time for observed service latency plus transport margin.
         metadataDispatchMs = Math.min(20_000, Math.max(metadataDispatchMs, Date.now() - started + 1_000));
         metadataLatencies.push(Date.now() - started);
         // Warm hits need no pacing; cold grouped MusicBrainz requests must not burst across invocations.
-        metadataReadyAt = Math.max(started + (reply.status?.retryAfterMs === undefined ? 0 : 1000), Date.now() + (reply.status?.retryAfterMs ?? 0));
+        // Modern replies pace each provider independently after cache read. Legacy replies retain their pre-dispatch wait.
+        metadataReadyAt = reply.status?.pacing ? 0 : Math.max(started + (reply.status?.retryAfterMs === undefined ? 0 : 1000), Date.now() + (reply.status?.retryAfterMs ?? 0));
         return reply.results;
       },
       (e) => factsKey(e),
@@ -1175,16 +1183,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const rep = await facts.gather(list);
       lastFactsReport = rep;
       if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return map;
+      metadataWarnings.report(rep);
       if (rep.timedOutSongs) activity?.notice("metadata_timeout", rep.timedOutSongs, "metadata");
       if (rep.failedSongs > rep.timedOutSongs) activity?.notice("metadata_failed", rep.failedSongs - rep.timedOutSongs, "metadata");
       if (rep.incompleteSongs) activity?.notice("metadata_incomplete", rep.incompleteSongs, "metadata");
       if (rep.skippedByBudget && !budgetWarned) activity?.notice("lookup_budget", rep.skippedByBudget);
       if (rep.skippedAfterTimeout && !timeoutWarned) activity?.notice("lookup_window", rep.skippedAfterTimeout);
-      if (rep.failedSongs && !enrichFailed) {
-        enrichFailed = true;
-        console.warn("Online enrichment failed for", rep.failedSongs, "songs — their details stay unknown/estimated");
-        toast.warning("Couldn't reach the online music data service for some songs — their energy, BPM and genre stay unknown or estimated for this run.");
-      }
       if (rep.skippedByBudget && !budgetWarned) {
         budgetWarned = true;
         toast.info(`${rep.skippedByBudget} candidate track${rep.skippedByBudget === 1 ? "" : "s"} weren't looked up online (per-run limit of ${FACTS_BUDGET} lookups). Any details they already had are kept; the skipped lookup adds no extra evidence.`);
@@ -1192,10 +1196,6 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       if (rep.skippedAfterTimeout && !timeoutWarned) {
         timeoutWarned = true;
         toast.info(`The online lookup time limit or provider cooldown prevented ${rep.skippedAfterTimeout} more track${rep.skippedAfterTimeout === 1 ? " from being" : "s from being"} looked up. Any details they already had are kept; nothing was added for them.`);
-      }
-      if (rep.incompleteSongs && !incompleteWarned) {
-        incompleteWarned = true;
-        toast.info(`The online music data lookup was incomplete (time limit or provider unavailable) for ${rep.incompleteSongs} track${rep.incompleteSongs === 1 ? "" : "s"}. Details that were already known or finished in time are kept; nothing was guessed for the rest.`);
       }
       for (const s of list) { const e = facts.get(s); if (e) map.set(factsKey(s), e); }
       return map;
@@ -2021,6 +2021,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const durationGaps = (["warmUp", "transition", "peak"] as SectionKey[]).filter(k => actualSeconds[k] < durationTargets[k]);
     activity?.coverage(durationTargets, actualSeconds);
     const diagnosticShort = expand ? durationGaps.length > 0 : clientCoverage.baselineShortSeconds > 0;
+    const metadataMessage = metadataWarnings.message(preparationOutcome({ status: diagnosticShort ? 'short' : 'completed', coverage: (['warmUp', 'transition', 'peak'] as SectionKey[]).map(section => ({ section, targetSeconds: durationTargets[section], achievedSeconds: actualSeconds[section] })) }));
+    if (metadataMessage) toast.warning(metadataMessage);
     if (diagnosticShort) activity?.notice("short", durationGaps.length || 1);
     activity?.finish(diagnosticShort ? "short" : "completed");
     diagnosticFinished = true;

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import * as vdj from '@/lib/virtualDj';
 import * as dance from '@/lib/danceFloor';
@@ -18,8 +18,21 @@ const harness = (options: any) => require('./helpers/eventRouteHarness.cjs').cre
 const songs = Array.from({ length: 16 }, (_, i) => ({ artist: `TEST ONLY Artist ${i}`, song: `Request ${i}`, fromUpload: true }));
 const row = { id: 'A', name: 'Synthetic cooldown', updated_at: 'v1', inputs: { songs, hours: '1', buffer: 1, listType: 'dance', expand: false }, lists: { warmUp: songs, transition: [], peak: [] } };
 afterEach(() => vi.useRealTimers());
+// Compile the actual route once outside unchanged individual 5s limits.
+beforeAll(async () => { const h = harness({ rows: { A: row } }); await h.flush(); h.unmount(); }, 30_000);
 
 describe('production event route cooldown dispatch', () => {
+  it('modern provider pressure carries across serial chunks while a warm response avoids the provider wait', async () => {
+    vi.useFakeTimers(); const requests: any[] = []; const h = harness({ rows: { A: row }, services: { enrich: async (req: any) => {
+      requests.push(req.data);
+      return { results: req.data.songs.map((s: any) => ({ ...s, energy: 8, danceability: 8, source: 'cache' })), status: requests.length === 1 ? { pacing: { reccobeats: { pressure: 2, cooldownMs: 30000 } }, causes: { reccobeats: { rate: 2 }, musicbrainz: { server: 1 } } } : { complete: true } };
+    } } });
+    await h.flush(); await h.current.generate(); await h.flush();
+    expect(requests).toHaveLength(2); expect(requests[1].pacing.reccobeats).toEqual({ pressure: 2, cooldownMs: 30000 });
+    expect(h.warnings.filter((s: string) => s.includes('rate limited'))).toHaveLength(1);
+    expect(h.warnings.join(' ')).not.toContain('actually timed out');
+    expect(h.current.result.warmUp.length + h.current.result.transition.length + h.current.result.peak.length).toBe(16); h.unmount();
+  });
   for (const cooldown of [2_000, 30_000, 120_000]) {
     it(`Retry-After ${cooldown}ms waits before RPC cutoff and never sends abandoned work`, async () => {
       vi.useFakeTimers(); const start = Date.now(); const starts: number[] = []; let live = 0, peak = 0;

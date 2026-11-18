@@ -208,8 +208,9 @@ describe('authenticated handler service-only metadata cache', () => {
   it.each(['read', 'write'] as const)('hung cache %s is bounded at the existing phase deadline', async phase => {
     vi.useFakeTimers(); const io = database(); io.hangRead = phase === 'read'; io.hangWrite = phase === 'write';
     providers(); vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const start = Date.now(); const pending = handler().call({ songs: [song] });
-    await vi.advanceTimersByTimeAsync(phase === 'read' ? ENRICH_LIMITS.cacheReadMs + 10 : ENRICH_LIMITS.upsertMs + 10);
+    const start = Date.now(); let settled = false; const pending = handler().call({ songs: [song] }).finally(() => { settled = true; });
+    // Drive to settlement inside the original hard end; healthy dispatch spacing precedes the bounded cache phase.
+    for (let ms = 0; !settled && ms < ENRICH_LIMITS.totalMs; ms += 50) await vi.advanceTimersByTimeAsync(50);
     const out = await pending;
     expect(Date.now() - start).toBeLessThan(ENRICH_LIMITS.totalMs);
     expect(out.results[0]).toMatchObject({ energy: 8, bpm: 122, year: 2004 });

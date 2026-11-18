@@ -30,7 +30,7 @@ it('actual handled metadata failure/shortfall notices persist with safe copy and
   vi.useFakeTimers(); const { h, store } = await setup(async () => { throw Error('PRIVATE raw token /path'); });
   expect(h.requests).toEqual([]); await h.current.generate(); await h.flush(); await store.settled();
   const run = store.get().rows[0].run;
-  expect(h.warnings.join(' ')).toMatch(/online music data|usable/i);
+  expect(h.warnings.join(' ')).toContain('Some online track details could not be checked.');
   expect(run.notices.map(n => n.code)).toContain('metadata_failed'); expect(run.notices.map(n => n.code)).toContain('short');
   expect(run.status).toBe('short'); expect(run.coverage).toHaveLength(3); expect(run.requested).toBe(1);
   const { copyDiagnostics } = await import('@/lib/generationDiagnostics/schema');
@@ -52,6 +52,12 @@ it('actual route true timeout is distinct from cancellation and partial response
   await partial.h.current.generate();
   expect(partial.store.get().rows[0].run.causes).toEqual([{ provider: 'ai', cause: 'deadline', count: 2 }, { provider: 'reccobeats', cause: 'rate', count: 1 }]);
   expect(partial.store.get().rows[0].run.notices.map(n => n.code)).toContain('metadata_incomplete'); partial.h.unmount();
+});
+it('actual temporary-pressure incomplete response emits one final cause-aware notice, no timeout claim or private data', async () => {
+  vi.useFakeTimers(); const { h, store } = await setup(async ({ data }) => ({ results: data.songs.map((s: any) => ({ ...s, incomplete: true, source: 'none' })), status: { causes: { reccobeats: { rate: 5 }, musicbrainz: { server: 2, raw: 'PRIVATE' } } } }));
+  await h.current.generate(); const messages = h.warnings.filter((s: string) => s.includes('rate limited'));
+  expect(messages).toHaveLength(1); expect(messages[0]).toContain('temporary server or network failures'); expect(messages[0]).toContain('Not all selected section preparation targets were reached.'); expect(messages[0]).not.toMatch(/timed out|PRIVATE/);
+  expect(store.get().rows[0].run.causes).toEqual([{ provider: 'reccobeats', cause: 'rate', count: 5 }, { provider: 'musicbrainz', cause: 'server', count: 2 }]); h.unmount();
 });
 it('diagnostics unavailable cannot change route result, recommendation choices or save contract', async () => {
   vi.useFakeTimers(); const { h, store } = await setup(async () => ({ results: [] }), true);

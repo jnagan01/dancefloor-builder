@@ -17,6 +17,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
+const PressureSchema = z.object({ pressure: z.number().int().min(0).max(6), cooldownMs: z.number().min(0).max(480_000) });
 const InputSchema = z.object({
   songs: z
     .array(
@@ -28,6 +29,7 @@ const InputSchema = z.object({
     .max(200),
   /** Active familiarity choice: warm cache rows without track popularity get one bounded upgrade lookup. */
   needPopularity: z.boolean().optional(),
+  pacing: z.object({ reccobeats: PressureSchema.optional(), musicbrainz: PressureSchema.optional() }).optional(),
 });
 
 export type { EnrichSource, EnrichedSong, EnrichStatus } from "./enrichPipeline.server";
@@ -38,5 +40,5 @@ export const enrichSongs = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { runEnrichment } = await import("./enrichPipeline.server");
     const { createEnrichCache } = await import("./enrichCache.server");
-    return runEnrichment(data.songs, createEnrichCache(), { needPopularity: data.needPopularity });
+    return runEnrichment(data.songs, createEnrichCache(), { needPopularity: data.needPopularity, pacing: data.pacing });
   });

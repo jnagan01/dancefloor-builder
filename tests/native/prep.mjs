@@ -53,6 +53,10 @@ try {
     await expect(page.getByRole('dialog')).toContainText('Warm Up: 1 hr 30 min / 1 hr 30 min');
     await expect(page.getByRole('dialog')).toContainText('Installed desktop version 1.2.99');
     await expect(page.getByRole('dialog')).toContainText('2 min 5 sec elapsed');
+    await expect(page.getByRole('dialog')).toContainText('All selected section preparation targets were reached.');
+    await expect(page.getByRole('dialog')).toContainText('ReccoBeats: rate limited; remaining checks were paced (5).');
+    await expect(page.getByRole('dialog')).toContainText('MusicBrainz: temporary server failures; finished track details were kept (2).');
+    await expect(page.getByRole('dialog')).not.toContainText('actual lookup timeouts');
     // Real clipboard under the production desktop permission policy; no mocked writes.
     const asyncDenied = await page.evaluate(() => navigator.clipboard.writeText('async-probe').then(() => false, () => true));
     expect(asyncDenied).toBe(true); // the installed shell denies the async Clipboard API, which caused the reported failure
@@ -114,6 +118,19 @@ try {
     expect(await page.evaluate(() => window.__activityLeaks ?? [])).toEqual([]);
     await page.evaluate(() => { document.execCommand = window.__execCommand; delete navigator.clipboard; window.__setActivityAccount('synthetic-diagnostics'); return window.__activity.activate('synthetic-diagnostics'); });
     await page.keyboard.press('Escape');
+  });
+  await check('activity distinguishes final short missing and real timeout reports', async () => {
+    for (const mode of ['short', 'missing', 'deadline']) {
+      await page.evaluate(mode => window.__addActivity(mode), mode); await page.reload();
+      await page.getByRole('button', { name: 'Recent generation activity' }).click();
+      const first = page.getByRole('dialog').locator('details').first(); await first.locator('summary').click();
+      if (mode === 'short') await expect(first).toContainText('Not all selected section preparation targets were reached.');
+      if (mode === 'missing') await expect(first).toContainText('Final preparation coverage was not recorded.');
+      if (mode === 'deadline') await expect(first).toContainText('actual lookup timeouts');
+      else await expect(first).not.toContainText('All selected section preparation targets were reached.');
+      await first.screenshot({ path: path.join(diagnostics, `activity-${mode}.png`) });
+      await page.keyboard.press('Escape');
+    }
   });
   await check('VirtualDJ SongLength parsed by real DOMParser in Electron', async () => {
     const r = await page.evaluate(() => window.__parseVdj(`<VirtualDJ_Database><Song FilePath="/x/a.mp3"><Tags Author="A" Title="T"/><Infos SongLength="215.6"/></Song><Song FilePath="/x/b.mp3"><Tags Author="B" Title="U"/><Infos SongLength="nope"/></Song></VirtualDJ_Database>`));

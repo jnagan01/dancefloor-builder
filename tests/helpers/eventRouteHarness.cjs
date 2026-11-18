@@ -22,6 +22,13 @@ function createEventRouteHarness(actual) {
   vm.runInNewContext(readiness.transpileModule(fs.readFileSync(path.join(root, "src/lib/exportReadiness.ts"), "utf8"), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:readinessModule,exports:readinessModule.exports,require:k=>k === "./preparationPolicy" ? require(path.join(root,"desktop/offline/policy.cjs")) : k === "./fileIdentity" ? identityModule.exports : actual.vdj});
   // Real preparation-knowledge modules (no test seams): transpiled with relative requires resolved inside src/lib/prep.
   const prepModules = {};
+  const sharedModules = {};
+  const loadShared = name => {
+    if (sharedModules[name]) return sharedModules[name].exports;
+    const m = { exports: {} }; sharedModules[name] = m;
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/${name}.ts`), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module: m, exports: m.exports, require: k => k.startsWith('./') ? loadShared(path.posix.join(path.posix.dirname(name), k.slice(2))) : require(k) });
+    return m.exports;
+  };
   const eventTypeModule = { exports: {} };
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/eventTypes.ts'), 'utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText, {module:eventTypeModule,exports:eventTypeModule.exports});
   let songLibMod; const songLibraryForPrep = () => { if (actual.songLibrary) return actual.songLibrary; if (!songLibMod) { songLibMod = { exports: {} }; vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root,'src/lib/songLibrary.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:songLibMod,exports:songLibMod.exports,require}); } return songLibMod.exports; };
@@ -80,6 +87,7 @@ function createEventRouteHarness(actual) {
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/prep/community.functions':{COMMUNITY_BATCH:20,lookupCommunityBatch:services.community ?? (async r=>r.data.songs.map(x=>({...x,status:'disabled'})))},
       '@/lib/enrich.functions':{enrichSongs:services.enrich ?? (async()=>({results:[]}))},
+      '@/lib/providerPacing':loadShared('providerPacing'), '@/lib/generationDiagnostics/presentation':loadShared('generationDiagnostics/presentation'),
       '@/lib/neighbors.functions':{getArtistNeighbors:services.neighbors ?? (async()=>({clusters:[]}))},
       '@/lib/recommend.functions':{recommendSongsForSection:services.recommend ?? (async()=>({suggestions:[]}))},
       '@/lib/lastfm.functions':{getArtistCrowdData:services.crowd ?? (async()=>({artists:[]})),getSimilarTracks:services.similarTracks ?? (async()=>({availability:'missingKey',seeds:[]}))},

@@ -103,13 +103,14 @@ function Root() {
 await w.__switchAccount(w.__fixture.account ?? 'synthetic-a');
 await diagnosticStore().activate('synthetic-diagnostics');
 w.__activity = diagnosticStore();
-w.__addActivity = async () => {
+w.__addActivity = async (mode = 'complete') => {
   let clock = Date.now();
   const store = createDiagnosticStore(indexedDiagnosticStorage(), () => clock);
   await store.activate('synthetic-diagnostics');
   const run = store.begin('synthetic-diagnostics', 'desktop:1.2.99', 'synthetic-build', 34);
   run?.notice('metadata_incomplete', 8);
-  run?.coverage({warmUp:5400,transition:14400,peak:7200}, {warmUp:5400,transition:14400,peak:7200});
+  run?.causes({ reccobeats: { rate: 5 }, musicbrainz: { server: 2 }, ai: mode === 'deadline' ? { deadline: 1 } : {} });
+  if (mode !== 'missing') run?.coverage({warmUp:5400,transition:14400,peak:7200}, {warmUp:5400,transition:14400,peak:mode === 'short' ? 7199 : 7200});
   clock += 125000; run?.finish('completed'); await store.settled();
 };
 createRoot(document.getElementById('root') as HTMLElement).render(<Root />);

@@ -7,6 +7,7 @@ import { normalizeKey } from "./danceFloor";
 import { decodeCacheSource, encodeCacheSource, sourceRank, type MetaProv } from "./prep/provenance";
 import { ENRICH_SERVER_DEADLINE_MS } from "./prep/factsGather";
 import { createProviderLane, ENRICH_PROVIDER_CONCURRENCY, MUSICBRAINZ_GROUP, MUSICBRAINZ_INTERVAL_MS } from "./enrichScheduling.server";
+import { boundedPressure, PROVIDER_INTERVAL_MS, type MetadataPacing, type ProviderPressure } from './providerPacing';
 
 export type EnrichSource =
   | "ReccoBeats+MusicBrainz"
@@ -64,6 +65,7 @@ export interface EnrichStatus {
   retryAfterMs?: number;
   /** Bounded per-provider cause counts (numbers only: never titles, URLs, payloads or credentials). */
   causes?: EnrichCauses;
+  pacing?: MetadataPacing;
 }
 /** Why a provider attempt did not yield facts. `missing` (catalogue has no such track) is a definitive miss, not a failure. */
 export type FetchCause = "rate" | "server" | "denied" | "http" | "missing" | "malformed" | "network" | "deadline" | "paused" | "truncated";
@@ -90,11 +92,12 @@ function httpCause(status: number): FetchCause {
 
 async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx): Promise<{ ok: boolean; json: () => Promise<unknown> }> {
   if (ctx?.lane && !(await ctx.lane.ready())) { ctx.failed = true; ctx.note?.("paused"); throw new Error("Provider paused"); }
+  if (ctx && (ctx.signal.aborted || ctx.now() >= ctx.until)) throw new Error('Provider closed');
   const ctrl = new AbortController();
   const ms = ctx ? Math.max(1, Math.min(ctx.requestMs, ctx.until - ctx.now())) : ENRICH_LIMITS.requestMs;
   const timer = setTimeout(() => ctrl.abort(), ms);
-  const onAbort = () => ctrl.abort();
   let noted = false;
+  const onAbort = () => { if (!noted) { if (ctx) ctx.timedOut = true; ctx?.note?.('deadline'); noted = true; } ctrl.abort(); };
   if (ctx?.signal.aborted) ctrl.abort(); else ctx?.signal.addEventListener("abort", onAbort);
   try {
     const now = ctx?.now ?? Date.now;
@@ -115,7 +118,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx):
   } catch (err) {
     if (ctx) ctx.failed = true;
     if (ctx && ctrl.signal.aborted) ctx.timedOut = true;
-    if (!noted) ctx?.note?.(ctrl.signal.aborted ? "deadline" : "network");
+    if (!noted) { ctx?.note?.(ctrl.signal.aborted ? "deadline" : "network"); if (!ctrl.signal.aborted) ctx?.lane?.networkFailure(); }
     throw err;
   } finally {
     clearTimeout(timer);
@@ -463,6 +466,7 @@ export interface EnrichDeps {
 export interface EnrichOptions {
   /** Active familiarity choice: a fresh cache row lacking track popularity is a partial hit worth one bounded lookup. */
   needPopularity?: boolean;
+  pacing?: MetadataPacing;
 }
 
 export async function runEnrichment(songs: Array<{ artist: string; song: string }>, deps: EnrichDeps, opts: EnrichOptions = {}): Promise<{ results: EnrichedSong[]; status: EnrichStatus }> {
@@ -556,8 +560,9 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     const bucket = ((status.causes ??= {})[provider] ??= {}) as Partial<Record<K, number>>;
     bucket[cause] = (bucket[cause] ?? 0) + 1;
   };
-  const recoCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal), note: (c: FetchCause) => count("reccobeats", c) };
-  const mbCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal, MUSICBRAINZ_INTERVAL_MS), note: (c: FetchCause) => count("musicbrainz", c) };
+  const remainingPressure = (value?: ProviderPressure) => { const p = boundedPressure(value); return { ...p, cooldownMs: Math.max(0, p.cooldownMs - (now() - start)) }; };
+  const recoCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal, PROVIDER_INTERVAL_MS, remainingPressure(opts.pacing?.reccobeats)), note: (c: FetchCause) => count("reccobeats", c) };
+  const mbCtx = { ...ctx, lane: createProviderLane(now, fetchUntil, fetchCtrl.signal, MUSICBRAINZ_INTERVAL_MS, remainingPressure(opts.pacing?.musicbrainz)), note: (c: FetchCause) => count("musicbrainz", c) };
   let fetchClosed = false;
   const recoDone = new Map<string, ReccoBeatsFeatures | null>();
   const mbDone = new Map<string, MusicBrainzInfo | null>();
@@ -676,8 +681,9 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     aiWork = estimateMissing();
     const pool = Promise.all([mbWorker(), acoustic]);
     const got = await within(pool, fetchUntil, now);
-    fetchClosed = true;
+    // Count actual sent requests still waiting at the phase end before fencing late callbacks.
     fetchCtrl.abort();
+    fetchClosed = true;
     acousticChanged();
     if (got === LATE) timeout("fetch");
     status.retryAfterMs = Math.max(0, recoCtx.lane.pausedUntil - now(), mbCtx.lane.pausedUntil - now());
@@ -828,5 +834,6 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     if (got) return { ...got, prov: got.prov && { ...got.prov }, ...inc };
     return { artist: q.original.artist, song: q.original.song, source: "none" as const, ...inc };
   });
+  if (missOrder.length) status.pacing = { reccobeats: recoCtx.lane.snapshot(), musicbrainz: mbCtx.lane.snapshot() };
   return { results, status };
 }
