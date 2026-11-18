@@ -85,6 +85,34 @@ try {
     expect(await page.getByLabel('Diagnostics text').count()).toBe(0);
     await expect(page.getByRole('dialog')).not.toContainText('Copy unavailable');
     await page.evaluate(() => window.__activity.activate('synthetic-diagnostics'));
+    // Switch BOTH the displayed account and the store while fallback text is visible, with an old copy still pending.
+    await page.getByText('Completed with warnings', {exact:true}).click();
+    await page.evaluate(() => { window.__execCommand = document.execCommand; document.execCommand = () => false; });
+    await page.getByRole('button', {name:'Copy diagnostics'}).click();
+    await expect(page.getByLabel('Diagnostics text')).toBeVisible();
+    const switchBoth = account => page.evaluate(acct => {
+      const { flushSync } = window.__reactDom;
+      flushSync(() => { window.__setActivityAccount(acct); void window.__activity.activate(acct); });
+      return { text: document.querySelector('[aria-label="Diagnostics text"]')?.value ?? null, status: document.querySelector('[role="dialog"]')?.textContent ?? '' };
+    }, account);
+    // (a) Fallback text visible for A, then prop and store move to B in one render.
+    const sameRender = await switchBoth('synthetic-b');
+    expect(await page.evaluate(() => window.__activityLeaks ?? [])).toEqual([]);
+    expect(sameRender.text).toBeNull(); expect(sameRender.status).not.toContain('Copy unavailable');
+    await switchBoth('synthetic-diagnostics');
+    // (b) An old copy still pending when both identities move to B completes late and shows nothing.
+    await page.getByText('Completed with warnings', {exact:true}).click();
+    await page.evaluate(() => { window.__releaseCopy = null; Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => new Promise((_, reject) => { window.__releaseCopy = () => reject(new DOMException('denied', 'NotAllowedError')); }) } }); });
+    await page.getByRole('button', {name:'Copy diagnostics'}).click();
+    await page.waitForFunction(() => typeof window.__releaseCopy === 'function');
+    await switchBoth('synthetic-b');
+    await page.evaluate(() => window.__releaseCopy());
+    await page.waitForTimeout(300);
+    expect(await page.getByLabel('Diagnostics text').count()).toBe(0);
+    await expect(page.getByRole('dialog')).not.toContainText('Copy unavailable');
+    await expect(page.getByRole('dialog')).not.toContainText('Diagnostics copied');
+    expect(await page.evaluate(() => window.__activityLeaks ?? [])).toEqual([]);
+    await page.evaluate(() => { document.execCommand = window.__execCommand; delete navigator.clipboard; window.__setActivityAccount('synthetic-diagnostics'); return window.__activity.activate('synthetic-diagnostics'); });
     await page.keyboard.press('Escape');
   });
   await check('VirtualDJ SongLength parsed by real DOMParser in Electron', async () => {

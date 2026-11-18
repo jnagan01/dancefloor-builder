@@ -48,14 +48,19 @@ describe('event rename keeps the builder name consistent', () => {
     await expect(writeEventConditionally(h.db, 'owner', { ...create(), create: false, expectedUpdatedAt: first.updatedAt, expectedRevision: first.revision, writeRevision: fresh(), name: 'Old Wedding', inputs: { ...inputs(), notes: 'stale' } })).rejects.toThrow('changed elsewhere');
     expect(JSON.stringify(h.rows.get('E'))).toBe(renamed);
   });
-  it('a rename racing an autosave applies at most one; the loser changes nothing', async () => {
+  it('a rename and an autosave from the same captured revision: exactly one applies, loser is a no-op', async () => {
     const h = eventDbHarness(); const first = await writeEventConditionally(h.db, 'owner', create());
-    const results = await Promise.allSettled([renameEventConditionally(h.db, 'owner', 'E', 'New Wedding'),
-      writeEventConditionally(h.db, 'owner', { ...create(), create: false, expectedUpdatedAt: first.updatedAt, expectedRevision: first.revision, writeRevision: fresh(), inputs: { ...inputs(), notes: 'autosave' } })]);
+    const base = { id: 'E', create: false, expectedUpdatedAt: first.updatedAt, expectedRevision: first.revision, lists: lists() };
+    const rename = { ...base, writeRevision: fresh(), name: 'New Wedding', inputs: renamedInputs(inputs(), 'New Wedding') };
+    const autosave = { ...base, writeRevision: fresh(), name: 'Old Wedding', inputs: { ...inputs(), notes: 'autosave' } };
+    const results = await Promise.allSettled([writeEventConditionally(h.db, 'owner', rename), writeEventConditionally(h.db, 'owner', autosave)]);
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    const winner = results[0].status === 'fulfilled' ? rename : autosave;
+    const loser = winner === rename ? results[1] : results[0];
+    expect(loser.status).toBe('rejected'); expect((loser as PromiseRejectedResult).reason.message).toContain('changed elsewhere');
     const row = h.rows.get('E');
-    expect(results.filter(r => r.status === 'fulfilled').length).toBeGreaterThanOrEqual(1);
-    expect(row.inputs.eventName).toBe(row.name === 'New Wedding' ? 'New Wedding' : 'Old Wedding');
-    expect(row.lists).toEqual(lists()); expect(row.inputs.songs).toEqual(inputs().songs); expect(row.inputs.future).toEqual(inputs().future);
+    expect(eventRevision(row.inputs)).toBe(winner.writeRevision);
+    expect(row.name).toBe(winner.name); expect(strip(row.inputs)).toEqual(winner.inputs); expect(row.lists).toEqual(lists());
   });
   it('legacy rows without a marker rename atomically with the observed timestamp and keep all data', async () => {
     const h = eventDbHarness();

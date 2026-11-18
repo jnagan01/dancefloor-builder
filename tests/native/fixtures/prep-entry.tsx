@@ -4,6 +4,7 @@ import React from 'react';
 import { GenerationActivity } from '../../../src/components/GenerationActivity';
 import { diagnosticStore, createDiagnosticStore, indexedDiagnosticStorage } from '../../../src/lib/generationDiagnostics/store';
 import { createRoot } from 'react-dom/client';
+import { flushSync } from 'react-dom';
 import { Route as LibraryRoute } from '../../../src/routes/_authenticated/library';
 import { EventPrepPanel, type PrepSectionKey } from '../../../src/components/prep/EventPrepPanel';
 import { TrackDetailSheet, type DetailSubject } from '../../../src/components/prep/TrackDetailSheet';
@@ -88,8 +89,15 @@ function BackupHost() {
 
 function Root() {
   const [page, setPage] = React.useState<'library' | 'event' | 'backup'>(w.__fixture.page ?? 'library');
-  w.__goto = setPage;
-  return <AppearanceProvider><GenerationActivity account="synthetic-diagnostics" /><nav className="flex gap-2 border-b p-2"><button onClick={() => setPage('library')}>Go library</button><button onClick={() => setPage('event')}>Go event</button><button onClick={() => setPage('backup')}>Go backup</button></nav>
+  w.__goto = setPage; w.__reactDom = { flushSync };
+  const [activityAccount, setActivityAccount] = React.useState('synthetic-diagnostics');
+  w.__setActivityAccount = setActivityAccount;
+  return <AppearanceProvider><React.Profiler id="activity" onRender={() => {
+    // Commit-time probe: runs before passive effects, so it sees any frame where another account's copy text is rendered.
+    const text = (document.querySelector('[aria-label="Diagnostics text"]') as HTMLTextAreaElement | null)?.value;
+    const status = document.querySelector('[role="dialog"]')?.textContent ?? '';
+    if (activityAccount !== 'synthetic-diagnostics' && (text || /Copy unavailable|Diagnostics copied/.test(status))) (w.__activityLeaks ??= []).push(activityAccount);
+  }}><GenerationActivity account={activityAccount} /></React.Profiler><nav className="flex gap-2 border-b p-2"><button onClick={() => setPage('library')}>Go library</button><button onClick={() => setPage('event')}>Go event</button><button onClick={() => setPage('backup')}>Go backup</button></nav>
     {page === 'library' ? <LibraryRoute.component /> : page === 'event' ? <EventHost /> : <BackupHost />}</AppearanceProvider>;
 }
 await w.__switchAccount(w.__fixture.account ?? 'synthetic-a');
