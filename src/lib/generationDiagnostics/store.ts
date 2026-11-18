@@ -83,6 +83,10 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
         let stored: unknown[] = [];
         try { await writes; stored = await storage.read(owner); } catch { if (epoch === fence) fallback = true; }
         if (epoch !== fence || account !== owner) return;
+        // Runs begun during this activation are live handles (live() checks
+        // rows.includes(row)); keep their identity and never interrupt them.
+        const liveRows = rows.slice();
+        const liveIds = new Set(liveRows.map(r => r.run.id));
         const merged = new Map<string, LocalRun>();
         const ownedMemory = memory.get(owner) ?? [];
         const memoryIds = new Set(ownedMemory.map(r => r.run.id));
@@ -90,6 +94,7 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
         for (const value of [...stored, ...ownedMemory]) {
           const row = decode(value);
           if (!row) { warning = true; continue; } // Never overwrite malformed originals.
+          if (liveIds.has(row.run.id)) continue;
           if (!memoryIds.has(row.run.id) && boundary && order(row.run, boundary) <= 0) continue;
           const old = merged.get(row.run.id);
           if (!old || row.run.revision > old.run.revision) merged.set(row.run.id, row);
@@ -100,9 +105,9 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
             merged.set(row.run.id, { ...row, delivery, attempts: Math.max(old.attempts, row.attempts), nextAt: delivery === 'sent' ? 0 : Math.max(old.nextAt, row.nextAt) });
           }
         }
-        rows = [...merged.values()];
+        rows = [...liveRows, ...merged.values()];
         trim(owner);
-        for (const row of rows) if (row.run.status === 'running') finishRow(owner, row, 'interrupted');
+        for (const row of rows) if (!liveIds.has(row.run.id) && row.run.status === 'running') finishRow(owner, row, 'interrupted');
         emit();
       })();
       await ready;

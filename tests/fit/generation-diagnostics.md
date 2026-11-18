@@ -38,3 +38,7 @@
 - Existing timing-sensitive full-suite cases passed alone without timeout changes after the initial two-worker run failed; a single-worker complete rerun is used for final evidence.
 - Final local evidence: single-worker full suite 1092/1092, 100 files, 732.53 seconds; new actual authenticated-handler test separately passed (one further test). Focused diagnostics group 27/27. Latest automatic preview compilation reports build OK. No separate manual production build/typecheck was run because this workspace delegates those to the automatic harness; separate production/TypeScript acceptance remains unverified.
 - No GitHub CLI/token is available in this sandbox; final-head hosted Mac/CodeQL outcome cannot be claimed locally.
+## Activation-read race (final review)
+- `activate()` now keeps runs begun while the account's stored history is still loading as the same live rows, merges older saved/memory records around them and marks only restored running records interrupted.
+- Regressions: deferred-read run stays running, aggregates notices, finishes exactly once as `warnings`; account switch during the pending read cancels the old run with no cross-account rows.
+- The route file warms its one-time compilation in `beforeAll` (30s hook) so the first version case no longer exceeds the unchanged 5s per-test limit. Focused groups: 55/55 store/route/version, 5/5 handler/bundle/client-artifact. Full local suite not repeated by request; exact-head hosted validation covers it.

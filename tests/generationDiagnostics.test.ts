@@ -223,4 +223,30 @@ it('late storage read cannot expose an earlier account after sign-out', async ()
   const pending = store.activate('a'); await Promise.resolve(); await store.activate(null);
   resolve([...f.data.values()]); await pending;
   expect(store.get().account).toBe(null); expect(store.get().rows).toEqual([]);
+});it('run begun while activation read is pending stays live, keeps identity and finishes exactly once', async () => {
+  const f = fixture(); await f.store.activate('a'); f.store.begin('a', '1', 'b', 0); await f.store.settled();
+  let resolve: (rows: unknown[]) => void = () => {};
+  const store = createDiagnosticStore({ ...f.storage, read: () => new Promise(r => { resolve = r; }) }, () => 1800000000500);
+  const pending = store.activate('a'); await Promise.resolve();
+  const live = store.begin('a', '1', 'b', 2); live?.notice('metadata_failed', 3);
+  resolve([...f.data.values()]); await pending; await store.settled();
+  const rows = () => store.get().rows;
+  expect(rows().find(r => r.run.id === live?.id)?.run.status).toBe('running');
+  expect(rows().filter(r => r.run.id !== live?.id).map(r => r.run.status)).toEqual(['interrupted']);
+  live?.notice('metadata_failed', 1); live?.finish('completed'); live?.finish('failed'); await store.settled();
+  const done = rows().filter(r => r.run.id === live?.id);
+  expect(done).toHaveLength(1); expect(done[0].run.status).toBe('warnings');
+  expect(done[0].run.notices).toEqual([{ code: 'metadata_failed', count: 4 }]);
+  expect(f.data.get(`a:${live?.id}`)).toMatchObject({ run: { status: 'warnings' } });
+});
+it('run begun during a pending activation is fenced when the account switches before the read completes', async () => {
+  const f = fixture(); let resolve: (rows: unknown[]) => void = () => {};
+  const store = createDiagnosticStore({ ...f.storage, read: owner => owner === 'a' ? new Promise(r => { resolve = r; }) : f.storage.read(owner) });
+  const pending = store.activate('a'); await Promise.resolve();
+  const old = store.begin('a', '1', 'b', 1);
+  await store.activate('b'); resolve([]); await pending;
+  old?.notice('metadata_failed', 5); old?.finish('completed'); await store.settled();
+  expect(store.get().account).toBe('b'); expect(store.get().rows).toEqual([]);
+  expect([...f.data.keys()].every(k => k.startsWith('a:'))).toBe(true);
+  expect(f.data.get(`a:${old?.id}`)).toMatchObject({ run: { status: 'cancelled' } });
 });

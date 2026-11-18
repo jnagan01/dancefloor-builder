@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import * as vdj from '@/lib/virtualDj'; import * as dance from '@/lib/danceFloor'; import * as audio from '@/lib/audioMatch'; import * as snapshots from '@/lib/snapshotSafety'; import * as drafts from '@/lib/eventDrafts'; import * as input from '@/lib/inputSafety'; import * as autosave from '@/lib/eventAutosave'; import * as vibes from '@/lib/vibes'; import * as isolation from '@/lib/workflowIsolation'; import * as theory from '@/lib/musicTheory'; import * as revisions from '@/lib/eventRevision';
 import { createDiagnosticStore, type DiagnosticStorage } from '@/lib/generationDiagnostics/store';
@@ -14,6 +14,8 @@ async function setup(enrich: (r: any) => Promise<any>, diagnosticThrows = false,
   await h.flush(); return { h, store, data };
 }
 afterEach(() => vi.useRealTimers());
+// Warm the one-time route compilation outside the per-test 5s limit; assertions and limits are unchanged.
+beforeAll(async () => { const { h } = await setup(async () => ({ results: [] })); h.unmount(); }, 30_000);
 it.each(['desktop:1.2.99', 'web:1.1.0', 'desktop:unavailable'])('actual generation snapshots %s and exact web build without waiting on version status', async version => {
   vi.useFakeTimers(); const ref = { current: version };
   const { h, store } = await setup(async () => ({ results: [] }), false, ref);

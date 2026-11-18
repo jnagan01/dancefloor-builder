@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Persistent generation activity
+- [x] Activation-read race: runs begun while saved history loads keep live identity and finish once; only restored runs become interrupted; pending-read account switch stays fenced. First version case warmed outside its unchanged 5s limit. Focused 55/55 + 5/5 pass; full local suite not repeated by request.
 - [x] Deferred context dispatch rechecks account/generation immediately before calling providers; exact microtask-switch actual-route regression passes, no old provider request or cross-owner notice. Focused group 51 pass/1 first-version setup timeout at unchanged 5s limit; isolated route repeats 12 pass/1 same timeout. Full suite not repeated for this correction.
 - [x] Fixed relay levels, separate frozen hosted no-emit/production/client-inspection job and expanded native screenshot. Prior final combined suite 1123/1123 (104 files, 1013.57s); no live sends/publication, hosted checks still pending.
 - [x] Successful reads reconcile newer owned memory and delivery progress after quota failure; bounded pruning prevents resurrection. Actual IndexedDB synthetic quota/account-return/expiry check passes; memory-only warning retained.
