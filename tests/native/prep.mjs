@@ -266,6 +266,23 @@ try {
     expect(errors).toEqual([]);
   });
 
+  await check('track information survives reload and repeat details avoid provider calls', async () => {
+    await page.reload(); await page.getByRole('button', { name: 'Go library' }).click();
+    const before = await page.evaluate(() => JSON.stringify(window.__fixture.tracks));
+    await page.locator('tbody tr', { hasText: 'Song B.mp3' }).getByRole('button', { name: /Details for Song B/ }).click();
+    await sheet().getByRole('button', { name: 'MusicBrainz', exact: true }).click();
+    await sheet().getByRole('button', { name: 'Last.fm tags & similar' }).click();
+    await expect(sheet().getByLabel('MusicBrainz results')).toBeVisible();
+    await expect(sheet().getByLabel('Last.fm results')).toBeVisible();
+    expect(await page.evaluate(() => window.__lookup.mbCalls)).toBe(0);
+    expect(await page.evaluate(() => window.__lookup.lfCalls)).toBe(0);
+    await expect(sheet()).toContainText('reused on this device');
+    await expect(sheet()).toContainText('Updated');
+    await narrow('reused-track-details');
+    expect(await page.evaluate(() => JSON.stringify(window.__fixture.tracks))).toBe(before);
+    await page.keyboard.press('Escape');
+  });
+
   await page.getByRole('button', { name: 'Go event' }).click();
   await check('dashboard categories and drilldown follow export semantics', async () => {
     const region = page.getByRole('region', { name: 'Event preparation' });

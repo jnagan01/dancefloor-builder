@@ -26,7 +26,7 @@ function createEventRouteHarness(actual) {
   const loadShared = name => {
     if (sharedModules[name]) return sharedModules[name].exports;
     const m = { exports: {} }; sharedModules[name] = m;
-    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/${name}.ts`), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module: m, exports: m.exports, require: k => k.startsWith('./') ? loadShared(path.posix.join(path.posix.dirname(name), k.slice(2))) : require(k) });
+    vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, `src/lib/${name}.ts`), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { module: m, exports: m.exports, TextEncoder, get indexedDB(){return global.indexedDB;}, get IDBKeyRange(){return global.IDBKeyRange;}, get setTimeout(){return setTimeout;}, get clearTimeout(){return clearTimeout;}, get Date(){return Date;}, require: k => k.startsWith('.') ? loadShared(path.posix.join(path.posix.dirname(name), k)) : require(k) });
     return m.exports;
   };
   const eventTypeModule = { exports: {} };
@@ -87,6 +87,7 @@ function createEventRouteHarness(actual) {
       '@/lib/dirHandleStore':{loadDirHandle:async()=>null,loadDirHandleMeta:async()=>null,verifyReadWrite:async()=>true},
       '@/lib/prep/community.functions':{COMMUNITY_BATCH:20,lookupCommunityBatch:services.community ?? (async r=>r.data.songs.map(x=>({...x,status:'disabled'})))},
       '@/lib/enrich.functions':{enrichSongs:services.enrich ?? (async()=>({results:[]}))},
+      '@/lib/songInformation/local':loadShared('songInformation/local'), '@/lib/songInformation/client':actual.songInformation ?? loadShared('songInformation/client'), '@/lib/songInformation/schema':loadShared('songInformation/schema'),
       '@/lib/providerPacing':loadShared('providerPacing'), '@/lib/generationDiagnostics/presentation':loadShared('generationDiagnostics/presentation'),
       '@/lib/neighbors.functions':{getArtistNeighbors:services.neighbors ?? (async()=>({clusters:[]}))},
       '@/lib/recommend.functions':{recommendSongsForSection:services.recommend ?? (async()=>({suggestions:[]}))},

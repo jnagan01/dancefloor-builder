@@ -108,7 +108,7 @@ it.each(['failure', 'timeout'])('actual bounded initial context %s retains safe 
   const f = await expansionFixture({ neighbors: fallback, crowd: fallback, similarTracks: fallback });
   await finishExpansion(f.h); const run = f.store.get().rows[0].run;
   const code = mode === 'failure' ? 'context_failed' : 'context_timeout';
-  expect(run.notices.filter(n => n.code === code)).toEqual([{ code, count: 2, provider: 'lastfm' }, { code, count: 1, provider: 'ai' }]);
+  expect(run.notices.filter(n => n.code === code).sort((a,b) => String(b.provider).localeCompare(String(a.provider)))).toEqual([{ code, count: 2, provider: 'lastfm' }, { code, count: 1, provider: 'ai' }]);
   expect(run.notices.some(n => n.code === (mode === 'failure' ? 'context_timeout' : 'context_failed'))).toBe(false);
   expect([...f.h.current.result.warmUp, ...f.h.current.result.transition, ...f.h.current.result.peak].map(s => s.artist)).toEqual(['PRIVATE Request']);
   expect(copyDiagnostics(run)).not.toMatch(/PRIVATE|\/path|raw/); f.h.unmount();

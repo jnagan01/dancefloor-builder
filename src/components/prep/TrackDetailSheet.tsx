@@ -1,3 +1,5 @@
+import { reuseDetails } from '@/lib/songInformation/client';
+import { reuseSummary, type ReuseCounts } from '@/lib/songInformation/schema';
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { ExternalLink, Play, Search, Star, Ban, Loader2 } from "lucide-react";
@@ -35,7 +37,7 @@ function Field({ label, value, source }: { label: string; value?: string; source
   </div>;
 }
 
-type Lookup<T> = { busy: boolean; result?: T; error?: string };
+type Lookup<T> = { busy: boolean; result?: T; error?: string; updatedAt?: number; reuse?: ReuseCounts };
 
 /** Notes/tags with independent unsaved drafts and explicit Save, so one field's save never overwrites the other. */
 function NotesEditor({ id }: { id: string }) {
@@ -92,14 +94,14 @@ export function TrackDetailSheet({ subject, onClose, onPreview }: { subject: Det
   if (!subject) return null;
   const facts = t ? trackFacts(t) : undefined;
   const tagSrc = t?.fromTags ? "file tags" : "VirtualDJ";
-  async function run<T>(guard: { current: ReturnType<typeof createLookupGuard> }, set: (v: Lookup<T>) => void, call: () => Promise<{ ok: true; items: T } | { ok: false; error: string }>) {
+  async function run<T>(guard: { current: ReturnType<typeof createLookupGuard> }, set: (v: Lookup<T>) => void, call: () => Promise<{ ok: true; items: T; updatedAt?: number; reuse?: ReuseCounts } | { ok: false; error: string }>) {
     const token = guard.current.begin(`${state.account}:${state.generation}`, subjectKey);
     set({ busy: true });
-    let r: { ok: true; items: T } | { ok: false; error: string };
+    let r: { ok: true; items: T; updatedAt?: number; reuse?: ReuseCounts } | { ok: false; error: string };
     try { r = await call(); } catch { r = { ok: false, error: "Lookup failed. Try again." }; }
     const now = live.current;
     if (!guard.current.current(token, `${now.account}:${now.generation}`, now.subjectKey) || !now.account) return;
-    set(r.ok ? { busy: false, result: r.items } : { busy: false, error: r.error });
+    set(r.ok ? { busy: false, result: r.items, updatedAt: r.updatedAt, reuse: r.reuse } : { busy: false, error: r.error });
   }
   const args = { data: { artist: subject.artist, title: subject.song } };
   const view = classifyVersions(subject.artist, subject.song, t, subject.alternatives ?? []);
@@ -164,9 +166,13 @@ export function TrackDetailSheet({ subject, onClose, onPreview }: { subject: Det
           <h3 className="mb-1 text-sm font-semibold">Look up song information</h3>
           <p className="mb-2 text-xs text-muted-foreground">Results are suggestions for reference only. Nothing is written into your music files.</p>
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" disabled={mb.busy} onClick={() => void run(mbGuard, setMb, () => mbFn(args))}>{mb.busy ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Search size={14} className="mr-1" />}MusicBrainz</Button>
-            <Button size="sm" variant="outline" disabled={lf.busy} onClick={() => void run(lfGuard, setLf, () => lfFn(args))}>{lf.busy ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Search size={14} className="mr-1" />}Last.fm tags & similar</Button>
+            <Button size="sm" variant="outline" disabled={mb.busy} onClick={() => void run(mbGuard, setMb, () => reuseDetails(state.account ?? '', 'mb', subject.artist, subject.song, () => mbFn(args), () => live.current.subjectKey === subjectKey && live.current.account === state.account && live.current.generation === state.generation, Date.now() + 14_000))}>{mb.busy ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Search size={14} className="mr-1" />}MusicBrainz</Button>
+            <Button size="sm" variant="outline" disabled={lf.busy} onClick={() => void run(lfGuard, setLf, () => reuseDetails(state.account ?? '', 'lastfm', subject.artist, subject.song, () => lfFn(args), () => live.current.subjectKey === subjectKey && live.current.account === state.account && live.current.generation === state.generation, Date.now() + 9000))}>{lf.busy ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Search size={14} className="mr-1" />}Last.fm tags & similar</Button>
           </div>
+          {[['MusicBrainz', mb], ['Last.fm', lf]].map(([name, info]) => {
+            const result = info as Lookup<unknown>;
+            return result.updatedAt ? <p key={String(name)} className="mt-2 text-xs text-muted-foreground">{String(name)} · Updated {new Date(result.updatedAt).toLocaleString()}{result.reuse ? ` · ${reuseSummary(result.reuse)}` : ''}</p> : null;
+          })}
           {mb.error && <p role="alert" className="mt-2 text-xs text-destructive">MusicBrainz: {mb.error}</p>}
           {mb.result && (mb.result.length ? <ul className="mt-2 space-y-2" aria-label="MusicBrainz results">{mb.result.map(c => {
             const cmp = compareCandidate({ artist: subject.artist, title: subject.song, remix: t?.remix, durationSec: facts?.durationSec }, c);

@@ -31,11 +31,13 @@ export interface EnrichedSong {
   source: EnrichSource;
   /** Per-attribute provenance. Absent from older servers; clients then decode `source` conservatively. */
   prov?: MetaProv;
+  updated?: Partial<Record<typeof META_ATTRS[number], number>>;
   /** The online lookup for this song didn't finish in time; values (if any) are only what was already known. */
   incomplete?: boolean;
 }
 
-const CACHE_TTL_DAYS = 90;
+import { META_ATTRS } from "./prep/provenance";
+import { fieldLifetime, emptyCounts, type ReuseCounts } from "./songInformation/schema";
 // Bounded parallelism + hard budget keep generation responsive; anything not
 // enriched in time falls back to VirtualDJ metadata / heuristics.
 // Independent lanes use at most five outbound provider connections, leaving one for storage.
@@ -66,6 +68,7 @@ export interface EnrichStatus {
   /** Bounded per-provider cause counts (numbers only: never titles, URLs, payloads or credentials). */
   causes?: EnrichCauses;
   pacing?: MetadataPacing;
+  reuse?: ReuseCounts;
 }
 /** Why a provider attempt did not yield facts. `missing` (catalogue has no such track) is a definitive miss, not a failure. */
 export type FetchCause = "rate" | "server" | "denied" | "http" | "missing" | "malformed" | "network" | "deadline" | "paused" | "truncated";
@@ -80,7 +83,7 @@ export interface EnrichCauses {
  * first delta 0.5–0.8 s, complete 1.5–2.5 s. Estimates stay gap-only and AI-labelled; they never satisfy strict limits. */
 export const ESTIMATE_MODEL = "google/gemini-3-flash-preview";
 
-interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number; lane?: ReturnType<typeof createProviderLane>; failed?: boolean; timedOut?: boolean; note?: (cause: FetchCause) => void }
+interface FetchCtx { signal: AbortSignal; until: number; requestMs: number; now: () => number; lane?: ReturnType<typeof createProviderLane>; failed?: boolean; timedOut?: boolean; note?: (cause: FetchCause) => void; dispatched?: () => void }
 
 function httpCause(status: number): FetchCause {
   if (status === 429) return "rate";
@@ -102,6 +105,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx):
   try {
     const now = ctx?.now ?? Date.now;
     const until = now() + ms;
+    ctx?.dispatched?.();
     const response = await within(fetch(url, { ...init, signal: ctrl.signal }), until, now);
     if (response === LATE) { if (ctx) ctx.timedOut = true; ctx?.note?.("deadline"); noted = true; ctrl.abort(); throw new Error("Provider request deadline"); }
     ctx?.lane?.response(response);
@@ -449,7 +453,7 @@ function pickSource(
 export interface CacheRow {
   artist_key: string; song_key: string; energy: number | null; danceability: number | null; valence: number | null;
   popularity: number | null; bpm: number | null; camelot: string | null; genre: string | null; year: number | null;
-  source: string; fetched_at: string | null;
+  source: string; fetched_at: string | null; updated?: Partial<Record<typeof META_ATTRS[number], number>>;
 }
 /** Internal error with optional recovered rows; never print this object or its payload. */
 export class EnrichCacheError extends Error {
@@ -470,7 +474,9 @@ export interface EnrichOptions {
 }
 
 export async function runEnrichment(songs: Array<{ artist: string; song: string }>, deps: EnrichDeps, opts: EnrichOptions = {}): Promise<{ results: EnrichedSong[]; status: EnrichStatus }> {
-  const status: EnrichStatus = { complete: true, timedOut: [], unfinished: 0 };
+  const status: EnrichStatus = { complete: true, timedOut: [], unfinished: 0, reuse: emptyCounts() };
+  const reuse = status.reuse as ReuseCounts;
+  const stalePopularity = new Set<string>();
   if (!songs.length) return { results: [] as EnrichedSong[], status };
   const L: EnrichLimits = { ...ENRICH_LIMITS, ...(deps.limits ?? {}) };
   const now = deps.now ?? Date.now;
@@ -502,13 +508,13 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       const got = await within(Promise.resolve().then(() => deps.readRows(artistKeys, songKeys)), Math.min(end, start + L.cacheReadMs), now);
       if (got === LATE) timeout("cacheRead"); else rows = got;
     } catch (err) {
-      cacheFailure('cacheRead');
+      cacheFailure('cacheRead'); reuse.readFailed++;
       rows = err instanceof EnrichCacheError ? err.rows : null;
     }
-    const cutoffMs = Date.now() - CACHE_TTL_DAYS * 24 * 60 * 60 * 1000;
+
     for (const row of rows ?? []) {
       const fetchedMs = row.fetched_at ? new Date(row.fetched_at).getTime() : 0;
-      if (fetchedMs < cutoffMs) continue; // stale — force refetch
+      if (!Number.isFinite(fetchedMs) || fetchedMs > now() + 60_000) continue;
       const values = {
         energy: row.energy ?? undefined, danceability: row.danceability ?? undefined, valence: row.valence ?? undefined,
         popularity: row.popularity ?? undefined, bpm: row.bpm ?? undefined, camelot: row.camelot ?? undefined,
@@ -516,13 +522,16 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       };
       // Cached rows keep their recorded per-attribute provenance (legacy rows decode conservatively).
       const { summary, prov } = decodeCacheSource(row.source, values);
-      cache.set(`${row.artist_key}\u0000${row.song_key}`, { artist: "", song: "", ...values, source: (summary as EnrichSource) || "none", prov });
+      const updated = Object.fromEntries(META_ATTRS.filter(a=>values[a]!=null).map(a=>[a,row.updated?.[a]??fetchedMs]));
+      if (opts.needPopularity && values.popularity != null && now()-(updated.popularity??fetchedMs)>=fieldLifetime('popularity',prov.popularity)) stalePopularity.add(`${row.artist_key}\u0000${row.song_key}`);
+      cache.set(`${row.artist_key}\u0000${row.song_key}`, { artist: "", song: "", ...values, source: (summary as EnrichSource) || "none", prov, updated });
     }
   }
 
   // 2) Misses. Rows without energy/danceability are partial hits (re-fetch to upgrade); with an active familiarity choice,
   //    rows lacking track popularity are partial too. Priority is deterministic: true misses / energy gaps first (input
   //    order), popularity-only upgrades last. Partials always keep their cached values if the upgrade doesn't finish.
+  reuse.database = queries.filter(q=>cache.has(`${q.artistKey}\u0000${q.songKey}`)).length;
   const partial = new Map<string, EnrichedSong>();
   const popOnly = new Set<string>();
   const acousticGap = (row: EnrichedSong | undefined, attr: "energy" | "danceability") =>
@@ -532,7 +541,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const upgrade = new Map<string, EnrichedSong>();
   for (const [k, c] of cache) {
     if (c.energy == null || c.danceability == null) { partial.set(k, c); cache.delete(k); }
-    else if (opts.needPopularity && c.popularity == null) { partial.set(k, c); popOnly.add(k); cache.delete(k); }
+    else if (opts.needPopularity && (c.popularity == null || stalePopularity.has(k))) { partial.set(k, c); popOnly.add(k); cache.delete(k); }
     else if (acousticGap(c, "energy") || acousticGap(c, "danceability")) upgrade.set(k, c);
   }
   const missSet = new Set<string>();
@@ -552,7 +561,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const fresh = new Set<string>(); // keys that gained provider/AI data this call (only these are written back)
   const fetchUntil = Math.max(now(), end - L.upsertMs - (missOrder.length ? Math.min(L.aiMs, Math.floor((end - now()) / 3)) : 0));
   const fetchCtrl = new AbortController();
-  const ctx: FetchCtx = { signal: fetchCtrl.signal, until: fetchUntil, requestMs: L.requestMs, now };
+  const ctx: FetchCtx = { signal: fetchCtrl.signal, until: fetchUntil, requestMs: L.requestMs, now, dispatched: () => { if (!fetchClosed) reuse.external++; } };
   const count = <K extends string>(provider: keyof EnrichCauses, cause: K) => {
     // Notes from requests that settle after the provider phase closed are fenced out (the phase timeout already reports
     // them); the returned status never changes after assembly.
@@ -725,7 +734,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     let gained = false;
     const take = <A extends keyof MetaProv>(a: A, freshV: unknown, src: MetaProv[A], old: unknown) => {
       const oldSrc = old != null ? prev?.prov?.[a] ?? "estimate" : undefined;
-      if (freshV != null && (old == null || sourceRank(src) >= sourceRank(oldSrc))) { prov[a] = src; gained = true; return freshV; }
+      if (freshV != null && (old == null || sourceRank(src) >= sourceRank(oldSrc))) { prov[a] = src; if (freshV !== old || src !== oldSrc) gained = true; return freshV; }
       if (old != null) { prov[a] = oldSrc; return old; }
       return undefined;
     };
@@ -817,6 +826,10 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
         artist_key, song_key,
         energy: e.energy ?? null, danceability: e.danceability ?? null, valence: e.valence ?? null, popularity: e.popularity ?? null,
         bpm: e.bpm ?? null, camelot: e.camelot ?? null, genre: e.genre ?? null, year: e.year ?? null,
+        updated: Object.fromEntries(META_ATTRS.filter(a=>e[a]!=null).map(a=>{
+          const previous = partial.get(k) ?? cache.get(k);
+          return [a,previous && previous[a]===e[a] && previous.prov?.[a]===e.prov?.[a] ? previous.updated?.[a]??start : now()];
+        })),
         source: encodeCacheSource(e.source, e.prov ?? {}),
         fetched_at: new Date().toISOString(),
       };
@@ -824,10 +837,10 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   if (toUpsert.length) {
     try {
       const got = await within(Promise.resolve().then(() => deps.upsert(toUpsert)), Math.min(end, now() + L.upsertMs), now);
-      if (got === LATE) timeout("upsert");
+      if (got === LATE) { timeout("upsert"); reuse.writeFailed++; }
     } catch {
       // Cache write failure is non-fatal — we still return the fresh data.
-      cacheFailure('upsert');
+      cacheFailure('upsert'); reuse.writeFailed++;
     }
   }
 
@@ -843,6 +856,8 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     if (got) return { ...got, prov: got.prov && { ...got.prov }, ...inc };
     return { artist: q.original.artist, song: q.original.song, source: "none" as const, ...inc };
   });
+  reuse.missing = results.filter(e=>e.energy==null||e.danceability==null||(opts.needPopularity&&e.popularity==null)).length;
+  for (const e of results) { const row=toUpsert.find(r=>r.artist_key===normalizeKey(e.artist)&&r.song_key===normalizeKey(e.song)); if(row)e.updated=row.updated; }
   if (missOrder.length) status.pacing = { reccobeats: recoCtx.lane.snapshot(), musicbrainz: mbCtx.lane.snapshot() };
   return { results, status };
 }

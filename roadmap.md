@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Approved reusable track information
+- [x] Add service-only parsed evidence cache and account-local separate storage; integrate metadata, exact similarity/community and details with bounded shared work and dated freshness.
+- [x] Synthetic repeat route 74 -> 0 metadata track checks, identical ranks/5400-14400-7200 seconds; canonical Last.fm 2 -> 0 HTTP requests; isolated Electron 23/23 including details reload with zero calls.
+- [x] Cache-only migrations applied; verified RLS and no anon/authenticated direct privileges. Final focused 66/66 plus earlier timeout/pacing group 103/103; isolated Electron 23/23.
+- [ ] Full acceptance blocked: full run 1181/1185; three failures corrected and focused rechecked, mixed coordinated timing remains 120471ms versus original <120000ms assertion. Hosted Mac/production/CodeQL final-head checks pending; do not release.
 ## Whole-request metadata timeout recovery
 - [x] Follow-up: both favorite/general lanes gate before computing needs; restart after bounded settlement waits, recheck current coverage/queue/window and cancellation. Final focused 71/71 plus unchanged hung-route 1/1 pass; old-head favorite regression fails with three requests at 20s behind the unresolved transport.
 - [x] Replace permanent timeout stop with settlement-fenced bounded recovery; preserve attempts/budgets, discard late facts and callback pressure/diagnostic side effects; suggestions wait behind unresolved timed-out metadata.

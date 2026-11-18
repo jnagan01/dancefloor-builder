@@ -1,6 +1,14 @@
 import { z } from 'zod';
 
 export const MESSAGES = {
+  reuse_local: 'Track information reused on this device.',
+  reuse_database: 'Track information reused from saved online information.',
+  reuse_external: 'New external provider checks.',
+  reuse_missing: 'Some track information is still missing.',
+  reuse_readFailed: 'Saved track information could not be read; available facts were kept.',
+  reuse_writeFailed: 'New track information could not be saved for reuse.',
+  reuse_refreshFailed: 'Some refreshes failed; previously known information was kept.',
+
   metadata_failed: 'Some online track details could not be checked. Finished details were kept.',
   metadata_timeout: 'Some track detail checks actually timed out. Finished details were kept.',
   metadata_incomplete: 'Some online track details remain unknown. This does not by itself mean a timeout. Finished details were kept.',

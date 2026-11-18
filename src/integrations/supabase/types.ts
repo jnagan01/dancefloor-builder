@@ -182,6 +182,27 @@ export type Database = {
         }
         Relationships: []
       }
+      track_evidence_cache: {
+        Row: {
+          cache_key: string
+          fetched_at: string
+          kind: string
+          value: Json
+        }
+        Insert: {
+          cache_key: string
+          fetched_at?: string
+          kind: string
+          value: Json
+        }
+        Update: {
+          cache_key?: string
+          fetched_at?: string
+          kind?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

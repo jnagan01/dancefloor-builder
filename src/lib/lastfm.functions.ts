@@ -37,8 +37,10 @@ export interface ArtistCrowd {
 }
 
 const API = "https://ws.audioscrobbler.com/2.0/";
-const CACHE_MS = 6 * 60 * 60 * 1000;
-const cache = new Map<string, { at: number; value: ArtistCrowd | null }>();
+import { emptyCounts, type ReuseCounts } from "./songInformation/schema";
+import { informationKey } from './songInformation/schema';
+import { createEvidenceReuse, createSharedWork } from './songInformation/reuse';
+const shared = createSharedWork();
 
 const sanitize = (s: string, max = 150): string =>
   s
@@ -78,10 +80,10 @@ async function fetchArtist(
   key: string,
   artist: string,
   perArtistSimilar: number,
-): Promise<ArtistCrowd | null> {
-  const cacheKey = `${artist.toLowerCase()}|${perArtistSimilar}`;
-  const hit = cache.get(cacheKey);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value;
+): Promise<{value:ArtistCrowd;counts:ReuseCounts} | null> {
+  const { createEvidenceStorage } = await import('./songInformation/cache.server');
+  try {
+  const reused = await createEvidenceReuse(createEvidenceStorage(), shared)<ArtistCrowd>('artist', informationKey('artist', artist, '', String(perArtistSimilar)), async () => {
 
   const [info, sim] = await Promise.all([
     callLastfm(key, { method: "artist.getinfo", artist, autocorrect: "1" }),
@@ -128,14 +130,17 @@ async function fetchArtist(
     };
   }
 
-  cache.set(cacheKey, { at: Date.now(), value });
+  if (!value || (perArtistSimilar > 0 && !sim)) throw new Error('Artist information unavailable');
   return value;
+  }, Date.now() + 9000);
+  return {value:reused.value,counts:reused.counts};
+  } catch { return null; }
 }
 
 export const getArtistCrowdData = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => InputSchema.parse(data))
-  .handler(async ({ data }): Promise<{ available: boolean; artists: ArtistCrowd[] }> => {
+  .handler(async ({ data }): Promise<{ available: boolean; artists: ArtistCrowd[]; reuse?: ReuseCounts }> => {
     const key = process.env["LASTFM_API_KEY"];
     if (!key) return { available: false, artists: [] };
 
@@ -143,19 +148,19 @@ export const getArtistCrowdData = createServerFn({ method: "POST" })
     if (!artists.length) return { available: true, artists: [] };
 
     // Keep Last.fm happy: small concurrency instead of 80 parallel requests.
-    const out: ArtistCrowd[] = [];
+    const out: ArtistCrowd[] = []; const counts=emptyCounts();
     const queue = [...artists];
     const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
       for (;;) {
         const next = queue.shift();
         if (!next) return;
         const got = await fetchArtist(key, next, data.perArtistSimilar);
-        if (got) out.push(got);
+        if (got) {out.push(got.value);for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=got.counts[k];}else counts.refreshFailed++;
       }
     });
     await Promise.all(workers);
 
-    return { available: true, artists: out };
+    return { available: true, artists: out, reuse:counts };
   });
 
 // ---- Track-level similarity (track.getSimilar) -------------------------------------------
@@ -164,10 +169,22 @@ const TrackSeedsSchema = z.object({
   seeds: z.array(z.object({ artist: z.string().max(150), title: z.string().max(150) })).max(SIMILAR_LIMITS.seeds),
   perSeed: z.number().int().min(1).max(SIMILAR_LIMITS.perSeed).default(20),
 });
-const trackCache: SimilarCache = new Map();
+// Each request hydrates an isolated bounded map; storage is not worker-lifetime state.
+async function durableSimilar(key: string | undefined, seeds: Array<{artist:string;title:string}>, perSeed: number): Promise<SimilarTracksResponse> {
+  if (!key) return {availability:'missingKey',seeds:[]};
+  const { similarEvidence } = await import('./songInformation/lastfm.server');
+  const queue=[...seeds], runs: SimilarTracksResponse['seeds']=[];
+  await Promise.all(Array.from({length:Math.min(3,queue.length)},async()=>{
+    for (;;) {const seed=queue.shift();if(!seed)return;
+      try {const result=await similarEvidence(key,seed.artist,seed.title,Date.now()+6500);runs.push({...result.value,similar:result.value.similar.slice(0,perSeed)});}
+      catch {runs.push({seed,status:'error',similar:[]});}
+    }
+  }));
+  return {availability:runs.every(r=>r.status!=='error')?'ok':runs.some(r=>r.status!=='error')?'partial':'unavailable',seeds:runs};
+}
 
 export const getSimilarTracks = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: unknown) => TrackSeedsSchema.parse(data))
   .handler(async ({ data }): Promise<SimilarTracksResponse> =>
-    runSimilarTracks(process.env["LASTFM_API_KEY"], data.seeds, data.perSeed, (u, init) => fetch(u, init), trackCache));
+    durableSimilar(process.env["LASTFM_API_KEY"], data.seeds, data.perSeed));

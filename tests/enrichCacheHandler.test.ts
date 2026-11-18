@@ -25,6 +25,10 @@ function database(initial: CacheRow[] = []) {
   const io = { reads: 0, writes: 0, readError: false, writeError: false, hangRead: false, hangWrite: false,
     filters: [] as unknown[], rows: () => rows };
   state.from.mockReset().mockImplementation((table: string) => {
+    if (table === 'track_evidence_cache') return {
+      select: () => ({ in: async () => ({ data: [], error: null }) }),
+      upsert: async () => ({ error: null }),
+    };
     expect(table).toBe('song_metadata_cache');
     return {
       select: () => ({ in: (column: string, keys: string[]) => {
@@ -175,9 +179,10 @@ describe('authenticated handler service-only metadata cache', () => {
     expect((await h.call({ songs: Array.from({ length: 200 }, () => song) })).results).toHaveLength(200);
   });
 
-  it('stale rows still refetch, and partial verified facts survive failed providers', async () => {
+  it('91-day stable verified facts remain reusable, and partial verified facts survive failed providers', async () => {
     database([{ ...warm(), fetched_at: new Date(Date.now() - 91 * 86400000).toISOString() }]);
-    const fetch = providers(); await handler().call({ songs: [song] }); expect(fetch).toHaveBeenCalledTimes(3);
+    const fetch = providers(); const reused = await handler().call({ songs: [song] }); expect(fetch).not.toHaveBeenCalled();
+    expect(reused.results[0]).toMatchObject({ energy: 8, bpm: 122, year: 2004 });
     database([{ ...warm(), energy: null, danceability: null }]);
     vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 503 })));
     // AI attempts are synthetic and supply no invented facts.

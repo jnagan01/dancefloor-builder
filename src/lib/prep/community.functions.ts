@@ -12,7 +12,11 @@ import { parseCommunityTrackInfo, providerQueryTitle, type CommunityEvidence } f
 export const COMMUNITY_BATCH = 20;
 const Input = z.object({ songs: z.array(z.object({ artist: z.string().max(200), song: z.string().max(300) })).max(COMMUNITY_BATCH) });
 export type CommunityStatus = "found" | "none" | "failed" | "timeout" | "disabled";
-export interface CommunityRow { artist: string; song: string; status: CommunityStatus; evidence?: CommunityEvidence }
+export interface CommunityRow { artist: string; song: string; status: CommunityStatus; evidence?: CommunityEvidence; reuse?: ReuseCounts }
+import { emptyCounts, type ReuseCounts } from "../songInformation/schema";
+import { informationKey } from "../songInformation/schema";
+import { bounded } from "../songInformation/reuse";
+import type { EvidenceStorage } from "../songInformation/cache.server";
 const CACHE_MS = 24 * 60 * 60 * 1000;
 const cache = new Map<string, { at: number; v: CommunityEvidence | null }>();
 
@@ -24,7 +28,7 @@ function within<T>(p: Promise<T>, ms: number, onLate: () => void): Promise<T | t
   return Promise.race([p, new Promise<typeof LATE>(r => { timer = setTimeout(() => { onLate(); r(LATE); }, Math.max(0, ms)); })]).finally(() => clearTimeout(timer));
 }
 
-export async function runCommunityBatch(songs: Array<{ artist: string; song: string }>, key: string | undefined, fetcher: typeof fetch = fetch, deadlineMs = 9000, callMs = 4000): Promise<CommunityRow[]> {
+export async function runCommunityBatch(songs: Array<{ artist: string; song: string }>, key: string | undefined, fetcher: typeof fetch = fetch, deadlineMs = 9000, callMs = 4000, durable?: EvidenceStorage): Promise<CommunityRow[]> {
   if (!key) return songs.map(s => ({ ...s, status: "disabled" as const }));
   const out: CommunityRow[] = songs.map(s => ({ ...s, status: "timeout" as const }));
   const end = Date.now() + deadlineMs;
@@ -34,9 +38,18 @@ export async function runCommunityBatch(songs: Array<{ artist: string; song: str
   const worker = async () => {
     while (!stopped && next < songs.length) {
       if (Date.now() >= end) { stopped = true; return; } // overall deadline reached: never schedule another call
-      const i = next++, s = songs[i]!;
+      const i = next++, s = songs[i];
+      if (!s) return;
       const ck = `${s.artist.toLowerCase()}||${s.song.toLowerCase()}`;
-      const hit = cache.get(ck);
+      if (durable) {
+        const { communityEvidence } = await import('../songInformation/lastfm.server');
+        try {
+          const result = await communityEvidence(key,s.artist,s.song,Math.min(end,Date.now()+callMs),fetcher);
+          if(!stopped&&Date.now()<end)out[i]={...s,status:'found',evidence:result.value,reuse:result.counts};
+        } catch {if(!stopped&&Date.now()<end)out[i]={...s,status:'failed',reuse:{...emptyCounts(),refreshFailed:1}};}
+        continue;
+      }
+      let hit = cache.get(ck);
       if (hit && Date.now() - hit.at < CACHE_MS) { out[i] = hit.v ? { ...s, status: "found", evidence: hit.v } : { ...s, status: "none" }; continue; }
       const ac = new AbortController(); live.add(ac);
       const callEnd = Math.min(end, Date.now() + callMs);
@@ -89,4 +102,7 @@ export const __resetCommunityCache = () => cache.clear();
 export const lookupCommunityBatch = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => Input.parse(d))
-  .handler(async ({ data }) => runCommunityBatch(data.songs, process.env["LASTFM_API_KEY"]));
+  .handler(async ({ data }) => {
+    const { createEvidenceStorage } = await import('../songInformation/cache.server');
+    return runCommunityBatch(data.songs, process.env["LASTFM_API_KEY"], fetch, 9000, 4000, createEvidenceStorage());
+  });

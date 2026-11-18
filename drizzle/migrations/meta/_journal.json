@@ -8,6 +8,20 @@
       "when": 1793847755986,
       "tag": "0000_rotate_digest_secret_and_lock_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795043405237,
+      "tag": "0001_public_track_evidence_cache",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795044144690,
+      "tag": "0002_evidence_cache_explicit_service_grants",
+      "breakpoints": true
     }
   ]
 }

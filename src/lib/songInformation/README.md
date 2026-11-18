@@ -1,0 +1,16 @@
+# Track information reuse
+
+Public parsed evidence is separate from events, selections, prep knowledge, indexes and audio. The additive `track_evidence_cache` is RLS-enabled and service-only; existing metadata rows/grants are not changed. Authenticated handlers dynamically load its adapter. Missing schema and storage failures preserve available results and report bounded failures.
+
+Keys retain literal full artist credit and recording/version titles plus provider/result shape. There is intentionally no primary-only, basename or fuzzy cache alias. Canonical Last.fm similarity uses autocorrect off and a bounded 30-row result; consumers slice only after the shared result. Exact community responses are identity-validated before reuse. Details search candidates remain advisory and cannot approve files.
+
+Freshness: stable provider facts/recording searches 365 days; AI/heuristic local acoustic facts 30 days; required popularity 7 days; community/details 24 hours; similarity/artist audience 6 hours. Successful dated stale context can serve as fallback for up to 365 days on refresh error. Legacy metadata rows retain known stable facts beyond the old 90-day cutoff and keep conservative provenance. Per-field dates are stored in separate evidence, not by rewriting old rows. Unchanged fields retain dates; new weaker evidence never replaces stronger local/provider facts. No polling or background list mutation.
+
+Local IndexedDB `setarchitect-track-information-v1` is account-scoped, capped at 3000 entries per owner and 64 KiB per entry. It is not included in event/library/offline backups. Storage operations have bounded waits; corruption is ignored, not rewritten. Consumer fences discard stale account/subject/generation replies. Shared unresolved work retains its slot until actual settlement; independent consumer deadlines never spawn duplicate producers or cancel another consumer. Enrichment's existing gatherer remains the owner of its 20s transport cutoff and recovery gate.
+
+Counts distinguish local/database reuse from actual external fetch dispatches (enrichment counts outbound HTTP calls, not server RPCs). Storage writes count only after confirmation. Diagnostic reuse notices are additive fixed count-only codes. Existing schema-1 readers ignore unrecognised new reports rather than exposing raw evidence. No new telemetry destination.
+
+Synthetic evidence: actual repeated route 74 requested metadata track checks -> 0 on repeat with unchanged rank membership and 5400/14400/7200s coverage. Canonical Last.fm external requests 2 -> 0 across adapter recreation. Electron details after reload: MusicBrainz/Last.fm stand-in calls 0/0, source/date displayed, library fixture unchanged. Full hosted final-head acceptance remains required.
+
+## Final validation limitation
+Full local regression: 1181 passed / 4 failed. Three transient/integration failures were corrected and rechecked (final focused 66/66). The unchanged mixed coordinated timing assertion remains failing: 120471ms versus <120000ms; its limits were not weakened. Isolated Electron final run 23/23. Final-head hosted production/Mac/CodeQL and full green acceptance remain outstanding. Migrations 0001 and 0002 applied; catalog permission read verified RLS enabled, anon/authenticated SELECT/INSERT false, service access true.

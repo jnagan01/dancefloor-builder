@@ -1,3 +1,8 @@
+import { localInformation } from '@/lib/songInformation/local';
+import { informationKey } from '@/lib/songInformation/schema';
+import type { SeedResult } from '@/lib/prep/similarTracks';
+import { reuseMetadata } from '@/lib/songInformation/client';
+import { reuseSummary, emptyCounts, type ReuseCounts } from '@/lib/songInformation/schema';
 import { buildResolver, intended, cleanReason, requiresClean, seasonal, type PreparationInputs } from "@/lib/preparationPolicy";
 import { openedEventName } from '@/lib/eventName';
 import { freshEvent, validateEventChoices, clientPlanningCoverage } from "@/lib/freshEvent";
@@ -1145,6 +1150,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     // network failure returns an empty map so generation continues.
     let budgetWarned = false, timeoutWarned = false;
     const metadataWarnings = createMetadataWarnings();
+    const informationCounts = emptyCounts();
     // One per-generation gatherer: small serial chunks, bounded concurrency, a total request budget, and each
     // exact artist||song attempted once (misses and failures included) so later passes never re-request them.
     // With an active familiarity choice the server also upgrades warm cache rows lacking track popularity (bounded).
@@ -1157,8 +1163,13 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       async (songs, acceptsReply) => {
         if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
         const started = Date.now();
-        const reply = await enrichFn({ data: { songs, needPopularity, pacing: remainingPacing(metadataPacing, Date.now()) } });
+        const reused = await reuseMetadata(accountAtStart as string, songs, needPopularity,
+          missing => enrichFn({ data: { songs: missing, needPopularity, pacing: remainingPacing(metadataPacing, Date.now()) } }),
+          () => acceptsReply() && genTokenRef.current === myToken && accountRef.current === accountAtStart, started + 20_000);
+        const reply = { results: reused.results, status: reused.status };
         if (!acceptsReply() || genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
+        for (const k of Object.keys(informationCounts) as Array<keyof ReuseCounts>) informationCounts[k] += reused.counts[k];
+        for (const k of Object.keys(reused.counts) as Array<keyof ReuseCounts>) if (reused.counts[k]) activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0], reused.counts[k]);
         activity?.causes(reply.status?.causes);
         metadataWarnings.response(reply.status?.causes, reply.status?.timedOut);
         // Only this generation carries sanitized, expiring pressure between serial chunks. Warm cache still bypasses lanes.
@@ -1313,19 +1324,35 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 new Promise<T>((resolve) => { t = setTimeout(() => { report('context_timeout'); resolve(fallback); }, Math.max(0, contextEnd - Date.now())); }),
               ]).finally(() => clearTimeout(t));
             };
+            const addReuse = (counts: ReuseCounts) => {
+              if (!contextCurrent()) return;
+              for (const k of Object.keys(counts) as Array<keyof ReuseCounts>) { informationCounts[k] += counts[k]; if(counts[k])activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0], counts[k]); }
+            };
+            const reusableTracks = async () => {
+              const local = localInformation(), session = local.session(accountAtStart as string), liveContext = () => session() && contextCurrent();
+              const cached = await Promise.all(trackSeeds.map(seed => local.read(accountAtStart as string,informationKey('similar',seed.artist,seed.title,'20:exact'),'similar',liveContext,contextEnd)));
+              const missing = trackSeeds.filter((_,i)=>!cached[i].entry);
+              const reply = missing.length ? await similarTracksFn({data:{seeds:missing,perSeed:20}}) : {availability:'ok' as const,seeds:[]};
+              if(!liveContext()) return {availability:'unavailable' as const,seeds:[]};
+              const counts = emptyCounts(); counts.local=cached.filter(h=>h.entry).length;counts.readFailed=cached.filter(h=>h.failed).length;
+              for(const row of reply.seeds) if(row.status!=='error' && !await local.write(accountAtStart as string,{key:informationKey('similar',row.seed.artist,row.seed.title,'20:exact'),kind:'similar',value:row,at:Date.now()},liveContext,contextEnd))counts.writeFailed++;
+              addReuse(counts);
+              return {...reply,seeds:[...cached.flatMap(h=>h.entry?[h.entry.value as SeedResult]:[]),...reply.seeds]};
+            };
             // AI cluster and Last.fm crowd data in parallel: the model knows
             // vibe and context, Last.fm knows what real listeners actually
             // play together.
             // Track-level Last.fm evidence: only bounded artist/title seeds from distinct client requests.
             const trackSeeds = seedsFromRequests(uniqueSongs);
             const [simTrackRes, res, crowdRes] = await Promise.all([
-              trackSeeds.length ? withinContext(() => similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }), null, 'lastfm') : Promise.resolve(null),
+              trackSeeds.length ? withinContext(reusableTracks, null, 'lastfm') : Promise.resolve(null),
               // Each provider fails on its own: an AI neighbour outage must not discard valid Last.fm track evidence.
               withinContext(() => neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
               }), { clusters: [] as Array<{ artist: string; neighbors: string[] }> }, 'ai'),
               withinContext(() => crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }), { available: false, artists: [] as ArtistCrowd[] }, 'lastfm'),
             ]);
+            if (crowdRes && 'reuse' in crowdRes && crowdRes.reuse) addReuse(crowdRes.reuse as ReuseCounts);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
             rankSimilarTracks = simEvidence;
             rankSimilar = similarArtistEvidence(crowdRes.artists, uniqueSongs.map((s) => s.artist));
@@ -1507,7 +1534,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           if (p.trackIdx !== undefined) { const t = mergedLibrary.tracks[p.trackIdx]; return { ...libraryCandidate(t, trackIdentity(t.filePath, rankRoots)), ...withFit(p.row) }; }
           return rowCandidate(p.row, catalogueKeys.has(songIdentity(p.row.artist, p.row.song)) ? "catalogue" : "ai");
         };
-        const cg = createFactsGatherer<CommunityRow>((songs) => communityFn({ data: { songs } }), factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
+        const cg = createFactsGatherer<CommunityRow>(async (songs, acceptsReply) => {
+          const local=localInformation(),session=local.session(accountAtStart as string),current=()=>session()&&live()&&acceptsReply(),end=Date.now()+12_000;
+          const hits=await Promise.all(songs.map(s=>local.read(accountAtStart as string,informationKey('community',s.artist,s.song),'community',current,end)));
+          const missing=songs.filter((_,i)=>!hits[i].entry);
+          const rows=missing.length?await communityFn({data:{songs:missing}}):[];
+          if(!current())return [];
+          for(const row of rows) if(row.evidence&&row.status==='found')await local.write(accountAtStart as string,{key:informationKey('community',row.artist,row.song),kind:'community',value:row.evidence,at:Date.now()},current,end);
+          return [...songs.flatMap((s,i)=>hits[i].entry?[{...s,status:'found' as const,evidence:hits[i].entry?.value as CommunityEvidence}]:[]),...rows];
+        }, factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });
         const coordinationStart = Date.now();
         const hardEnd = coordinationStart + 480_000;
         let repairEnd = coordinationStart + 90_000;
@@ -2039,6 +2074,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     const diagnosticShort = expand ? durationGaps.length > 0 : clientCoverage.baselineShortSeconds > 0;
     const metadataMessage = metadataWarnings.message(preparationOutcome({ status: diagnosticShort ? 'short' : 'completed', coverage: (['warmUp', 'transition', 'peak'] as SectionKey[]).map(section => ({ section, targetSeconds: durationTargets[section], achievedSeconds: actualSeconds[section] })) }));
     if (metadataMessage) toast.warning(metadataMessage);
+    toast.info(reuseSummary(informationCounts));
     if (diagnosticShort) activity?.notice("short", durationGaps.length || 1);
     activity?.finish(diagnosticShort ? "short" : "completed");
     diagnosticFinished = true;
