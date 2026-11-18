@@ -4,6 +4,7 @@ export function nextEventVersion(expected: string, now = Date.now()) {
   if (!Number.isFinite(previous)) throw new Error("Reopen this event to read a valid saved version.");
   return new Date(Math.max(now, previous + 1)).toISOString();
 }
+import { renamedInputs } from "./eventName";
 import { EVENT_REVISION_FIELD, eventRevision, withEventRevision } from "./eventRevision";
 /** Compact atomic marker comparison; legacy initialization also compares its observed timestamp. */
 export async function writeEventConditionally(db: any, owner: string, request: {
@@ -41,5 +42,5 @@ export async function renameEventConditionally(db: any, owner: string, id: strin
   const { data: row, error } = await db.from("workflow_history").select("id, name, inputs, lists, updated_at").eq("id", id).eq("user_id", owner).maybeSingle();
   if (error || !row) throw new Error("Could not read this event before renaming it.");
   return writeEventConditionally(db, owner, { id, create: false, expectedUpdatedAt: row.updated_at,
-    expectedRevision: eventRevision(row.inputs), writeRevision: crypto.randomUUID(), name, inputs: row.inputs, lists: row.lists });
+    expectedRevision: eventRevision(row.inputs), writeRevision: crypto.randomUUID(), name, inputs: renamedInputs(row.inputs, name), lists: row.lists });
 }

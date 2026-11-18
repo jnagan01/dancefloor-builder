@@ -53,9 +53,17 @@ try {
     await expect(page.getByRole('dialog')).toContainText('Warm Up: 1 hr 30 min / 1 hr 30 min');
     await expect(page.getByRole('dialog')).toContainText('Installed desktop version 1.2.99');
     await expect(page.getByRole('dialog')).toContainText('2 min 5 sec elapsed');
-    await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', {configurable:true,value:{writeText:async text => {window.__activityCopy=text;}}}); });
+    // Real clipboard under the production desktop permission policy; no mocked writes.
+    const asyncDenied = await page.evaluate(() => navigator.clipboard.writeText('async-probe').then(() => false, () => true));
+    expect(asyncDenied).toBe(true); // the installed shell denies the async Clipboard API, which caused the reported failure
+    await app.evaluate(({ clipboard }) => clipboard.writeText('synthetic-sentinel'));
     await page.getByRole('button', {name:'Copy diagnostics'}).click();
-    const copied = await page.evaluate(() => window.__activityCopy);
+    await expect(page.getByRole('dialog')).toContainText('Diagnostics copied');
+    expect(await page.evaluate(() => document.querySelectorAll('[role="dialog"] textarea, body > textarea').length)).toBe(0);
+    expect(await page.evaluate(() => document.activeElement?.textContent)).toContain('Copy diagnostics');
+    await expect(page.getByRole('dialog')).toBeVisible();
+    const copied = await app.evaluate(({ clipboard }) => clipboard.readText());
+    expect(copied).not.toBe('synthetic-sentinel');
     expect(JSON.parse(copied).requested).toBe(34);
     expect(JSON.parse(copied).coverage[1]).toEqual({ section: 'transition', targetSeconds: 14400, achievedSeconds: 14400 });
     expect(JSON.parse(copied).version).toBe('desktop:1.2.99');
@@ -63,6 +71,20 @@ try {
     expect(copied).not.toMatch(/filePath|\/synthetic\/|Queen|token|accountId|eventName/);
     expect(await page.evaluate(() => JSON.stringify(window.__fixture.tracks))).toBe(before);
     await page.getByRole('dialog').screenshot({ path: path.join(diagnostics, 'generation-activity-expanded.png') });
+    // Honest failure: selection copy refused and async API denied -> visible sanitized text, clipboard untouched.
+    await app.evaluate(({ clipboard }) => clipboard.writeText('synthetic-sentinel'));
+    await page.evaluate(() => { window.__execCommand = document.execCommand; document.execCommand = () => false; });
+    await page.getByRole('button', {name:'Copy diagnostics'}).click();
+    await expect(page.getByRole('dialog')).toContainText('Copy unavailable. Select the text below and copy it.');
+    expect(await page.getByLabel('Diagnostics text').inputValue()).toBe(copied);
+    expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe('synthetic-sentinel');
+    await page.evaluate(() => { document.execCommand = window.__execCommand; });
+    // Account change while the dialog is open: the other account sees no rows, copy state or fallback text.
+    await page.evaluate(() => window.__activity.activate('synthetic-other'));
+    await expect(page.getByRole('dialog')).toContainText('No recent generation activity.');
+    expect(await page.getByLabel('Diagnostics text').count()).toBe(0);
+    await expect(page.getByRole('dialog')).not.toContainText('Copy unavailable');
+    await page.evaluate(() => window.__activity.activate('synthetic-diagnostics'));
     await page.keyboard.press('Escape');
   });
   await check('VirtualDJ SongLength parsed by real DOMParser in Electron', async () => {

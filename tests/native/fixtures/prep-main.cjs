@@ -5,6 +5,7 @@ const profile = process.env.SETARCHITECT_TEST_PROFILE, bundle = process.env.SETA
 if (!profile || !path.basename(profile).startsWith('setarchitect-native-prep-') || !fs.existsSync(path.join(profile, 'ISOLATED'))) throw Error('Separate synthetic profile required.');
 app.setPath('userData', profile); app.setPath('downloads', profile); app.disableHardwareAcceleration();
 const { createBackupStore } = require('../../../desktop/backups.cjs');
+const { createDesktopSecurity } = require('../../../desktop/security.cjs'); // production Chromium permission policy
 const backups = createBackupStore(profile);
 const fixture = JSON.parse(fs.readFileSync(path.join(profile, 'fixture.json'), 'utf8'));
 const blocked = [];
@@ -26,6 +27,10 @@ app.whenReady().then(() => {
     ipcMain.handle('prep:backup-latest', (_e, account) => { if (!account.startsWith('synthetic-')) throw Error('Real account blocked'); return backups.latest(account); });
     const win = new BrowserWindow({ width: 1280, height: 1000, show: true, webPreferences: { preload: path.join(__dirname, 'prep-preload.cjs'), contextIsolation: true, sandbox: false } });
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    // Same handlers as desktop/main.cjs, so clipboard and other permission behaviour matches the installed shell.
+    const security = createDesktopSecurity(origin + '/', () => win);
+    win.webContents.session.setPermissionRequestHandler((wc, permission, callback, details) => callback(security.permissionRequest(wc, permission, details)));
+    win.webContents.session.setPermissionCheckHandler((wc, permission, requestingOrigin, details) => security.permissionCheck(wc, permission, requestingOrigin, details));
     win.loadURL(origin + '/');
   });
 });

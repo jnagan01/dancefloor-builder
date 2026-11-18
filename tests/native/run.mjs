@@ -788,6 +788,19 @@ try{
    expect(await wrong.innerText()).not.toMatch(/(?:6[2-9]|[7-9]\d|100)%/);
    expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(original);
  });
+ await check('events-list rename then reopen shows the renamed name in heading and field; legacy mismatch opens without writing',async()=>{
+   await app.close();
+   const legacy={id:'A',name:'Renamed in Events',updated_at:'v1',inputs:{eventName:'Original name',songs:[song],hours:'1',buffer:2,listType:'dance',notes:'keep',future:{x:[1]}},lists:{warmUp:[],transition:[],peak:[song],custom:'keep'}};
+   fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));
+   fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:legacy}));await launch();
+   await expect(page.getByRole('heading',{name:'Renamed in Events',exact:true})).toBeVisible();
+   await page.getByRole('button',{name:/Dance floor/i}).first().click();await expect(page.getByPlaceholder('e.g. Smith Johnson Wedding')).toHaveValue('Renamed in Events');
+   await page.waitForTimeout(2500);
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(legacy);
+   await app.close();await launch();
+   await page.getByRole('button',{name:/Dance floor/i}).first().click();await expect(page.getByPlaceholder('e.g. Smith Johnson Wedding')).toHaveValue('Renamed in Events');
+   expect(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A).toEqual(legacy);
+ });
  await check('fresh event: saved reopen exact, saved-to-New reset blank, populated delayed profile cannot prefill or save',async()=>{
    await app.close();
    const preserved={id:'A',name:'Saved preferences',updated_at:'v1',inputs:{eventName:'Saved preferences',songs:[song],hours:'1',minutes:'60',buffer:3,listType:'dance',eventType:'school_dance',decades:['1980s'],artistsInput:'Saved Artist',genresInput:'Pop',vibe:'party',homeKey:'8A',notes:'Saved notes',doNotPlayInput:'Forbidden',expand:true,split:{warmUp:10,transition:20,peak:30},bpmRange:[110,128],danceRange:[6,9],ownedOnlyExpansion:true,includeSeasonalTracks:true,requireCleanVersions:true},lists:{warmUp:[song],transition:[],peak:[],selections:{[key]:{paths:[tracks[1].filePath],confirmed:true}}}};

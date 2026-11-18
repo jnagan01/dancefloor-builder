@@ -7,3 +7,4 @@
 - Snapshot the shared sidebar installed-version resolution synchronously at run start; label web/desktop separately and keep the exact allowlisted build ID, because IPC and late identity replies must never delay or rewrite a run.
 - Synthetic connection checks use the same validated relay with an explicit empty-success marker and informational level, because connection verification must not resemble a real preparation failure.
 - Map real run statuses to fixed relay levels (failed=error; warnings/short/interrupted=warning; other statuses=info); synthetic checks always stay info, because client severity must never control transport classification.
+- Copy user-visible text via `src/lib/copyText` (gesture-time selection copy inside the dialog first, async Clipboard API second, visible text fallback on failure), because the installed desktop permission policy denies the async Clipboard API.
