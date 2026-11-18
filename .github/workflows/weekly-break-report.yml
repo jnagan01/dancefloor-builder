@@ -3,6 +3,10 @@ on:
   schedule:
     - cron: '0 8 * * 2'
       timezone: America/Chicago
+    # Off-hour retries survive a dropped/failed primary trigger. Accepted mail
+    # is deduplicated by the existing weekly finding-set delivery marker.
+    - cron: '17 8,9 * * 2'
+      timezone: America/Chicago
   workflow_dispatch:
     inputs:
       dry_run:

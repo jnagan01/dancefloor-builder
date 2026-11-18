@@ -118,7 +118,8 @@ class Decisions(unittest.TestCase):
         self.assertEqual(report.delivery_decision([], False, False, False), "silent")
 
     def test_failed(self):
-        self.assertEqual(report.problems(run(conclusion="failure"))[0][0], "run-failure")
+        self.assertEqual(report.problems(run(conclusion="failure"))[0][0], "evidence-missing")
+        self.assertEqual(len(report.problems(run(conclusion="failure"))), 1)
 
     def test_cancelled(self):
         self.assertEqual(report.problems(run(conclusion="cancelled"))[0][1], "incomplete")
@@ -175,7 +176,7 @@ class Decisions(unittest.TestCase):
         self.assertTrue(report.problems(run(), None))
         incomplete = evidence()
         incomplete["suites"]["prep"]["status"] = "not_run"
-        self.assertEqual(report.problems(run(), incomplete)[0][0], "suite-prep")
+        self.assertEqual(report.problems(run(), incomplete)[0][0], "testing-incomplete")
         self.assertFalse(run_tests.valid_vitest({"success": True, "numTotalTests": 2, "numPassedTests": 1, "numPendingTests": 1}))
         self.assertFalse(run_tests.valid_vitest({"success": True, "numTotalTests": 0}))
 
