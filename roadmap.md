@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Whole-request metadata timeout recovery
+- [x] Follow-up: both favorite/general lanes gate before computing needs; restart after bounded settlement waits, recheck current coverage/queue/window and cancellation. Final focused 71/71 plus unchanged hung-route 1/1 pass; old-head favorite regression fails with three requests at 20s behind the unresolved transport.
 - [x] Replace permanent timeout stop with settlement-fenced bounded recovery; preserve attempts/budgets, discard late facts and callback pressure/diagnostic side effects; suggestions wait behind unresolved timed-out metadata.
 - [x] Final focused 88/88, actual 25s first-eight transport reaches 5400/14400/7200, concurrency/cancellation/rejection races pass. One full attempt 1170 passed/1 failed, not accepted; original hung-suggestion assertion passes unchanged after integration fix (1/1). Evidence in tests/fit/request-timeout-recovery.md.
 - [ ] Final-code hosted Mac/production/native UI and independent frozen real-input replay: external execution pending; no release before acceptance.

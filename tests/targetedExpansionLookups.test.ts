@@ -103,6 +103,60 @@ it('real pipeline completes twelve-second AI after quick misses within unchanged
   expect(result.results[0]).toMatchObject({energy:8,danceability:7,bpm:120,year:2005,prov:{energy:'ai',year:'provider'}});expect(writes).toHaveLength(1);
 });
 
+for (const recovery of ['settle', 'covered', 'hung', 'account', 'event'] as const) it(`actual favorite and general lanes ${recovery}: wait for timed-out metadata settlement without stacking or stale dispatch`, async () => {
+  vi.useFakeTimers(); const start = Date.now(); let calls = 0, active = 0, peak = 0;
+  const suggestions: Array<{ at: number; favorite: boolean; active: number }> = [];
+  const resumedNeeds: number[] = [];
+  const useful = Array.from({ length: 40 }, (_, i) => ({ artist: `Z Favorite Recovery ${i}`, title: `Floor ${i}`, filePath: `/synthetic/favorite-recovery/${i}.mp3`, year: '2005', bpm: '120', genre: 'Pop', songLength: 900 }));
+  const lib = vdj.buildLibrary(useful);
+  const saved = structuredClone({ ...base, inputs: { ...inputs, artistsInput: 'TEST Favorite' } }), before = JSON.stringify(saved);
+  // Test-only coordinator seam: simulate independent approved coverage arriving while lanes wait.
+  // Keep the real lane loop, deficit calculation, file readiness and settlement gate unchanged.
+  const coveredRows = useful.map(t => ({ artist: t.artist, song: t.title, fromUpload: false, energy: 8, danceability: 8, popularity: 8, bpm: 120, year: 2005, source: 'ReccoBeats', prov: { energy: 'provider', danceability: 'provider', popularity: 'provider', bpm: 'provider', year: 'provider' } }));
+  const recoveryHarness = recovery === 'covered' ? require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({
+    vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions,
+    observeCoordinator: (state: any) => { if (state.resumedDeficit !== undefined && Date.now() - start >= 25_000) resumedNeeds.push(state.resumedDeficit); },
+    routeSource: require('node:fs').readFileSync('src/routes/_authenticated/events.new.tsx', 'utf8').replace(
+      'const laneRuns = sectionMap.map(laneLoop);',
+      `setTimeout(() => { Object.assign(durationBase, ${JSON.stringify({ warmUp: coveredRows.slice(0, 6), transition: coveredRows.slice(6, 22), peak: coveredRows.slice(22, 30) })}); evaluate(false); notify(); }, 4000); const laneRuns = sectionMap.map(laneLoop);`,
+    ).replace('const deficit = deficitSec(key);', 'const deficit = deficitSec(key); observeCoordinator({ resumedDeficit: deficit });'),
+  }) : harness;
+  const h = recoveryHarness({ rows: { A: saved, B: { ...saved, id: 'B' } }, contract: true, services: {
+    enrich: async ({ data }: any) => {
+      const n = ++calls; active++; peak = Math.max(peak, active);
+      try {
+        if (n === 1) await (recovery === 'hung' ? new Promise(() => {}) : new Promise(r => setTimeout(r, 25_000)));
+        return { results: data.songs.map((s: any) => ({ ...s, energy: n === 1 ? 1 : 8, danceability: n === 1 ? 1 : 8, popularity: 8, bpm: 120, year: 2005, source: 'ReccoBeats', prov: { energy: 'provider', danceability: 'provider', popularity: 'provider', bpm: 'provider', year: 'provider' } })), status: { complete: true, timedOut: [] } };
+      } finally { active--; }
+    },
+    recommend: async ({ data }: any) => {
+      suggestions.push({ at: Date.now() - start, favorite: !!data.onlyArtists, active });
+      return { suggestions: [] };
+    },
+  } });
+  await h.flush(); h.library(lib); await h.flush(); const pending = h.current.generate();
+  await vi.advanceTimersByTimeAsync(24_999);
+  expect(calls).toBe(1); expect(suggestions).toEqual([]);
+  if (recovery === 'account' || recovery === 'event') {
+    h.switchTo(recovery === 'account' ? 'other' : 'owner', recovery === 'event' ? 'B' : 'A'); await h.flush();
+  }
+  await vi.advanceTimersByTimeAsync(125_001); await pending; await h.flush();
+  expect(peak).toBe(1); expect(JSON.stringify(saved)).toBe(before); expect(h.requests).toEqual([]); expect(h.errors).toEqual([]);
+  if (recovery === 'settle') {
+    expect(suggestions.some(s => s.favorite)).toBe(true); expect(suggestions.some(s => !s.favorite)).toBe(true);
+    expect(suggestions.every(s => s.at >= 25_000 && s.active === 0)).toBe(true);
+    expect(seconds(h, lib)).toEqual([5400, 14400, 7200]); expect(calls).toBeGreaterThan(1);
+  } else {
+    expect(suggestions).toEqual([]);
+    if (recovery === 'covered') {
+      // Already-queued metadata may refine after settlement; no new sourcing is needed.
+      expect(resumedNeeds.length).toBeGreaterThanOrEqual(3);
+      expect(resumedNeeds.every(n => n === 0)).toBe(true); expect(active).toBe(0);
+    } else expect(calls).toBe(1);
+  }
+  h.unmount();
+}, 30000);
+
 it('remaining-time dispatch reserve keeps completed twelve-second chunks, never sends a doomed final chunk or marks it attempted',async()=>{
   vi.useFakeTimers();let current=true;const starts:number[]=[];const start=Date.now();
   const gather=createFactsGatherer(async s=>{starts.push(Date.now()-start);await new Promise(r=>setTimeout(r,12_000));return s;},factsKey,{overallMs:90_000,minDispatchMs:()=>13_000,isCurrent:()=>current});

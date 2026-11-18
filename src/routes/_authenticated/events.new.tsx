@@ -1749,6 +1749,15 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             let sent = 0, barren = 0, favoriteAttempts = favoriteArtists.length ? 0 : 3;
             // Once lookups have stopped, further replies could never be verified: the lane ends honestly.
             while (!finished && !lookupsClosed && live() && lanes.open(key) && sent < maxLaneRequests) {
+              // Both sourcing passes wait for actual metadata settlement. Restart the turn afterwards:
+              // coverage, pending facts and the useful request window may have changed while waiting.
+              if (facts.transportBlocked) {
+                while (facts.transportBlocked && live() && !finished && !lookupsClosed && lanes.open(key) && Date.now() < workEnd) {
+                  await waitChange(Math.min(100, workEnd - Date.now()));
+                }
+                if (!live() || finished || lookupsClosed || !lanes.open(key) || Date.now() >= workEnd) return;
+                continue;
+              }
               const turn = timerTurnIfNeeded(key); if (turn) { await turn; continue; }
               const deficit = deficitSec(key);
               if (!libraryOn && r[key].length >= reviewTargets[key] && sent > 0) break;
@@ -1794,9 +1803,6 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 }
                 favoriteAttempts = 3;
               }
-              // A timed-out transport may recover, but do not source more suggestions behind it while unresolved.
-              while (facts.transportBlocked && live() && !finished && Date.now() < workEnd) await waitChange(Math.min(100, workEnd - Date.now()));
-              if (!live() || finished || Date.now() >= workEnd) return;
               // PASS 2 — general gap-driven candidates for whatever is still uncovered.
               const gaps = buildGapProfile(r[key], [...r.warmUp, ...r.transition, ...r.peak], gapSection(label), { favoriteArtists });
               sent++;
