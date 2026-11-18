@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import * as vdj from '@/lib/virtualDj'; import * as dance from '@/lib/danceFloor'; import * as audio from '@/lib/audioMatch'; import * as snapshots from '@/lib/snapshotSafety'; import * as drafts from '@/lib/eventDrafts'; import * as input from '@/lib/inputSafety'; import * as autosave from '@/lib/eventAutosave'; import * as vibes from '@/lib/vibes'; import * as isolation from '@/lib/workflowIsolation'; import * as theory from '@/lib/musicTheory'; import * as revisions from '@/lib/eventRevision';
 import { createDiagnosticStore, type DiagnosticStorage } from '@/lib/generationDiagnostics/store';
+import { copyDiagnostics } from '@/lib/generationDiagnostics/schema';
 
 const require = createRequire(import.meta.url);
 const actual = { vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions };
@@ -53,4 +54,72 @@ it('actual route true timeout is distinct from cancellation and partial response
 it('diagnostics unavailable cannot change route result, recommendation choices or save contract', async () => {
   vi.useFakeTimers(); const { h, store } = await setup(async () => ({ results: [] }), true);
   await h.current.generate(); await h.flush(); expect(h.current.result.warmUp).toHaveLength(1); expect(store.get().rows).toEqual([]); h.unmount();
+});
+
+async function expansionFixture(services: Record<string, unknown> = {}, logging = true) {
+  const data = new Map();
+  const store = createDiagnosticStore({ read: async a => [...data].filter(([k]) => k.startsWith(`${a}:`)).map(([, v]) => v), write: async (a, r) => { data.set(`${a}:${r.run.id}`, structuredClone(r)); }, remove: async () => {} });
+  await store.activate('owner');
+  const request = { artist: 'PRIVATE Request', song: 'PRIVATE Request Title' };
+  const tracks = [
+    { artist: request.artist, title: request.song, filePath: '/synthetic/request.mp3', songLength: 240, bpm: '120', year: '2005' },
+    { artist: 'PRIVATE Slow', title: 'PRIVATE Slow Title', filePath: '/synthetic/slow.mp3', songLength: 240, bpm: '120', year: '2005', genre: 'Pop' },
+    { artist: 'PRIVATE Strict', title: 'PRIVATE Strict Title', filePath: '/synthetic/strict.mp3', songLength: 240, genre: 'Pop' },
+  ];
+  const h = require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({ ...actual, diagnostics: { beginGenerationDiagnostics: logging ? (...args: any[]) => store.begin(args[0], args[1], args[2], args[3], args[4]) : () => null } })({
+    eventId: 'A', rows: { A: { id: 'A', inputs: { songs: [request], hours: '0.5', buffer: 1, listType: 'dance', expand: true, genresInput: 'Pop', ownedOnlyExpansion: true, bpmRange: [110, 130], decades: ['2000s'], eventFit: { avoidSlow: true } }, lists: { warmUp: [], transition: [], peak: [], selections: {} } } },
+    services: { enrich: async ({ data }: any) => ({ results: data.songs.map((s: any) => ({ ...s, source: 'ReccoBeats', energy: s.artist === 'PRIVATE Slow' ? 2 : 8, danceability: s.artist === 'PRIVATE Slow' ? 2 : 8, bpm: s.artist === 'PRIVATE Strict' ? 90 : 120, year: s.artist === 'PRIVATE Strict' ? 1990 : 2005, prov: { energy: 'provider', danceability: 'provider', bpm: 'provider', year: 'provider' } })) }), ...services },
+  });
+  await h.flush(); h.library(vdj.buildLibrary(tracks)); await h.flush();
+  return { h, store, tracks };
+}
+async function finishExpansion(h: any) {
+  let done = false; const run = h.current.generate().finally(() => { done = true; });
+  for (let tick = 0; tick < 510 && !done; tick++) await vi.advanceTimersByTimeAsync(1000);
+  expect(done).toBe(true); await run; await h.flush();
+}
+it('actual slow/strict candidate toasts persist once and selections match diagnostics-disabled generation', async () => {
+  vi.useFakeTimers(); const f = await expansionFixture(); const before = JSON.stringify(f.tracks);
+  await finishExpansion(f.h); await f.store.settled();
+  const run = f.store.get().rows[0].run;
+  const slow = f.h.infos.find((n: string) => n.includes('slow/ballad additions'));
+  const strict = f.h.infos.find((n: string) => n.includes('candidate track') && n.includes("BPM or year couldn't be verified"));
+  expect(slow).toBeTruthy(); expect(strict).toBeTruthy();
+  expect(run.notices.filter(n => n.code === 'candidate_slow_excluded')).toEqual([{ code: 'candidate_slow_excluded', count: Number(/^\d+/.exec(slow)?.[0]) }]);
+  expect(run.notices.filter(n => n.code === 'candidate_strict_excluded')).toEqual([{ code: 'candidate_strict_excluded', count: Number(/^\d+/.exec(strict)?.[0]) }]);
+  expect(run.notices.filter(n => n.code === 'strict_excluded')).toEqual([]);
+  const rows = [...f.h.current.result.warmUp, ...f.h.current.result.transition, ...f.h.current.result.peak];
+  expect(rows.map(s => s.artist)).toEqual(['PRIVATE Request']); expect(JSON.stringify(f.tracks)).toBe(before);
+  expect(copyDiagnostics(run)).not.toMatch(/PRIVATE|\/synthetic\//);
+  const control = await expansionFixture({}, false); await finishExpansion(control.h);
+  expect(control.h.current.result).toEqual(f.h.current.result); f.h.unmount(); control.h.unmount();
+});
+it.each(['failure', 'timeout'])('actual bounded initial context %s retains safe provider categories without altering exclusions', async mode => {
+  vi.useFakeTimers();
+  const fallback = mode === 'failure' ? async () => { throw Error('PRIVATE /path token raw'); } : () => new Promise(() => {});
+  const f = await expansionFixture({ neighbors: fallback, crowd: fallback, similarTracks: fallback });
+  await finishExpansion(f.h); const run = f.store.get().rows[0].run;
+  const code = mode === 'failure' ? 'context_failed' : 'context_timeout';
+  expect(run.notices.filter(n => n.code === code)).toEqual([{ code, count: 2, provider: 'lastfm' }, { code, count: 1, provider: 'ai' }]);
+  expect(run.notices.some(n => n.code === (mode === 'failure' ? 'context_timeout' : 'context_failed'))).toBe(false);
+  expect([...f.h.current.result.warmUp, ...f.h.current.result.transition, ...f.h.current.result.peak].map(s => s.artist)).toEqual(['PRIVATE Request']);
+  expect(copyDiagnostics(run)).not.toMatch(/PRIVATE|\/path|raw/); f.h.unmount();
+});
+it('actual account cancellation fences late initial context errors instead of recording provider failures/timeouts', async () => {
+  vi.useFakeTimers(); let reject: (e: Error) => void = () => {};
+  const f = await expansionFixture({ neighbors: () => new Promise((_resolve, r) => { reject = r; }), crowd: async () => ({ artists: [] }), similarTracks: async () => ({ availability: 'ok', seeds: [] }) });
+  const work = f.h.current.generate(); await vi.advanceTimersByTimeAsync(1);
+  f.h.switchTo('other', 'B'); await f.store.activate('other'); reject(Error('PRIVATE late error'));
+  await vi.advanceTimersByTimeAsync(15001); await work;
+  expect(f.store.get().rows).toEqual([]); await f.store.activate('owner');
+  expect(f.store.get().rows[0].run.status).toBe('cancelled');
+  expect(f.store.get().rows[0].run.notices.filter(n => ['context_failed', 'context_timeout'].includes(n.code))).toEqual([]); f.h.unmount();
+});
+it('actual optional extra neighbour crowd lookup failure retains a sanitized Last.fm category', async () => {
+  vi.useFakeTimers(); let calls = 0;
+  const f = await expansionFixture({ neighbors: async () => ({ clusters: [{ artist: 'PRIVATE Request', neighbors: ['PRIVATE Related'] }] }), similarTracks: async () => ({ availability: 'ok', seeds: [] }), crowd: async () => { if (++calls === 2) throw Error('PRIVATE raw token'); return { artists: [] }; } });
+  await finishExpansion(f.h);
+  expect(calls).toBe(2);
+  expect(f.store.get().rows[0].run.notices.filter(n => n.code === 'context_failed')).toEqual([{ code: 'context_failed', count: 1, provider: 'lastfm' }]);
+  expect(copyDiagnostics(f.store.get().rows[0].run)).not.toMatch(/PRIVATE|raw|token/); f.h.unmount();
 });

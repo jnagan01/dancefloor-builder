@@ -44,6 +44,14 @@ it('completed external warnings remain warnings; informational budget alone is n
   const r = f.store.begin('a', '1', 'b', 1); r?.notice('metadata_failed', 8); r?.finish('completed');
   expect(f.store.get().rows.find(x => x.run.id === r?.id)?.run.status).toBe('warnings');
 });
+it('candidate exclusions are informational and separate from final selected-addition strict drops', async () => {
+  const f = fixture(); await f.store.activate('a'); const r = f.store.begin('a', '1', 'b', 1);
+  r?.notice('candidate_slow_excluded', 3); r?.notice('candidate_strict_excluded', 4); r?.finish('completed');
+  expect(f.store.get().rows[0].run.status).toBe('completed');
+  expect(f.store.get().rows[0].run.notices).toEqual([{ code: 'candidate_slow_excluded', count: 3 }, { code: 'candidate_strict_excluded', count: 4 }]);
+  const next = f.store.begin('a', '1', 'b', 1); next?.notice('candidate_strict_excluded', 4); next?.notice('strict_excluded', 2); next?.finish('completed');
+  expect(f.store.get().rows[0].run.notices).toEqual([{ code: 'candidate_strict_excluded', count: 4 }, { code: 'strict_excluded', count: 2 }]);
+});
 it('offline queue survives reload; partial acceptance marks only confirmed stable revisions', async () => {
   const f = fixture(); await f.store.activate('a');
   for (let i = 0; i < 2; i++) { f.advance(1); f.store.begin('a', '1', 'b', 1)?.finish('completed'); }

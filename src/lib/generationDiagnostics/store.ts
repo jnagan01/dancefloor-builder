@@ -126,7 +126,7 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
         },
         finish(status: DiagnosticRun['status']) {
           if (!live()) return;
-          finishRow(owner, row, status === 'completed' && row.run.notices.some(n => !['continuation', 'lookup_budget', 'community_budget'].includes(n.code)) ? 'warnings' : status);
+          finishRow(owner, row, status === 'completed' && row.run.notices.some(n => !['continuation', 'lookup_budget', 'community_budget', 'candidate_strict_excluded', 'candidate_slow_excluded', 'context_window'].includes(n.code)) ? 'warnings' : status);
           void api.flush();
         },
       };

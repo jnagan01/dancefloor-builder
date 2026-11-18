@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Persistent generation activity
+- [x] Candidate slow/strict high-water aggregates persisted as informational codes, separate from final strict drops; initial/extra context failure and true timeout provider categories are settlement/account/generation fenced. 61 related tests plus extra actual-route case pass; final 38-test route/store/bundle group pass, preview OK. No live send/publication; final Mac/full-suite gates remain external.
 - [x] Mac 44244331975 bundle finding: main renderer aliases relay to synthetic service, supplies synthetic auth session/build identity; three browser-bundle regressions cover actual main/prep configurations plus standalone offline/race assets. 38 related tests pass, native assertions/platform/network restrictions unchanged; exact-head Mac execution still required.
 - [x] Review follow-up: shared installed-version resolution with synchronous run snapshots, readable times/exact copy, native assertion; 43 focused and 1101/1101 full tests (102 files, original limits), desktop/mobile synthetic checks and secret-free preview/native client artifacts. No second live report or publication.
 - [x] Separate bounded local history/outbox, safe allowlisted relay and accessible in-place activity/copy panel.

@@ -1297,10 +1297,17 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           if (uniqueSeeds.length) {
             // Bounded context phase: neighbour/crowd evidence is optional, so a slow provider cannot delay expansion.
             const contextEnd = Date.now() + CONTEXT_PHASE_MS;
-            const withinContext = <T,>(dispatch: () => Promise<T>, fallback: T): Promise<T> => {
-              if (Date.now() >= contextEnd || genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return Promise.resolve(fallback);
+            const contextCurrent = () => genTokenRef.current === myToken && accountRef.current === accountAtStart;
+            const withinContext = <T,>(dispatch: () => Promise<T>, fallback: T, provider: 'ai' | 'lastfm'): Promise<T> => {
+              if (!contextCurrent()) return Promise.resolve(fallback);
+              if (Date.now() >= contextEnd) { activity?.notice('context_window', 1, provider); return Promise.resolve(fallback); }
               let t: ReturnType<typeof setTimeout> | undefined;
-              return Promise.race([dispatch().catch(() => fallback), new Promise<T>((resolve) => { t = setTimeout(() => resolve(fallback), Math.max(0, contextEnd - Date.now())); })]).finally(() => clearTimeout(t));
+              let settled = false;
+              const report = (code: 'context_failed' | 'context_timeout') => { if (!settled && contextCurrent()) activity?.notice(code, 1, provider); settled = true; };
+              return Promise.race([
+                Promise.resolve().then(dispatch).then(value => { settled = true; return value; }, () => { report('context_failed'); return fallback; }),
+                new Promise<T>((resolve) => { t = setTimeout(() => { report('context_timeout'); resolve(fallback); }, Math.max(0, contextEnd - Date.now())); }),
+              ]).finally(() => clearTimeout(t));
             };
             // AI cluster and Last.fm crowd data in parallel: the model knows
             // vibe and context, Last.fm knows what real listeners actually
@@ -1308,12 +1315,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             // Track-level Last.fm evidence: only bounded artist/title seeds from distinct client requests.
             const trackSeeds = seedsFromRequests(uniqueSongs);
             const [simTrackRes, res, crowdRes] = await Promise.all([
-              trackSeeds.length ? withinContext(() => similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }), null) : Promise.resolve(null),
+              trackSeeds.length ? withinContext(() => similarTracksFn({ data: { seeds: trackSeeds, perSeed: 20 } }), null, 'lastfm') : Promise.resolve(null),
               // Each provider fails on its own: an AI neighbour outage must not discard valid Last.fm track evidence.
               withinContext(() => neighborsFn({
                 data: { artists: uniqueSeeds, genres: prefs.genres ?? [], perArtist: 8 },
-              }).catch((err) => { console.warn("AI neighbour map unavailable", err); return { clusters: [] as Array<{ artist: string; neighbors: string[] }> }; }), { clusters: [] as Array<{ artist: string; neighbors: string[] }> }),
-              withinContext(() => crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }), { available: false, artists: [] as ArtistCrowd[] }),
+              }), { clusters: [] as Array<{ artist: string; neighbors: string[] }> }, 'ai'),
+              withinContext(() => crowdFn({ data: { artists: uniqueSeeds, perArtistSimilar: 10 } }), { available: false, artists: [] as ArtistCrowd[] }, 'lastfm'),
             ]);
             simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
             rankSimilarTracks = simEvidence;
@@ -1363,7 +1370,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               const extra = topNeighbors.length
                 ? await withinContext(() => crowdFn({
                     data: { artists: topNeighbors, perArtistSimilar: 0 },
-                  }), { available: false, artists: [] as ArtistCrowd[] })
+                  }), { available: false, artists: [] as ArtistCrowd[] }, 'lastfm')
                 : { available: false, artists: [] as ArtistCrowd[] };
               const seenCrowd = new Set<string>();
               crowdArtists = [...crowdRes.artists, ...extra.artists]
@@ -1380,12 +1387,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                   tags: c.tags.slice(0, 6),
                 }));
             } catch (err) {
+              if (contextCurrent()) activity?.notice('context_failed', 1, 'lastfm');
               console.warn("Crowd data unavailable", err);
             }
 
             neighborOrdered = ordered;
           }
         } catch (err) {
+          if (genTokenRef.current === myToken && accountRef.current === accountAtStart) activity?.notice('context_failed', 1, 'ai');
           console.warn("Neighbor map unavailable — continuing without it", err);
         }
 
@@ -1875,6 +1884,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         }
         finished = true; communityFinal = true;
         evaluate(true);
+        if (seenSlow) activity?.notice('candidate_slow_excluded', seenSlow);
+        if (seenStrict) activity?.notice('candidate_strict_excluded', seenStrict);
         if (seenSlow) toast.info(`${seenSlow} candidate track${seenSlow === 1 ? " was" : "s were"} left out as slow/ballad additions (provider or measured energy and danceability). Remaining time stays an honest gap.`);
         if (seenStrict) toast.info(`${seenStrict} candidate track${seenStrict === 1 ? " was" : "s were"} left out because their BPM or year couldn't be verified within your limits.`);
         progress.requests = sectionMap.reduce((n, { key }) => n + lanes.lane(key).attempts, 0);
