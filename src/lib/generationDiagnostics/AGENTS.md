@@ -6,3 +6,4 @@
 - Keep candidate exclusion high-water counts informational and separate from final selected-addition drops; fence context fallback notices by request settlement and generation/account identity, because retries/late replies must not duplicate or misattribute outcomes.
 - Snapshot the shared sidebar installed-version resolution synchronously at run start; label web/desktop separately and keep the exact allowlisted build ID, because IPC and late identity replies must never delay or rewrite a run.
 - Synthetic connection checks use the same validated relay with an explicit empty-success marker and informational level, because connection verification must not resemble a real preparation failure.
+- Map real run statuses to fixed relay levels (failed=error; warnings/short/interrupted=warning; other statuses=info); synthetic checks always stay info, because client severity must never control transport classification.

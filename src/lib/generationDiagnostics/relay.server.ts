@@ -1,4 +1,9 @@
-import { BatchSchema, MESSAGES, type RelayReply } from './schema';
+import { BatchSchema, MESSAGES, type DiagnosticRun, type RelayReply } from './schema';
+
+const STATUS_LEVEL: Record<DiagnosticRun['status'], 'info' | 'warning' | 'error'> = {
+  running: 'info', completed: 'info', cancelled: 'info', warnings: 'warning',
+  short: 'warning', interrupted: 'warning', failed: 'error',
+};
 
 /** Config is supplied only by the authenticated handler, never by the caller. */
 export async function relayDiagnostics(input: unknown, config: { token?: string; host?: string }, transport: typeof fetch = fetch): Promise<RelayReply> {
@@ -10,7 +15,7 @@ export async function relayDiagnostics(input: unknown, config: { token?: string;
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const payload = runs.map(r => ({ ...r, dt: new Date(r.endedAt ?? r.startedAt).toISOString(), application: 'Set Architect', level: 'info', synthetic: r.kind === 'synthetic_connection_check', message: r.kind === 'synthetic_connection_check' ? 'SYNTHETIC CONNECTION CHECK — no user data' : `Preparation ${r.status}`, notices: r.notices.map(n => ({ ...n, message: MESSAGES[n.code] })) }));
+    const payload = runs.map(r => ({ ...r, dt: new Date(r.endedAt ?? r.startedAt).toISOString(), application: 'Set Architect', level: r.kind === 'synthetic_connection_check' ? 'info' : STATUS_LEVEL[r.status], synthetic: r.kind === 'synthetic_connection_check', message: r.kind === 'synthetic_connection_check' ? 'SYNTHETIC CONNECTION CHECK — no user data' : `Preparation ${r.status}`, notices: r.notices.map(n => ({ ...n, message: MESSAGES[n.code] })) }));
     const response = await Promise.race([
       transport(`https://${host}/`, { method: 'POST', redirect: 'manual', signal: controller.signal,
         headers: { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }),

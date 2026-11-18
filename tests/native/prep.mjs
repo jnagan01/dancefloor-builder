@@ -62,6 +62,7 @@ try {
     expect(JSON.parse(copied).elapsedMs).toBe(125000);
     expect(copied).not.toMatch(/filePath|\/synthetic\/|Queen|token|accountId|eventName/);
     expect(await page.evaluate(() => JSON.stringify(window.__fixture.tracks))).toBe(before);
+    await page.getByRole('dialog').screenshot({ path: path.join(diagnostics, 'generation-activity-expanded.png') });
     await page.keyboard.press('Escape');
   });
   await check('VirtualDJ SongLength parsed by real DOMParser in Electron', async () => {

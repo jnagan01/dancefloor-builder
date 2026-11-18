@@ -18,6 +18,42 @@ on:
 permissions:
   contents: read
 jobs:
+  production-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.5
+      - name: Frozen root install
+        run: bun install --frozen-lockfile
+      - name: Isolate build configuration from committed project settings
+        run: |
+          rm -f .env .env.local .env.production .env.production.local .env.development .env.development.local
+          cat > .env.production <<'EOF'
+          VITE_SUPABASE_URL=http://127.0.0.1:9
+          VITE_SUPABASE_PUBLISHABLE_KEY=synthetic-build-only
+          VITE_SUPABASE_PROJECT_ID=synthetic-build-only
+          SUPABASE_URL=http://127.0.0.1:9
+          SUPABASE_PUBLISHABLE_KEY=synthetic-build-only
+          EOF
+      - name: TypeScript no-emit check (frozen compiler)
+        run: bun node_modules/typescript/bin/tsc --noEmit --project tsconfig.json
+      - name: Production build (no deployment or providers)
+        if: ${{ !cancelled() }}
+        env:
+          NODE_ENV: production
+        run: bun run build
+      - name: Verify production client excludes relay secrets
+        if: ${{ !cancelled() }}
+        run: node scripts/check-diagnostic-client.mjs dist/client
   regression:
     # Push, pull request, and reusable release checks retain Apple Silicon.
     runs-on: ${{ github.event_name == 'workflow_dispatch' && inputs.runner || 'macos-15' }}

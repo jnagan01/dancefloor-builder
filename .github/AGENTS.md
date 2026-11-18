@@ -1,0 +1,2 @@
+# Read-only validation
+- Keep production/no-emit validation separate from the existing native job, with frozen dependencies and synthetic loopback configuration; do not deploy or load production secrets, because preview compilation is not production acceptance.

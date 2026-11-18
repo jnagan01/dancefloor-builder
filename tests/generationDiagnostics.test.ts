@@ -160,6 +160,21 @@ it('relay/copy rebuild allowlist with sensitive dummy fields and rejects invalid
   expect(BatchSchema.safeParse({ runs: Array(6).fill(r) }).success).toBe(false);
   expect(BatchSchema.safeParse({ runs: [{ ...r, build: 'https://sensitive/path' }] }).success).toBe(false);
 });
+it.each([
+  ['running', 'info'], ['completed', 'info'], ['cancelled', 'info'],
+  ['warnings', 'warning'], ['short', 'warning'], ['interrupted', 'warning'], ['failed', 'error'],
+] as const)('real %s report uses fixed %s transport level, ignoring caller severity', async (status, level) => {
+  const f = fixture(); await f.store.activate('a');
+  f.store.begin('a', '1', 'b', 1)?.finish('completed');
+  const run = { ...f.store.get().rows[0].run, status, level: 'SENSITIVE', message: 'SENSITIVE', accountId: 'SENSITIVE' };
+  const send = vi.fn(async (_url: any, init: any) => {
+    const records = JSON.parse(init.body);
+    expect(records[0].level).toBe(level); expect(records[0].synthetic).toBe(false);
+    expect(init.body).not.toContain('SENSITIVE'); return new Response(null, { status: 202 });
+  });
+  const reply = await relayDiagnostics({ runs: [run] }, { token: 'dummy', host: 'in.logs.betterstack.com' }, send);
+  expect(reply.accepted).toEqual([{ id: run.id, revision: run.revision }]); expect(send).toHaveBeenCalledTimes(1);
+});
 it.each([200, 401, 402, 403, 429, 500])('relay status %s is never falsely acknowledged', async status => {
   const f = fixture(); await f.store.activate('a'); f.store.begin('a', '1', 'b', 1)?.finish('completed');
   const reply = await relayDiagnostics({ runs: [f.store.get().rows[0].run] }, { token: 'dummy', host: 'in.logs.betterstack.com' }, async () => new Response(null, { status, headers: { 'retry-after': '999999' } }));

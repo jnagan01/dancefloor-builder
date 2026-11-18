@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Persistent generation activity
+- [ ] Fixed status-to-level relay mapping, isolated hosted no-emit/production checks and expanded native activity screenshot; final combined validation without live sends or publication.
 - [ ] Reconcile account-owned session memory with successful persisted reads after write failure; preserve revisions/delivery metadata and prevent expired/capped resurrection. Batch final focused/full validation; no live sends or publication.
 - [x] Candidate slow/strict high-water aggregates persisted as informational codes, separate from final strict drops; initial/extra context failure and true timeout provider categories are settlement/account/generation fenced. 61 related tests plus extra actual-route case pass; final 38-test route/store/bundle group pass, preview OK. No live send/publication; final Mac/full-suite gates remain external.
 - [x] Mac 44244331975 bundle finding: main renderer aliases relay to synthetic service, supplies synthetic auth session/build identity; three browser-bundle regressions cover actual main/prep configurations plus standalone offline/race assets. 38 related tests pass, native assertions/platform/network restrictions unchanged; exact-head Mac execution still required.
