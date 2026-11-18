@@ -12,7 +12,7 @@ it('rate/server failures are distinct from actual timeouts; one bounded aggregat
 });
 it('a provider phase closed while rate-parked is not described as an actual sent-request timeout', () => {
   const w = createMetadataWarnings(); w.response({ reccobeats: { rate: 3, paused: 4 } }, ['fetch']); w.report({ incompleteSongs: 8, failedSongs: 0, timedOutSongs: 0 });
-  expect(w.message('')).toContain('rate limited'); expect(w.message('')).not.toMatch(/actually timed out|phase\/window limit/);
+  expect(w.message('')).toContain('rate limited'); expect(w.message('')).not.toMatch(/actually timed out|could not finish within the available lookup time/);
   w.response({ reccobeats: { deadline: 1 } }, ['fetch']); expect(w.message('')).toContain('actually timed out');
 });
 it.each(['rate', 'server'])('earlier %s pressure cannot hide a separate legacy fetch phase limit', cause => {
@@ -21,7 +21,7 @@ it.each(['rate', 'server'])('earlier %s pressure cannot hide a separate legacy f
   w.response(undefined, ['fetch']);
   const text = w.message('Not all selected section preparation targets were reached.');
   expect(text).toContain(cause === 'rate' ? 'rate limited' : 'temporary server or network failures');
-  expect(text).toContain('Some online track checks reached a phase/window limit; a sent-request timeout was not confirmed.');
+  expect(text).toContain('Some online track checks could not finish within the available lookup time.');
   expect(text).not.toContain('actually timed out');
 });
 it('a current response with pressure and an explicit deadline retains the confirmed timeout', () => {
@@ -30,7 +30,7 @@ it('a current response with pressure and an explicit deadline retains the confir
   expect(w.message('')).toContain('rate limited');
   expect(w.message('')).toContain('temporary server or network failures');
   expect(w.message('')).toContain('actually timed out');
-  expect(w.message('')).not.toContain('phase/window limit');
+  expect(w.message('')).not.toContain('could not finish within the available lookup time');
 });
 it('unknown legacy incomplete details do not imply timeout, but client deadlines do', () => {
   const w = createMetadataWarnings(); w.report({ incompleteSongs: 5, failedSongs: 0, timedOutSongs: 0 }); expect(w.message('')).toContain('no timeout was reported');

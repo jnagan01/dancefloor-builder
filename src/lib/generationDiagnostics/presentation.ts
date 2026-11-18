@@ -55,7 +55,7 @@ export function createMetadataWarnings() {
       if (categories.includes('rate')) parts.push('Online track checks were rate limited; remaining checks were paced.');
       if (categories.includes('server') || categories.includes('network')) parts.push('Some online track checks had temporary server or network failures.');
       if (clientTimeouts || categories.includes('deadline')) parts.push('Some online track checks actually timed out.');
-      if (phaseLimited) parts.push('Some online track checks reached a phase/window limit; a sent-request timeout was not confirmed.');
+      if (phaseLimited) parts.push('Some online track checks could not finish within the available lookup time.');
       if (failed || categories.some(c => ['denied', 'http', 'malformed', 'unavailable'].includes(c))) parts.push('Some online track details could not be checked.');
       if (!parts.length && incomplete) parts.push('Some online track details remain unknown; no timeout was reported.');
       return parts.length ? `${parts.join(' ')} Finished details were kept; unknown details were not guessed. ${outcome} See Recent generation activity for known service causes.` : null;
