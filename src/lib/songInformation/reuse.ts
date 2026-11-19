@@ -1,4 +1,4 @@
-import { emptyCounts, FRESH_MS, validatedEntry, type Entry, type Kind, type ReuseCounts } from './schema';
+import { emptyCounts, entryLifetime, validatedEntry, type Entry, type Kind, type ReuseCounts } from './schema';
 export interface Storage { read(keys:string[]):Promise<Entry[]>; write(e:Entry):Promise<void> }
 export async function bounded<T>(work:Promise<T>, end:number):Promise<T> {
   work.catch(()=>{}); let timer:ReturnType<typeof setTimeout>|undefined;
@@ -39,7 +39,7 @@ export function createEvidenceReuse(storage:Storage, shared=createSharedWork(), 
     try { const rows=await bounded(storage.read([key]),Math.min(end,now()+500)); old=rows.map(e=>validatedEntry(e,now())).find(e=>e?.key===key&&e.kind===kind)??undefined; }
     catch {counts.readFailed++;}
     if(!current()||now()>=end)throw new Error('Information cancelled');
-    if(old&&now()-old.at<FRESH_MS[kind]) {counts.database++;return {value:old.value as T,at:old.at,counts:{...counts},stale:false};}
+    if(old&&now()-old.at<entryLifetime(old)) {counts.database++;return {value:old.value as T,at:old.at,counts:{...counts},stale:false};}
     try {
       const value=await shared(key,async()=>load((n=1)=>{counts.external+=n;}),end,current);
       const at=now(), e=validatedEntry({kind,key,value,at},at);

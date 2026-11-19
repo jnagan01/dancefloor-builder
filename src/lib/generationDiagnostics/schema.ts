@@ -1,14 +1,6 @@
 import { z } from 'zod';
 
 export const MESSAGES = {
-  reuse_local: 'Track information reused on this device.',
-  reuse_database: 'Track information reused from saved online information.',
-  reuse_external: 'New external provider checks.',
-  reuse_missing: 'Some track information is still missing.',
-  reuse_readFailed: 'Saved track information could not be read; available facts were kept.',
-  reuse_writeFailed: 'New track information could not be saved for reuse.',
-  reuse_refreshFailed: 'Some refreshes failed; previously known information was kept.',
-
   metadata_failed: 'Some online track details could not be checked. Finished details were kept.',
   metadata_timeout: 'Some track detail checks actually timed out. Finished details were kept.',
   metadata_incomplete: 'Some online track details remain unknown. This does not by itself mean a timeout. Finished details were kept.',
@@ -37,6 +29,7 @@ export const providers = ['metadata', 'reccobeats', 'musicbrainz', 'ai', 'lastfm
 export const causes = ['rate', 'server', 'denied', 'http', 'missing', 'malformed', 'network', 'deadline', 'paused', 'truncated', 'unavailable'] as const;
 export const sections = ['warmUp', 'transition', 'peak'] as const;
 const count = z.number().int().min(0).max(1_000_000);
+export const ReuseCountSchema = z.object({local:count.optional(),database:count.optional(),external:count.optional(),missing:count.optional(),readFailed:count.optional(),writeFailed:count.optional(),refreshFailed:count.optional()});
 export const NoticeSchema = z.object({ code: z.enum(Object.keys(MESSAGES) as [keyof typeof MESSAGES, ...Array<keyof typeof MESSAGES>]), count, provider: z.enum(providers).optional(), section: z.enum(sections).optional() });
 export const CauseSchema = z.object({ provider: z.enum(providers), cause: z.enum(causes), count });
 export const RunSchema = z.object({
@@ -45,6 +38,7 @@ export const RunSchema = z.object({
   startedAt: z.number().int().min(0).max(8_640_000_000_000_000), endedAt: z.number().int().min(0).max(8_640_000_000_000_000).optional(),
   version: z.string().max(80).regex(/^[a-zA-Z0-9._:-]+$/), build: z.string().max(100).regex(/^[a-zA-Z0-9._:-]+$/),
   status: z.enum(['running', 'completed', 'warnings', 'short', 'failed', 'cancelled', 'interrupted']), elapsedMs: count,
+  reuse: ReuseCountSchema.optional(),
   requested: count, notices: z.array(NoticeSchema).max(48), causes: z.array(CauseSchema).max(77),
   coverage: z.array(z.object({ section: z.enum(sections), targetSeconds: count, achievedSeconds: count })).max(3),
 }).superRefine((r, ctx) => {

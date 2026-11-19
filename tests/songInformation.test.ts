@@ -4,6 +4,17 @@ import { createEvidenceReuse, createSharedWork } from '@/lib/songInformation/reu
 import { createLocalInformation } from '@/lib/songInformation/local';
 const fact={artist:'TEST Credit & Guest',song:'Exact (Live)',source:'ReccoBeats',energy:8,danceability:8,popularity:7,prov:{energy:'provider',danceability:'provider',popularity:'provider'}};
 afterEach(()=>vi.useRealTimers());
+it('rejects inherited kinds, future dates and mismatched identities without throwing',()=>{
+ const at=Date.now(),key=informationKey('metadata',fact.artist,fact.song);
+ for(const kind of ['toString','__proto__','constructor'])expect(validatedEntry({kind,key,value:fact,at})).toBeNull();
+ for(const date of [NaN,Infinity,-1,at+120000])expect(validatedEntry({kind:'metadata',key,value:{...fact,checked:{energy:date}},at})).toBeNull();
+ expect(validatedEntry({kind:'metadata',key,value:{...fact,song:'Exact (Remix)'},at})).toBeNull();
+});
+it('durable empty MusicBrainz results refresh after one day, positive recording evidence does not',async()=>{
+ const key=informationKey('mb','TEST Miss','Exact'),at=Date.now()-2*DAY,load=vi.fn(async(dispatch:()=>void)=>{dispatch();return [];});
+ const result=await createEvidenceReuse({read:async()=>[{kind:'mb',key,value:[],at}],write:async()=>{}})('mb',key,load,Date.now()+1000);
+ expect(load).toHaveBeenCalledTimes(1);expect(result.counts.external).toBe(1);
+});
 describe('bounded public evidence reuse',()=>{
  it('cold then service recreation reuses durable successful facts without a provider call',async()=>{
   const rows=new Map(),storage={read:async(keys:string[])=>keys.flatMap(k=>rows.has(k)?[rows.get(k)]:[]),write:async(e:any)=>{rows.set(e.key,e);}};

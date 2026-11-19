@@ -2,6 +2,17 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { BatchSchema, copyDiagnostics } from '@/lib/generationDiagnostics/schema';
 import { createDiagnosticStore, MAX_RUNS, RETENTION_MS, type DiagnosticStorage, type LocalRun } from '@/lib/generationDiagnostics/store';
 import { relayDiagnostics } from '@/lib/generationDiagnostics/relay.server';
+import { RunSchema as OlderRunSchema } from './helpers/diagnosticsSchema1';
+
+it('actual diagnostic store sends allowlisted optional reuse counts readable by unchanged schema-1 readers',async()=>{
+ const f=fixture();await f.store.activate('synthetic');const run=f.store.begin('synthetic','1.2.3','build',34);
+ run?.reuse({local:7,database:8,external:2,readFailed:1,track:'private must strip'});
+ run?.finish('completed');await f.store.settled();const saved=f.store.get().rows[0].run;
+ expect(saved.reuse).toEqual({local:7,database:8,external:2,readFailed:1});expect(saved.notices).toEqual([]);
+ const older=OlderRunSchema.safeParse(saved);expect(older.success).toBe(true);
+ if(older.success)expect('reuse' in older.data).toBe(false);
+ expect(copyDiagnostics(saved)).not.toContain('private must strip');
+});
 
 function fixture() {
   let time = 1800000000000;

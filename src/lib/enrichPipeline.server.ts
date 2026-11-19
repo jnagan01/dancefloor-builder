@@ -251,6 +251,7 @@ async function fetchReccoBeats(
   artist: string,
   song: string,
   ctx?: FetchCtx,
+  needAcoustic = true,
 ): Promise<ReccoBeatsFeatures | null> {
   try {
     // ReccoBeats indexes titles only — never send "title artist".
@@ -275,6 +276,7 @@ async function fetchReccoBeats(
     if (!match && !ctx?.failed && !ctx?.signal.aborted) match = pick(await searchReccoBeats(clean, 1, ctx));
     if (!match?.id) return null;
 
+    if (!needAcoustic) return { popularity: popularityTo10(match.popularity), exact: isExact(match) };
     let featRes: Awaited<ReturnType<typeof fetchWithTimeout>>;
     try { featRes = await fetchWithTimeout(
       `https://api.reccobeats.com/v1/track/${encodeURIComponent(match.id)}/audio-features`,
@@ -599,7 +601,9 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       if (!q) return;
       const k = `${q.artistKey}\u0000${q.songKey}`;
       const songCtx = { ...recoCtx, failed: false };
-      const r = await fetchReccoBeats(q.original.artist, q.original.song, songCtx);
+      const prev=partial.get(k);
+      const needAcoustic=!prev||(['energy','danceability'] as const).some(a=>sourceRank(prev.prov?.[a])<sourceRank('provider'))||(['energy','danceability','valence','bpm','camelot'] as const).some(a=>prev[a]==null?(a==='energy'||a==='danceability'):now()-(prev.checked?.[a]??prev.updated?.[a]??0)>=fieldLifetime(a,prev.prov?.[a]));
+      const r = await fetchReccoBeats(q.original.artist, q.original.song, songCtx, needAcoustic);
       if (open()) { recoDone.set(k, r); if (songCtx.failed) providerIncomplete.add(k); if (songCtx.timedOut) providerTimeout.add(k); }
       acousticChanged();
       if (recoCtx.lane.pausedUntil >= fetchUntil) return;

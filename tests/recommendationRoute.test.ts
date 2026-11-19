@@ -63,7 +63,7 @@ describe('real event route: Last.fm track evidence and preparation feedback in a
     // Requests survive regardless of feedback.
     expect(rows.filter(t => t.fromUpload).map(t => t.song).sort()).toEqual(['Dancing Queen', 'Radio Ga Ga']);
     // Only bounded artist/title seeds were sent to Last.fm.
-    expect(seen).toEqual([{ seeds: [{ artist: 'Queen', title: 'Radio Ga Ga' }, { artist: 'ABBA', title: 'Dancing Queen' }], perSeed: 20 }]);
+    expect(seen).toEqual([{ seeds: [{ artist: 'Queen', title: 'Radio Ga Ga' }, { artist: 'ABBA', title: 'Dancing Queen' }], perSeed: 30 }]);
     // Exact owned similar track added with readable multi-seed evidence; same artist but other version is not.
     const elton = rows.find(t => t.song === "I'm Still Standing")!;
     expect(elton.aiReason).toMatch(/similar to 2 requested tracks/);

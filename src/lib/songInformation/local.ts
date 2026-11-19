@@ -1,4 +1,4 @@
-import { validatedEntry, MAX_LOCAL_ENTRIES, freshMetadata, FRESH_MS, type Entry, type Kind } from './schema';
+import { validatedEntry, MAX_LOCAL_ENTRIES, freshMetadata, entryLifetime, type Entry, type Kind } from './schema';
 import { bounded, createSharedWork } from './reuse';
 export interface LocalStorage { read(account:string,key:string):Promise<unknown>; write(account:string,entry:Entry,current?:()=>boolean):Promise<void> }
 export function indexedInformationStorage():LocalStorage {
@@ -28,7 +28,7 @@ export function createLocalInformation(storage:LocalStorage) {
   return {activate,session,
     async read(account:string,key:string,kind:Kind,current:()=>boolean,end:number,needPopularity=false) {
       if(!current())return {entry:null,failed:false};
-      try {const raw=await bounded(storage.read(account,key),Math.min(end,Date.now()+250));const candidate=current()?validatedEntry(raw):null;const e=candidate?.key===key&&candidate.kind===kind?candidate:null;return {entry:e&&e.kind===kind&&(kind==='metadata'?freshMetadata(e.value,e.at,needPopularity):Date.now()-e.at<FRESH_MS[kind])?e:null,retained:e,failed:false};}
+      try {const raw=await bounded(storage.read(account,key),Math.min(end,Date.now()+250));const candidate=current()?validatedEntry(raw):null;const e=candidate?.key===key&&candidate.kind===kind?candidate:null;return {entry:e&&e.kind===kind&&(kind==='metadata'?freshMetadata(e.value,e.at,needPopularity):Date.now()-e.at<entryLifetime(e))?e:null,retained:e,failed:false};}
       catch {return {entry:null,failed:true};}
     },
     async write(account:string,entry:Entry,current:()=>boolean,end:number) {

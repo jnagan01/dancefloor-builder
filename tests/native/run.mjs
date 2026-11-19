@@ -15,7 +15,7 @@ const key='warmUp:0:test artist|test song live';
 fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));
 fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Test',updated_at:'2026-10-31T01:59:00Z',inputs:{eventName:'Test',songs:[song],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[],selections:{[key]:{paths:[tracks[0].filePath],confirmed:false}}}}}));
 let app,page,count=0;const diagnostics=path.join(root,'test-results/native');fs.mkdirSync(diagnostics,{recursive:true});
-async function launch(){app=await electron.launch({executablePath:process.env.ELECTRON_BIN||path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text().slice(0,2000));});await page.locator('[role="status"], #backups').first().waitFor();await page.waitForTimeout(800);}
+async function launch(){app=await electron.launch({executablePath:process.env.ELECTRON_BIN||path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text().slice(0,2000));});await page.locator('button').filter({hasText:/Dance floor|Fixture rescan/}).first().waitFor();await page.waitForTimeout(800);}
 async function check(name,f){await f();count++;await page.screenshot({path:path.join(diagnostics,`check-${count}.png`)});console.log(`PASS ${name}`);}
 try{
  await launch();
@@ -294,7 +294,6 @@ try{
  await check('automatic updater download latch captures latest editor draft before any Squirrel stage',async()=>{
    await page.evaluate(()=>{window.__testState.eventId='A';window.__testState.page='event';window.__rerender();});
    await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible({timeout:15000});
-   await expect(page.getByText('Secret Session',{exact:true}).first()).toBeVisible({timeout:15000});
    const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.count()){await archive.click();await expect(archive).toHaveCount(0);}
    await page.getByRole('button',{name:/Dance floor/i}).first().click();
    const name=page.getByPlaceholder('e.g. Smith Johnson Wedding');await expect(name).toHaveValue('Secret Session',{timeout:15000});
@@ -385,7 +384,7 @@ try{
    const k=`warmUp:0:${dedupeKey(request.artist,request.song)}`;
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Queen',updated_at:'2026-11-02T01:59:00Z',inputs:{eventName:'Queen',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[k]:{paths:[q[0].filePath],confirmed:true}}}}}));
    await launch();
-   await page.evaluate(r=>localStorage.setItem('dancefloor:vdjRoot',r),temp);await page.reload();await page.locator('[role="status"], #backups').first().waitFor();
+   await page.evaluate(r=>localStorage.setItem('dancefloor:vdjRoot',r),temp);await page.reload();await page.locator('button').filter({hasText:/Dance floor|Fixture rescan/}).first().waitFor();
    const lengths=()=>{try{return Object.fromEntries(JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8')).flatMap(s=>s.tracks).map(t=>[t.filePath,t.songLength??null]));}catch{return {};}};
    await expect.poll(()=>lengths()[q[0].filePath],{timeout:15000}).toBe('215');
    expect(lengths()).toEqual({[q[0].filePath]:'215',[q[1].filePath]:'187',[q[2].filePath]:null,[q[3].filePath]:'200'});
@@ -566,7 +565,7 @@ try{
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:banned,aiSuggestions:[]}));
    const req={artist:'Client',song:'Keep Request',fromUpload:true};
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Constrained gap',updated_at:'v1',inputs:{songs:[req],eventName:'Constrained gap',hours:'.25',buffer:2,listType:'dance',expand:true,ownedOnlyExpansion:true,includeSeasonalTracks:false,requireCleanVersions:true,eventType:'school_dance',decades:['2010s'],genresInput:'Pop',doNotPlayInput:'Forbidden Artist - Forbidden Track',bpmRange:[110,128]},lists:{warmUp:[req],transition:[],peak:[]}}}));
-   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   await launch();await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible();
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
@@ -583,7 +582,7 @@ try{
    fs.rmSync(path.join(temp,'exports'),{recursive:true,force:true});await launch();
    // Earlier tests configured a native folder; use the actual native write bridge, fenced to this profile.
    await page.evaluate(root=>localStorage.setItem('dancefloor:vdjRoot',root),path.join(temp,'VirtualDJ'));await page.reload();
-   await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible();
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    await expect(page.getByRole('button',{name:'Archive recovery copy and continue',exact:true})).toHaveCount(0);
    const toggle=page.getByRole('switch',{name:'Require clean versions',exact:true});await expect(toggle).not.toBeChecked();await toggle.click();
@@ -624,7 +623,7 @@ try{
    const selections=Object.fromEntries(ss.map((s,i)=>[`peak:${i}:txt band|track ${i}`,{paths:[tt[i].filePath],confirmed:true}]));
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'TXT confirm',updated_at:'v1',inputs:{songs:ss,eventName:'TXT confirm',hours:'.25',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss,selections}}}));
-   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   await launch();await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible();
    await page.getByRole('tab',{name:/Peak \(6/}).click();
    const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
    const filesBefore=()=>Object.fromEntries(fs.readdirSync(path.join(temp,'exports')).map(n=>[n,fs.readFileSync(path.join(temp,'exports',n),'utf8')]));
@@ -672,7 +671,7 @@ try{
    const selected=Object.fromEntries(kk.map((k,i)=>[k,{paths:[tt[i].filePath,...(i===3?[tt[6].filePath]:[])],confirmed:true,...(i===2?{excluded:true}:{})}]));
    fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks:tt}));
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Display policy',updated_at:'v1',inputs:{songs:ss,eventName:'Display policy',hours:'.25',buffer:2,listType:'dance',requireCleanVersions:true},lists:{warmUp:[],transition:[],peak:ss,selections:selected}}}));
-   await launch();await expect(page.getByText('Event saved automatically',{exact:true})).toBeVisible();
+   await launch();await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible();
    const before=fs.readFileSync(path.join(temp,'backend.json'),'utf8');
    await page.getByRole('tab',{name:/Peak \(6/}).click();
    const toolbar=page.locator('.panel-quiet').filter({hasText:'Track matcher options'});

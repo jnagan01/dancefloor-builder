@@ -61,3 +61,13 @@ it('actual details handler dispatches three HTTP checks, shares compatible durab
  const second=await actualDetails().lookupLastfmTrack({artist,title});expect(second.reuse.database).toBe(1);expect(second.reuse.external).toBe(0);expect(f).toHaveBeenCalledTimes(3);
  const generation=await similarEvidence('synthetic',artist,title,Date.now()+1000,f);expect(generation.counts.external).toBe(0);expect(generation.at).toBe(first.compatible[0].at);
 });
+it('actual MusicBrainz details handler refreshes a definitive miss after 24 hours, not every lookup',async()=>{
+ vi.useFakeTimers();try{
+  const f=vi.fn(async()=>new Response('{"recordings":[]}'));vi.stubGlobal('fetch',f);
+  const details=actualDetails(),request={artist:'TEST Miss',title:'Exact (Live)'};
+  const first=await details.lookupMusicBrainz(request);expect(f).toHaveBeenCalledTimes(1);expect(first.reuse.external).toBe(1);
+  await actualDetails().lookupMusicBrainz(request);expect(f).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(86400001);
+  await actualDetails().lookupMusicBrainz(request);expect(f).toHaveBeenCalledTimes(2);
+ }finally{vi.useRealTimers();}
+});

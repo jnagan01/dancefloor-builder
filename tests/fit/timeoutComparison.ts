@@ -29,9 +29,10 @@ const LATE = ["energy", "danceability", "popularity"] as const;
 const fixture = (): Raw[] => (rows as Raw[]).map(r0 => { const o = SAVED_EVENT_ROWS[`${r0.artist}|${r0.song}`]; return (o ? { artist: r0.artist, song: r0.song, heldOut: r0.heldOut, ...o } : r0) as Raw; });
 const hung = (i: number) => i % 3 === 2;
 
-function cacheRows(): CacheRow[] {
+function cacheRows(impl: "before" | "after"): CacheRow[] {
+  const key = impl === "before" ? normalizeKey : (s:string) => s.normalize("NFC").trim().toLowerCase();
   return fixture().flatMap((r, i) => hung(i) ? [] : [{
-    artist_key: normalizeKey(r.artist), song_key: normalizeKey(r.song),
+    artist_key: key(r.artist), song_key: key(r.song),
     energy: (r.energy as number) ?? null, danceability: (r.danceability as number) ?? null, valence: null, popularity: (r.popularity as number) ?? null,
     bpm: (r.bpm as number) ?? null, camelot: null, genre: (r.genre as string) ?? null, year: (r.year as number) ?? null,
     source: encodeCacheSource("ReccoBeats", (r.metaProv ?? {}) as never), fetched_at: new Date().toISOString(),
@@ -44,7 +45,7 @@ async function gatherWith(impl: "before" | "after") {
   globalThis.fetch = (() => new Promise<Response>(() => {})) as typeof fetch;
   try {
     const deps = {
-      readRows: () => new Promise<CacheRow[]>((res) => setTimeout(() => res(cacheRows()), 1000)),
+      readRows: () => new Promise<CacheRow[]>((res) => setTimeout(() => res(cacheRows(impl)), 1000)),
       upsert: () => new Promise<void>(() => {}),
       estimate: () => new Promise<never>(() => {}),
     };

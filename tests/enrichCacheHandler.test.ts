@@ -236,7 +236,7 @@ it.each([['AI',40],['ReccoBeats',400]] as const)('actual pipeline refreshes aged
 it('unchanged successful popularity check persists freshness without changing its provenance date',async()=>{
  const row={...warm(),fetched_at:new Date(Date.now()-8*86400000).toISOString()};database([row]);const f=providers(),h=handler();
  const first=await h.call({songs:[song],needPopularity:true});const checks=f.mock.calls.length;
- expect(checks).toBeGreaterThan(0);expect(first.results[0].updated?.popularity).toBe(Date.parse(row.fetched_at));
+ expect(checks).toBe(1);expect(first.status.reuse?.writeFailed??0).toBe(0);expect(first.results[0].updated?.popularity).toBe(Date.parse(row.fetched_at));
  expect(first.results[0].checked?.popularity).toBeGreaterThan(Date.parse(row.fetched_at));
  const second=await h.call({songs:[song],needPopularity:true});expect(f).toHaveBeenCalledTimes(checks);expect(second.results[0].popularity).toBe(8);
 });

@@ -29,6 +29,13 @@
       "when": 1795044883494,
       "tag": "0003_atomic_metadata_evidence_merge",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795046384318,
+      "tag": "0004_align_evidence_provenance_order",
+      "breakpoints": true
     }
   ]
 }

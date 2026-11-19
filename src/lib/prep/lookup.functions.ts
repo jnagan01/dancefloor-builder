@@ -39,7 +39,6 @@ export const lookupMusicBrainz = createServerFn({ method: "POST" })
       const reused = await evidence("mb", artist, title, async dispatch => {
       if (!(await mbGate())) throw new Error("MusicBrainz busy");
       dispatch();
-      dispatch();
       const res = await fetch(url, { headers: { "User-Agent": "SetArchitect/1.2 ( https://dancefloor-builder.lovable.app )", Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
       if (res.status === 503 || res.status === 429) throw new Error("MusicBrainz busy");
       if (!res.ok) throw new Error("MusicBrainz unavailable");

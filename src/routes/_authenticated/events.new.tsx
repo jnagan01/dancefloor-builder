@@ -1169,7 +1169,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
         const reply = { results: reused.results, status: reused.status };
         if (!acceptsReply() || genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
         for (const k of Object.keys(informationCounts) as Array<keyof ReuseCounts>) informationCounts[k] += reused.counts[k];
-        for (const k of Object.keys(reused.counts) as Array<keyof ReuseCounts>) if (reused.counts[k]) activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0], reused.counts[k]);
+        for (const k of Object.keys(reused.counts) as Array<keyof ReuseCounts>) if (reused.counts[k]) activity?.reuse?.({[k]: reused.counts[k]});
         activity?.causes(reply.status?.causes);
         metadataWarnings.response(reply.status?.causes, reply.status?.timedOut);
         // Only this generation carries sanitized, expiring pressure between serial chunks. Warm cache still bypasses lanes.
@@ -1326,7 +1326,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             };
             const addReuse = (counts: ReuseCounts) => {
               if (!contextCurrent()) return;
-              for (const k of Object.keys(counts) as Array<keyof ReuseCounts>) { informationCounts[k] += counts[k]; if(counts[k])activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0], counts[k]); }
+              for (const k of Object.keys(counts) as Array<keyof ReuseCounts>) { informationCounts[k] += counts[k]; if(counts[k])activity?.reuse?.({[k]: counts[k]}); }
             };
             // Queue same-turn consumers into the existing bounded server batches (3/5 provider lanes).
             const batchContext=<Q,R>(send:(q:Q[])=>Promise<R>)=>{
@@ -1571,9 +1571,9 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                 if(!row?.evidence||row.status!=='found')throw Object.assign(Error('Community unavailable'),{row,reuse:row?.reuse});
                 return {value:row.evidence,at:row.updatedAt??Date.now(),counts:row.reuse,stale:row.stale};
               },current,end);
-              if(current())for(const k of Object.keys(result.counts) as Array<keyof ReuseCounts>){informationCounts[k]+=result.counts[k];if(result.counts[k])activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0],result.counts[k]);}
+              if(current())for(const k of Object.keys(result.counts) as Array<keyof ReuseCounts>){informationCounts[k]+=result.counts[k];if(result.counts[k])activity?.reuse?.({[k]:result.counts[k]});}
               return {...song,status:'found' as const,evidence:result.value};
-            }catch(error){const e=error as {row?:CommunityRow;reuse?:ReuseCounts};if(current()&&e.reuse)for(const k of Object.keys(e.reuse) as Array<keyof ReuseCounts>){informationCounts[k]+=e.reuse[k];if(e.reuse[k])activity?.notice(`reuse_${k}` as Parameters<NonNullable<typeof activity>['notice']>[0],e.reuse[k]);}return e.row??{...song,status:'failed' as const};}
+            }catch(error){const e=error as {row?:CommunityRow;reuse?:ReuseCounts};if(current()&&e.reuse)for(const k of Object.keys(e.reuse) as Array<keyof ReuseCounts>){informationCounts[k]+=e.reuse[k];if(e.reuse[k])activity?.reuse?.({[k]:e.reuse[k]});}return e.row??{...song,status:'failed' as const};}
           }));return current()?results:[];
 
         }, factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });

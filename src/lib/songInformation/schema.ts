@@ -18,6 +18,7 @@ export const schemas = {
 export type Kind = keyof typeof schemas;
 export const DAY = 86400_000;
 export const FRESH_MS: Record<Kind,number> = { metadata:365*DAY, artist:6*3600_000, similar:6*3600_000, community:DAY, mb:365*DAY, lastfm:DAY };
+export function entryLifetime(e:Entry):number { return (e.kind==='mb'&&Array.isArray(e.value)&&e.value.length===0)||(e.kind==='similar'&&(e.value as {status?:string}).status==='notFound')?DAY:FRESH_MS[e.kind]; }
 export const MAX_ENTRY_BYTES=65536;
 export const MAX_LOCAL_ENTRIES=3000;
 export const MAX_RETAIN_MS=365*DAY;
@@ -33,12 +34,12 @@ export function informationKey(kind:Kind, artist:string, title='', shape=''):str
 export function validatedEntry(input:unknown, now=Date.now()):Entry|null {
   if (!input || typeof input!=='object') return null;
   const e=input as Entry;
-  if (!(e.kind in schemas) || typeof e.key!=='string' || e.key.length>1400 || !Number.isFinite(e.at) || e.at<0 || e.at>now+60000 || now-e.at>(e.kind==='metadata'?730*DAY:MAX_RETAIN_MS)) return null;
+  if (typeof e.kind!=='string' || !Object.hasOwn(schemas,e.kind) || typeof e.key!=='string' || e.key.length>1400 || !Number.isFinite(e.at) || e.at<0 || e.at>now+60000 || now-e.at>(e.kind==='metadata'?730*DAY:MAX_RETAIN_MS)) return null;
   const parsed=schemas[e.kind].safeParse(e.value);
   if (!parsed.success) return null;
   let parts:unknown;
   try {parts=JSON.parse(e.key);}catch{return null;}
-  if(!Array.isArray(parts)||parts.length!==4||parts[0]!==e.kind||parts.some(v=>typeof v!=='string'))return null;
+  if(!Array.isArray(parts)||parts.length!==4||parts[0]!==e.kind||parts.some(v=>typeof v!=='string')||informationKey(e.kind,parts[1],parts[2],parts[3])!==e.key)return null;
   const value=parsed.data as Record<string,unknown>;
   if(e.kind==='metadata' && informationKey(e.kind,String(value.artist),String(value.song),parts[3])!==e.key)return null;
   if(e.kind==='similar') {const seed=value.seed as {artist:string;title:string};if(informationKey(e.kind,seed.artist,seed.title,parts[3])!==e.key)return null;}

@@ -1,4 +1,4 @@
-import { CauseSchema, RunSchema, safeCount, safeVersion, safeBuild, type DiagnosticRun, type Delivery, type NoticeCode, type RelayReply } from './schema';
+import { CauseSchema, ReuseCountSchema, RunSchema, safeCount, safeVersion, safeBuild, type DiagnosticRun, type Delivery, type NoticeCode, type RelayReply } from './schema';
 
 export type LocalRun = { run: DiagnosticRun; delivery: Delivery; attempts: number; nextAt: number };
 export interface DiagnosticStorage { read(account: string): Promise<unknown[]>; write(account: string, value: LocalRun): Promise<void>; remove(account: string, id: string): Promise<void> }
@@ -132,6 +132,13 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
           else if (row.run.notices.length < 45) row.run.notices.push({ code, count: safeCount(count), provider, section });
           update(owner, row);
         },
+        reuse(input: unknown) {
+          if (!live()) return;
+          const parsed=ReuseCountSchema.safeParse(input);if(!parsed.success)return;
+          row.run.reuse??={};
+          for(const k of Object.keys(parsed.data) as Array<keyof typeof parsed.data>)row.run.reuse[k]=safeCount((row.run.reuse[k]??0)+(parsed.data[k]??0));
+          update(owner,row);
+        },
         causes(input: unknown) {
           if (!live() || !input || typeof input !== 'object') return;
           for (const [provider, bucket] of Object.entries(input)) {
@@ -152,7 +159,7 @@ export function createDiagnosticStore(storage: DiagnosticStorage, now = () => Da
         },
         finish(status: DiagnosticRun['status']) {
           if (!live()) return;
-          finishRow(owner, row, status === 'completed' && row.run.notices.some(n => !['continuation', 'lookup_budget', 'community_budget', 'candidate_strict_excluded', 'candidate_slow_excluded', 'context_window', 'reuse_local', 'reuse_database', 'reuse_external'].includes(n.code)) ? 'warnings' : status);
+          finishRow(owner, row, status === 'completed' && row.run.notices.some(n => !['continuation', 'lookup_budget', 'community_budget', 'candidate_strict_excluded', 'candidate_slow_excluded', 'context_window'].includes(n.code)) ? 'warnings' : status);
           void api.flush();
         },
       };
@@ -201,6 +208,7 @@ export function beginGenerationDiagnostics(owner: string | null, version: unknow
     return {
       id: run.id,
       notice: (...args: Parameters<typeof run.notice>) => { try { run.notice(...args); } catch { /* Diagnostics never stop generation. */ } },
+      reuse: (...args: Parameters<typeof run.reuse>) => { try { run.reuse(...args); } catch { /* Best effort. */ } },
       causes: (...args: Parameters<typeof run.causes>) => { try { run.causes(...args); } catch { /* Best effort. */ } },
       coverage: (...args: Parameters<typeof run.coverage>) => { try { run.coverage(...args); } catch { /* Best effort. */ } },
       finish: (...args: Parameters<typeof run.finish>) => { try { run.finish(...args); } catch { /* Best effort. */ } },
