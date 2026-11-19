@@ -7,12 +7,30 @@ import { meterMinutes, type MeterKey, type SectionMeterProgress } from '@/lib/se
 const keys: MeterKey[] = ['warmUp', 'transition', 'peak'];
 const labels = { warmUp: 'Warm Up', transition: 'Transition', peak: 'Peak' };
 const heights = Array.from({ length: 100 }, (_, i) => 7 + ((i * 13 + Math.floor(i / 7) * 11) % 23));
-export function SectionMeterDialog({ progress }: { progress: SectionMeterProgress }) {
+export function SectionMeterDialog({ progress, focusFallback }: { progress: SectionMeterProgress; focusFallback?: () => HTMLElement | null }) {
   const [run, setRun] = useState(progress.get);
   const [clock, setClock] = useState(Date.now);
-  const returnFocus = useRef<HTMLElement | null>(null);
+  const returnFocus = useRef<{ id: number; target: HTMLElement | null } | null>(null);
   const show = useRef<HTMLButtonElement>(null);
+  const showFocused = useRef(false);
+  const mounted = useRef(false);
+  const fallback = useRef(focusFallback); fallback.current = focusFallback;
+  const usable = (target: HTMLElement | null | undefined): target is HTMLElement => !!target && target !== document.body && target.isConnected && target.getClientRects().length > 0 && !target.matches(':disabled,[aria-disabled="true"]');
+  const restore = () => {
+    const original = returnFocus.current?.target;
+    const target = usable(original) ? original : fallback.current?.();
+    if (usable(target)) target.focus();
+  };
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => progress.subscribe(() => setRun(progress.get())), [progress]);
+  useEffect(() => {
+    // A hidden run can finish without a Radix close event. Its focused Show control
+    // disappears; return to the current route action, not the removed node/body.
+    if ((!run || (run.finished && !run.open)) && showFocused.current && progress.get() === run) {
+      showFocused.current = false;
+      if (document.activeElement === document.body || document.activeElement === show.current) restore();
+    }
+  }, [run]);
   useEffect(() => {
     if (!run?.open || run.finished) return;
     setClock(Date.now()); const timer = setInterval(() => setClock(Date.now()), 1000);
@@ -27,13 +45,22 @@ export function SectionMeterDialog({ progress }: { progress: SectionMeterProgres
   if (!run) return null;
   const elapsed = Math.max(0, Math.floor((clock - run.started) / 1000));
   return <>
-    {!run.open && !run.finished && <Button ref={show} variant="ghost" size="sm" className="min-h-11 text-muted-foreground" onClick={() => progress.visible(run.id, true)}><Eye aria-hidden="true" className="size-4" />Show progress</Button>}
+    {!run.open && !run.finished && <Button ref={show} variant="ghost" size="sm" className="min-h-11 text-muted-foreground" onFocus={() => { showFocused.current = true; }} onBlur={() => { showFocused.current = false; }} onClick={() => progress.visible(run.id, true)}><Eye aria-hidden="true" className="size-4" />Show progress</Button>}
     <Primitive.Root open={run.open} onOpenChange={open => progress.visible(run.id, open)}>
       <Primitive.Portal>
         <Primitive.Overlay className="fixed inset-0 z-50 bg-media-overlay/60 backdrop-blur-[2px]" />
         <Primitive.Content className="section-meter-dialog fixed left-1/2 top-1/2 z-50 w-[calc(100%_-_2rem)] max-w-[680px] max-h-[calc(100dvh_-_2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-input bg-popover p-5 text-popover-foreground shadow-lg sm:p-8"
-          onOpenAutoFocus={() => { returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
-          onCloseAutoFocus={e => { e.preventDefault(); const target = show.current ?? returnFocus.current; if (target?.isConnected) target.focus(); }}>
+          onOpenAutoFocus={() => {
+            if (returnFocus.current?.id === run.id) return;
+            const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            returnFocus.current = { id: run.id, target: active !== show.current && usable(active) ? active : null };
+          }}
+          onCloseAutoFocus={e => {
+            e.preventDefault();
+            const current = progress.get();
+            if (!mounted.current || (current && (current.id !== run.id || current.owner !== run.owner || current.event !== run.event || current.open))) return;
+            if (usable(show.current)) show.current.focus(); else restore();
+          }}>
           <Primitive.Close asChild><Button variant="ghost" size="icon" aria-label="Hide progress window" className="absolute right-2 top-2 min-h-11 min-w-11"><X aria-hidden="true" className="size-4" /></Button></Primitive.Close>
           <div className="mb-5 text-center">
             <div className="mb-4 flex items-center justify-center gap-3 text-xs font-semibold uppercase tracking-widest"><AudioLines aria-hidden="true" className="size-6 text-gold" />Set Architect</div>

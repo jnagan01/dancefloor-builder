@@ -435,6 +435,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   // Guards against a slow in-flight generate() overwriting newer state.
   const genTokenRef = useRef(0);
   const [meterProgress] = useState(() => createSectionMeterProgress());
+  const generationFocus = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const run = meterProgress.get();
     if (run && (run.id !== genTokenRef.current || run.owner !== account || run.event !== openedEventId)) {
@@ -2992,7 +2993,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   return (
     <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
-      <SectionMeterDialog progress={meterProgress} />
+      <SectionMeterDialog progress={meterProgress} focusFallback={() => generationFocus.current} />
       <div className="flex justify-end"><GenerationActivity account={account} /></div>
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">
@@ -3824,7 +3825,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               </Button>
             )}
             {step === lastInputStep && (
-              <Button size="sm" className="glow-gold" onClick={generate} disabled={isGenerating}>
+              <Button ref={generationFocus} size="sm" className="glow-gold" onClick={generate} disabled={isGenerating}>
                 {isGenerating
                   ? "Generating with AI…"
                   : background
@@ -3835,7 +3836,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
             {step === 5 && (
               <>
-                <Button size="sm" variant="outline" onClick={generate} disabled={isGenerating}>
+                <Button ref={generationFocus} size="sm" variant="outline" onClick={generate} disabled={isGenerating}>
                   {isGenerating ? "Generating…" : "Regenerate"}
                 </Button>
                 <Button size="sm" className="glow-gold" onClick={exportAllZip}>

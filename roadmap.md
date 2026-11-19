@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Approved section-meter progress
+- [x] Confirmed initial Generate/hide/keyboard-reopen/automatic-close stranded focus; preserved per-run origin with current route action fallback and fenced closes. Shared committed rendered regression passes all three flows in Chromium and is integrated into the unchanged native runner; 37/37 focused tests, TypeScript and preview compilation pass. Local Electron absent; hosted Mac remains external and untouched.
 - [x] Add ephemeral run-fenced measured progress and accessible appearance-aware waveform dialog.
 - [x] Validate actual route lifecycle, rendered themes/mobile/reduced motion and snapshot preservation; 58/58 focused checks, real rendered route intermediate/final coverage, hide/reopen, hidden finish, stale timer, Dinner and focus return pass.
 - [x] TypeScript, automatic preview compilation and synthetic client-secret isolation pass; theme screenshots inspected and supplied. Native runner attempted: Electron executable absent, no installation.
