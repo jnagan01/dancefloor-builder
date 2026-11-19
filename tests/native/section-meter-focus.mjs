@@ -33,4 +33,7 @@ export async function checkSectionMeterFocus(page) {
   await expect(show).toBeFocused();
   await expect(show).toBeHidden({ timeout: 30000 });
   await expect(dialog).toBeHidden(); await returned();
+  // Hide completion precedes the queued save. A caller may now remount a fresh
+  // editor, bypassing real navigation guards; do not strand this run's recovery.
+  await expect(page.getByText('Event saved automatically', { exact: true })).toBeVisible({ timeout: 15000 });
 }

@@ -2110,7 +2110,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     resolvedSelectionsRef.current = {}; restorePending.current = false; supersededRows.current = new Set();
     setResult(r);
     setActiveSection("warmUp");
-    setSaveState("saving");
+    // Autosave owns save status: an identical regeneration may require no write.
     setMatches({});
     if (mergedLibrary) {
       // fresh matching

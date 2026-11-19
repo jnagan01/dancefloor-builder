@@ -6,6 +6,15 @@ const clients=[{artist:'TEST Meter',song:'One'},{artist:'TEST Meter',song:'Two'}
 const base={id:'A',inputs:{eventName:'Meter test',songs:clients,hours:'0.15',buffer:1,listType:'dance',expand:false},lists:{warmUp:clients,transition:[],peak:[],selections:{}}};
 const getProgress=(h:any)=>h.nodes().find((n:any)=>n.props?.progress)?.props.progress;
 afterEach(()=>vi.useRealTimers());
+it('identical regeneration retains confirmed save status rather than fabricating a pending save',async()=>{
+ vi.useFakeTimers();const h=factory({rows:{A:structuredClone(base)}});await h.flush();
+ h.library(vdj.buildLibrary(clients.map((s,i)=>({artist:s.artist,title:s.song,filePath:`/synthetic/save-status/${i}.mp3`,songLength:180}))));await h.flush();
+ const first=h.current.generate();await vi.advanceTimersByTimeAsync(3000);await first;await h.flush();await vi.advanceTimersByTimeAsync(2000);await h.flush();
+ const saved=()=>h.nodes().some((n:any)=>n.props?.role==='status'&&n.props?.children?.includes('Event saved automatically'));
+ expect(saved()).toBe(true);
+ const second=h.current.generate();await vi.advanceTimersByTimeAsync(3000);await second;await h.flush();await vi.advanceTimersByTimeAsync(2000);await h.flush();
+ expect(saved()).toBe(true);h.unmount();
+});
 it('actual generation begins immediately, exposes measured intermediate totals, hidden completion stays hidden and next run resets',async()=>{
  vi.useFakeTimers();let resolve:(v:any)=>void=()=>{};const h=factory({rows:{A:structuredClone(base)},services:{enrich:()=>new Promise(r=>{resolve=r;})}});await h.flush();
  const tracks=clients.map((s,i)=>({artist:s.artist,title:s.song,filePath:`/synthetic/meters/${i}.mp3`,songLength:180}));const original=JSON.stringify(base);h.library(vdj.buildLibrary(tracks));await h.flush();
