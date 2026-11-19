@@ -15,8 +15,12 @@ try {
  run('pg_ctl',['-D',join(dir,'data'),'-l',join(dir,'server.log'),'-o',`-k ${dir} -p 55439 -h ''`,'-w','start']);
  sql('CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE TABLE public.track_evidence_cache(cache_key text PRIMARY KEY,kind text,value jsonb,fetched_at timestamptz);');
  sql(readFileSync('drizzle/migrations/0004_align_evidence_provenance_order.sql','utf8'));
+ sql(readFileSync('drizzle/migrations/0005_correct_filename_evidence_rank.sql','utf8'));
  sql('CREATE TRIGGER preserve_track_evidence BEFORE UPDATE ON public.track_evidence_cache FOR EACH ROW EXECUTE FUNCTION public.merge_track_evidence_update();');
- const ranks={user:12,measured:10,tags:8,virtualdj:8,provider:6,catalogue:4,ai:3,estimate:2,filename:1,unknown:0};
+ const rankSource=readFileSync('src/lib/prep/provenance.ts','utf8').match(/const RANK: Record<string, number> = \{([^}]+)\}/);
+ assert.ok(rankSource,'Authoritative source ranks must be readable');
+ const ranks=Object.fromEntries(rankSource[1].split(',').map(pair=>{const [source,rank]=pair.trim().split(':');return [source.trim(),Number(rank)*2];}));
+ assert.equal(ranks.filename,2);assert.equal(ranks.filename,ranks.estimate);
  let checks=0;
  for(const [old,rank] of Object.entries(ranks))for(const [next,nrank] of Object.entries(ranks)){
   const value=(source,n,date)=>JSON.stringify({energy:n,prov:{energy:source},updated:{energy:date},checked:{energy:date+50}});
