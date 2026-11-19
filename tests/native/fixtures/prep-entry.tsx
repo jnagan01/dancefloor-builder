@@ -17,14 +17,14 @@ import { validateBackup } from '../../../src/lib/backups';
 import { buildLibrary, matchSong, parseVdjDatabaseXml, parseVdjDatabaseXmlDetailed, type SongMatch } from '../../../src/lib/virtualDj';
 import { dedupeKey, type ResultSong } from '../../../src/lib/danceFloor';
 import { indexedInformationStorage, createLocalInformation } from '../../../src/lib/songInformation/local';
-import { informationKey } from '../../../src/lib/songInformation/schema';
+import { informationKey, MAX_LOCAL_ENTRIES } from '../../../src/lib/songInformation/schema';
 
 const w = window as any;
 w.__parseVdj = parseVdjDatabaseXml;
 w.__parseVdjDetailed = parseVdjDatabaseXmlDetailed;
 w.__prep = prepStore();
 // Actual account-scoped track-information IndexedDB store (synthetic owners only).
-w.__trackInformation = { indexedInformationStorage, createLocalInformation, informationKey };
+w.__trackInformation = { indexedInformationStorage, createLocalInformation, informationKey, MAX_LOCAL_ENTRIES };
 // Test-only: optionally delay IndexedDB write completion so a save stays pending while the UI is used.
 w.__idbCompleteDelay = 0;
 { const desc = Object.getOwnPropertyDescriptor(IDBTransaction.prototype, 'oncomplete')!;

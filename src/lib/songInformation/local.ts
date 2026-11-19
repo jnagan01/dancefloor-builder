@@ -18,8 +18,10 @@ export function indexedInformationStorage():LocalStorage {
         const existing=s.get([account,e.key]);existing.onsuccess=()=>{if(!current()){tx.abort();return;}const old=validatedEntry(existing.result);
           // Same per-field provenance/date merge as the service trigger, inside this one readwrite transaction, so a
           // newer weaker/partial reply from another caller or window never replaces stronger saved fields.
-          const merged=validatedEntry(mergeEntries(old,e));if(!merged){tx.abort();return;}s.put(merged,[account,e.key]);};const all=s.getAll(IDBKeyRange.bound([account,''],[account,'\uffff']));
-        all.onsuccess=()=>{if(!current()){tx.abort();return;}const rows=(all.result as Entry[]).filter(r=>r&&typeof r.key==='string'&&Number.isFinite(r.at)).sort((a,b)=>b.at-a.at);for(const r of rows.slice(MAX_LOCAL_ENTRIES))s.delete([account,r.key]);};
+          const merged=validatedEntry(mergeEntries(old,e));if(!merged){tx.abort();return;}s.put(merged,[account,e.key]);
+          // Prune read queued after the put in this transaction, so it observes the refreshed row and its new timestamp.
+          const all=s.getAll(IDBKeyRange.bound([account,''],[account,'\uffff']));
+          all.onsuccess=()=>{if(!current()){tx.abort();return;}const rows=(all.result as Entry[]).filter(r=>r&&typeof r.key==='string'&&Number.isFinite(r.at)).sort((a,b)=>b.at-a.at);for(const r of rows.slice(MAX_LOCAL_ENTRIES))s.delete([account,r.key]);};};
       });
     },
   };

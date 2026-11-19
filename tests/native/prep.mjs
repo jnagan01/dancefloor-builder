@@ -310,6 +310,29 @@ try {
     expect(errors).toEqual([]);
   });
 
+  await check('local capacity prune observes the refreshed entry in the same transaction; other accounts untouched', async () => {
+    const r = await page.evaluate(async () => {
+      const { indexedInformationStorage, informationKey, MAX_LOCAL_ENTRIES } = window.__trackInformation;
+      const now = Date.now(), DAY = 86400000, owner = 'native-cap-A', other = 'native-cap-B';
+      const entry = (i, at, energy, prov) => { const artist = 'TEST Cap ' + i, song = 'Exact'; return { key: informationKey('metadata', artist, song), kind: 'metadata', at, value: { artist, song, source: 'ReccoBeats', energy, danceability: 5, prov: { energy: prov, danceability: 'provider' }, checked: { energy: at, danceability: at }, updated: { energy: at, danceability: at } } }; };
+      const db = await new Promise((res, rej) => { const o = indexedDB.open('setarchitect-track-information-v1', 1); o.onupgradeneeded = () => o.result.createObjectStore('evidence'); o.onsuccess = () => res(o.result); o.onerror = () => rej(o.error); });
+      const seeded = Array.from({ length: MAX_LOCAL_ENTRIES + 1 }, (_, i) => entry(i, now - 10 * DAY + i * 1000, 4, 'ai'));
+      await new Promise((res, rej) => { const tx = db.transaction('evidence', 'readwrite'), s = tx.objectStore('evidence');
+        for (const e of seeded) s.put(e, [owner, e.key]); for (const e of seeded.slice(0, 2)) s.put(e, [other, e.key]);
+        tx.oncomplete = res; tx.onerror = rej; });
+      db.close();
+      const refreshed = entry(0, now, 9, 'measured');
+      const storage = indexedInformationStorage(); await storage.write(owner, refreshed);
+      const count = acct => new Promise(res => { const o = indexedDB.open('setarchitect-track-information-v1', 1); o.onsuccess = () => { const q = o.result.transaction('evidence').objectStore('evidence').count(IDBKeyRange.bound([acct, ''], [acct, '\uffff'])); q.onsuccess = () => { o.result.close(); res(q.result); }; }; });
+      return { max: MAX_LOCAL_ENTRIES, count: await count(owner), otherCount: await count(other), kept: await storage.read(owner, refreshed.key), evicted: await storage.read(owner, seeded[1].key), third: await storage.read(owner, seeded[2].key), other0: await storage.read(other, seeded[0].key), other1: await storage.read(other, seeded[1].key) };
+    });
+    expect(r.count).toBeLessThanOrEqual(r.max); expect(r.count).toBe(r.max);
+    expect(r.kept?.value).toMatchObject({ energy: 9, prov: { energy: 'measured' } });
+    expect(r.evicted).toBeUndefined(); expect(r.third).toBeDefined();
+    expect(r.otherCount).toBe(2); expect(r.other0.value.energy).toBe(4); expect(r.other1.value.energy).toBe(4);
+    expect(errors).toEqual([]);
+  });
+
   await page.getByRole('button', { name: 'Go event' }).click();
   await check('dashboard categories and drilldown follow export semantics', async () => {
     const region = page.getByRole('region', { name: 'Event preparation' });
