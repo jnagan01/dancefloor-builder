@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Remaining evidence reads and provider pacing
+- [x] Hydrate community evidence once per bounded request; preserve partial/stale rows and count batch read causes once across accepting route consumers, including device-cached first songs. Focused handler/real-SDK/route/client-isolation checks 99/99 pass; automatic preview compilation passes. Final hosted typecheck/Mac/production/CodeQL remain external; no publication or data changes.
 - [x] Correct explicit community none classification: actual-route two 20-row batches with 17 found/3 none report zero refresh failures; genuine errors count once, absent/malformed remain failures, stale evidence and legacy numeric replies preserved.
 - [x] Batch request-owned artist cache reads, retain partial evidence and diagnose numeric failure causes without private content; 800ms warm/cold successful reads send zero external requests, overdue reads abort with no per-artist retries.
 - [x] Correct concurrent zero/past Retry-After floor and old-response pressure decay; retain healthy throughput after slower pacing regressed coverage. Focused combined 171/171 and full 1277/1277 pass; real rendered focus/upload and durable dance/regeneration/Dinner/save sequence pass, preview compilation and synthetic client isolation pass.

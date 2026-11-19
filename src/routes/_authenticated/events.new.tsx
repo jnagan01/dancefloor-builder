@@ -1595,7 +1595,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           const results=await Promise.all(songs.map(async song=>{
             try{
               const result=await reusePublicEvidence<CommunityEvidence>(accountAtStart as string,'community',song.artist,song.song,'',async()=>{
-                const rows=await (batch??=communityFn({data:{songs}})),row=rows.find(r=>r.artist===song.artist&&r.song===song.song);
+                const rows=await (batch??=communityFn({data:{songs}}).then(rows=>{
+                  if(current()&&!counted.has(rows)){
+                    counted.add(rows);
+                    const counts=rows.find(r=>r.batchReuse)?.batchReuse;
+                    if(counts)for(const k of Object.keys(informationCounts) as Array<keyof ReuseCounts>){informationCounts[k]+=counts[k]??0;if(counts[k])activity?.reuse?.({[k]:counts[k]});}
+                  }
+                  return rows;
+                })),row=rows.find(r=>r.artist===song.artist&&r.song===song.song);
                 if(!row?.evidence||row.status!=='found')throw Object.assign(Error('Community unavailable'),{row,reuse:row?.reuse,...(row?.status==='none'?{category:'none'}:{})});
                 return {value:row.evidence,at:row.updatedAt??Date.now(),counts:row.reuse,stale:row.stale};
               },current,end);

@@ -26,6 +26,17 @@ it('wrong remix/credit responses are never reusable evidence',async()=>{
 
 import { runCommunityBatch } from '@/lib/prep/community.functions';
 import { createEvidenceStorage } from '@/lib/songInformation/cache.server';
+import { communityHandler } from './helpers/communityHandler';
+it('authenticated community handler reuses 20 exact SDK cache keys at 800ms across recreated requests',async()=>{
+ vi.useFakeTimers();const songs=Array.from({length:20},(_,i)=>({artist:`TEST SDK Community "${i}" \\ & Guest`,song:`Exact, ${i} (Live)`})),at=Date.now()-60000;
+ for(const s of songs){const key=schema.informationKey('community',s.artist,s.song);state.rows.set(key,{cache_key:key,kind:'community',value:{source:'lastfm',listeners:6000,slowTags:[],upbeatTags:['dance']},fetched_at:new Date(at).toISOString()});}
+ state.delay=800;const fetcher=vi.fn(async()=>{throw Error('Provider forbidden');}),before=state.reads;
+ for(let i=0;i<2;i++){
+  const pending=communityHandler(createEvidenceStorage(),fetcher)({songs});await vi.advanceTimersByTimeAsync(801);const rows=await pending;
+  expect(rows.every(r=>r.status==='found'&&r.updatedAt===at)).toBe(true);expect(rows.reduce((n,r)=>n+(r.reuse?.database??0),0)).toBe(20);expect(rows[0].batchReuse?.readFailed).toBe(0);expect(state.reads-before).toBe(i+1);
+ }
+ expect(fetcher).not.toHaveBeenCalled();
+});
 it('actual durable community batch keeps error6/no-data distinct from service and per-call timeouts',async()=>{
  const songs=[{artist:'TEST Durable',song:'Exact (Live)'}],storage=createEvidenceStorage();
  for(const body of [{error:6}, {track:{name:'Other',artist:{name:'Wrong'}}}]){

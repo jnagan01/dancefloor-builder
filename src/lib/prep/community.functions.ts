@@ -12,10 +12,10 @@ import { parseCommunityTrackInfo, providerQueryTitle, type CommunityEvidence } f
 export const COMMUNITY_BATCH = 20;
 const Input = z.object({ songs: z.array(z.object({ artist: z.string().max(200), song: z.string().max(300) })).max(COMMUNITY_BATCH) });
 export type CommunityStatus = "found" | "none" | "failed" | "timeout" | "disabled";
-export interface CommunityRow { artist: string; song: string; status: CommunityStatus; evidence?: CommunityEvidence; reuse?: ReuseCounts; updatedAt?:number; stale?:boolean }
+export interface CommunityRow { artist: string; song: string; status: CommunityStatus; evidence?: CommunityEvidence; reuse?: ReuseCounts; batchReuse?: ReuseCounts; updatedAt?:number; stale?:boolean }
 import { emptyCounts, type ReuseCounts } from "../songInformation/schema";
 import { informationKey } from "../songInformation/schema";
-import { bounded } from "../songInformation/reuse";
+import { createRequestEvidenceStorage } from "../songInformation/reuse";
 import type { EvidenceStorage } from "../songInformation/cache.server";
 const CACHE_MS = 24 * 60 * 60 * 1000;
 const cache = new Map<string, { at: number; v: CommunityEvidence | null }>();
@@ -32,6 +32,10 @@ export async function runCommunityBatch(songs: Array<{ artist: string; song: str
   if (!key) return songs.map(s => ({ ...s, status: "disabled" as const }));
   const out: CommunityRow[] = songs.map(s => ({ ...s, status: "timeout" as const }));
   const end = Date.now() + deadlineMs;
+  const hydration = durable && songs.length
+    ? await createRequestEvidenceStorage(durable, songs.map(s => informationKey('community', s.artist, s.song)), end)
+    : undefined;
+  const storage = hydration?.storage;
   let stopped = false; // set at the overall deadline: no scheduling, cache writes or result writes afterwards
   const live = new Set<AbortController>();
   let next = 0;
@@ -41,10 +45,10 @@ export async function runCommunityBatch(songs: Array<{ artist: string; song: str
       const i = next++, s = songs[i];
       if (!s) return;
       const ck = `${s.artist.toLowerCase()}||${s.song.toLowerCase()}`;
-      if (durable) {
+      if (storage) {
         const { communityEvidence } = await import('../songInformation/lastfm.server');
         try {
-          const result = await communityEvidence(key,s.artist,s.song,Math.min(end,Date.now()+callMs),fetcher,durable);
+          const result = await communityEvidence(key,s.artist,s.song,Math.min(end,Date.now()+callMs),fetcher,storage);
           if(!stopped&&Date.now()<end)out[i]={...s,status:'found',evidence:result.value,reuse:result.counts,updatedAt:result.at,stale:result.stale};
         } catch (error) {const e=error as {category?:string;name?:string;message?:string;reuse?:ReuseCounts};if(!stopped&&Date.now()<end)out[i]={...s,status:e.category==='none'?'none':e.name==='TimeoutError'||e.message==='Information time limit'?'timeout':'failed',reuse:e.reuse??{...emptyCounts(),refreshFailed:1}};}
         continue;
@@ -93,6 +97,9 @@ export async function runCommunityBatch(songs: Array<{ artist: string; song: str
   clearTimeout(overall);
   stopped = true;
   for (const ac of live) ac.abort();
+  // Request transport counts are separate from per-song reuse. One numeric carrier
+  // survives JSON transport even when its song is already cached on the device.
+  if (hydration && out[0]) out[0] = { ...out[0], batchReuse: hydration.counts };
   return out.map(r => ({ ...r })); // snapshot; workers can no longer write after `stopped`
 }
 
