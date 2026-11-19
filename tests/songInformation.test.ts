@@ -112,6 +112,25 @@ it('cache read timeout and a hung producer report actual dispatch once without s
 
 import { localInformation } from '@/lib/songInformation/local';
 import { reuseDetails, reusePublicEvidence } from '@/lib/songInformation/client';
+it.each(['none','failed','timeout','disabled','denied','unavailable','error'] as const)('community %s keeps dated retained evidence without cache writes and truthful failure counts',async status=>{
+ const local=localInformation(),at=Date.now()-2*DAY,entry={kind:'community' as const,key:informationKey('community','TEST Retained','Exact'),at,value:{source:'lastfm',listeners:50,slowTags:[],upbeatTags:['dance']}};
+ const read=vi.spyOn(local,'read').mockResolvedValue({entry:null,retained:entry,failed:false}),write=vi.spyOn(local,'write').mockResolvedValue(true);
+ try{
+  const serverCounts={local:0,database:0,external:1,missing:0,readFailed:0,writeFailed:0,refreshFailed:status==='none'?0:1};
+  const got=await reusePublicEvidence('TEST Retained Owner','community','TEST Retained','Exact','',async()=>{throw Object.assign(Error('unavailable'),{category:status,reuse:serverCounts});},()=>true,Date.now()+1000);
+  expect(got.value).toEqual(entry.value);expect(got.at).toBe(at);expect(got.stale).toBe(true);expect(got.counts.refreshFailed).toBe(status==='none'?0:1);expect(got.counts.external).toBe(1);expect(got.counts.readDeadline).toBe(0);expect(write).not.toHaveBeenCalled();
+ }finally{read.mockRestore();write.mockRestore();}
+});
+it.each(['event','account'] as const)('late community none after %s cancellation cannot return stale evidence or counts',async change=>{
+ const local=localInformation(),entry={kind:'community' as const,key:informationKey('community','TEST Cancel','Exact'),at:Date.now()-2*DAY,value:{source:'lastfm',slowTags:[],upbeatTags:['dance']}};
+ const read=vi.spyOn(local,'read').mockResolvedValue({entry:null,retained:entry,failed:false}),write=vi.spyOn(local,'write').mockResolvedValue(true);let live=true,release:()=>void=()=>{};
+ const gate=new Promise<void>(r=>{release=r;});
+ try{
+  const pending=reusePublicEvidence('TEST Cancel Owner','community','TEST Cancel','Exact','',async()=>{await gate;throw Object.assign(Error('none'),{category:'none',reuse:emptyCounts()});},()=>live,Date.now()+1000).catch(e=>e);
+  await new Promise(r=>setTimeout(r,0));if(change==='account')local.activate('TEST Other');else live=false;release();
+  const result=await pending;expect(result).toBeInstanceOf(Error);expect(result.message).toBe('Information cancelled');expect(result.reuse).toBeUndefined();expect(write).not.toHaveBeenCalled();
+ }finally{read.mockRestore();write.mockRestore();}
+});
 it('actual concurrent local details callers report shared server work once and keep original dates',async()=>{
  const local=localInformation(),read=vi.spyOn(local,'read').mockResolvedValue({entry:null,retained:null,failed:false}),write=vi.spyOn(local,'write').mockResolvedValue(true);
  try{

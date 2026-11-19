@@ -1349,7 +1349,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             };
             const addReuse = (counts: ReuseCounts) => {
               if (!contextCurrent()) return;
-              for (const k of Object.keys(counts) as Array<keyof ReuseCounts>) { informationCounts[k] += counts[k]; if(counts[k])activity?.reuse?.({[k]: counts[k]}); }
+              for (const k of Object.keys(counts) as Array<keyof ReuseCounts>) { informationCounts[k] += counts[k]??0; if(counts[k])activity?.reuse?.({[k]: counts[k]}); }
             };
             // Queue same-turn consumers into the existing bounded server batches (3/5 provider lanes).
             const batchContext=<Q,R>(send:(q:Q[])=>Promise<R>)=>{
@@ -1592,12 +1592,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
             try{
               const result=await reusePublicEvidence<CommunityEvidence>(accountAtStart as string,'community',song.artist,song.song,'',async()=>{
                 const rows=await (batch??=communityFn({data:{songs}})),row=rows.find(r=>r.artist===song.artist&&r.song===song.song);
-                if(!row?.evidence||row.status!=='found')throw Object.assign(Error('Community unavailable'),{row,reuse:row?.reuse});
+                if(!row?.evidence||row.status!=='found')throw Object.assign(Error('Community unavailable'),{row,reuse:row?.reuse,...(row?.status==='none'?{category:'none'}:{})});
                 return {value:row.evidence,at:row.updatedAt??Date.now(),counts:row.reuse,stale:row.stale};
               },current,end);
-              if(current())for(const k of Object.keys(result.counts) as Array<keyof ReuseCounts>){informationCounts[k]+=result.counts[k];if(result.counts[k])activity?.reuse?.({[k]:result.counts[k]});}
+              if(current())for(const k of Object.keys(result.counts) as Array<keyof ReuseCounts>){informationCounts[k]+=result.counts[k]??0;if(result.counts[k])activity?.reuse?.({[k]:result.counts[k]});}
               return {...song,status:'found' as const,evidence:result.value};
-            }catch(error){const e=error as {row?:CommunityRow;reuse?:ReuseCounts};if(current()&&e.reuse)for(const k of Object.keys(e.reuse) as Array<keyof ReuseCounts>){informationCounts[k]+=e.reuse[k];if(e.reuse[k])activity?.reuse?.({[k]:e.reuse[k]});}return e.row??{...song,status:'failed' as const};}
+            }catch(error){const e=error as {row?:CommunityRow;reuse?:ReuseCounts};if(current()&&e.reuse)for(const k of Object.keys(e.reuse) as Array<keyof ReuseCounts>){informationCounts[k]+=e.reuse[k]??0;if(e.reuse[k])activity?.reuse?.({[k]:e.reuse[k]});}return e.row??{...song,status:'failed' as const};}
           }));return current()?results:[];
 
         }, factsKey, { batchSize: COMMUNITY_BATCH, concurrency: 2, budget: 40, timeoutMs: 12_000 });

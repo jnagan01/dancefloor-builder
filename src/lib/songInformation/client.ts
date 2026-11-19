@@ -81,9 +81,14 @@ export async function reusePublicEvidence<T>(account:string,kind:Kind,artist:str
   if(!e||!await local.write(account,e,live,end))counts.writeFailed++;
   return {...result,counts};
  }catch(error){
-  const c=(error as {reuse?:ReuseCounts}).reuse;if(c)for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=c[k]??0;
-  counts.refreshFailed++;
+  if(!live()||Date.now()>=end)throw Error('Information cancelled');
+  const failure=error as {reuse?:ReuseCounts;category?:string};
+  const c=failure.reuse;
+  if(c&&typeof error==='object'&&error&&!deliveredCounts.has(error)){deliveredCounts.add(error);for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=c[k]??0;}
+  // Only explicit, identity-matched community no-data is ordinary absence. Failed refresh
+  // already counted by the service is the same failure, not another client failure.
+  if(!(kind==='community'&&failure.category==='none')&&!(c?.refreshFailed))counts.refreshFailed++;
   if(hit.retained&&live())return {value:hit.retained.value as T,at:hit.retained.at,counts,stale:true};
-  throw Object.assign(error instanceof Error?error:Error('Information unavailable'),typeof error==='object'&&error?error:{},{reuse:counts});
+  throw Object.assign(Error('Information unavailable'),typeof error==='object'&&error?error:{},{reuse:counts});
  }
 }

@@ -160,7 +160,7 @@ export const getArtistCrowdData = createServerFn({ method: "POST" })
         const next = queue.shift();
         if (!next) return;
         const got = await fetchArtist(key, next, data.perArtistSimilar,hydrated.storage,Date.now()+9000);
-        if (got) {if(got.value){out.push(got.value);evidence.push({artist:next,at:got.updatedAt,stale:got.stale});}for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=got.counts[k];}else counts.refreshFailed++;
+        if (got) {if(got.value){out.push(got.value);evidence.push({artist:next,at:got.updatedAt,stale:got.stale});}for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=got.counts[k]??0;}else counts.refreshFailed++;
       }
     });
     await Promise.all(workers);
@@ -181,8 +181,8 @@ async function durableSimilar(key: string | undefined, seeds: Array<{artist:stri
   const queue=[...seeds], runs: SimilarTracksResponse['seeds']=[];const reuse=emptyCounts(),evidence:Array<{artist:string;title:string;at:number;stale:boolean}>=[];
   await Promise.all(Array.from({length:Math.min(3,queue.length)},async()=>{
     for (;;) {const seed=queue.shift();if(!seed)return;
-      try {const result=await similarEvidence(key,seed.artist,seed.title,Date.now()+6500);for(const k of Object.keys(reuse) as Array<keyof ReuseCounts>)reuse[k]+=result.counts[k];evidence.push({...seed,at:result.at,stale:result.stale});runs.push({...result.value,similar:result.value.similar.slice(0,perSeed)});}
-      catch (error) {const counts=(error as {reuse?:ReuseCounts}).reuse;if(counts)for(const k of Object.keys(reuse) as Array<keyof ReuseCounts>)reuse[k]+=counts[k];runs.push({seed,status:'error',similar:[]});}
+      try {const result=await similarEvidence(key,seed.artist,seed.title,Date.now()+6500);for(const k of Object.keys(reuse) as Array<keyof ReuseCounts>)reuse[k]+=result.counts[k]??0;evidence.push({...seed,at:result.at,stale:result.stale});runs.push({...result.value,similar:result.value.similar.slice(0,perSeed)});}
+      catch (error) {const counts=(error as {reuse?:ReuseCounts}).reuse;if(counts)for(const k of Object.keys(reuse) as Array<keyof ReuseCounts>)reuse[k]+=counts[k]??0;runs.push({seed,status:'error',similar:[]});}
     }
   }));
   return {availability:runs.every(r=>r.status!=='error')?'ok':runs.some(r=>r.status!=='error')?'partial':'unavailable',seeds:runs,reuse,evidence};

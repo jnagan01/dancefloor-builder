@@ -1,8 +1,9 @@
 # Workspace rebuild
 ## Remaining evidence reads and provider pacing
-- [ ] Batch request-owned artist cache reads, retain partial evidence and diagnose numeric failure causes without private content.
-- [ ] Correct concurrent provider backoff/recovery and verify cold/warm, deadlines and privacy with synthetic regressions.
-- [ ] Run focused/full checks and existing rendered/native validation; final-head hosted Mac/production/CodeQL remain release gates. No publish or production writes.
+- [x] Correct explicit community none classification: actual-route two 20-row batches with 17 found/3 none report zero refresh failures; genuine errors count once, absent/malformed remain failures, stale evidence and legacy numeric replies preserved.
+- [x] Batch request-owned artist cache reads, retain partial evidence and diagnose numeric failure causes without private content; 800ms warm/cold successful reads send zero external requests, overdue reads abort with no per-artist retries.
+- [x] Correct concurrent zero/past Retry-After floor and old-response pressure decay; retain healthy throughput after slower pacing regressed coverage. Focused combined 171/171 and full 1277/1277 pass; real rendered focus/upload and durable dance/regeneration/Dinner/save sequence pass, preview compilation and synthetic client isolation pass.
+- [ ] Final-head hosted Mac/native/offline, production/no-emit and CodeQL require the unchanged external runners after commit synchronization; local Electron absent, native attempts blocked. No publish, production writes, dependency or workflow changes.
 ## Approved section-meter progress
 - [x] Reproduced Dinner failure with durable CAS backend: identical regeneration falsely set Saving although unchanged fingerprint suppressed writing; reset preserved false dance recovery and blocked Dinner. Removed only generation's fabricated save status, leaving autosave in control; focus flow awaits confirmed save. Durable sequence passes eight desktop/mobile appearance cases, distinct IDs and prior-row preservation; 24/24 focused checks, TypeScript/client isolation pass. Electron absent; no hosted-run intervention.
 - [x] Confirmed completed modal excludes export controls until automatic close on corrected six-row upload; shared bounded native completion waits replace fixed post-generation sleeps and guard saved-before-close paths. Real-route browser invalid/corrected upload and six ZIP titles pass; focus regression retained; 13/13 focused checks and TypeScript pass. No product changes; Electron absent locally, hosted runs untouched.
