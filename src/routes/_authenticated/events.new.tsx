@@ -1454,6 +1454,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
                     data: { artists: topNeighbors, perArtistSimilar: 0 },
                   }), { available: false, artists: [] as ArtistCrowd[] }, 'lastfm')
                 : { available: false, artists: [] as ArtistCrowd[] };
+              if (contextCurrent() && Date.now() < contextEnd) {
+                const counts = contextCounts(extra as { reuse?: ReuseCounts });
+                if (counts) addReuse(counts);
+              }
               const seenCrowd = new Set<string>();
               crowdArtists = [...crowdRes.artists, ...extra.artists]
                 .filter((c) => {

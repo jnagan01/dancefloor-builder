@@ -79,7 +79,7 @@ async function expansionFixture(services: Record<string, unknown> = {}, logging 
     services: { enrich: async ({ data }: any) => ({ results: data.songs.map((s: any) => ({ ...s, source: 'ReccoBeats', energy: s.artist === 'PRIVATE Slow' ? 2 : 8, danceability: s.artist === 'PRIVATE Slow' ? 2 : 8, bpm: s.artist === 'PRIVATE Strict' ? 90 : 120, year: s.artist === 'PRIVATE Strict' ? 1990 : 2005, prov: { energy: 'provider', danceability: 'provider', bpm: 'provider', year: 'provider' } })) }), ...services },
   });
   await h.flush(); h.library(vdj.buildLibrary(tracks)); await h.flush();
-  return { h, store, tracks };
+  return { h, store, tracks, data };
 }
 async function finishExpansion(h: any) {
   let done = false; const run = h.current.generate().finally(() => { done = true; });
@@ -152,4 +152,63 @@ it('actual optional extra neighbour crowd lookup failure retains a sanitized Las
   expect(calls).toBe(2);
   expect(f.store.get().rows[0].run.notices.filter(n => n.code === 'context_failed')).toEqual([{ code: 'context_failed', count: 1, provider: 'lastfm' }]);
   expect(copyDiagnostics(f.store.get().rows[0].run)).not.toMatch(/PRIVATE|raw|token/); f.h.unmount();
+});
+
+const extraLegacyCounts = { local: 0, database: 20, external: 0, missing: 0, readFailed: 0, writeFailed: 0, refreshFailed: 0 };
+async function extraCrowdFixture(extra: () => Promise<any>) {
+  const calls: any[] = [];
+  const f = await expansionFixture({
+    neighbors: async () => ({ clusters: [{ artist: 'PRIVATE Request', neighbors: Array.from({ length: 20 }, (_, i) => `PRIVATE Neighbor ${i}`) }] }),
+    similarTracks: async () => ({ availability: 'ok', seeds: [] }),
+    crowd: async ({ data }: any) => {
+      calls.push(data);
+      return data.perArtistSimilar === 0 ? extra() : { artists: [] };
+    },
+  });
+  return { ...f, calls };
+}
+const extraReply = (reuse: any) => ({ available: true, artists: Array.from({ length: 20 }, (_, i) => ({ name: `PRIVATE Neighbor ${i}`, listeners: 100, tags: [], similar: [] })), reuse });
+it.each(['legacy', 'partial'] as const)('actual top-neighbor batch persists %s reuse exactly once with finite private-safe counts', async mode => {
+  vi.useFakeTimers();
+  const counts = mode === 'legacy' ? extraLegacyCounts : { ...extraLegacyCounts, database: 16, readFailed: 4, readDeadline: 1, readDenied: 1, readSchema: 1, readOther: 1 };
+  const f = await extraCrowdFixture(async () => extraReply(counts));
+  const control = await extraCrowdFixture(async () => extraReply(undefined));
+  try {
+    await finishExpansion(control.h); await control.store.settled();
+    const baseline = control.store.get().rows[0].run.reuse;
+    await finishExpansion(f.h); await f.store.settled();
+    expect(f.calls.filter(c => c.perArtistSimilar === 0)).toEqual([{ artists: Array.from({ length: 20 }, (_, i) => `PRIVATE Neighbor ${i}`), perArtistSimilar: 0 }]);
+    const run = f.store.get().rows[0].run;
+    expect(run.reuse?.database).toBe(counts.database);
+    for (const key of ['readDeadline', 'readDenied', 'readSchema', 'readOther'] as const) expect(run.reuse?.[key] ?? 0).toBe(mode === 'partial' ? 1 : 0);
+    // Other route consumers keep their existing local-storage counts unchanged.
+    expect(run.reuse?.readFailed).toBe((baseline?.readFailed ?? 0) + counts.readFailed);
+    expect(Object.values(run.reuse ?? {}).every(Number.isFinite)).toBe(true);
+    expect([...f.data.values()][0].run.reuse).toEqual(run.reuse);
+    expect(copyDiagnostics(run)).not.toMatch(/PRIVATE|Neighbor|synthetic\//);
+    expect([...f.h.current.result.warmUp, ...f.h.current.result.transition, ...f.h.current.result.peak].map(s => s.artist)).toEqual(['PRIVATE Request']);
+    expect(f.h.current.result).toEqual(control.h.current.result);
+  } finally { f.h.unmount(); control.h.unmount(); }
+});
+it.each(['timeout', 'event', 'account', 'cancelled', 'fallback'] as const)('actual top-neighbor %s cannot add late or fallback reuse', async mode => {
+  vi.useFakeTimers(); let resolve = (_value: any) => {};
+  const f = await extraCrowdFixture(mode === 'fallback' ? async () => { throw Error('PRIVATE transport'); } : () => new Promise(r => { resolve = r; }));
+  try {
+    let done = false; const work = f.h.current.generate().finally(() => { done = true; });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(f.calls.filter(c => c.perArtistSimilar === 0)).toHaveLength(1);
+    if (mode === 'event') f.h.switchTo('owner', 'B');
+    if (mode === 'account') { f.h.switchTo('other', 'B'); await f.store.activate('other'); }
+    if (mode === 'cancelled') f.h.current.clearWorkflowState();
+    if (mode !== 'timeout') resolve(extraReply({ ...extraLegacyCounts, readFailed: 4, readDeadline: 4 }));
+    for (let tick = 0; tick < 510 && !done; tick++) await vi.advanceTimersByTimeAsync(1000);
+    expect(done).toBe(true); await work; await f.h.flush(); await f.store.settled();
+    if (mode === 'account') { expect(f.store.get().rows).toEqual([]); await f.store.activate('owner'); }
+    const before = structuredClone(f.store.get().rows[0].run);
+    resolve(extraReply({ ...extraLegacyCounts, readFailed: 4, readDeadline: 4 }));
+    await vi.advanceTimersByTimeAsync(1000); await f.store.settled();
+    expect(f.store.get().rows[0].run).toEqual(before);
+    expect(before.reuse?.database ?? 0).toBe(0); expect(before.reuse?.readDeadline ?? 0).toBe(0);
+    expect(copyDiagnostics(before)).not.toMatch(/PRIVATE|transport|Neighbor/);
+  } finally { f.h.unmount(); }
 });
