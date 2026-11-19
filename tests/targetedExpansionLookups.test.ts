@@ -103,23 +103,28 @@ it('real pipeline completes twelve-second AI after quick misses within unchanged
   expect(result.results[0]).toMatchObject({energy:8,danceability:7,bpm:120,year:2005,prov:{energy:'ai',year:'provider'}});expect(writes).toHaveLength(1);
 });
 
-for (const recovery of ['settle', 'covered', 'hung', 'account', 'event'] as const) it(`actual favorite and general lanes ${recovery}: wait for timed-out metadata settlement without stacking or stale dispatch`, async () => {
+for (const recovery of ['settle', 'covered', 'covered-inert', 'hung', 'account', 'event'] as const) it(`actual favorite and general lanes ${recovery}: wait for timed-out metadata settlement without stacking or stale dispatch`, async () => {
   vi.useFakeTimers(); const start = Date.now(); let calls = 0, active = 0, peak = 0;
+  const covered = recovery === 'covered' || recovery === 'covered-inert';
+  const inertTitle = ' "double" \'single\' `backtick` ${globalThis.__coverageExecuted = true} ; throw new Error("fixture executed"); //';
+  if (recovery === 'covered-inert') vi.stubGlobal('__coverageExecuted', false);
   const suggestions: Array<{ at: number; favorite: boolean; active: number }> = [];
   const resumedNeeds: number[] = [];
-  const useful = Array.from({ length: 40 }, (_, i) => ({ artist: `Z Favorite Recovery ${i}`, title: `Floor ${i}`, filePath: `/synthetic/favorite-recovery/${i}.mp3`, year: '2005', bpm: '120', genre: 'Pop', songLength: 900 }));
+  let coverageScheduledAt: number | undefined, coverageArrivedAt: number | undefined, arrivedCoverage: any;
+  const useful = Array.from({ length: 40 }, (_, i) => ({ artist: `Z Favorite Recovery ${i}`, title: `Floor ${i}` + (recovery === 'covered-inert' ? inertTitle : ''), filePath: `/synthetic/favorite-recovery/${i}.mp3`, year: '2005', bpm: '120', genre: 'Pop', songLength: 900 }));
   const lib = vdj.buildLibrary(useful);
   const saved = structuredClone({ ...base, inputs: { ...inputs, artistsInput: 'TEST Favorite' } }), before = JSON.stringify(saved);
   // Test-only coordinator seam: simulate independent approved coverage arriving while lanes wait.
   // Keep the real lane loop, deficit calculation, file readiness and settlement gate unchanged.
   const coveredRows = useful.map(t => ({ artist: t.artist, song: t.title, fromUpload: false, energy: 8, danceability: 8, popularity: 8, bpm: 120, year: 2005, source: 'ReccoBeats', prov: { energy: 'provider', danceability: 'provider', popularity: 'provider', bpm: 'provider', year: 'provider' } }));
-  const recoveryHarness = recovery === 'covered' ? require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({
+  const recoveryHarness = covered ? require('./helpers/eventRouteHarness.cjs').createEventRouteHarness({
     vdj, dance, audio, snapshots, drafts, input, autosave, vibes, isolation, theory, revisions,
-    observeCoordinator: (state: any) => { if (state.resumedDeficit !== undefined && Date.now() - start >= 25_000) resumedNeeds.push(state.resumedDeficit); },
-    routeSource: require('node:fs').readFileSync('src/routes/_authenticated/events.new.tsx', 'utf8').replace(
-      'const laneRuns = sectionMap.map(laneLoop);',
-      `setTimeout(() => { Object.assign(durationBase, ${JSON.stringify({ warmUp: coveredRows.slice(0, 6), transition: coveredRows.slice(6, 22), peak: coveredRows.slice(22, 30) })}); evaluate(false); notify(); }, 4000); const laneRuns = sectionMap.map(laneLoop);`,
-    ).replace('const deficit = deficitSec(key);', 'const deficit = deficitSec(key); observeCoordinator({ resumedDeficit: deficit });'),
+    observeCoordinator: (state: any) => {
+      if (state.resumedDeficit !== undefined && Date.now() - start >= 25_000) resumedNeeds.push(state.resumedDeficit);
+      if (state.coverageScheduledAt !== undefined) coverageScheduledAt = state.coverageScheduledAt;
+      if (state.coverageArrivedAt !== undefined) { coverageArrivedAt = state.coverageArrivedAt; arrivedCoverage = state.coverage; }
+    },
+    coordinatorCoverage: { warmUp: coveredRows.slice(0, 6), transition: coveredRows.slice(6, 22), peak: coveredRows.slice(22, 30) },
   }) : harness;
   const h = recoveryHarness({ rows: { A: saved, B: { ...saved, id: 'B' } }, contract: true, services: {
     enrich: async ({ data }: any) => {
@@ -136,6 +141,12 @@ for (const recovery of ['settle', 'covered', 'hung', 'account', 'event'] as cons
   } });
   await h.flush(); h.library(lib); await h.flush(); const pending = h.current.generate();
   await vi.advanceTimersByTimeAsync(24_999);
+  if (covered) {
+    expect(coverageScheduledAt).toBeTypeOf('number'); expect(coverageArrivedAt).toBeTypeOf('number');
+    expect(Number(coverageArrivedAt) - Number(coverageScheduledAt)).toBe(4000);
+    expect(arrivedCoverage).toEqual({ warmUp: coveredRows.slice(0, 6), transition: coveredRows.slice(6, 22), peak: coveredRows.slice(22, 30) });
+    if (recovery === 'covered-inert') expect((globalThis as any).__coverageExecuted).toBe(false);
+  }
   expect(calls).toBe(1); expect(suggestions).toEqual([]);
   if (recovery === 'account' || recovery === 'event') {
     h.switchTo(recovery === 'account' ? 'other' : 'owner', recovery === 'event' ? 'B' : 'A'); await h.flush();
@@ -148,10 +159,11 @@ for (const recovery of ['settle', 'covered', 'hung', 'account', 'event'] as cons
     expect(seconds(h, lib)).toEqual([5400, 14400, 7200]); expect(calls).toBeGreaterThan(1);
   } else {
     expect(suggestions).toEqual([]);
-    if (recovery === 'covered') {
+    if (covered) {
       // Already-queued metadata may refine after settlement; no new sourcing is needed.
       expect(resumedNeeds.length).toBeGreaterThanOrEqual(3);
       expect(resumedNeeds.every(n => n === 0)).toBe(true); expect(active).toBe(0);
+      if (recovery === 'covered-inert') expect((globalThis as any).__coverageExecuted).toBe(false);
     } else expect(calls).toBe(1);
   }
   h.unmount();
