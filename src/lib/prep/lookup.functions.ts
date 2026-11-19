@@ -15,7 +15,7 @@ const clean = (s: unknown, max = 300) => String(s ?? "").replace(/[\u0000-\u001F
 import { informationKey, type ReuseCounts } from '../songInformation/schema';
 import { createEvidenceReuse, createSharedWork } from '../songInformation/reuse';
 const shared = createSharedWork();
-async function evidence<T>(kind: 'mb' | 'lastfm', artist: string, title: string, load: (dispatch:(n?:number)=>void) => Promise<T>, end: number) {
+async function evidence<T>(kind: 'mb' | 'lastfm', artist: string, title: string, load: (dispatch:(n?:number)=>void,aggregate:(counts?:ReuseCounts)=>void) => Promise<T>, end: number) {
   const { createEvidenceStorage } = await import('../songInformation/cache.server');
   return createEvidenceReuse(createEvidenceStorage(), shared)<T>(kind, informationKey(kind, artist, title), load, end);
 }
@@ -75,16 +75,15 @@ export const lookupLastfmTrack = createServerFn({ method: "POST" })
     };
     try {
       const compatible: import("../songInformation/schema").WireEntry[]=[];
-      const reused = await evidence("lastfm", artist, title, async dispatch => {
+      const reused = await evidence("lastfm", artist, title, async (dispatch,aggregate) => {
       const { similarEvidence, communityEvidence } = await import('../songInformation/lastfm.server');
       const [tags, similarity, community] = await Promise.all([
-        call(dispatch,'track.gettoptags'), similarEvidence(key,artist,title,end).then(r=>{dispatch(r.counts.external);return r;},error=>{dispatch((error as {reuse?:ReuseCounts}).reuse?.external??0);throw error;}), communityEvidence(key,artist,title,end).catch(error=>{dispatch((error as {reuse?:ReuseCounts}).reuse?.external??0);return null;}),
+        call(dispatch,'track.gettoptags'), similarEvidence(key,artist,title,end).then(r=>{aggregate(r.counts);return r;},error=>{aggregate((error as {reuse?:ReuseCounts}).reuse);throw error;}), communityEvidence(key,artist,title,end).then(r=>{aggregate(r.counts);return r;},error=>{aggregate((error as {reuse?:ReuseCounts}).reuse);return null;}),
       ]);
       if (!tags) throw new Error('Incomplete Last.fm response');
       const items = parseLastfm(tags, null, artist, title);
       items.similar = similarity.value.similar.slice(0,15);
       // Exact community information is cached by the common endpoint for later generation reuse.
-      dispatch(community?.counts.external??0);
       compatible.push({kind:'similar',key:informationKey('similar',artist,title,'30:exact'),value:similarity.value as unknown as import("@/integrations/supabase/types").Json,at:similarity.at});
       if(community)compatible.push({kind:'community',key:informationKey('community',artist,title),value:community.value as unknown as import("@/integrations/supabase/types").Json,at:community.at});
       return {...items,compatible};

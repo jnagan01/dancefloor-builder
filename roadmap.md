@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Confirmed online cache transport and compatible reuse
+- [x] Correct exact-key PostgREST serialization and bounded complete reads without row/schema changes; old SDK-boundary reproduction fails and repaired stored-style/Unicode/partial/enrichment cases pass.
+- [x] Preserve compatible generation/details reuse, dates, independent consumers and truthful nested work counts; artist 2->0, fresh similarity/community to details only one tags check, repeat zero.
+- [x] Focused consumers and TypeScript/preview/client-isolation checked with synthetic HTTP only; native prep attempted but Electron executable absent. Live service credential unavailable, so no live adapter/database probe or production writes.
 ## Approved reusable track information
 - [x] a39fd6f acceptance follow-up: shared local/server field freshness, bounded advisory re-estimate + definitive-miss cooldown, per-field local IndexedDB merge, generation 20-per-seed similarity cap, per-version timeout fixture keys, visible native event-name heading; focused, full 1216/1216 and Electron 41/41 + 24/24 pass.
 - [x] Fold precise review into final correction: shared SQL provenance ordering, schema-1 compatible reuse counts, short definitive-miss TTL, popularity-only endpoint refresh and corrupt-entry hardening; isolated focused/full/native validation.

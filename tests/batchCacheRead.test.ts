@@ -4,6 +4,7 @@ import { createEnrichCache } from '@/lib/enrichCache.server';
 import { informationKey } from '@/lib/songInformation/schema';
 import { READ_BATCH_CHARS, READ_BATCH_COUNT } from '@/lib/songInformation/cache.server';
 import { encodeCacheSource } from '@/lib/prep/provenance';
+import { evidenceFilterKeys } from './helpers/postgrestEvidence';
 
 // Actual pipeline + actual service adapters; only the database transport is a synthetic in-memory stand-in.
 const state = vi.hoisted(() => ({ from: vi.fn() }));
@@ -20,7 +21,7 @@ function db(songs: { artist: string; song: string }[], failBatch = -1) {
   });
   const io = { batches: [] as string[][], legacy: [] as [string[], string[]][] };
   state.from.mockReset().mockImplementation((table: string) => table === 'track_evidence_cache'
-    ? { select: () => ({ in: async (_: string, keys: string[]) => { io.batches.push(keys); if (io.batches.length - 1 === failBatch) return { data: null, error: {} };
+    ? { select: () => ({ filter: async (_: string, _op:string,raw:string) => { const keys=evidenceFilterKeys(raw);io.batches.push(keys); if (io.batches.length - 1 === failBatch) return { data: null, error: {} };
         return { data: [...evidence.values()], error: null }; } }) } // returns unrelated rows too: adapter must filter
     : { select: () => ({ in: (_: string, a: string[]) => ({ in: async (__: string, s: string[]) => { io.legacy.push([a, s]); return { data: [] as CacheRow[], error: null }; } }) }) });
   return io;

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { runEnrichment, ENRICH_LIMITS, type CacheRow } from '@/lib/enrichPipeline.server';
 import { createEnrichCache } from '@/lib/enrichCache.server';
 import { encodeCacheSource } from '@/lib/prep/provenance';
+import { evidenceFilterKeys } from './helpers/postgrestEvidence';
 
 // Actual RPC handler + actual auth middleware + actual service adapter + actual pipeline.
 // Only framework dispatch, claims transport, DB transport and public providers are synthetic.
@@ -26,7 +27,7 @@ function database(initial: CacheRow[] = []) {
     filters: [] as unknown[], rows: () => rows };
   state.from.mockReset().mockImplementation((table: string) => {
     if (table === 'track_evidence_cache') return {
-      select: () => ({ in: async (_:string,keys:string[]) => ({data:keys.flatMap(k=>evidence.has(k)?[evidence.get(k)]:[]),error:null}) }),
+      select: () => ({ filter: async (_:string,_op:string,raw:string) => ({data:evidenceFilterKeys(raw).flatMap(k=>evidence.has(k)?[evidence.get(k)]:[]),error:null}) }),
       upsert: async (row:any) => {io.writes++;if(io.hangWrite)return new Promise(()=>{});if(io.writeError)return {error:{}};evidence.set(row.cache_key,row);return {error:null};},
     };
     expect(table).toBe('song_metadata_cache');

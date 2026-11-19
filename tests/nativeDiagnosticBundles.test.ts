@@ -26,9 +26,9 @@ it.each(['run.mjs', 'prep.mjs'])('%s bundles actual diagnostic UI/store with syn
   expect(inputs).toContain('src/components/GenerationActivity.tsx');
   expect(inputs).toContain('src/lib/generationDiagnostics/store.ts');
   expect(inputs.some(p => /fixtures\/(?:prep-)?services\.tsx$/.test(p))).toBe(true);
-  expect(inputs.filter(p => /generationDiagnostics\/relay\.|integrations\/supabase\/|@tanstack\/react-start|@tanstack\/start-/.test(p))).toEqual([]);
+  expect(inputs.filter(p => /generationDiagnostics\/relay\.|integrations\/supabase\/|songInformation\/.*\.server\.|@tanstack\/react-start|@tanstack\/start-/.test(p))).toEqual([]);
   const code = result.outputFiles.map((f: any) => f.text).join('\n');
-  expect(code).not.toMatch(/BETTER_STACK_SOURCE_TOKEN|BETTER_STACK_INGESTING_HOST|node:async_hooks|node:stream|#tanstack-router-entry|#tanstack-start-entry|tanstack-start-manifest:v/);
+  expect(code).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|LASTFM_API_KEY|supabaseAdmin|BETTER_STACK_SOURCE_TOKEN|BETTER_STACK_INGESTING_HOST|node:async_hooks|node:stream|#tanstack-router-entry|#tanstack-start-entry|tanstack-start-manifest:v/);
 }, 20000);
 
 it('standalone offline/race renderers remain browser-safe with no generation relay/auth dependency', async () => {

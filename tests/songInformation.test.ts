@@ -91,9 +91,36 @@ it('dispatches for B when A cancels before producer microtask',async()=>{
  const b=run('same',send,Date.now()+2000);aCurrent=false;
  expect(await a).toBeNull();expect(await b).toBe(8);expect(send).toHaveBeenCalledTimes(1);
 });
+it('evidence work counts and persistence belong to the live peer when the first consumer cancels',async()=>{
+ const shared=createSharedWork(),key=informationKey('metadata',fact.artist,fact.song);let current=true,release:()=>void=()=>{};
+ const gate=new Promise<void>(r=>{release=r;}),write=vi.fn(async()=>{}),reuse=createEvidenceReuse({read:async()=>[],write},shared);
+ const load=vi.fn(async(dispatch:()=>void)=>{dispatch();await gate;return fact;});
+ const a=reuse('metadata',key,load,Date.now()+1000,()=>current).catch(()=>null);
+ const b=reuse('metadata',key,load,Date.now()+2000);
+ await new Promise(r=>setTimeout(r,0));current=false;release();
+ expect(await a).toBeNull();const live=await b;expect(live.counts.external).toBe(1);expect(write).toHaveBeenCalledTimes(1);expect(load).toHaveBeenCalledTimes(1);
+});
+it('cache read timeout and a hung producer report actual dispatch once without stacking',async()=>{
+ vi.useFakeTimers();const shared=createSharedWork(),key=informationKey('community','TEST Hung Counts','Exact');
+ const load=vi.fn(async(dispatch:()=>void)=>{dispatch();return new Promise(()=>{});});
+ const reuse=createEvidenceReuse({read:()=>new Promise(()=>{}),write:async()=>{}},shared);
+ const first=reuse('community',key,load,Date.now()+600).catch(e=>e);await vi.advanceTimersByTimeAsync(601);
+ const a=await first;expect(a.reuse).toMatchObject({readFailed:1,external:1});
+ const second=reuse('community',key,load,Date.now()+600).catch(e=>e);await vi.advanceTimersByTimeAsync(601);
+ expect((await second).reuse).toMatchObject({readFailed:1,external:0});expect(load).toHaveBeenCalledTimes(1);
+});
 
 import { localInformation } from '@/lib/songInformation/local';
 import { reuseDetails, reusePublicEvidence } from '@/lib/songInformation/client';
+it('actual concurrent local details callers report shared server work once and keep original dates',async()=>{
+ const local=localInformation(),read=vi.spyOn(local,'read').mockResolvedValue({entry:null,retained:null,failed:false}),write=vi.spyOn(local,'write').mockResolvedValue(true);
+ try{
+  const at=Date.now()-60000,send=vi.fn(async()=>({ok:true as const,items:{available:true,tags:['dance'],similar:[],url:null},updatedAt:at,reuse:{...emptyCounts(),external:1,database:2,readFailed:1}}));
+  const [a,b]=await Promise.all([reuseDetails('TEST-details-account','lastfm','TEST Concurrent Local','Exact',send,()=>true,Date.now()+1000),reuseDetails('TEST-details-account','lastfm','TEST Concurrent Local','Exact',send,()=>true,Date.now()+1000)]);
+  expect(a.ok&&b.ok).toBe(true);expect(a.reuse?.external+b.reuse?.external).toBe(1);expect(a.reuse?.database+b.reuse?.database).toBe(2);expect(a.reuse?.readFailed+b.reuse?.readFailed).toBe(1);expect(send).toHaveBeenCalledTimes(1);
+  if(a.ok&&b.ok){expect(a.updatedAt).toBe(at);expect(b.updatedAt).toBe(at);}
+ }finally{read.mockRestore();write.mockRestore();}
+});
 it('actual local details consumer exposes canonical similarity to generation and stale refresh retains its date',async()=>{
  const local=localInformation(),rows=new Map<string,any>(),at=Date.now()-2*DAY,artist='TEST Local',title='Exact (Live)';
  const read=vi.spyOn(local,'read').mockImplementation(async(a,k,kind)=>{const e=rows.get(a+':'+k);return {entry:e&&Date.now()-e.at<3600000?e:null,retained:e??null,failed:false};});

@@ -1,8 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest';
-const state=vi.hoisted(()=>({rows:new Map<string,any>(),reads:0,writes:0}));
-vi.mock('@/integrations/supabase/client.server',()=>({supabaseAdmin:{from:()=>({select:()=>({in:async(_c:string,keys:string[])=>{state.reads++;return {data:keys.flatMap(k=>state.rows.has(k)?[state.rows.get(k)]:[]),error:null};}}),upsert:async(row:any)=>{state.writes++;state.rows.set(row.cache_key,row);return {error:null};}})}}));
+import { createClient } from '@supabase/supabase-js';
+import { evidenceFilterKeys } from './helpers/postgrestEvidence';
+const state=vi.hoisted(()=>({rows:new Map<string,any>(),reads:0,writes:0,failReads:new Set<string>(),failWrites:new Set<string>()}));
+vi.mock('@/integrations/supabase/client.server',()=>({get supabaseAdmin(){return createClient('http://127.0.0.1:9','synthetic-only',{auth:{persistSession:false},global:{fetch:async(input,init)=>{
+ const url=new URL(String(input));if(init?.method==='POST'){const row=JSON.parse(String(init.body));state.writes++;if(state.failWrites.has(row.kind))return new Response('{"message":"synthetic write failure"}',{status:400});state.rows.set(row.cache_key,row);return new Response(null,{status:201});}
+ state.reads++;const keys=evidenceFilterKeys(url.searchParams.get('cache_key')??'');if(keys.some(k=>state.failReads.has(JSON.parse(k)[0])))return new Response('{"message":"synthetic read failure"}',{status:400});return new Response(JSON.stringify(keys.flatMap(k=>state.rows.has(k)?[state.rows.get(k)]:[])),{headers:{'content-type':'application/json'}});
+}}});}}));
 import { similarEvidence, communityEvidence } from '@/lib/songInformation/lastfm.server';
-afterEach(()=>{vi.unstubAllGlobals();state.rows.clear();});
+afterEach(()=>{vi.unstubAllGlobals();state.rows.clear();state.failReads.clear();state.failWrites.clear();});
 it('canonical similarity and exact community survive adapter recreation with no external work on repeat',async()=>{
  const fetcher=vi.fn(async(input:any)=>{const method=new URL(String(input)).searchParams.get('method');return new Response(JSON.stringify(method==='track.getsimilar'?{similartracks:{track:[{name:'Related',artist:{name:'TEST Neighbor'},match:'0.8'}]}}:{track:{name:'Exact (Live)',artist:{name:'TEST Full & Guest'},listeners:'6000',toptags:{tag:[{name:'dance'}]}}}));});
  const a=await similarEvidence('synthetic','TEST Full & Guest','Exact (Live)',Date.now()+1000,fetcher);
@@ -46,11 +51,23 @@ import * as schema from '@/lib/songInformation/schema';
 import * as parsers from '@/lib/prep/lookupParse';
 import * as lastfm from '@/lib/songInformation/lastfm.server';
 import * as cacheModule from '@/lib/songInformation/cache.server';
+import * as similarModule from '@/lib/prep/similarTracks';
 function actualDetails(){
  const ts=createRequire(import.meta.url)('typescript'),m={exports:{} as any};
  const builder=()=>{let validator:(d:any)=>any;const b={middleware:()=>b,inputValidator:(v:any)=>{validator=v;return b;},handler:(h:any)=>(data:any)=>h({data:validator(data)})};return b;};
  vm.runInNewContext(ts.transpileModule(readFileSync('src/lib/prep/lookup.functions.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,URL,AbortSignal,console,Date,process:{env:{LASTFM_API_KEY:'synthetic'}},fetch:(...args:any[])=>globalThis.fetch(...args as Parameters<typeof fetch>),require:(k:string)=>({'@tanstack/react-start':{createServerFn:builder},zod:{z},'@/integrations/supabase/auth-middleware':{requireSupabaseAuth:{}},'./lookupParse':parsers,'../songInformation/schema':schema,'../songInformation/reuse':reuse,'../songInformation/lastfm.server':lastfm,'../songInformation/cache.server':cacheModule} as any)[k]});return m.exports;
 }
+function actualCrowd(){
+ const ts=createRequire(import.meta.url)('typescript'),m={exports:{} as any};
+ const builder=()=>{let validator:(d:any)=>any;const b={middleware:()=>b,inputValidator:(v:any)=>{validator=v;return b;},handler:(h:any)=>(data:any)=>h({data:validator(data)})};return b;};
+ vm.runInNewContext(ts.transpileModule(readFileSync('src/lib/lastfm.functions.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{module:m,exports:m.exports,URL,AbortSignal,console,Date,process:{env:{LASTFM_API_KEY:'synthetic'}},fetch:(...args:any[])=>globalThis.fetch(...args as Parameters<typeof fetch>),require:(k:string)=>({'@tanstack/react-start':{createServerFn:builder},zod:{z},'@/integrations/supabase/auth-middleware':{requireSupabaseAuth:{}},'@/lib/prep/similarTracks':similarModule,'./songInformation/schema':schema,'./songInformation/reuse':reuse,'./songInformation/cache.server':cacheModule} as any)[k]});return m.exports;
+}
+it('actual artist handler reads fresh durable artist evidence after service recreation through the SDK',async()=>{
+ const artist='TEST Artist "Quoted", \\ & Guest',f=vi.fn(async(input:any)=>new Response(JSON.stringify(new URL(String(input)).searchParams.get('method')==='artist.getinfo'?{artist:{name:artist,stats:{listeners:'5000',playcount:'9000'},tags:{tag:[{name:'dance'}]}}}:{similarartists:{artist:[{name:'TEST Peer',match:'0.8'}]}})));vi.stubGlobal('fetch',f);
+ const a=await actualCrowd().getArtistCrowdData({artists:[artist],perArtistSimilar:10});
+ const b=await actualCrowd().getArtistCrowdData({artists:[artist],perArtistSimilar:10});
+ expect(a.reuse.external).toBe(2);expect(b.reuse).toMatchObject({external:0,database:1,readFailed:0});expect(f).toHaveBeenCalledTimes(2);expect(b.evidence[0].at).toBe(a.evidence[0].at);
+});
 it('actual details handler dispatches three HTTP checks, shares compatible durable evidence, repeat dispatches zero',async()=>{
  const artist='TEST Details',title='Exact (Live)',f=vi.fn(async(input:any)=>{
   const method=new URL(String(input)).searchParams.get('method');
@@ -70,4 +87,44 @@ it('actual MusicBrainz details handler refreshes a definitive miss after 24 hour
   await vi.advanceTimersByTimeAsync(86400001);
   await actualDetails().lookupMusicBrainz(request);expect(f).toHaveBeenCalledTimes(2);
  }finally{vi.useRealTimers();}
+});
+
+const publicReply=(artist:string,title:string)=>(input:any)=>{
+ const method=new URL(String(input)).searchParams.get('method');
+ return new Response(JSON.stringify(method==='track.gettoptags'?{toptags:{tag:[{name:'dance'}]}}:method==='track.getsimilar'?{similartracks:{track:[{name:'Related',artist:{name:'TEST Neighbor'},match:'0.8'}]}}:{track:{name:title,artist:{name:artist},listeners:'6000',toptags:{tag:[{name:'dance'}]}}}));
+};
+it('fresh generation evidence is read by actual details through HTTP with original dates and only the tags check',async()=>{
+ const artist='TEST Generation "Quote" \\ & Guest',title='Exact, (Live)',f=vi.fn(async(input:any)=>publicReply(artist,title)(input));vi.stubGlobal('fetch',f);
+ const similarity=await similarEvidence('synthetic',artist,title,Date.now()+2000,f);
+ const community=await communityEvidence('synthetic',artist,title,Date.now()+2000,f);
+ const writes=state.writes;
+ const result=await actualDetails().lookupLastfmTrack({artist,title});
+ expect(result.ok).toBe(true);expect(f).toHaveBeenCalledTimes(3);
+ expect(result.reuse).toMatchObject({database:2,external:1,readFailed:0,writeFailed:0,refreshFailed:0});
+ expect(result.compatible.map((e:any)=>e.at)).toEqual([similarity.at,community.at]);
+ expect(state.writes-writes).toBe(1);
+ const repeat=await actualDetails().lookupLastfmTrack({artist,title});expect(repeat.reuse).toMatchObject({database:1,external:0});expect(f).toHaveBeenCalledTimes(3);
+});
+it('actual nested details propagates child storage and refresh failures without double provider counts',async()=>{
+ const artist='TEST Nested Failures',title='Exact';state.failReads.add('similar');state.failWrites.add('similar');
+ const f=vi.fn(async(input:any)=>new URL(String(input)).searchParams.get('method')==='track.getInfo'?new Response('{}',{status:503}):publicReply(artist,title)(input));vi.stubGlobal('fetch',f);
+ const result=await actualDetails().lookupLastfmTrack({artist,title});
+ expect(result.ok).toBe(true);expect(result.reuse).toMatchObject({external:3,database:0,readFailed:1,writeFailed:1,refreshFailed:1});expect(f).toHaveBeenCalledTimes(3);
+});
+it('overlapping actual generation/details coalesce exact similarity and keep distinct recording versions',async()=>{
+ const artist='TEST Concurrent',title='Exact (Live)';let release:()=>void=()=>{};
+ const gate=new Promise<void>(r=>{release=r;}),started=new Promise<void>(r=>{
+  const f=vi.fn(async(input:any)=>{if(new URL(String(input)).searchParams.get('method')==='track.getsimilar'){r();await gate;}return publicReply(artist,title)(input);});vi.stubGlobal('fetch',f);
+ });
+ const generation=similarEvidence('synthetic',artist,title,Date.now()+3000);
+ await started;const details=actualDetails().lookupLastfmTrack({artist,title});
+ // Let the compatible caller join before releasing the one active transport.
+ await new Promise(r=>setTimeout(r,30));release();
+ const [a,b]=await Promise.all([generation,details]);
+ expect(b.ok).toBe(true);expect(a.at).toBe(b.compatible[0].at);
+ expect(a.counts.external+b.reuse.external).toBe(3);
+ expect([...state.rows.keys()].filter(k=>JSON.parse(k)[0]==='similar')).toHaveLength(1);
+ const f=vi.fn(async(input:any)=>publicReply(artist,'Exact (Remix)')(input));
+ const other=await similarEvidence('synthetic',artist,'Exact (Remix)',Date.now()+2000,f);
+ expect(other.counts.external).toBe(1);expect(other.value.seed.title).toBe('Exact (Remix)');
 });

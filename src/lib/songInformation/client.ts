@@ -2,6 +2,7 @@ import { localInformation } from './local';
 import { informationKey, schemas, emptyCounts, MetadataSchema, type ReuseCounts, type Entry, type Kind, validatedEntry } from './schema';
 import { META_ATTRS, sourceRank } from '../prep/provenance';
 import type { EnrichedSong, EnrichStatus } from '../enrich.functions';
+const deliveredCounts=new WeakSet<object>();
 
 export async function reuseMetadata(account:string,songs:Array<{artist:string;song:string}>,needPopularity:boolean,send:(songs:Array<{artist:string;song:string}>)=>Promise<{results:EnrichedSong[];status?:EnrichStatus}>,current:()=>boolean,end:number) {
   const local=localInformation(), session=local.session(account), live=()=>session()&&current();
@@ -60,15 +61,15 @@ export async function reuseDetails<T>(account:string,kind:Kind,artist:string,tit
   try {
     const result=await local.shared(`${account}:${key}`,send,end,live);
     if(!live())return {ok:false as const,error:"Information cancelled"};
-    if(result.ok){const p=schemas[kind].safeParse(result.items);if(p.success){const at=result.updatedAt??Date.now();const extras=result.compatible??(p.data as {compatible?:Entry[]}).compatible??[];const entries=[{key,kind,value:p.data,at},...extras].flatMap(e=>{const v=validatedEntry(e);return v?[v]:[];});const writes=await Promise.all(entries.map(e=>local.write(account,e,live,end)));counts.writeFailed+=writes.filter(v=>!v).length;}return {...result,reuse:{...emptyCounts(),...result.reuse,local:counts.local,readFailed:counts.readFailed+(result.reuse?.readFailed??0),writeFailed:counts.writeFailed+(result.reuse?.writeFailed??0)}};}
-    if(result.reuse)for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=result.reuse[k];
+    const wireCounts=!deliveredCounts.has(result)?result.reuse:undefined;deliveredCounts.add(result);
+    if(result.ok){const p=schemas[kind].safeParse(result.items);if(p.success){const at=result.updatedAt??Date.now();const extras=result.compatible??(p.data as {compatible?:Entry[]}).compatible??[];const entries=[{key,kind,value:p.data,at},...extras].flatMap(e=>{const v=validatedEntry(e);return v?[v]:[];});const writes=await Promise.all(entries.map(e=>local.write(account,e,live,end)));counts.writeFailed+=writes.filter(v=>!v).length;}return {...result,reuse:{...emptyCounts(),...wireCounts,local:counts.local,readFailed:counts.readFailed+(wireCounts?.readFailed??0),writeFailed:counts.writeFailed+(wireCounts?.writeFailed??0)}};}
+    if(wireCounts)for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=wireCounts[k];
     if(hit.retained&&live()){counts.refreshFailed++;return {ok:true as const,items:hit.retained.value as T,updatedAt:hit.retained.at,reuse:counts,cached:true};}
-    return result;
+    return {...result,reuse:counts};
   }catch{if(hit.retained&&live()){counts.refreshFailed++;return {ok:true as const,items:hit.retained.value as T,updatedAt:hit.retained.at,reuse:counts,cached:true};}return {ok:false as const,error:'Track information could not be checked. Try again.'};}
 }
 
 /** Account-scoped evidence coordinator used by actual generation context and details. */
-const deliveredCounts=new WeakSet<object>();
 export async function reusePublicEvidence<T>(account:string,kind:Kind,artist:string,title:string,shape:string,send:()=>Promise<{value:T;at:number;counts?:ReuseCounts;stale?:boolean}>,current:()=>boolean,end:number) {
  const local=localInformation(),session=local.session(account),live=()=>session()&&current(),key=informationKey(kind,artist,title,shape),counts=emptyCounts();
  const hit=await local.read(account,key,kind,live,end);if(hit.failed)counts.readFailed++;
