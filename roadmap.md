@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Approved section-meter progress
+- [x] Confirmed completed modal excludes export controls until automatic close on corrected six-row upload; shared bounded native completion waits replace fixed post-generation sleeps and guard saved-before-close paths. Real-route browser invalid/corrected upload and six ZIP titles pass; focus regression retained; 13/13 focused checks and TypeScript pass. No product changes; Electron absent locally, hosted runs untouched.
 - [x] Confirmed initial Generate/hide/keyboard-reopen/automatic-close stranded focus; preserved per-run origin with current route action fallback and fenced closes. Shared committed rendered regression passes all three flows in Chromium and is integrated into the unchanged native runner; 37/37 focused tests, TypeScript and preview compilation pass. Local Electron absent; hosted Mac remains external and untouched.
 - [x] Add ephemeral run-fenced measured progress and accessible appearance-aware waveform dialog.
 - [x] Validate actual route lifecycle, rendered themes/mobile/reduced motion and snapshot preservation; 58/58 focused checks, real rendered route intermediate/final coverage, hide/reopen, hidden finish, stale timer, Dinner and focus return pass.

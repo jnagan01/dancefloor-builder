@@ -3,6 +3,7 @@ import {compile} from '@tailwindcss/node';
 import {Scanner} from '@tailwindcss/oxide';
 import {malformedVdjFixture} from './fixtures/malformed-vdj.mjs';
 import {checkSectionMeterFocus} from './section-meter-focus.mjs';
+import {generationReady} from './generation-ready.mjs';
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const temp=fs.mkdtempSync(path.join(os.tmpdir(),'setarchitect-native-')),bundle=path.join(temp,'bundle');fs.mkdirSync(bundle);fs.writeFileSync(path.join(temp,'ISOLATED'),'synthetic only');
@@ -112,7 +113,7 @@ try{
    await page.getByRole('button',{name:'Continue',exact:false}).click();await page.locator('#buffer').selectOption('2');await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(300);
    expect(await page.evaluate(()=>window.__errors.at(-1))).toContain('missing a song title');expect(await rows.count()).toBe(6);
    await rows.nth(5).locator('input').nth(1).fill('Corrected Song');await page.getByRole('button',{name:'Continue',exact:false}).click();
-   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await page.waitForTimeout(1800);
+   await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();await generationReady(page);
    expect(await page.getByRole('button',{name:'Export All Files as ZIP',exact:false}).count()).toBe(1);
    await page.getByRole('button',{name:'Export All Files as ZIP',exact:false}).click();await page.waitForTimeout(700);
    const zipName=fs.readdirSync(path.join(temp,'exports')).filter(n=>n.endsWith('.zip')).sort((a,b)=>fs.statSync(path.join(temp,'exports',b)).mtimeMs-fs.statSync(path.join(temp,'exports',a)).mtimeMs)[0];
@@ -136,6 +137,7 @@ try{
    const before=Object.keys(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')));
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    await expect.poll(()=>{const rows=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'));return Object.values(rows).filter(r=>!before.includes(r.id)&&r.inputs.eventName==='TEST ONLY 1x'&&(r.lists.warmUp.length+r.lists.transition.length+r.lists.peak.length)>=6).length;},{timeout:15000}).toBe(1);
+   await generationReady(page);
    const created=Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY 1x');
    expect(created.inputs.buffer).toBe(1);expect(created.inputs.expand).toBe(true);
    expect([...created.lists.warmUp,...created.lists.transition,...created.lists.peak].filter(r=>r.fromUpload).length).toBe(6);
@@ -172,7 +174,7 @@ try{
    // additions. Wait for the saved generation (lists present + fit persisted), not for a row count above the requests.
    await expect.poll(()=>{const r=find();return r&&r.lists&&r.inputs.eventFit?'saved':'pending';},{timeout:30000}).toBe('saved').catch(e=>{fs.writeFileSync(path.join(diagnostics,'wedding-row.json'),JSON.stringify({row:find()},null,1));throw e;});
    await expect.poll(()=>{const r=find();return r&&['warmUp','transition','peak'].flatMap(k=>r.lists[k]).filter(s=>!s.fromUpload).length;},{timeout:15000}).toBe(14);
-   await page.waitForTimeout(1500);
+   await generationReady(page);
    const created=find();
    expect(created.inputs.eventFit).toEqual({familiarity:'familiar',avoidSlow:true});expect(created.inputs.buffer).toBe(1);
    const all=['warmUp','transition','peak'].flatMap(k=>created.lists[k].map(r=>({...r,section:k})));
@@ -215,7 +217,7 @@ try{
    await page.getByRole('switch',{name:'Expand event with additional tracks'}).click();await page.locator('#fit-familiarity').selectOption('familiar');await page.getByRole('switch',{name:'Avoid slow or ballad additions'}).click();
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
    const find=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.inputs.eventName==='TEST ONLY Native Slow Risk');
-   await expect.poll(()=>find()?.lists?.warmUp?.length,{timeout:30000}).toBeGreaterThan(0);await page.waitForTimeout(1500);
+   await expect.poll(()=>find()?.lists?.warmUp?.length,{timeout:30000}).toBeGreaterThan(0);await generationReady(page);
    const saved=find(), all=['warmUp','transition','peak'].flatMap(k=>saved.lists[k]);
    expect(all.filter(r=>r.fromUpload).map(r=>r.song).sort()).toEqual(['One','Two','Three','Four','Keep (Live)'].sort());
    expect(all.some(r=>r.artist==='TEST Native Risk')).toBe(false);
@@ -551,7 +553,7 @@ try{
    await expect(page.locator('tbody tr')).toHaveCount(2);await page.getByRole('button',{name:'Continue',exact:true}).click();
    await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();await page.locator('#buffer').selectOption('2');
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
-   await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   await generationReady(page);
    await expect.poll(()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Policy synthetic'),{timeout:30000}).toBeTruthy();
    const saved=Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Policy synthetic');
    expect(saved.inputs).toMatchObject({ownedOnlyExpansion:true,includeSeasonalTracks:false,requireCleanVersions:true});
@@ -576,6 +578,7 @@ try{
    await launch();await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible();
    if(await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).isVisible())await page.getByRole('button',{name:'Archive recovery copy and continue',exact:true}).click();
    await page.getByRole('button',{name:/Generate|Regenerate/}).first().click();
+   await generationReady(page);
    await expect(page.getByText(/Eligible pool is short/)).toBeVisible();
    await expect.poll(()=>JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A.inputs.__setarchitect_write_revision_v1,{timeout:15000}).toBeTruthy();
    const saved=JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).A;
@@ -763,6 +766,7 @@ try{
    };
    // Fresh allocation distributes unlinked requests too; total rows are not coverage.
    await expect.poll(()=>approvedSeconds(saved()),{timeout:30000}).toEqual(targets);
+   await generationReady(page);
    const generated=saved(),seconds=approvedSeconds(generated);
    expect(seconds).toEqual([5400,14400,7200]);
    const retained=sec.flatMap(k=>generated.lists[k]).filter(r=>r.fromUpload);
@@ -883,7 +887,7 @@ try{
    await page.locator('input[type=file][accept=".csv,.txt"]').setInputFiles(upload);
    await page.getByRole('button',{name:'Review songs',exact:false}).first().click();
    await page.getByRole('button',{name:'Generate dinner playlist',exact:true}).click();
-   await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   await generationReady(page);
    const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Explicit dinner');
    await expect.poll(saved,{timeout:15000}).toBeTruthy();const original=saved();
    expect(original.inputs).toMatchObject({listType:'dinner',minutes:'15',decades:[],requireCleanVersions:false,ownedOnlyExpansion:false,expand:false});
@@ -912,7 +916,7 @@ try{
      await expect(page.getByText('60:00 event baseline · 1× preparation 60:00 · expansion off',{exact:true}).first()).toBeVisible();
    };
    const generateAndRead=async(name,count)=>{
-     await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+     await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();await generationReady(page);
      await expect.poll(()=>saved().find(r=>r.name===name),{timeout:15000}).toBeTruthy();const r=saved().find(r=>r.name===name);
      const all=[...r.lists.warmUp,...r.lists.transition,...r.lists.peak];expect(all.filter(t=>t.fromUpload)).toHaveLength(count);expect(r.inputs.songs).toEqual(client.slice(0,count));return {r,all};
    };
@@ -938,7 +942,7 @@ try{
    await page.locator('#donotplay').fill(client.slice(0,35).map(t=>`${t.artist} - ${t.song}`).join('\n'));
    await page.getByRole('button',{name:'Review songs',exact:false}).first().click();await page.getByRole('button',{name:'Continue',exact:true}).click();
    await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');await expect(page.getByLabel('Client duration coverage')).toContainText('35 blocked or missing-title rows not counted');
-   await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
+   await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();await generationReady(page);
    await expect.poll(()=>saved().find(r=>r.name==='Blocked coverage'),{timeout:15000}).toBeTruthy();const blocked=saved().find(r=>r.name==='Blocked coverage');expect(blocked.inputs.songs).toEqual(client);expect([...blocked.lists.warmUp,...blocked.lists.transition,...blocked.lists.peak]).toHaveLength(5);
    await prepare(5,'Short off');await expect(page.getByLabel('Client duration coverage')).toContainText('40:00 time shortfall');const short=await generateAndRead('Short off',5);expect(short.all).toHaveLength(5);
    await prepare(5,'Short expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();const expanded=await generateAndRead('Short expansion',5);expect(expanded.all.length).toBeGreaterThan(5);expect(expanded.r.inputs).toMatchObject({buffer:1,expand:true});
