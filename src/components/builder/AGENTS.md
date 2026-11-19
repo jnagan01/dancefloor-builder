@@ -1,0 +1,2 @@
+# Generation presentation
+- Keep section-meter state in the keyed event editor's ephemeral model and observe memoized measured coverage at bounded generator boundaries; timers update elapsed display only and every dismissal/close is run-fenced, because presentation must not schedule generation or persist event data.

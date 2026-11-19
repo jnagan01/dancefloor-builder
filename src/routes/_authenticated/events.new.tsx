@@ -1,4 +1,6 @@
 import { localInformation } from '@/lib/songInformation/local';
+import { createSectionMeterProgress } from '@/lib/sectionMeterProgress';
+import { SectionMeterDialog } from '@/components/builder/SectionMeterDialog';
 import { informationKey } from '@/lib/songInformation/schema';
 import type { SeedResult } from '@/lib/prep/similarTracks';
 import { reuseMetadata, reusePublicEvidence } from '@/lib/songInformation/client';
@@ -432,6 +434,14 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   matchesRef.current = matches;
   // Guards against a slow in-flight generate() overwriting newer state.
   const genTokenRef = useRef(0);
+  const [meterProgress] = useState(() => createSectionMeterProgress());
+  useEffect(() => {
+    const run = meterProgress.get();
+    if (run && (run.id !== genTokenRef.current || run.owner !== account || run.event !== openedEventId)) {
+      meterProgress.release(run.id); setIsGenerating(false);
+    }
+  });
+  useEffect(() => () => { const run = meterProgress.get(); if (run) meterProgress.release(run.id); }, [meterProgress]);
   const diagnosticRunRef = useRef<ReturnType<typeof beginGenerationDiagnostics>>(null);
   const diagnosticVersion = useDiagnosticVersion();
   useEffect(() => () => { diagnosticRunRef.current?.finish("cancelled"); }, []);
@@ -1017,6 +1027,10 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     let activity: ReturnType<typeof beginGenerationDiagnostics> = null;
     let diagnosticFinished = false;
     const myToken = ++genTokenRef.current;
+    const meterShares = activeSplit ?? equalSplit(hoursNum);
+    meterProgress.begin({ id: myToken, owner: accountRef.current, event: openedEventId, type: listType, expand: fill,
+      targets: background ? { warmUp: minutesNum * 60, transition: 0, peak: 0 } : { warmUp: meterShares.warmUp * 60 * buffer, transition: meterShares.transition * 60 * buffer, peak: meterShares.peak * 60 * buffer } });
+    let meterFinished = false;
     setIsGenerating(true);
     try {
     const uniqueSongs = songs.slice();
@@ -1118,6 +1132,12 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       const t = m.trackIndex === undefined ? undefined : mergedLibrary.tracks[m.trackIndex];
       return t && (row.fromUpload || intended(row, t)) ? trackIdentity(t.filePath, rankRoots) : undefined;
     };
+    const observeMeter = (stage: string, force = false) => {
+      if (genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return;
+      // Only at useful generator boundaries, never on animation/timer ticks; exact matches are memoized above.
+      meterProgress.update(myToken, stage, () => durationTotals(r, generationFiles), force);
+    };
+    observeMeter('Matching your requested tracks', true);
     let refillAfterFeedback: (() => void) | undefined;
     let durationReason = "No more eligible ranked candidates with approved known-length files. Review unlinked tracks or add eligible files; your limits were not relaxed.";
 
@@ -1214,6 +1234,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
     // Enrich uploads: online first, then VirtualDJ fallback.
     const initialFlat = ([...r.warmUp, ...r.transition, ...r.peak]);
+    observeMeter('Checking track details', true);
     const initialOnline = await enrichBatch(initialFlat);
     (["warmUp", "transition", "peak"] as SectionKey[]).forEach((k) => {
       r[k] = r[k].map((s) =>
@@ -1223,6 +1244,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
 
     if (fill) {
       if (!background) r = allocateFreshClients(r, durationTargets, generationFiles, clientCoverage.averageSeconds, { favoriteArtists: prefs.artists ?? [], eventType: prefs.eventType });
+      observeMeter('Checking track details and adding suggestions', true);
       // Only the freshly allocated request base can bypass expansion. Coverage reached later by automatic
       // additions still enters the coordinator's verification/refinement and can reopen sourcing.
       const requestedSeconds = durationTotals(r, generationFiles);
@@ -1751,6 +1773,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           seenSlow = Math.max(seenSlow, rankStats.hidden?.slow ?? 0);
           seenUncertain = Math.max(seenUncertain, rankStats.hidden?.uncertainDance ?? 0);
           r = fillRankedDuration(durationBase, ranked.map(({ item, rec }) => ({ row: { ...item.row, rankWhy: explainTop(rec) }, prefer: item.prefer })), durationTargets, generationFiles, generationPath, reviewTargets);
+          observeMeter('Checking track details and adding suggestions');
           const finalEligible = eligible;
           refillAfterFeedback = () => {
             const finalRanked = rankPool(finalEligible.filter(p => addedAllowed(p.row)), p => withCommunity(baseCandidate(p), p.row), { ...rankCtx([...durationBase.warmUp, ...durationBase.transition, ...durationBase.peak]), automaticExpansion: true });
@@ -2019,6 +2042,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       // No source-first library top-up here: every addition came through the shared ranking above.
     }
 
+    observeMeter('Validating your lists', true);
     // Final pass: any song still missing Energy/Danceability (library
     // top-ups, crate picks, misses) gets looked up online, with the AI
     // estimate as the server-side fallback, so every card shows metrics.
@@ -2108,6 +2132,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
     activity?.coverage(durationTargets, actualSeconds);
     const diagnosticShort = expand ? durationGaps.length > 0 : clientCoverage.baselineShortSeconds > 0;
     const metadataMessage = metadataWarnings.message(preparationOutcome({ status: diagnosticShort ? 'short' : 'completed', coverage: (['warmUp', 'transition', 'peak'] as SectionKey[]).map(section => ({ section, targetSeconds: durationTargets[section], achievedSeconds: actualSeconds[section] })) }));
+    meterProgress.finish(myToken, durationGaps.length || diagnosticShort ? 'Lists ready — some preparation time remains unfilled' : metadataMessage ? 'Lists ready — some track details need review' : 'Lists ready — preparation targets reached', actualSeconds);
+    meterFinished = true;
     if (metadataMessage) toast.warning(metadataMessage);
     toast.info(reuseSummary(informationCounts));
     if (diagnosticShort) activity?.notice("short", durationGaps.length || 1);
@@ -2134,7 +2160,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
       throw error;
     } finally {
       if (!diagnosticFinished) activity?.finish("cancelled");
-      setIsGenerating(false);
+      if (!meterFinished) meterProgress.release(myToken);
+      if (genTokenRef.current === myToken) setIsGenerating(false);
     }
   }
 
@@ -2965,6 +2992,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
   return (
     <div className="min-h-dvh bg-background">
       <Toaster richColors position="top-right" />
+      <SectionMeterDialog progress={meterProgress} />
       <div className="flex justify-end"><GenerationActivity account={account} /></div>
 
       <header className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3">

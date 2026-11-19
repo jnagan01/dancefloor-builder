@@ -1,4 +1,9 @@
 # Workspace rebuild
+## Approved section-meter progress
+- [x] Add ephemeral run-fenced measured progress and accessible appearance-aware waveform dialog.
+- [x] Validate actual route lifecycle, rendered themes/mobile/reduced motion and snapshot preservation; 58/58 focused checks, real rendered route intermediate/final coverage, hide/reopen, hidden finish, stale timer, Dinner and focus return pass.
+- [x] TypeScript, automatic preview compilation and synthetic client-secret isolation pass; theme screenshots inspected and supplied. Native runner attempted: Electron executable absent, no installation.
+- [ ] Required final-head hosted Mac and production validation await the unchanged push-triggered workflow; no sandbox workflow-dispatch tool or local Electron available, no publish/install.
 ## Confirmed online cache transport and compatible reuse
 - [x] Correct exact-key PostgREST serialization and bounded complete reads without row/schema changes; old SDK-boundary reproduction fails and repaired stored-style/Unicode/partial/enrichment cases pass.
 - [x] Preserve compatible generation/details reuse, dates, independent consumers and truthful nested work counts; artist 2->0, fresh similarity/community to details only one tags check, repeat zero.

@@ -1,0 +1,66 @@
+import { useEffect, useRef, useState } from 'react';
+import * as Primitive from '@radix-ui/react-dialog';
+import { AudioLines, Check, Clock3, Eye, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { meterMinutes, type MeterKey, type SectionMeterProgress } from '@/lib/sectionMeterProgress';
+
+const keys: MeterKey[] = ['warmUp', 'transition', 'peak'];
+const labels = { warmUp: 'Warm Up', transition: 'Transition', peak: 'Peak' };
+const heights = Array.from({ length: 100 }, (_, i) => 7 + ((i * 13 + Math.floor(i / 7) * 11) % 23));
+export function SectionMeterDialog({ progress }: { progress: SectionMeterProgress }) {
+  const [run, setRun] = useState(progress.get);
+  const [clock, setClock] = useState(Date.now);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  const show = useRef<HTMLButtonElement>(null);
+  useEffect(() => progress.subscribe(() => setRun(progress.get())), [progress]);
+  useEffect(() => {
+    if (!run?.open || run.finished) return;
+    setClock(Date.now()); const timer = setInterval(() => setClock(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [run?.id, run?.open, run?.finished]);
+  useEffect(() => {
+    if (!run?.finished) return;
+    setClock(Date.now());
+    const id = run.id, timer = setTimeout(() => progress.release(id), 1800);
+    return () => clearTimeout(timer);
+  }, [run?.id, run?.finished, progress]);
+  if (!run) return null;
+  const elapsed = Math.max(0, Math.floor((clock - run.started) / 1000));
+  return <>
+    {!run.open && !run.finished && <Button ref={show} variant="ghost" size="sm" className="min-h-11 text-muted-foreground" onClick={() => progress.visible(run.id, true)}><Eye aria-hidden="true" className="size-4" />Show progress</Button>}
+    <Primitive.Root open={run.open} onOpenChange={open => progress.visible(run.id, open)}>
+      <Primitive.Portal>
+        <Primitive.Overlay className="fixed inset-0 z-50 bg-media-overlay/60 backdrop-blur-[2px]" />
+        <Primitive.Content className="section-meter-dialog fixed left-1/2 top-1/2 z-50 w-[calc(100%_-_2rem)] max-w-[680px] max-h-[calc(100dvh_-_2rem)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-input bg-popover p-5 text-popover-foreground shadow-lg sm:p-8"
+          onOpenAutoFocus={() => { returnFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null; }}
+          onCloseAutoFocus={e => { e.preventDefault(); const target = show.current ?? returnFocus.current; if (target?.isConnected) target.focus(); }}>
+          <Primitive.Close asChild><Button variant="ghost" size="icon" aria-label="Hide progress window" className="absolute right-2 top-2 min-h-11 min-w-11"><X aria-hidden="true" className="size-4" /></Button></Primitive.Close>
+          <div className="mb-5 text-center">
+            <div className="mb-4 flex items-center justify-center gap-3 text-xs font-semibold uppercase tracking-widest"><AudioLines aria-hidden="true" className="size-6 text-gold" />Set Architect</div>
+            <Primitive.Title className="font-display text-2xl font-semibold sm:text-3xl">Building your lists</Primitive.Title>
+            <Primitive.Description className="mt-2 text-sm text-muted-foreground sm:text-base">{run.expand ? 'Filling your preparation time' : 'Organizing your client tracks'}</Primitive.Description>
+          </div>
+          <div className="space-y-3">
+            {keys.filter(k => run.targets[k] > 0).map(k => {
+              const actual = Math.max(0, run.totals[k]), target = run.targets[k], ratio = Math.min(1, actual / target);
+              const label = k === 'warmUp' && run.type !== 'dance' ? run.type === 'dinner' ? 'Dinner' : 'Cocktail Hour' : labels[k];
+              return <section key={k} className="rounded-xl border border-input bg-surface/40 px-4 py-3">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"><h2 className="min-w-0 font-display text-lg font-semibold">{label}</h2><div className="flex shrink-0 items-center gap-2 text-sm tabular-nums"><span>{meterMinutes(actual)} / {meterMinutes(target)} min</span>{actual >= target && <Check aria-label={`${label} target reached`} className="size-5 text-success" />}</div></div>
+                <div role="progressbar" aria-label={`${label} usable preparation time`} aria-valuemin={0} aria-valuemax={Math.max(target, actual)} aria-valuenow={actual} aria-valuetext={`${meterMinutes(actual)} usable minutes of ${meterMinutes(target)} selected minutes`} className="relative mt-3 flex h-9 items-center gap-px overflow-hidden sm:gap-[3px]">
+                  {heights.map((height, i) => <span aria-hidden="true" key={i} style={{ height, opacity: i / heights.length < ratio ? 1 : 0.35 }} className={`min-w-0 flex-1 rounded-full ${i / heights.length < ratio ? 'bg-gold' : 'bg-muted-foreground'}`} />)}
+                  {ratio > 0 && ratio < 1 && !run.finished && <span aria-hidden="true" style={{ left: `${ratio * 100}%` }} className="meter-leading absolute h-7 w-1 rounded-full bg-gold-soft" />}
+                </div>
+              </section>;
+            })}
+          </div>
+          <p role="status" aria-live="polite" className="my-5 flex items-center justify-center gap-3 text-center text-sm"><AudioLines aria-hidden="true" className="size-5 shrink-0 text-gold" />{run.stage}</p>
+          <footer className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-t border-border pt-3 text-xs sm:grid-cols-[auto_1fr_auto]">
+            <span className="flex items-center gap-2 tabular-nums"><Clock3 aria-hidden="true" className="size-3.5" />Elapsed {Math.floor(elapsed / 60)}:{String(elapsed % 60).padStart(2, '0')}</span>
+            <span className="col-span-2 row-start-2 text-muted-foreground sm:col-span-1 sm:row-start-auto sm:text-center">Closes automatically when ready</span>
+            <Primitive.Close asChild><Button variant="link" size="sm" className="min-h-11 p-0 text-gold">Hide window</Button></Primitive.Close>
+          </footer>
+        </Primitive.Content>
+      </Primitive.Portal>
+    </Primitive.Root>
+  </>;
+}

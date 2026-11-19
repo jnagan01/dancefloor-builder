@@ -862,6 +862,10 @@ try{
    await expect(page.locator('#buffer')).toHaveValue('1');await expect(page.getByRole('switch',{name:'Expand event with additional tracks',exact:true})).not.toBeChecked();
    expect(fs.readFileSync(path.join(temp,'backend.json'),'utf8')).toBe(before);
    await page.getByRole('button',{name:'Generate dance floor lists',exact:true}).click();
+   await expect(page.getByRole('dialog',{name:'Building your lists'})).toBeVisible();
+   await expect(page.getByRole('dialog',{name:'Building your lists'}).getByRole('progressbar')).toHaveCount(3);
+   await page.getByRole('button',{name:'Hide window',exact:true}).click();
+   // Dismissal is presentation-only; all following save/preferences/selection checks remain unchanged.
    await expect(page.getByRole('button',{name:'Export All Files as ZIP',exact:false})).toBeVisible({timeout:30000});
    const saved=()=>Object.values(JSON.parse(fs.readFileSync(path.join(temp,'backend.json'),'utf8'))).find(r=>r.name==='Explicit fresh choices');
    await expect.poll(saved,{timeout:15000}).toBeTruthy();

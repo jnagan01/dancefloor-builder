@@ -4,6 +4,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@keyframes meter-glow { 50% { opacity: 0.45; transform: scaleY(0.8); } }
+.meter-leading { animation: meter-glow 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .section-meter-dialog *, .meter-leading { animation: none !important; transition: none !important; }
+}
+
 /* Noir-champagne DJ workbench. All color roles use semantic oklch tokens. */
 
 @theme inline {
