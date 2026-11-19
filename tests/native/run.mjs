@@ -15,7 +15,11 @@ const key='warmUp:0:test artist|test song live';
 fs.writeFileSync(path.join(temp,'fixture.json'),JSON.stringify({tracks}));
 fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Test',updated_at:'2026-10-31T01:59:00Z',inputs:{eventName:'Test',songs:[song],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[song],transition:[],peak:[],selections:{[key]:{paths:[tracks[0].filePath],confirmed:false}}}}}));
 let app,page,count=0;const diagnostics=path.join(root,'test-results/native');fs.mkdirSync(diagnostics,{recursive:true});
-async function launch(){app=await electron.launch({executablePath:process.env.ELECTRON_BIN||path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text().slice(0,2000));});await page.locator('button').filter({hasText:/Dance floor|Fixture rescan/}).first().waitFor();await page.waitForTimeout(800);}
+// Mode-independent readiness: the visible event builder (eyebrow + page heading + the step list's Review & export step,
+// present in dance AND background modes), or the fixture library page. Never assumes a particular event mode.
+const builderReady=()=>page.locator('main,body').filter({has:page.getByText('Events / Builder',{exact:true})}).getByRole('heading',{level:1}).first();
+async function ready(timeout=30000){await builderReady().or(page.getByRole('button',{name:/Fixture rescan/})).first().waitFor({state:'visible',timeout});if(await builderReady().isVisible())await page.getByRole('button',{name:/Review & export/}).first().waitFor({state:'visible',timeout});}
+async function launch(){app=await electron.launch({executablePath:process.env.ELECTRON_BIN||path.join(root,'desktop/node_modules/electron/dist',process.platform==='darwin'?'Electron.app/Contents/MacOS/Electron':process.platform==='win32'?'electron.exe':'electron'),args:[path.join(root,'tests/native/fixtures/main.cjs'),'--no-sandbox'],env:{...process.env,SETARCHITECT_TEST_PROFILE:temp,SETARCHITECT_TEST_BUNDLE:bundle}});page=await app.firstWindow();page.on('pageerror',e=>console.error('PAGE',e.message));page.on('console',m=>{if(m.type()==='error')console.error('CONSOLE',m.text().slice(0,2000));});await ready();await page.waitForTimeout(800);}
 async function check(name,f){await f();count++;await page.screenshot({path:path.join(diagnostics,`check-${count}.png`)});console.log(`PASS ${name}`);}
 try{
  await launch();
@@ -387,7 +391,7 @@ try{
    const k=`warmUp:0:${dedupeKey(request.artist,request.song)}`;
    fs.writeFileSync(path.join(temp,'backend.json'),JSON.stringify({A:{id:'A',name:'Queen',updated_at:'2026-11-02T01:59:00Z',inputs:{eventName:'Queen',songs:[request],hours:'0.25',buffer:2,listType:'dance',expand:false},lists:{warmUp:[request],transition:[],peak:[],selections:{[k]:{paths:[q[0].filePath],confirmed:true}}}}}));
    await launch();
-   await page.evaluate(r=>localStorage.setItem('dancefloor:vdjRoot',r),temp);await page.reload();await page.locator('button').filter({hasText:/Dance floor|Fixture rescan/}).first().waitFor();
+   await page.evaluate(r=>localStorage.setItem('dancefloor:vdjRoot',r),temp);await page.reload();await ready();
    const lengths=()=>{try{return Object.fromEntries(JSON.parse(fs.readFileSync(path.join(temp,'library-index.json'),'utf8')).flatMap(s=>s.tracks).map(t=>[t.filePath,t.songLength??null]));}catch{return {};}};
    await expect.poll(()=>lengths()[q[0].filePath],{timeout:15000}).toBe('215');
    expect(lengths()).toEqual({[q[0].filePath]:'215',[q[1].filePath]:'187',[q[2].filePath]:null,[q[3].filePath]:'200'});
@@ -937,6 +941,15 @@ try{
    await prepare(40,'Covered expansion');await page.getByRole('switch',{name:'Expand event with additional tracks',exact:true}).click();await expect(page.getByLabel('Client duration coverage')).toContainText('Choose a higher multiplier');await page.locator('#buffer').selectOption('4');await expect(page.getByLabel('Client duration coverage')).toContainText('80:00 additional time');const extras=await generateAndRead('Covered expansion',40);expect(extras.all.length).toBeGreaterThan(40);expect(extras.r.inputs).toMatchObject({buffer:4,expand:true});
    await prepare(5,'Reset baseline');expect(saved().find(r=>r.id==='A')).toEqual(legacy);
    await page.evaluate(()=>{window.__testState.eventId='A';window.__rerender();});await expect(page.getByRole('heading',{name:'Legacy 2×',exact:true})).toBeVisible();expect(saved().find(r=>r.id==='A')).toEqual(legacy);
+ });
+ await check('launch readiness is mode-independent: a background (cocktail) event with no Dance floor step is ready',async()=>{
+   await page.evaluate(()=>{window.__testState.eventId=undefined;window.__rerender();});
+   await page.getByRole('radio',{name:/Cocktail/}).first().click();
+   await expect(page.getByRole('button',{name:/Dance floor/})).toHaveCount(0);
+   await ready(10000);
+   await expect(page.getByRole('heading',{level:1}).first()).toBeVisible();await expect(page.getByRole('button',{name:/Review & export/}).first()).toBeVisible();
+   // The former selector would have waited here forever for this valid state.
+   expect(await page.locator('button').filter({hasText:/Dance floor|Fixture rescan/}).count()).toBe(0);
  });
  await check('old 1.2.44 shell: 14 legacy events passive no-write, policy activation blocked, fresh v1 backup allows guarded update',async()=>{
    await app.close();process.env.SETARCHITECT_TEST_OLD_SHELL='1';
