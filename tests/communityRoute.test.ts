@@ -81,8 +81,9 @@ it("budget: at most 40 distinct lookups, preliminary-rank priority, unattempted 
   const lib=vdj.buildLibrary(many.map(c=>({artist:c.artist,title:c.song,filePath:`/synthetic/bulk/${c.song}.mp3`,year:"1985",genre:"Pop"})) as vdj.VdjTrack[]);
   const row={id,name:inputBase.eventName,updated_at:"2026-11-04T00:00:00Z",inputs:{...inputBase,eventFit:{avoidSlow:true}},lists:{warmUp:requests,transition:[],peak:[]}};
   const calls:any[]=[];
-  // T44 gets the strongest exact-track similarity, so the preliminary shared ranking must spend budget on it first.
-  const services={recommend:async()=>({suggestions:[]}),enrich:async()=>({results:[]}),similarTracks:async()=>({availability:"ok",seeds:REQUESTS.slice(0,1).map(s=>({seed:{artist:s.artist,title:s.song},status:"ok",similar:many.map(c=>({artist:c.artist,title:c.song,match:c.song==="T44"?1:0.2}))}))}),community:async(r:any)=>{calls.push(...r.data.songs);return r.data.songs.map((s:any)=>({...s,status:"none"}));}};
+  // T44 (last library row) gets the strongest exact-track similarity, so the preliminary shared ranking must spend budget on
+  // it first. Last.fm returns similarity strongest-first within the canonical 30-row shape; generation reads the top 20.
+  const services={recommend:async()=>({suggestions:[]}),enrich:async()=>({results:[]}),similarTracks:async()=>({availability:"ok",seeds:REQUESTS.slice(0,1).map(s=>({seed:{artist:s.artist,title:s.song},status:"ok",similar:[many[44],...many.slice(0,44)].slice(0,30).map(c=>({artist:c.artist,title:c.song,match:c.song==="T44"?1:0.2}))}))}),community:async(r:any)=>{calls.push(...r.data.songs);return r.data.songs.map((s:any)=>({...s,status:"none"}));}};
   vi.useFakeTimers();
   try{
     const h=harness({eventId:id,rows:{[id]:row},services,contract:true});await h.flush();h.library(lib);await h.flush();await h.current.generate();await h.flush();

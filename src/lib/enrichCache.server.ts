@@ -23,7 +23,7 @@ export function createEnrichCache(
         const p=pairs.find(p=>p.key===e.key),parsed=MetadataSchema.safeParse(e.value);
         if(!p||!parsed.success)continue;
         const {encodeCacheSource}=await import('./prep/provenance');const v=parsed.data;
-        rows.push({artist_key:p.artist,song_key:p.song,energy:v.energy??null,danceability:v.danceability??null,valence:v.valence??null,popularity:v.popularity??null,bpm:v.bpm??null,camelot:v.camelot??null,genre:v.genre??null,year:v.year??null,source:encodeCacheSource(v.source,v.prov??{}),updated:v.updated,checked:v.checked,fetched_at:new Date(e.at).toISOString()});
+        rows.push({artist_key:p.artist,song_key:p.song,energy:v.energy??null,danceability:v.danceability??null,valence:v.valence??null,popularity:v.popularity??null,bpm:v.bpm??null,camelot:v.camelot??null,genre:v.genre??null,year:v.year??null,source:encodeCacheSource(v.source,v.prov??{}),updated:v.updated,checked:v.checked,...(v.missed?{missed:v.missed}:{}),fetched_at:new Date(e.at).toISOString()});
       }
       // Only literal legacy keys equal to requested keys are eligible. No stripped alias lookup.
       if(legacy.status==='fulfilled')for(const r of legacy.value.data??[])if(pairs.some(p=>p.artist===r.artist_key&&p.song===r.song_key)&&!rows.some(p=>p.artist_key===r.artist_key&&p.song_key===r.song_key))rows.push(r);

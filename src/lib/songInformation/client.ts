@@ -36,7 +36,7 @@ export async function reuseMetadata(account:string,songs:Array<{artist:string;so
       const value={...old,...parsed.data};
       // Missing refresh fields never erase retained facts; provenance remains field-specific.
       if(old)for(const a of META_ATTRS)if(old[a]!=null&&(e[a]==null||sourceRank(e.prov?.[a])<sourceRank(old.prov?.[a]))){(value as Record<string,unknown>)[a]=old[a];value.prov={...value.prov,[a]:old.prov?.[a]??'estimate'};}
-      value.updated={...old?.updated,...parsed.data.updated};value.checked={...old?.checked,...parsed.data.checked};
+      value.updated={...old?.updated,...parsed.data.updated};value.checked={...old?.checked,...parsed.data.checked};if(old?.missed||parsed.data.missed)value.missed={...old?.missed,...parsed.data.missed};
       for(const a of META_ATTRS)if(value[a]!=null){
         const unchanged=old&&old[a]===value[a]&&old.prov?.[a]===value.prov?.[a];
         value.updated[a]=unchanged ? old.updated?.[a]??retainedAt.get(key)??0 : parsed.data.updated?.[a]??retainedAt.get(key)??Date.now();

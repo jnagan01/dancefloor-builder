@@ -1,4 +1,4 @@
-import { validatedEntry, MAX_LOCAL_ENTRIES, freshMetadata, entryLifetime, type Entry, type Kind } from './schema';
+import { validatedEntry, mergeEntries, MAX_LOCAL_ENTRIES, freshMetadata, entryLifetime, type Entry, type Kind } from './schema';
 import { bounded, createSharedWork } from './reuse';
 export interface LocalStorage { read(account:string,key:string):Promise<unknown>; write(account:string,entry:Entry,current?:()=>boolean):Promise<void> }
 export function indexedInformationStorage():LocalStorage {
@@ -15,7 +15,10 @@ export function indexedInformationStorage():LocalStorage {
       await new Promise<void>((resolve,reject)=>{const tx=db.transaction('evidence','readwrite'),s=tx.objectStore('evidence');
         tx.oncomplete=()=>resolve();tx.onerror=tx.onabort=()=>reject(new Error('Track information write failed'));
         if(!current()){tx.abort();return;}
-        const existing=s.get([account,e.key]);existing.onsuccess=()=>{if(!current()){tx.abort();return;}const old=validatedEntry(existing.result);if(old&&old.at>e.at)return;s.put(e,[account,e.key]);};const all=s.getAll(IDBKeyRange.bound([account,''],[account,'\uffff']));
+        const existing=s.get([account,e.key]);existing.onsuccess=()=>{if(!current()){tx.abort();return;}const old=validatedEntry(existing.result);
+          // Same per-field provenance/date merge as the service trigger, inside this one readwrite transaction, so a
+          // newer weaker/partial reply from another caller or window never replaces stronger saved fields.
+          const merged=validatedEntry(mergeEntries(old,e));if(!merged){tx.abort();return;}s.put(merged,[account,e.key]);};const all=s.getAll(IDBKeyRange.bound([account,''],[account,'\uffff']));
         all.onsuccess=()=>{if(!current()){tx.abort();return;}const rows=(all.result as Entry[]).filter(r=>r&&typeof r.key==='string'&&Number.isFinite(r.at)).sort((a,b)=>b.at-a.at);for(const r of rows.slice(MAX_LOCAL_ENTRIES))s.delete([account,r.key]);};
       });
     },

@@ -147,7 +147,7 @@ import { prepStore } from "@/lib/prep/prepStore";
 import { attrSource, sourceRank, decodeCacheSource, mergeMeta, metaLabel, strictLimitFailure, withProv, type StrictLimits } from "@/lib/prep/provenance";
 import { sourceLabel } from "@/lib/prep/metaConfidence";
 import { awaitReadyFeedback, BLOCK_ALL_ADDITIONS, expansionFeedback, GATE_MESSAGES, recheckAdditions, type ExpansionFeedback } from "@/lib/prep/expansionFeedback";
-import { aggregateSimilar, availabilityNote, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
+import { aggregateSimilar, availabilityNote, capSimilarPerSeed, GENERATION_SIMILAR_PER_SEED, seedsFromRequests, type SimilarTrackEvidence } from "@/lib/prep/similarTracks";
 import { songIdentity } from "@/lib/prep/knowledge";
 import { explainTop, rankPool, type SimilarArtistEvidence } from "@/lib/prep/recommend";
 import { expansionRankContext, rowCandidate, similarArtistEvidence, withFit } from "@/lib/prep/expansionRanking";
@@ -1380,7 +1380,8 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
               }), { clusters: [] as Array<{ artist: string; neighbors: string[] }> }, 'ai'),
               withinContext(reusableArtists, { available: false, artists: [] as ArtistCrowd[] }, 'lastfm'),
             ]);
-            simEvidence = simTrackRes ? aggregateSimilar(simTrackRes.seeds) : [];
+            // The canonical shared/cached result may hold 30 rows; generation keeps its original 20-per-seed evidence.
+            simEvidence = simTrackRes ? aggregateSimilar(capSimilarPerSeed(simTrackRes.seeds, GENERATION_SIMILAR_PER_SEED)) : [];
             rankSimilarTracks = simEvidence;
             rankSimilar = similarArtistEvidence(crowdRes.artists, uniqueSongs.map((s) => s.artist));
             if (trackSeeds.length) {

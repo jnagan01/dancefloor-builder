@@ -18,6 +18,7 @@ import { recommend, DEFAULT_REC_CONTROLS, type Recommendation } from "./archived
 import { rowCandidate } from "../../src/lib/prep/expansionRanking";
 import { mergeMeta, encodeCacheSource, decodeCacheSource } from "../../src/lib/prep/provenance";
 import { normalizeKey } from "../../src/lib/danceFloor";
+import { literalKey } from "../../src/lib/songInformation/schema";
 import { createFactsGatherer, factsKey, FACTS_TIMEOUT_MS } from "../../src/lib/prep/factsGather";
 import { runEnrichment as afterRun, type CacheRow, type EnrichedSong } from "../../src/lib/enrichPipeline.server";
 import { runEnrichment as beforeRun } from "./archived/enrichPipeline.f009f0a";
@@ -30,7 +31,9 @@ const fixture = (): Raw[] => (rows as Raw[]).map(r0 => { const o = SAVED_EVENT_R
 const hung = (i: number) => i % 3 === 2;
 
 function cacheRows(impl: "before" | "after"): CacheRow[] {
-  const key = impl === "before" ? normalizeKey : (s:string) => s.normalize("NFC").trim().toLowerCase();
+  // Each pipeline's real cache key contract: archived f009f0a used the stripped normalizer; the current pipeline reads
+  // only exact literal identities (full credit and version words retained). Same fixture values for both.
+  const key = impl === "before" ? normalizeKey : literalKey;
   return fixture().flatMap((r, i) => hung(i) ? [] : [{
     artist_key: key(r.artist), song_key: key(r.song),
     energy: (r.energy as number) ?? null, danceability: (r.danceability as number) ?? null, valence: null, popularity: (r.popularity as number) ?? null,

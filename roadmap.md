@@ -1,5 +1,6 @@
 # Workspace rebuild
 ## Approved reusable track information
+- [x] a39fd6f acceptance follow-up: shared local/server field freshness, bounded advisory re-estimate + definitive-miss cooldown, per-field local IndexedDB merge, generation 20-per-seed similarity cap, per-version timeout fixture keys, visible native event-name heading; focused, full 1216/1216 and Electron 41/41 + 24/24 pass.
 - [x] Fold precise review into final correction: shared SQL provenance ordering, schema-1 compatible reuse counts, short definitive-miss TTL, popularity-only endpoint refresh and corrupt-entry hardening; isolated focused/full/native validation.
 - [x] Add service-only parsed evidence cache and account-local separate storage; integrate metadata, exact similarity/community and details with bounded shared work and dated freshness.
 - [x] Synthetic repeat route 74 -> 0 metadata track checks, identical ranks/5400-14400-7200 seconds; canonical Last.fm 2 -> 0 HTTP requests; isolated Electron 23/23 including details reload with zero calls.

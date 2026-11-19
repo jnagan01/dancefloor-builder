@@ -294,6 +294,9 @@ try{
  await check('automatic updater download latch captures latest editor draft before any Squirrel stage',async()=>{
    await page.evaluate(()=>{window.__testState.eventId='A';window.__testState.page='event';window.__rerender();});
    await expect(page.getByRole('button',{name:/Dance floor/i}).first()).toBeVisible({timeout:15000});
+   // Diagnosed state: the reopened editor shows the event-name page heading plus an unsaved recovery banner; other
+   // matching text nodes can be hidden in DOM order, so assert the accessible visible heading, not the first text node.
+   await expect(page.getByRole('heading',{name:'Secret Session',exact:true})).toBeVisible({timeout:15000});
    const archive=page.getByRole('button',{name:'Archive recovery copy and continue',exact:true});if(await archive.count()){await archive.click();await expect(archive).toHaveCount(0);}
    await page.getByRole('button',{name:/Dance floor/i}).first().click();
    const name=page.getByPlaceholder('e.g. Smith Johnson Wedding');await expect(name).toHaveValue('Secret Session',{timeout:15000});

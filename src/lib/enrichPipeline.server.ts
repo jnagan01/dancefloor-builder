@@ -4,7 +4,7 @@
  */
 import { toCamelot } from "./musicTheory";
 import { normalizeKey } from "./danceFloor";
-import { decodeCacheSource, encodeCacheSource, sourceRank, type MetaProv } from "./prep/provenance";
+import { decodeCacheSource, encodeCacheSource, sourceRank, type MetaProv, type MetaAttr } from "./prep/provenance";
 import { ENRICH_SERVER_DEADLINE_MS } from "./prep/factsGather";
 import { createProviderLane, ENRICH_PROVIDER_CONCURRENCY, MUSICBRAINZ_GROUP, MUSICBRAINZ_INTERVAL_MS } from "./enrichScheduling.server";
 import { boundedPressure, PROVIDER_INTERVAL_MS, type MetadataPacing, type ProviderPressure } from './providerPacing';
@@ -34,12 +34,14 @@ export interface EnrichedSong {
   prov?: MetaProv;
   checked?: Partial<Record<typeof META_ATTRS[number], number>>;
   updated?: Partial<Record<typeof META_ATTRS[number], number>>;
+  /** Last definitive provider miss per known field (cooldown only; never a value or check date). */
+  missed?: Partial<Record<typeof META_ATTRS[number], number>>;
   /** The online lookup for this song didn't finish in time; values (if any) are only what was already known. */
   incomplete?: boolean;
 }
 
 import { META_ATTRS } from "./prep/provenance";
-import { fieldLifetime, emptyCounts, type ReuseCounts } from "./songInformation/schema";
+import { fieldDue, fieldStale, recentMiss, advisoryStale, literalKey, emptyCounts, type ReuseCounts } from "./songInformation/schema";
 // Bounded parallelism + hard budget keep generation responsive; anything not
 // enriched in time falls back to VirtualDJ metadata / heuristics.
 // Independent lanes use at most five outbound provider connections, leaving one for storage.
@@ -457,7 +459,7 @@ function pickSource(
 export interface CacheRow {
   artist_key: string; song_key: string; energy: number | null; danceability: number | null; valence: number | null;
   popularity: number | null; bpm: number | null; camelot: string | null; genre: string | null; year: number | null;
-  source: string; fetched_at: string | null; checked?: Partial<Record<typeof META_ATTRS[number], number>>; updated?: Partial<Record<typeof META_ATTRS[number], number>>;
+  source: string; fetched_at: string | null; checked?: Partial<Record<typeof META_ATTRS[number], number>>; updated?: Partial<Record<typeof META_ATTRS[number], number>>; missed?: Partial<Record<typeof META_ATTRS[number], number>>;
 }
 /** Internal error with optional recovered rows; never print this object or its payload. */
 export class EnrichCacheError extends Error {
@@ -480,7 +482,6 @@ export interface EnrichOptions {
 export async function runEnrichment(songs: Array<{ artist: string; song: string }>, deps: EnrichDeps, opts: EnrichOptions = {}): Promise<{ results: EnrichedSong[]; status: EnrichStatus }> {
   const status: EnrichStatus = { complete: true, timedOut: [], unfinished: 0, reuse: emptyCounts() };
   const reuse = status.reuse as ReuseCounts;
-  const stalePopularity = new Set<string>();
   if (!songs.length) return { results: [] as EnrichedSong[], status };
   const L: EnrichLimits = { ...ENRICH_LIMITS, ...(deps.limits ?? {}) };
   const now = deps.now ?? Date.now;
@@ -499,7 +500,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
 
   // Build normalized keys and de-dupe (multiple identical songs in one batch).
   type Query = { original: { artist: string; song: string }; artistKey: string; songKey: string };
-  const queries: Query[] = songs.map((s) => ({ original: s, artistKey: s.artist.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase(), songKey: s.song.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase() }));
+  const queries: Query[] = songs.map((s) => ({ original: s, artistKey: literalKey(s.artist), songKey: literalKey(s.song) }));
 
   // 1) Cache read (bounded; a hung read means "no cache knowledge", never a fabricated hit).
   const cacheKeys = Array.from(new Set(queries.filter((q) => q.artistKey && q.songKey).map((q) => `${q.artistKey}\u0000${q.songKey}`)));
@@ -530,8 +531,8 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       const validDate=(v:unknown)=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=now()+60000?v:fetchedMs;
       const updated = Object.fromEntries(META_ATTRS.filter(a=>values[a]!=null).map(a=>[a,validDate(row.updated?.[a])]));
       const checked = Object.fromEntries(META_ATTRS.filter(a=>values[a]!=null).map(a=>[a,validDate(row.checked?.[a]??updated[a])]));
-      if (opts.needPopularity && values.popularity != null && now()-(checked.popularity??fetchedMs)>=fieldLifetime('popularity',prov.popularity)) stalePopularity.add(`${row.artist_key}\u0000${row.song_key}`);
-      cache.set(`${row.artist_key}\u0000${row.song_key}`, { artist: "", song: "", ...values, source: (summary as EnrichSource) || "none", prov, updated, checked });
+      const missed = Object.fromEntries(META_ATTRS.filter(a=>values[a]!=null&&typeof row.missed?.[a]==='number'&&row.missed[a]!>=0&&row.missed[a]!<=now()+60000).map(a=>[a,row.missed![a]]));
+      cache.set(`${row.artist_key}\u0000${row.song_key}`, { artist: "", song: "", ...values, source: (summary as EnrichSource) || "none", prov, updated, checked, ...(Object.keys(missed).length ? { missed } : {}) });
     }
   }
 
@@ -543,13 +544,17 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const popOnly = new Set<string>();
   const acousticGap = (row: EnrichedSong | undefined, attr: "energy" | "danceability") =>
     row?.[attr] == null || sourceRank(row.prov?.[attr] ?? "estimate") <= sourceRank("estimate");
+  const AI_ATTRS = ["energy", "danceability", "valence", "bpm", "genre", "year"] as const;
+  const staleAdvisory = (row: EnrichedSong | undefined) => !!row && AI_ATTRS.some(a => advisoryStale(row, a, 0, now()));
   // Complete cached rows whose acoustic values are only generic heuristics stay cache hits (no provider re-fetch, so a
   // warm cache stays warm); they join the estimate lane last, opportunistically, after every genuine gap is ready.
   const upgrade = new Map<string, EnrichedSong>();
   for (const [k, c] of cache) {
-    if (c.energy == null || c.danceability == null || META_ATTRS.some(a=>a!=='popularity'&&c[a]!=null&&now()-(c.checked?.[a]??c.updated?.[a]??0)>=fieldLifetime(a,c.prov?.[a]))) { partial.set(k, c); cache.delete(k); }
-    else if (opts.needPopularity && (c.popularity == null || stalePopularity.has(k))) { partial.set(k, c); popOnly.add(k); cache.delete(k); }
-    else if (acousticGap(c, "energy") || acousticGap(c, "danceability")) upgrade.set(k, c);
+    // Same shared field decision as local reuse: stale known fields are refreshed unless a definitive provider miss is
+    // cooling down; stale AI-or-weaker fields in that cooldown join the bounded estimate lane only.
+    if (c.energy == null || c.danceability == null || META_ATTRS.some(a=>a!=='popularity'&&fieldDue(c,a,0,now()))) { partial.set(k, c); cache.delete(k); }
+    else if (opts.needPopularity && (c.popularity == null || fieldDue(c,'popularity',0,now()))) { partial.set(k, c); popOnly.add(k); cache.delete(k); }
+    else if (acousticGap(c, "energy") || acousticGap(c, "danceability") || staleAdvisory(c)) upgrade.set(k, c);
   }
   const missSet = new Set<string>();
   const first: Query[] = [], last: Query[] = [], upgradeOrder: Query[] = [];
@@ -583,7 +588,8 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const recoDone = new Map<string, ReccoBeatsFeatures | null>();
   const mbDone = new Map<string, MusicBrainzInfo | null>();
   const open = () => !fetchClosed && now() < fetchUntil;
-  const reusesMb = (prev: EnrichedSong | undefined) => !!(prev && (prev.genre || prev.year) && (['genre','year'] as const).every(a=>prev[a]==null||now()-(prev.checked?.[a]??prev.updated?.[a]??0)<fieldLifetime(a,prev.prov?.[a])));
+  const reusesMb = (prev: EnrichedSong | undefined) => !!(prev && (prev.genre || prev.year) && (['genre','year'] as const).every(a=>!fieldDue(prev,a,0,now())));
+  const askedAcoustic = new Map<string, boolean>();
   let recoCursor = 0;
   const providerIncomplete = new Set<string>();
   const providerTimeout = new Set<string>();
@@ -602,9 +608,10 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       const k = `${q.artistKey}\u0000${q.songKey}`;
       const songCtx = { ...recoCtx, failed: false };
       const prev=partial.get(k);
-      const needAcoustic=!prev||(['energy','danceability'] as const).some(a=>sourceRank(prev.prov?.[a])<sourceRank('provider'))||(['energy','danceability','valence','bpm','camelot'] as const).some(a=>prev[a]==null?(a==='energy'||a==='danceability'):now()-(prev.checked?.[a]??prev.updated?.[a]??0)>=fieldLifetime(a,prev.prov?.[a]));
+      // Below-provider acoustic values are worth audio-features unless that endpoint definitively missed them recently.
+      const needAcoustic=!prev||(['energy','danceability'] as const).some(a=>prev[a]==null||(sourceRank(prev.prov?.[a])<sourceRank('provider')&&!recentMiss(prev,a,now())))||(['energy','danceability','valence','bpm','camelot'] as const).some(a=>fieldDue(prev,a,0,now()));
       const r = await fetchReccoBeats(q.original.artist, q.original.song, songCtx, needAcoustic);
-      if (open()) { recoDone.set(k, r); if (songCtx.failed) providerIncomplete.add(k); if (songCtx.timedOut) providerTimeout.add(k); }
+      if (open()) { recoDone.set(k, r); askedAcoustic.set(k, needAcoustic); if (songCtx.failed) providerIncomplete.add(k); if (songCtx.timedOut) providerTimeout.add(k); }
       acousticChanged();
       if (recoCtx.lane.pausedUntil >= fetchUntil) return;
     }
@@ -618,6 +625,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       const rows = await fetchMusicBrainzGroup(group.map(q => q.original), groupCtx);
       if (open() && groupCtx.failed) for (const q of group) { const k = `${q.artistKey}\u0000${q.songKey}`; providerIncomplete.add(k); if (groupCtx.timedOut) providerTimeout.add(k); mbDone.set(k, null); }
       if (open() && rows) group.forEach((q, j) => { const k = `${q.artistKey}\u0000${q.songKey}`; mbDone.set(k, rows[j] ?? null); if (rows[j]?.incomplete) truncated.push(q); });
+      acousticChanged();
       if (mbCtx.lane.pausedUntil >= fetchUntil) break;
     }
     // A popular song's many recordings can fill a grouped page (limit 100) before another song's match appears. Those
@@ -631,6 +639,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       if (oneCtx.failed || !rows) { providerIncomplete.add(k); if (oneCtx.timedOut) providerTimeout.add(k); continue; }
       mbDone.set(k, rows[0] ?? null);
       if (rows[0]?.incomplete) { providerIncomplete.add(k); count("musicbrainz", "truncated"); }
+      acousticChanged();
     }
   };
   // One estimate lane starts from completed acoustic gaps, independently
@@ -642,6 +651,14 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   const estimates = new Map<string, AiEstimate>();
   let aiFailed = false, aiLate = false;
   const finalAt = aiUntil - L.aiFinalMs;
+  const providersDone = (k: string) => recoDone.has(k) && (mbDone.has(k) || reusesMb(partial.get(k)));
+  const refreshable = (k: string) => {
+    const prev = partial.get(k);
+    if (!staleAdvisory(prev) || !(providersDone(k) || fetchClosed)) return false;
+    const reco = recoDone.get(k), mb = mbDone.get(k);
+    return AI_ATTRS.some(a => advisoryStale(prev!, a, 0, now()) &&
+      !(a === "genre" || a === "year" ? mb?.[a] != null && mb.exact : reco?.[a] != null && reco.exact));
+  };
   const estimateMissing = async () => {
     const attemptedAi = new Set<string>();
     let firstGroup = true, collected = false, sentGroups = 0;
@@ -672,15 +689,20 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
         const gapsReady = settled || final || missOrder.every(m => recoDone.has(`${m.artistKey}\u0000${m.songKey}`));
         const group = [...missOrder, ...upgradeOrder].filter(q => {
           const k = `${q.artistKey}\u0000${q.songKey}`, prev = partial.get(k) ?? upgrade.get(k), reco = recoDone.get(k);
+          if (attemptedAi.has(k)) return false;
+          if (upgrade.has(k)) return gapsReady && (acousticGap(prev, "energy") || acousticGap(prev, "danceability") || staleAdvisory(prev));
           // At the final dispatch point rows whose provider search is still pending join speculatively; provider facts
           // that arrive later still outrank the estimate (AI only fills gaps), and no row is estimated twice.
-          return !attemptedAi.has(k) && (upgrade.has(k) ? gapsReady : (recoDone.has(k) || settled || final)) &&
-            ((acousticGap(prev, "energy") && (reco?.energy == null || !reco.exact)) ||
-              (acousticGap(prev, "danceability") && (reco?.danceability == null || !reco.exact)));
+          const gap = (acousticGap(prev, "energy") && (reco?.energy == null || !reco.exact)) ||
+            (acousticGap(prev, "danceability") && (reco?.danceability == null || !reco.exact));
+          if (gap) return recoDone.has(k) || settled || final;
+          // Stale advisory values are re-estimated only after both providers settled without stronger evidence.
+          return refreshable(k);
         }).slice(0, 8);
         if (!group.length) {
-          if (settled || final) return;
-          await waitAcoustic(finalAt);
+          const pendingRefresh = !fetchClosed && missOrder.some(q => { const k = `${q.artistKey}\u0000${q.songKey}`; return !attemptedAi.has(k) && staleAdvisory(partial.get(k)) && !providersDone(k); });
+          if ((settled || final) && !pendingRefresh) return;
+          await waitAcoustic(pendingRefresh ? fetchUntil : finalAt);
           continue;
         }
         sentGroups++;
@@ -764,6 +786,16 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       source: "none",
       prov, checked, updated,
     };
+    // A settled, non-failed provider answer without a stronger value is a definitive miss for the fields it was asked
+    // about: retain the known value and its dates, and record only a cooldown (never for transient failures).
+    if (prev && !providerIncomplete.has(k)) {
+      const asked: MetaAttr[] = [...(hasReco ? (askedAcoustic.get(k) ? ["energy", "danceability", "valence", "bpm", "camelot", "popularity"] as const : ["popularity"] as const) : []),
+        ...(!reusedMb && mbDone.has(k) ? ["genre", "year"] as const : [])];
+      for (const a of asked) if (prev[a] != null && checked[a] === prev.checked?.[a] && (fieldStale(prev, a, 0, now()) || sourceRank(prev.prov?.[a]) < sourceRank("provider"))) {
+        (e.missed ??= { ...prev.missed })[a] = now(); gained = true;
+      }
+    }
+    if (prev?.missed && !e.missed) e.missed = { ...prev.missed };
     const recoEnergy = reco?.energy != null && prov.energy === rs;
     e.source = prev?.energy != null && !recoEnergy ? prev.source : pickSource(reco?.energy != null, !!(mb?.genre || mb?.year));
     fetched.set(k, e);
@@ -773,17 +805,22 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
   // 3b) AI acoustic estimate for anything still missing energy/danceability — bounded and abortable; a late answer is ignored.
   const needAi = missOrder
     .map((q) => ({ q, k: `${q.artistKey}\u0000${q.songKey}` }))
-    .filter(({ k }) => { const e = fetched.get(k); return acousticGap(e, "energy") || acousticGap(e, "danceability"); });
+    .filter(({ k }) => { const e = fetched.get(k); return acousticGap(e, "energy") || acousticGap(e, "danceability") || staleAdvisory(e); });
   // Only acoustic values may replace a lower-ranked heuristic; other attributes are filled only when absent, and only
   // for rows that genuinely lacked an acoustic fact (a heuristic-upgrade row never gains AI year/BPM/genre).
   const applyAi = (e: EnrichedSong, a: AiEstimate, gapRow: boolean) => {
     const prov: MetaProv = { ...(e.prov ?? {}) };
+    const checked = { ...e.checked }, updated = { ...e.updated };
     let filled = false;
     const fill = <A extends "energy" | "danceability" | "valence" | "bpm" | "genre" | "year">(attr: A) => {
       if (a[attr] == null) return e[attr];
       const acoustic = attr === "energy" || attr === "danceability";
-      if (e[attr] != null ? !acoustic || sourceRank(prov[attr] ?? "estimate") >= sourceRank("ai") : !gapRow) return e[attr];
-      prov[attr] = "ai"; filled = true;
+      // A stale AI-or-weaker value may be re-estimated; verified/stronger values are never displaced.
+      const refresh = e[attr] != null && advisoryStale(e, attr, 0, now());
+      if (!refresh && (e[attr] != null ? !acoustic || sourceRank(prov[attr] ?? "estimate") >= sourceRank("ai") : !gapRow)) return e[attr];
+      // Successful estimate: renew its check date; the value-change date moves only when value or provenance changed.
+      if (e[attr] !== a[attr] || e.prov?.[attr] !== "ai") updated[attr] = now();
+      checked[attr] = now(); prov[attr] = "ai"; filled = true;
       return a[attr];
     };
     const next: EnrichedSong = {
@@ -794,7 +831,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
       bpm: fill("bpm") as number | undefined,
       genre: fill("genre") as string | undefined,
       year: fill("year") as number | undefined,
-      prov,
+      prov, checked, updated,
     };
     return { next, filled };
   };
@@ -842,11 +879,12 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
           const previous = partial.get(k) ?? cache.get(k);
           return [a,previous && previous[a]===e[a] && previous.prov?.[a]===e.prov?.[a] ? previous.updated?.[a]??start : now()];
         })),
+        ...(e.missed && Object.keys(e.missed).length ? { missed: Object.fromEntries(META_ATTRS.filter(a=>e[a]!=null&&e.missed?.[a]!=null).map(a=>[a,e.missed![a]!])) } : {}),
         source: encodeCacheSource(e.source, e.prov ?? {}),
         fetched_at: new Date(now()).toISOString(),
       };
     });
-  for(const row of toUpsert){const value=fetched.get(`${row.artist_key}\u0000${row.song_key}`);if(value){value.updated=row.updated;value.checked=row.checked;}}
+  for(const row of toUpsert){const value=fetched.get(`${row.artist_key}\u0000${row.song_key}`);if(value){value.updated=row.updated;value.checked=row.checked;if(row.missed)value.missed=row.missed;}}
   if (toUpsert.length) {
     try {
       const got = await within(Promise.resolve().then(() => deps.upsert(toUpsert)), Math.min(end, now() + L.upsertMs), now);
@@ -870,7 +908,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     return { artist: q.original.artist, song: q.original.song, source: "none" as const, ...inc };
   });
   reuse.missing = results.filter(e=>e.energy==null||e.danceability==null||(opts.needPopularity&&e.popularity==null)).length;
-  for (const e of results) { const row=toUpsert.find(r=>r.artist_key===normalizeKey(e.artist)&&r.song_key===normalizeKey(e.song)); if(row)e.updated=row.updated; }
+  for (const e of results) { const row=toUpsert.find(r=>r.artist_key===literalKey(e.artist)&&r.song_key===literalKey(e.song)); if(row)e.updated=row.updated; }
   if (missOrder.length) status.pacing = { reccobeats: recoCtx.lane.snapshot(), musicbrainz: mbCtx.lane.snapshot() };
   return { results, status };
 }

@@ -240,3 +240,71 @@ it('unchanged successful popularity check persists freshness without changing it
  expect(first.results[0].checked?.popularity).toBeGreaterThan(Date.parse(row.fetched_at));
  const second=await h.call({songs:[song],needPopularity:true});expect(f).toHaveBeenCalledTimes(checks);expect(second.results[0].popularity).toBe(8);
 });
+
+// Advisory refresh and definitive-miss cooldown through the actual service adapter and pipeline.
+const DAYMS = 86400000;
+const aiRow = (days: number): CacheRow => ({ ...warm(), energy: 8, danceability: 8, valence: 8, popularity: null, bpm: 120, camelot: null, genre: 'Pop', year: 2005,
+  source: encodeCacheSource('AI', { energy: 'ai', danceability: 'ai', valence: 'ai', bpm: 'ai', genre: 'ai', year: 'ai' }), fetched_at: new Date(Date.now() - days * DAYMS).toISOString() });
+function evidence(seed: CacheRow) {
+  // Seed the exact evidence store through the actual adapter write path so the next read is the real exact identity.
+  const io = database([]);
+  return { io, ready: createEnrichCache().upsert([{ ...seed, fetched_at: seed.fetched_at! }]).then(() => { io.writes = 0; }) };
+}
+describe('advisory refresh and definitive-miss cooldown', () => {
+  it('40-day AI row with definitive 404s and an estimate returning the same values refreshes once, then repeats zero', async () => {
+    const seeded = aiRow(40), { io, ready } = evidence(seeded); await ready;
+    const fetch = vi.fn(async () => new Response('{}', { status: 404 })); vi.stubGlobal('fetch', fetch);
+    const estimate = vi.fn(async (songs: unknown[]) => songs.map(() => ({ energy: 8, danceability: 8, valence: 8, bpm: 120, genre: 'Pop', year: 2005 })));
+    const deps = () => ({ ...createEnrichCache(), estimate });
+    const first = await runEnrichment([song], deps());
+    expect(fetch).toHaveBeenCalledTimes(3); expect(estimate).toHaveBeenCalledTimes(1); expect(io.writes).toBe(1);
+    const r = first.results[0], old = Date.parse(seeded.fetched_at!);
+    expect(r).toMatchObject({ energy: 8, danceability: 8, valence: 8, bpm: 120, genre: 'Pop', year: 2005, prov: { energy: 'ai', year: 'ai' } });
+    // Same values: the value-change date is unchanged; only the successful check date advances.
+    expect(r.updated?.energy).toBe(old); expect(r.checked?.energy).toBeGreaterThan(old);
+    expect(first.status.reuse).toMatchObject({ external: 4, writeFailed: 0 });
+    const second = await runEnrichment([song], deps());
+    expect(fetch).toHaveBeenCalledTimes(3); expect(estimate).toHaveBeenCalledTimes(1); expect(io.writes).toBe(1);
+    expect(second.results[0]).toMatchObject({ energy: 8, year: 2005, prov: { energy: 'ai' } }); expect(second.status.reuse).toMatchObject({ external: 0, database: 1 });
+  });
+  it('unavailable estimate: definitive miss cools providers down without renewing stale values; estimates retry', async () => {
+    const seeded = aiRow(40), { io, ready } = evidence(seeded); await ready;
+    const fetch = vi.fn(async () => new Response('{}', { status: 404 })); vi.stubGlobal('fetch', fetch);
+    const estimate = vi.fn(async () => { throw new Error('synthetic estimate outage'); });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const first = await runEnrichment([song], { ...createEnrichCache(), estimate });
+    expect(fetch).toHaveBeenCalledTimes(3); expect(estimate).toHaveBeenCalledTimes(1); expect(io.writes).toBe(1);
+    const old = Date.parse(seeded.fetched_at!);
+    expect(first.results[0]).toMatchObject({ energy: 8, year: 2005, prov: { energy: 'ai', year: 'ai' } });
+    expect(first.results[0].checked?.energy).toBe(old); expect(first.results[0].updated?.energy).toBe(old);
+    expect(first.results[0].missed?.energy).toBeGreaterThan(old);
+    const second = await runEnrichment([song], { ...createEnrichCache(), estimate });
+    // Providers are not re-asked inside the cooldown; the transient estimate failure is not negative-cached.
+    expect(fetch).toHaveBeenCalledTimes(3); expect(estimate).toHaveBeenCalledTimes(2); expect(io.writes).toBe(1);
+    expect(second.results[0]).toMatchObject({ energy: 8, year: 2005, prov: { energy: 'ai' } });
+    expect(second.results[0].checked?.energy).toBe(old);
+  });
+  it('transient 503 is never a definitive miss: no cooldown is written and the next run asks again', async () => {
+    const seeded = aiRow(40), { io, ready } = evidence(seeded); await ready;
+    const fetch = vi.fn(async () => new Response('{}', { status: 503 })); vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const estimate = vi.fn(async () => { throw new Error('synthetic estimate outage'); });
+    const first = await runEnrichment([song], { ...createEnrichCache(), estimate });
+    const calls = fetch.mock.calls.length; expect(calls).toBeGreaterThan(0);
+    expect(first.results[0].missed).toBeUndefined(); expect(io.writes).toBe(0);
+    await runEnrichment([song], { ...createEnrichCache(), estimate });
+    expect(fetch.mock.calls.length).toBe(calls * 2);
+  });
+  it('fresh acoustic/popularity with stale provider year/BPM refreshes; failure retains strong fields and source dates', async () => {
+    const at = Date.now(), old = at - 400 * DAYMS;
+    const row: CacheRow = { ...warm(), fetched_at: new Date(at).toISOString(), checked: { energy: at, danceability: at, popularity: at, valence: at, camelot: at, genre: at, year: old, bpm: old }, updated: { energy: at - DAYMS, danceability: at - DAYMS, popularity: at - DAYMS, valence: at, genre: at, year: old - DAYMS, bpm: old - DAYMS } };
+    const { io, ready } = evidence(row); await ready;
+    const fetch = vi.fn(async () => new Response('{}', { status: 503 })); vi.stubGlobal('fetch', fetch);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const out = await runEnrichment([song], { ...createEnrichCache(), estimate: async () => [] }, { needPopularity: true });
+    expect(fetch).toHaveBeenCalled(); expect(io.writes).toBe(0);
+    expect(out.results[0]).toMatchObject({ energy: 8, danceability: 7, popularity: 8, bpm: 122, year: 2004, prov: { energy: 'provider', year: 'provider', bpm: 'provider' } });
+    expect(out.results[0].updated).toMatchObject({ year: old - DAYMS, bpm: old - DAYMS, energy: at - DAYMS });
+    expect(out.results[0].checked).toMatchObject({ year: old, bpm: old }); expect(out.results[0].missed).toBeUndefined();
+  });
+});

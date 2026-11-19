@@ -283,6 +283,33 @@ try {
     await page.keyboard.press('Escape');
   });
 
+  await check('local track information merges per field across connections, reversed completion, account fences and reload', async () => {
+    const setup = await page.evaluate(async () => {
+      const { indexedInformationStorage, createLocalInformation, informationKey } = window.__trackInformation;
+      const artist = 'TEST Native Merge', song = 'Exact (Live)', key = informationKey('metadata', artist, song), now = Date.now(), DAY = 86400000;
+      const strong = { key, kind: 'metadata', at: now - 1000, value: { artist, song, source: 'ReccoBeats+MusicBrainz', energy: 8, danceability: 7, year: 2004, prov: { energy: 'provider', danceability: 'provider', year: 'provider' }, checked: { energy: now - 1000, danceability: now - 1000, year: now - 1000 }, updated: { energy: now - DAY, danceability: now - DAY, year: now - DAY } } };
+      // Newer, weaker partial reply from another caller/window: estimate energy, absent year.
+      const weak = { key, kind: 'metadata', at: now, value: { artist, song, source: 'AI', energy: 3, danceability: 7, prov: { energy: 'estimate', danceability: 'provider' }, checked: { energy: now, danceability: now }, updated: { energy: now, danceability: now - DAY } } };
+      const a = indexedInformationStorage(), b = indexedInformationStorage();
+      await a.write('native-owner-A', strong); await b.write('native-owner-A', weak);
+      await b.write('native-owner-B', weak); await a.write('native-owner-B', strong);
+      const local = createLocalInformation(a), fence = local.session('native-owner-C'); local.activate('native-owner-D');
+      const fenced = await local.write('native-owner-C', strong, fence, Date.now() + 1000);
+      return { key, now, DAY, fenced };
+    });
+    expect(setup.fenced).toBe(false);
+    await page.reload(); await page.getByRole('button', { name: 'Go library' }).waitFor({ timeout: 20000 });
+    const got = await page.evaluate(async key => { const s = window.__trackInformation.indexedInformationStorage();
+      return { A: await s.read('native-owner-A', key), B: await s.read('native-owner-B', key), C: await s.read('native-owner-C', key), X: await s.read('native-owner-X', key) }; }, setup.key);
+    for (const owner of ['A', 'B']) {
+      expect(got[owner].value).toMatchObject({ energy: 8, danceability: 7, year: 2004, prov: { energy: 'provider', year: 'provider' } });
+      expect(got[owner].value.updated).toMatchObject({ energy: setup.now - setup.DAY, year: setup.now - setup.DAY, danceability: setup.now - setup.DAY });
+      expect(got[owner].value.checked.danceability).toBe(setup.now);
+    }
+    expect(got.C).toBeUndefined(); expect(got.X).toBeUndefined();
+    expect(errors).toEqual([]);
+  });
+
   await page.getByRole('button', { name: 'Go event' }).click();
   await check('dashboard categories and drilldown follow export semantics', async () => {
     const region = page.getByRole('region', { name: 'Event preparation' });

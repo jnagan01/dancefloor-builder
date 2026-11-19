@@ -22,6 +22,9 @@ export interface SimilarTrackEvidence {
 }
 
 export const SIMILAR_LIMITS = { seeds: 20, perSeed: 30, concurrency: 3, timeoutMs: 6000 };
+/** Generation consumes only the original top 20 neighbours per seed, even when the shared canonical result holds 30. */
+export const GENERATION_SIMILAR_PER_SEED = 20;
+export const capSimilarPerSeed = <T extends { similar: readonly unknown[] }>(results: readonly T[], n: number): T[] => results.map(r => ({ ...r, similar: r.similar.slice(0, n) }));
 
 const clean = (s: string, max = 150) =>
   // eslint-disable-next-line no-control-regex

@@ -76,6 +76,21 @@ describe('real event route: Last.fm track evidence and preparation feedback in a
     h.unmount();
   });
 
+  it.each([[19, true], [20, false]] as const)('shared canonical 30-row similarity: neighbour at index %i reaches generation=%s (20-per-seed consumer cap)', async (index, used) => {
+    const fillers = Array.from({ length: 29 }, (_, i) => ({ artist: `TEST Filler ${i}`, title: `Unowned ${i}`, match: 0.9 }));
+    const similar = [...fillers.slice(0, index), { artist: 'Elton John', title: "I'm Still Standing", match: 0.95 }, ...fillers.slice(index)].slice(0, 30);
+    const h = harness({ rows: { A: row() }, services: {
+      similarTracks: async () => ({ availability: 'ok', seeds: [{ seed: { artist: 'Queen', title: 'Radio Ga Ga' }, status: 'ok', similar }, { seed: { artist: 'ABBA', title: 'Dancing Queen' }, status: 'ok', similar: [] }] }),
+      enrich: async () => ({ results: [] }), recommend: async () => ({ suggestions: [] }),
+    } });
+    await h.flush(); h.library(library); await h.flush();
+    await h.current.generate(); await h.flush();
+    const elton = all(h.current.result).find(t => t.song === "I'm Still Standing");
+    // The 21st shared row cannot become generation evidence; the 20th still does.
+    expect(/similar to/i.test(elton?.aiReason ?? '')).toBe(used);
+    h.unmount();
+  });
+
   it('missing Last.fm key and failures fall back without inventing evidence', async () => {
     const h = harness({ rows: { A: row() }, services: { similarTracks: async () => { throw Error('offline'); }, recommend: async () => ({ suggestions: [sug('Plain Act', 'Plain Song')] }) } });
     await h.flush(); h.library(library); await h.flush();
