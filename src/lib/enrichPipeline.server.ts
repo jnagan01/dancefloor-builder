@@ -466,7 +466,8 @@ export class EnrichCacheError extends Error {
   constructor(readonly rows: CacheRow[] | null = null) { super('Metadata cache unavailable'); }
 }
 export interface EnrichDeps {
-  readRows(artistKeys: string[], songKeys: string[]): Promise<CacheRow[] | null>;
+  /** `pairs` (when supplied) are the exact requested identities; adapters must not read crossed artist×song products. */
+  readRows(artistKeys: string[], songKeys: string[], pairs?: { artist: string; song: string }[]): Promise<CacheRow[] | null>;
   upsert(rows: Array<Omit<CacheRow, "fetched_at"> & { fetched_at: string }>): Promise<void>;
   estimate?: (songs: Parameters<typeof estimateWithAi>[0], signal?: AbortSignal, onItem?: (index: number, value: AiEstimate) => void) => ReturnType<typeof estimateWithAi>;
   /** Test/override hooks: phase limits and clock. Production uses ENRICH_LIMITS + Date.now. */
@@ -510,7 +511,7 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     const songKeys = Array.from(new Set(queries.map((q) => q.songKey))).filter(Boolean);
     let rows: CacheRow[] | null = null;
     try {
-      const got = await within(Promise.resolve().then(() => deps.readRows(artistKeys, songKeys)), Math.min(end, start + L.cacheReadMs), now);
+      const got = await within(Promise.resolve().then(() => deps.readRows(artistKeys, songKeys, cacheKeys.map((k) => { const [artist, song] = k.split('\u0000'); return { artist, song }; }))), Math.min(end, start + L.cacheReadMs), now);
       if (got === LATE) {timeout("cacheRead");reuse.readFailed++;} else rows = got;
     } catch (err) {
       cacheFailure('cacheRead'); reuse.readFailed++;

@@ -2,7 +2,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/integrations/supabase/types';
 import { informationKey, MetadataSchema } from './songInformation/schema';
-import { createEvidenceStorage } from './songInformation/cache.server';
+import { createEvidenceStorage, EvidenceReadError, readBatches, encodedSize } from './songInformation/cache.server';
 import { EnrichCacheError, type EnrichDeps } from './enrichPipeline.server';
 
 export function createEnrichCache(
@@ -10,16 +10,26 @@ export function createEnrichCache(
     (await import('@/integrations/supabase/client.server')).supabaseAdmin,
 ): Pick<EnrichDeps, 'readRows' | 'upsert'> {
   return {
-    async readRows(artistKeys, songKeys) {
+    async readRows(artistKeys, songKeys, requested?) {
       const client = await getClient();
-      const pairs=artistKeys.flatMap(artist=>songKeys.map(song=>({artist,song,key:informationKey('metadata',artist,song)})));
+      // Only the actual requested exact pairs (crossed products only for older two-argument callers).
+      const source=requested??artistKeys.flatMap(artist=>songKeys.map(song=>({artist,song})));
+      const seen=new Set<string>();
+      const pairs=source.flatMap(({artist,song})=>{const key=informationKey('metadata',artist,song);if(!artist||!song||seen.has(key))return [];seen.add(key);return [{artist,song,key}];});
       const storage=createEvidenceStorage();
-      const [exact,legacy]=await Promise.allSettled([
-        storage.read(pairs.map(p=>p.key)),
-        client.from('song_metadata_cache').select('artist_key, song_key, energy, danceability, valence, popularity, bpm, camelot, genre, year, source, fetched_at').in('artist_key',artistKeys).in('song_key',songKeys),
-      ]);
+      const legacyRead=async()=>{
+        const replies=await Promise.allSettled(readBatches(pairs,p=>encodedSize(p.artist)+encodedSize(p.song)).map(async batch=>{
+          const r=await client.from('song_metadata_cache').select('artist_key, song_key, energy, danceability, valence, popularity, bpm, camelot, genre, year, source, fetched_at').in('artist_key',[...new Set(batch.map(p=>p.artist))]).in('song_key',[...new Set(batch.map(p=>p.song))]);
+          // Rows returned alongside an error are kept (still filtered to requested pairs) and the error is reported.
+          return {data:r.data??[],failed:!!r.error};
+        }));
+        return {data:replies.flatMap(r=>r.status==='fulfilled'?r.value.data:[]),error:replies.some(r=>r.status==='rejected'||r.value.failed)?{}:null};
+      };
+      const [exactRead,legacy]=await Promise.allSettled([storage.read(pairs.map(p=>p.key)),legacyRead()]);
+      // A partially failed exact read still yields the batches that succeeded, and is reported as a failure.
+      const exact=exactRead.status==='rejected'&&exactRead.reason instanceof EvidenceReadError?{status:'partial' as const,value:exactRead.reason.entries}:exactRead;
       const rows: import('./enrichPipeline.server').CacheRow[]=[];
-      if(exact.status==='fulfilled')for(const e of exact.value){
+      if(exact.status!=='rejected')for(const e of exact.value){
         const p=pairs.find(p=>p.key===e.key),parsed=MetadataSchema.safeParse(e.value);
         if(!p||!parsed.success)continue;
         const {encodeCacheSource}=await import('./prep/provenance');const v=parsed.data;
@@ -27,7 +37,7 @@ export function createEnrichCache(
       }
       // Only literal legacy keys equal to requested keys are eligible. No stripped alias lookup.
       if(legacy.status==='fulfilled')for(const r of legacy.value.data??[])if(pairs.some(p=>p.artist===r.artist_key&&p.song===r.song_key)&&!rows.some(p=>p.artist_key===r.artist_key&&p.song_key===r.song_key))rows.push(r);
-      if(exact.status==='rejected'||legacy.status==='rejected'||(legacy.status==='fulfilled'&&legacy.value.error))throw new EnrichCacheError(rows);
+      if(exact.status!=='fulfilled'||legacy.status==='rejected'||(legacy.status==='fulfilled'&&legacy.value.error))throw new EnrichCacheError(rows);
       return rows;
     },
     async upsert(rows) {
