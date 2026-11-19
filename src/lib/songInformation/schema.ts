@@ -24,8 +24,8 @@ export const MAX_LOCAL_ENTRIES=3000;
 export const MAX_RETAIN_MS=365*DAY;
 export type WireEntry = Omit<Entry,'value'> & {value:import('@/integrations/supabase/types').Json};
 export interface Entry { key:string; kind:Kind; value:unknown; at:number }
-export interface ReuseCounts { local:number; database:number; external:number; missing:number; readFailed:number; writeFailed:number; refreshFailed:number }
-export const emptyCounts = ():ReuseCounts => ({ local:0,database:0,external:0,missing:0,readFailed:0,writeFailed:0,refreshFailed:0 });
+export interface ReuseCounts { local:number; database:number; external:number; missing:number; readFailed:number; writeFailed:number; refreshFailed:number; readDeadline:number; readDenied:number; readSchema:number; readOther:number }
+export const emptyCounts = ():ReuseCounts => ({ local:0,database:0,external:0,missing:0,readFailed:0,writeFailed:0,refreshFailed:0,readDeadline:0,readDenied:0,readSchema:0,readOther:0 });
 // Complete credit and literal version descriptors remain in the key. No basename or primary-only aliases.
 /** Exact literal identity (NFC, collapsed whitespace, case-folded); every credit and version word is retained. */
 export const literalKey=(s:string)=>s.normalize('NFC').replace(/\s+/g,' ').trim().toLowerCase();

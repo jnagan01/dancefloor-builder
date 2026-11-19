@@ -1189,7 +1189,7 @@ function Index({ account, handoff, onHandoff }: { account: string | null; handof
           () => acceptsReply() && genTokenRef.current === myToken && accountRef.current === accountAtStart, started + 20_000);
         const reply = { results: reused.results, status: reused.status };
         if (!acceptsReply() || genTokenRef.current !== myToken || accountRef.current !== accountAtStart) return [];
-        for (const k of Object.keys(informationCounts) as Array<keyof ReuseCounts>) informationCounts[k] += reused.counts[k];
+        for (const k of Object.keys(informationCounts) as Array<keyof ReuseCounts>) informationCounts[k] += reused.counts[k]??0;
         for (const k of Object.keys(reused.counts) as Array<keyof ReuseCounts>) if (reused.counts[k]) activity?.reuse?.({[k]: reused.counts[k]});
         activity?.causes(reply.status?.causes);
         metadataWarnings.response(reply.status?.causes, reply.status?.timedOut);

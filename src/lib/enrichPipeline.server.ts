@@ -8,6 +8,7 @@ import { decodeCacheSource, encodeCacheSource, sourceRank, type MetaProv, type M
 import { ENRICH_SERVER_DEADLINE_MS } from "./prep/factsGather";
 import { createProviderLane, ENRICH_PROVIDER_CONCURRENCY, MUSICBRAINZ_GROUP, MUSICBRAINZ_INTERVAL_MS } from "./enrichScheduling.server";
 import { boundedPressure, PROVIDER_INTERVAL_MS, type MetadataPacing, type ProviderPressure } from './providerPacing';
+import { emptyReadFailures, readFailure, type ReadFailures } from './songInformation/readFailures';
 
 export type EnrichSource =
   | "ReccoBeats+MusicBrainz"
@@ -108,11 +109,12 @@ async function fetchWithTimeout(url: string, init: RequestInit, ctx?: FetchCtx):
   if (ctx?.signal.aborted) ctrl.abort(); else ctx?.signal.addEventListener("abort", onAbort);
   try {
     const now = ctx?.now ?? Date.now;
+    const startedAt=now();
     const until = now() + ms;
     ctx?.dispatched?.();
     const response = await within(fetch(url, { ...init, signal: ctrl.signal }), until, now);
     if (response === LATE) { if (ctx) ctx.timedOut = true; ctx?.note?.("deadline"); noted = true; ctrl.abort(); throw new Error("Provider request deadline"); }
-    ctx?.lane?.response(response);
+    ctx?.lane?.response(response,startedAt);
     // A catalogue "not found" is a definitive miss (no facts exist there), never an unfinished lookup.
     if (!response.ok) { const cause = httpCause(response.status); ctx?.note?.(cause); noted = true; if (ctx && cause !== "missing") ctx.failed = true; }
     // Keep the request timer and abort forwarding alive through body consumption, not just headers.
@@ -463,7 +465,7 @@ export interface CacheRow {
 }
 /** Internal error with optional recovered rows; never print this object or its payload. */
 export class EnrichCacheError extends Error {
-  constructor(readonly rows: CacheRow[] | null = null) { super('Metadata cache unavailable'); }
+  constructor(readonly rows: CacheRow[] | null = null, readonly failures:ReadFailures=emptyReadFailures()) { super('Metadata cache unavailable'); }
 }
 export interface EnrichDeps {
   /** `pairs` (when supplied) are the exact requested identities; adapters must not read crossed artist×song products. */
@@ -512,9 +514,11 @@ export async function runEnrichment(songs: Array<{ artist: string; song: string 
     let rows: CacheRow[] | null = null;
     try {
       const got = await within(Promise.resolve().then(() => deps.readRows(artistKeys, songKeys, cacheKeys.map((k) => { const [artist, song] = k.split('\u0000'); return { artist, song }; }))), Math.min(end, start + L.cacheReadMs), now);
-      if (got === LATE) {timeout("cacheRead");reuse.readFailed++;} else rows = got;
+      if (got === LATE) {timeout("cacheRead");reuse.readFailed++;reuse.readDeadline++;} else rows = got;
     } catch (err) {
       cacheFailure('cacheRead'); reuse.readFailed++;
+      const failures=err instanceof EnrichCacheError?err.failures:readFailure(err);
+      for(const k of Object.keys(failures) as Array<keyof ReadFailures>)reuse[k]+=failures[k];
       rows = err instanceof EnrichCacheError ? err.rows : null;
     }
 

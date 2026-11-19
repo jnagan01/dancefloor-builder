@@ -6,6 +6,17 @@ import { enrichHandler } from './helpers/enrichHandler';
 const json = (data: unknown, status = 200, headers = {}) => new Response(JSON.stringify(data), { status, headers });
 const deps = { readRows: async () => [], upsert: vi.fn(async () => {}), estimate: async () => [] };
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.clearAllMocks(); });
+it.each([429,503])('%s zero/past hints retain exponential floor and old in-flight successes cannot erase pressure',async status=>{
+ vi.useFakeTimers();const origin=Date.now(),lane=createProviderLane(Date.now,origin+90000,new AbortController().signal,100);
+ const starts:number[]=[];await lane.ready();const oldStart=Date.now();
+ lane.response(json({},status,{'retry-after':'0'}),oldStart);expect(lane.pausedUntil-origin).toBe(1000);
+ for(let i=0;i<8;i++)lane.response(json({}),oldStart);expect(lane.snapshot().pressure).toBe(1);
+ const workers=Promise.all(Array.from({length:4},async()=>{if(await lane.ready())starts.push(Date.now()-origin);}));
+ await vi.advanceTimersByTimeAsync(500);lane.response(json({},status,{'retry-after':new Date(origin-60000).toUTCString()}),oldStart);
+ expect(lane.pausedUntil-origin).toBe(2500);await vi.advanceTimersByTimeAsync(3500);await workers;expect(starts).toEqual([2500,3000,3500,4000]);
+ for(let i=0;i<8;i++)lane.response(json({}),oldStart);expect(lane.snapshot().pressure).toBe(2);
+ for(let i=0;i<8;i++)lane.response(json({}),Date.now());expect(lane.snapshot().pressure).toBe(0);
+});
 it.each([[false, false], [true, false], [true, true]])('paced acoustic misses form one useful bounded batch (slow=%s, initial hit=%s)', async (slow, initialHit) => {
   vi.useFakeTimers(); const origin = Date.now(), starts: number[] = [], groups: Array<{ at: number; songs: string[] }> = []; let firstGap = -1;
   const songs = Array.from({ length: initialHit ? 9 : 8 }, (_, i) => ({ artist: `Fixture ${i}`, song: `Synthetic ${i}` }));
@@ -49,7 +60,7 @@ it.each([429, 503])('%s missing/invalid hints back off 1/2/4 seconds, dates and 
     expect(lane.pausedUntil - at).toBe(wait); const ready = lane.ready(); await vi.advanceTimersByTimeAsync(wait); expect(await ready).toBe(true);
   }
   const date = new Date(Date.now() + 10_000).toUTCString(); lane.response(json({}, status, { 'retry-after': date }));
-  expect(lane.pausedUntil).toBe(Date.parse(date));
+  expect(lane.pausedUntil).toBe(Math.max(Date.parse(date),Date.now()+8000));
   lane.response(json({}, status, { 'retry-after': '30' })); expect(lane.pausedUntil).toBe(Date.now() + 30_000);
   expect(retryAfterMs('-1', Date.now())).toBeUndefined(); expect(retryAfterMs('nonsense', Date.now())).toBeUndefined();
   expect(retryAfterMs('0', Date.now())).toBe(0);
@@ -68,7 +79,7 @@ it('serial chunk pressure persists, expires by elapsed time, and healthy replies
   expect(next.snapshot()).toEqual({ pressure: 2, cooldownMs: 1500 });
   const pending = next.ready(); await vi.advanceTimersByTimeAsync(1500); expect(await pending).toBe(true);
   for (let i = 0; i < 8; i++) next.response(json({})); expect(next.snapshot().pressure).toBe(0);
-  await vi.advanceTimersByTimeAsync(200); expect(await next.ready()).toBe(true);
+  await vi.advanceTimersByTimeAsync(500); expect(await next.ready()).toBe(true);
   expect(remainingPacing(captured, Date.now()).reccobeats?.cooldownMs).toBe(0);
 });
 it('long valid Retry-After closes work within the existing hard ceiling rather than shortening to fallback', async () => {

@@ -63,7 +63,7 @@ export async function reuseDetails<T>(account:string,kind:Kind,artist:string,tit
     if(!live())return {ok:false as const,error:"Information cancelled"};
     const wireCounts=!deliveredCounts.has(result)?result.reuse:undefined;deliveredCounts.add(result);
     if(result.ok){const p=schemas[kind].safeParse(result.items);if(p.success){const at=result.updatedAt??Date.now();const extras=result.compatible??(p.data as {compatible?:Entry[]}).compatible??[];const entries=[{key,kind,value:p.data,at},...extras].flatMap(e=>{const v=validatedEntry(e);return v?[v]:[];});const writes=await Promise.all(entries.map(e=>local.write(account,e,live,end)));counts.writeFailed+=writes.filter(v=>!v).length;}return {...result,reuse:{...emptyCounts(),...wireCounts,local:counts.local,readFailed:counts.readFailed+(wireCounts?.readFailed??0),writeFailed:counts.writeFailed+(wireCounts?.writeFailed??0)}};}
-    if(wireCounts)for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=wireCounts[k];
+    if(wireCounts)for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=wireCounts[k]??0;
     if(hit.retained&&live()){counts.refreshFailed++;return {ok:true as const,items:hit.retained.value as T,updatedAt:hit.retained.at,reuse:counts,cached:true};}
     return {...result,reuse:counts};
   }catch{if(hit.retained&&live()){counts.refreshFailed++;return {ok:true as const,items:hit.retained.value as T,updatedAt:hit.retained.at,reuse:counts,cached:true};}return {ok:false as const,error:'Track information could not be checked. Try again.'};}
@@ -76,12 +76,12 @@ export async function reusePublicEvidence<T>(account:string,kind:Kind,artist:str
  if(hit.entry){counts.local++;return {value:hit.entry.value as T,at:hit.entry.at,counts,stale:false};}
  try {
   const result=await local.shared(account+':'+key,send,end,live);
-  if(result.counts&&!deliveredCounts.has(result)){deliveredCounts.add(result);for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=result.counts[k];}
+  if(result.counts&&!deliveredCounts.has(result)){deliveredCounts.add(result);for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=result.counts[k]??0;}
   const e=validatedEntry({key,kind,value:result.value,at:result.at});
   if(!e||!await local.write(account,e,live,end))counts.writeFailed++;
   return {...result,counts};
  }catch(error){
-  const c=(error as {reuse?:ReuseCounts}).reuse;if(c)for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=c[k];
+  const c=(error as {reuse?:ReuseCounts}).reuse;if(c)for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=c[k]??0;
   counts.refreshFailed++;
   if(hit.retained&&live())return {value:hit.retained.value as T,at:hit.retained.at,counts,stale:true};
   throw Object.assign(error instanceof Error?error:Error('Information unavailable'),typeof error==='object'&&error?error:{},{reuse:counts});

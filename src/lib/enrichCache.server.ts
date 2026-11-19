@@ -4,6 +4,7 @@ import type { Database } from '@/integrations/supabase/types';
 import { informationKey, MetadataSchema } from './songInformation/schema';
 import { createEvidenceStorage, EvidenceReadError, readBatches, encodedSize } from './songInformation/cache.server';
 import { EnrichCacheError, type EnrichDeps } from './enrichPipeline.server';
+import { emptyReadFailures, readFailure, type ReadFailures } from './songInformation/readFailures';
 
 export function createEnrichCache(
   getClient: () => Promise<Pick<SupabaseClient<Database>, 'from'>> = async () =>
@@ -21,9 +22,10 @@ export function createEnrichCache(
         const replies=await Promise.allSettled(readBatches(pairs,p=>encodedSize(p.artist)+encodedSize(p.song)).map(async batch=>{
           const r=await client.from('song_metadata_cache').select('artist_key, song_key, energy, danceability, valence, popularity, bpm, camelot, genre, year, source, fetched_at').in('artist_key',[...new Set(batch.map(p=>p.artist))]).in('song_key',[...new Set(batch.map(p=>p.song))]);
           // Rows returned alongside an error are kept (still filtered to requested pairs) and the error is reported.
-          return {data:r.data??[],failed:!!r.error};
+          return {data:r.data??[],failed:!!r.error,failures:r.error?readFailure(r.error):emptyReadFailures()};
         }));
-        return {data:replies.flatMap(r=>r.status==='fulfilled'?r.value.data:[]),error:replies.some(r=>r.status==='rejected'||r.value.failed)?{}:null};
+        const failures=emptyReadFailures();for(const r of replies){const f=r.status==='fulfilled'?r.value.failures:readFailure(r.reason);for(const k of Object.keys(failures) as Array<keyof ReadFailures>)failures[k]+=f[k];}
+        return {data:replies.flatMap(r=>r.status==='fulfilled'?r.value.data:[]),error:replies.some(r=>r.status==='rejected'||r.value.failed)?{}:null,failures};
       };
       const [exactRead,legacy]=await Promise.allSettled([storage.read(pairs.map(p=>p.key)),legacyRead()]);
       // A partially failed exact read still yields the batches that succeeded, and is reported as a failure.
@@ -37,7 +39,11 @@ export function createEnrichCache(
       }
       // Only literal legacy keys equal to requested keys are eligible. No stripped alias lookup.
       if(legacy.status==='fulfilled')for(const r of legacy.value.data??[])if(pairs.some(p=>p.artist===r.artist_key&&p.song===r.song_key)&&!rows.some(p=>p.artist_key===r.artist_key&&p.song_key===r.song_key))rows.push(r);
-      if(exact.status!=='fulfilled'||legacy.status==='rejected'||(legacy.status==='fulfilled'&&legacy.value.error))throw new EnrichCacheError(rows);
+      if(exact.status!=='fulfilled'||legacy.status==='rejected'||(legacy.status==='fulfilled'&&legacy.value.error)){
+        const failures=emptyReadFailures(),parts=[exactRead.status==='rejected'?(exactRead.reason instanceof EvidenceReadError?exactRead.reason.failures:readFailure(exactRead.reason)):emptyReadFailures(),legacy.status==='fulfilled'?legacy.value.failures:readFailure(legacy.reason)];
+        for(const f of parts)for(const k of Object.keys(failures) as Array<keyof ReadFailures>)failures[k]+=f[k];
+        throw new EnrichCacheError(rows,failures);
+      }
       return rows;
     },
     async upsert(rows) {

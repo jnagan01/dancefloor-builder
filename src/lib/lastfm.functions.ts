@@ -39,7 +39,7 @@ export interface ArtistCrowd {
 const API = "https://ws.audioscrobbler.com/2.0/";
 import { emptyCounts, type ReuseCounts } from "./songInformation/schema";
 import { informationKey } from './songInformation/schema';
-import { createEvidenceReuse, createSharedWork } from './songInformation/reuse';
+import { createEvidenceReuse, createSharedWork, createRequestEvidenceStorage, type Storage } from './songInformation/reuse';
 const shared = createSharedWork();
 
 const sanitize = (s: string, max = 150): string =>
@@ -82,10 +82,11 @@ async function fetchArtist(
   key: string,
   artist: string,
   perArtistSimilar: number,
+  storage:Storage,
+  end:number,
 ): Promise<{value:ArtistCrowd|null;counts:ReuseCounts;updatedAt:number;stale:boolean} | null> {
-  const { createEvidenceStorage } = await import('./songInformation/cache.server');
   try {
-  const reused = await createEvidenceReuse(createEvidenceStorage(), shared)<ArtistCrowd>('artist', informationKey('artist', artist, '', String(perArtistSimilar)), async dispatch => {
+  const reused = await createEvidenceReuse(storage, shared)<ArtistCrowd>('artist', informationKey('artist', artist, '', String(perArtistSimilar)), async dispatch => {
 
   const [info, sim] = await Promise.all([
     callLastfm(key, { method: "artist.getinfo", artist, autocorrect: "0" },dispatch),
@@ -134,7 +135,7 @@ async function fetchArtist(
 
   if (!value || (perArtistSimilar > 0 && !sim)) throw new Error('Artist information unavailable');
   return value;
-  }, Date.now() + 9000);
+  }, end);
   return {value:reused.value,counts:reused.counts,updatedAt:reused.at,stale:reused.stale};
   } catch (error) {return {value:null,counts:(error as {reuse?:ReuseCounts}).reuse??{...emptyCounts(),refreshFailed:1},updatedAt:0,stale:false}; }
 }
@@ -146,17 +147,19 @@ export const getArtistCrowdData = createServerFn({ method: "POST" })
     const key = process.env["LASTFM_API_KEY"];
     if (!key) return { available: false, artists: [] };
 
-    const artists = data.artists.map((a) => sanitize(a)).filter(Boolean).slice(0, 40);
+    const artists = [...new Map(data.artists.map(a=>sanitize(a)).filter(Boolean).map(a=>[informationKey('artist',a,'',String(data.perArtistSimilar)),a])).values()].slice(0,40);
     if (!artists.length) return { available: true, artists: [] };
 
     // Keep Last.fm happy: small concurrency instead of 80 parallel requests.
-    const out: ArtistCrowd[] = []; const counts=emptyCounts();const evidence: Array<{artist:string;at:number;stale:boolean}>=[];
+    const {createEvidenceStorage}=await import('./songInformation/cache.server');
+    const hydrated=await createRequestEvidenceStorage(createEvidenceStorage(),artists.map(a=>informationKey('artist',a,'',String(data.perArtistSimilar))),Date.now()+9000);
+    const out: ArtistCrowd[] = []; const counts=hydrated.counts;const evidence: Array<{artist:string;at:number;stale:boolean}>=[];
     const queue = [...artists];
     const workers = Array.from({ length: Math.min(5, queue.length) }, async () => {
       for (;;) {
         const next = queue.shift();
         if (!next) return;
-        const got = await fetchArtist(key, next, data.perArtistSimilar);
+        const got = await fetchArtist(key, next, data.perArtistSimilar,hydrated.storage,Date.now()+9000);
         if (got) {if(got.value){out.push(got.value);evidence.push({artist:next,at:got.updatedAt,stale:got.stale});}for(const k of Object.keys(counts) as Array<keyof ReuseCounts>)counts[k]+=got.counts[k];}else counts.refreshFailed++;
       }
     });

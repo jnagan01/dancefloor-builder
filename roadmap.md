@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Remaining evidence reads and provider pacing
+- [ ] Batch request-owned artist cache reads, retain partial evidence and diagnose numeric failure causes without private content.
+- [ ] Correct concurrent provider backoff/recovery and verify cold/warm, deadlines and privacy with synthetic regressions.
+- [ ] Run focused/full checks and existing rendered/native validation; final-head hosted Mac/production/CodeQL remain release gates. No publish or production writes.
 ## Approved section-meter progress
 - [x] Reproduced Dinner failure with durable CAS backend: identical regeneration falsely set Saving although unchanged fingerprint suppressed writing; reset preserved false dance recovery and blocked Dinner. Removed only generation's fabricated save status, leaving autosave in control; focus flow awaits confirmed save. Durable sequence passes eight desktop/mobile appearance cases, distinct IDs and prior-row preservation; 24/24 focused checks, TypeScript/client isolation pass. Electron absent; no hosted-run intervention.
 - [x] Confirmed completed modal excludes export controls until automatic close on corrected six-row upload; shared bounded native completion waits replace fixed post-generation sleeps and guard saved-before-close paths. Real-route browser invalid/corrected upload and six ZIP titles pass; focus regression retained; 13/13 focused checks and TypeScript pass. No product changes; Electron absent locally, hosted runs untouched.

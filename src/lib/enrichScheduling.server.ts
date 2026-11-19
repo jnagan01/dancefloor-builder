@@ -19,7 +19,7 @@ export function createProviderLane(now: () => number, until: number, signal: Abo
   let blocked = false;
   const failure = (hint?: number) => {
     pressure = Math.min(6, pressure + 1); healthy = 0;
-    pausedUntil = Math.max(pausedUntil, now() + (hint ?? Math.min(32_000, 1000 * 2 ** (pressure - 1))));
+    pausedUntil = Math.max(pausedUntil, now() + Math.max(hint ?? 0,Math.min(32_000, 1000 * 2 ** (pressure - 1))));
   };
   return {
     get pausedUntil() { return blocked ? until : pausedUntil; },
@@ -42,15 +42,17 @@ export function createProviderLane(now: () => number, until: number, signal: Abo
         });
       }
       if (signal.aborted || now() >= until || blocked) return false;
-      nextStart = now() + Math.max(intervalMs, pressure ? Math.min(1000, 100 * pressure) : 0);
+      // Slow only a pressured provider's recovery starts; no guessed healthy/global quota.
+      nextStart = now() + Math.max(intervalMs, pressure ? Math.min(2000, 250 * pressure) : 0);
       return true;
     },
-    response(res: Response) {
+    response(res: Response, startedAt=now()) {
+      if(signal.aborted||now()>=until)return;
       if (res.status === 429 || res.status >= 500) {
         // No replay of the failed recording. Pause the entire provider lane before new work.
         failure(retryAfterMs(res.headers.get('retry-after'), now()));
       } else if (res.status === 401 || res.status === 403) blocked = true;
-      else if (res.ok && ++healthy >= 4) { pressure = Math.max(0, pressure - 1); healthy = 0; }
+      else if (res.ok && startedAt>=pausedUntil && ++healthy >= 4) { pressure = Math.max(0, pressure - 1); healthy = 0; }
     },
   };
 }

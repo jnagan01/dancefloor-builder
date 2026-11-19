@@ -1,9 +1,26 @@
 import { emptyCounts, entryLifetime, validatedEntry, type Entry, type Kind, type ReuseCounts } from './schema';
-export interface Storage { read(keys:string[]):Promise<Entry[]>; write(e:Entry):Promise<void> }
+import { EvidenceReadError, readFailure } from './readFailures';
+export interface Storage { read(keys:string[],signal?:AbortSignal,partial?:(entries:Entry[])=>void):Promise<Entry[]>; write(e:Entry):Promise<void> }
 export async function bounded<T>(work:Promise<T>, end:number):Promise<T> {
   work.catch(()=>{}); let timer:ReturnType<typeof setTimeout>|undefined;
-  try { return await Promise.race([work,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('Information time limit')),Math.max(0,end-Date.now()));})]); }
+  try { return await Promise.race([work,new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('Information time limit'),{name:'TimeoutError'})),Math.max(0,end-Date.now()));})]); }
   finally {clearTimeout(timer);}
+}
+
+/** One request-owned hydration, not N per-artist reads/retries. Reserve the remainder for producers.
+ * Cache hits never enter a provider lane. The memo is discarded with this authenticated request. */
+export async function createRequestEvidenceStorage(storage:Storage,keys:string[],end:number) {
+  const counts=emptyCounts(),ctrl=new AbortController();let rows:Entry[]=[];const partial:Entry[]=[];
+  const readEnd=Math.min(end,Date.now()+Math.min(2000,Math.max(0,(end-Date.now())/3)));
+  try {rows=await bounded(storage.read([...new Set(keys)],ctrl.signal,entries=>{if(!ctrl.signal.aborted)partial.push(...entries);}),readEnd);}
+  catch(error){
+    ctrl.abort();
+    rows=error instanceof EvidenceReadError?error.entries:partial;
+    const failures=error instanceof EvidenceReadError?error.failures:readFailure(error);
+    counts.readFailed=1;Object.assign(counts,failures);
+  }
+  const entries=rows.flatMap(e=>{const v=validatedEntry(e);return v&&keys.includes(v.key)?[v]:[];});
+  return {counts,storage:{read:async(requested:string[])=>entries.filter(e=>requested.includes(e.key)),write:(e:Entry)=>storage.write(e)} satisfies Storage};
 }
 /** One producer per semantic key; unresolved work remains gated after consumer deadlines. */
 export function createSharedWork(max=200) {
@@ -37,8 +54,9 @@ export function createSharedWork(max=200) {
 export function createEvidenceReuse(storage:Storage, shared=createSharedWork(), now=()=>Date.now()) {
   return async function reuse<T>(kind:Kind,key:string,load:(dispatch:(count?:number)=>void,aggregate:(counts?:ReuseCounts)=>void)=>Promise<T>,end:number,current=()=>true):Promise<{value:T;at:number;counts:ReuseCounts;stale:boolean}> {
     const counts=emptyCounts(); let old:Entry|undefined;
-    try { const rows=await bounded(storage.read([key]),Math.min(end,now()+500)); old=rows.map(e=>validatedEntry(e,now())).find(e=>e?.key===key&&e.kind===kind)??undefined; }
-    catch {counts.readFailed++;}
+    const ctrl=new AbortController();
+    try { const rows=await bounded(storage.read([key],ctrl.signal),Math.min(end,now()+500)); old=rows.map(e=>validatedEntry(e,now())).find(e=>e?.key===key&&e.kind===kind)??undefined; }
+    catch(error) {ctrl.abort();counts.readFailed++;Object.assign(counts,error instanceof EvidenceReadError?error.failures:readFailure(error));old=(error instanceof EvidenceReadError?error.entries:[]).map(e=>validatedEntry(e,now())).find(e=>e?.key===key&&e.kind===kind)??undefined;}
     if(!current()||now()>=end)throw new Error('Information cancelled');
     if(old&&now()-old.at<entryLifetime(old)) {counts.database++;return {value:old.value as T,at:old.at,counts:{...counts},stale:false};}
     let progress:{counts:ReuseCounts;reported:ReuseCounts}|undefined;

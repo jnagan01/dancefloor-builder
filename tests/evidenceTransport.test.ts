@@ -4,9 +4,30 @@ import { createEvidenceStorage, EvidenceReadError, READ_BATCH_CHARS } from '@/li
 import { informationKey, type Entry } from '@/lib/songInformation/schema';
 import { createEnrichCache } from '@/lib/enrichCache.server';
 import { runEnrichment } from '@/lib/enrichPipeline.server';
+import {createRequestEvidenceStorage} from '@/lib/songInformation/reuse';
 const state = vi.hoisted(() => ({ client: null as any }));
 vi.mock('@/integrations/supabase/client.server', () => ({ get supabaseAdmin() { return state.client; } }));
 afterEach(() => vi.restoreAllMocks());
+it.each([[403,'42501','readDenied'],[404,'PGRST205','readSchema'],[503,'','readOther']] as const)('SDK HTTP %s retains partial rows and fixed cause %s',async(status,code,cause)=>{
+ const entries=[entry(0,true),entry(1,true)];for(const e of entries){const v=e.value as {seed:{artist:string;title:string}};v.seed.title+=' 東京ü'.repeat(16);e.key=informationKey('similar',v.seed.artist,v.seed.title,'30:exact');}const requests:string[][]=[];
+ state.client=createClient('http://127.0.0.1:9','synthetic-only',{auth:{persistSession:false},global:{fetch:async input=>{
+  const keys=parseIn(new URL(String(input)).searchParams.get('cache_key')??'');requests.push(keys);
+  if(keys.includes(entries[1].key))return new Response(JSON.stringify({code,message:'PRIVATE artist query path secret'}),{status});
+  return new Response(JSON.stringify([{cache_key:entries[0].key,kind:entries[0].kind,value:entries[0].value,fetched_at:new Date(entries[0].at).toISOString()}]));
+ }}});
+ const request=await createRequestEvidenceStorage(createEvidenceStorage(),entries.map(e=>e.key),Date.now()+9000);
+ expect(await request.storage.read(entries.map(e=>e.key))).toEqual([entries[0]]);expect(request.counts).toMatchObject({readFailed:1,[cause]:1});expect(requests).toHaveLength(2);expect(JSON.stringify(request.counts)).not.toMatch(/PRIVATE|artist|query|secret|path/);
+});
+it('real SDK passes the request abort signal and late transport cannot enter request memo',async()=>{
+ vi.useFakeTimers();try{
+  let signal:AbortSignal|null|undefined,release:(r:Response)=>void=()=>{};
+  state.client=createClient('http://127.0.0.1:9','synthetic-only',{auth:{persistSession:false},global:{fetch:async(_input,init)=>{signal=init?.signal;return new Promise<Response>(r=>{release=r;});}}});
+  const e=entry(0),pending=createRequestEvidenceStorage(createEvidenceStorage(),[e.key],Date.now()+9000);
+  await vi.advanceTimersByTimeAsync(2000);const request=await pending;expect(signal?.aborted).toBe(true);expect(request.counts.readDeadline).toBe(1);
+  release(new Response(JSON.stringify([{cache_key:e.key,kind:e.kind,value:e.value,fetched_at:new Date(e.at).toISOString()}])));await vi.advanceTimersByTimeAsync(0);
+  expect(await request.storage.read([e.key])).toEqual([]);
+ }finally{vi.useRealTimers();}
+});
 
 // Decode PostgREST's quoted IN grammar at the HTTP boundary, NOT the builder's raw arguments.
 function parseIn(raw: string): string[] {

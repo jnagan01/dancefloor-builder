@@ -1,4 +1,6 @@
 import { informationKey, schemas, validatedEntry, type Entry, type Kind } from './schema';
+import { EvidenceReadError, emptyReadFailures, readFailure } from './readFailures';
+export { EvidenceReadError } from './readFailures';
 /** Bounded read batches: count AND serialized (URL-encoded) size, so long/unicode credits never build oversized GET URLs. */
 export const READ_BATCH_COUNT=100, READ_BATCH_CHARS=4000;
 export function readBatches<T>(items:T[], size:(item:T)=>number, maxCount=READ_BATCH_COUNT, maxChars=READ_BATCH_CHARS):T[][] {
@@ -24,22 +26,28 @@ export function evidenceReadBatches(keys:string[]):string[][] {
   if(batch.length)out.push(batch);return out;
 }
 /** Some batches failed: carries every validated entry from the batches that succeeded (never a silent miss). */
-export class EvidenceReadError extends Error { constructor(readonly entries:Entry[]){super('Evidence cache read unavailable');} }
-export interface EvidenceStorage { read(keys:string[]):Promise<Entry[]>; write(entry:Entry):Promise<void> }
+export interface EvidenceStorage { read(keys:string[],signal?:AbortSignal,partial?:(entries:Entry[])=>void):Promise<Entry[]>; write(entry:Entry):Promise<void> }
 export function createEvidenceStorage():EvidenceStorage {
   return {
-    async read(keys) {
+    async read(keys,signal,partial) {
       const { supabaseAdmin }=await import('@/integrations/supabase/client.server');
       // Every requested key is read (no truncation), in bounded parallel batches.
       const batches=evidenceReadBatches(keys),replies:PromiseSettledResult<Entry[]>[]=[];
       // Never queue more than the runtime's six outbound connections.
       for(let i=0;i<batches.length;i+=6)replies.push(...await Promise.allSettled(batches.slice(i,i+6).map(async batch=>{
-        const {data,error}=await supabaseAdmin.from('track_evidence_cache').select('cache_key,kind,value,fetched_at').filter('cache_key','in',evidenceInFilter(batch));
-        if(error) throw new Error('Evidence cache read unavailable');
-        return (data??[]).flatMap(r=>{const e=batch.includes(r.cache_key)?validatedEntry({key:r.cache_key,kind:r.kind,value:r.value,at:Date.parse(r.fetched_at)}):null;return e?[e]:[];});
+        if(signal?.aborted)throw Object.assign(Error('Evidence deadline'),{name:'AbortError'});
+        let query=supabaseAdmin.from('track_evidence_cache').select('cache_key,kind,value,fetched_at').filter('cache_key','in',evidenceInFilter(batch));
+        if(signal)query=query.abortSignal(signal).retry(false);
+        const {data,error,status}=await query;
+        if(error) throw signal?.aborted?{name:'AbortError'}:{code:error.code,status};
+        if(signal?.aborted)throw {name:'AbortError'};
+        const entries=(data??[]).flatMap(r=>{const e=batch.includes(r.cache_key)?validatedEntry({key:r.cache_key,kind:r.kind,value:r.value,at:Date.parse(r.fetched_at)}):null;return e?[e]:[];});
+        partial?.(entries);return entries;
       })));
       const entries=replies.flatMap(r=>r.status==='fulfilled'?r.value:[]);
-      if(replies.some(r=>r.status==='rejected'))throw new EvidenceReadError(entries);
+      const failures=emptyReadFailures();
+      for(const r of replies)if(r.status==='rejected'){const c=readFailure(r.reason);for(const k of Object.keys(failures) as Array<keyof typeof failures>)failures[k]+=c[k];}
+      if(replies.some(r=>r.status==='rejected'))throw new EvidenceReadError(entries,failures);
       return entries;
     },
     async write(input) {

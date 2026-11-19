@@ -1,13 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { createClient } from '@supabase/supabase-js';
 import { evidenceFilterKeys } from './helpers/postgrestEvidence';
-const state=vi.hoisted(()=>({rows:new Map<string,any>(),reads:0,writes:0,failReads:new Set<string>(),failWrites:new Set<string>()}));
+const state=vi.hoisted(()=>({rows:new Map<string,any>(),reads:0,writes:0,delay:0,failReads:new Set<string>(),failWrites:new Set<string>()}));
 vi.mock('@/integrations/supabase/client.server',()=>({get supabaseAdmin(){return createClient('http://127.0.0.1:9','synthetic-only',{auth:{persistSession:false},global:{fetch:async(input,init)=>{
  const url=new URL(String(input));if(init?.method==='POST'){const row=JSON.parse(String(init.body));state.writes++;if(state.failWrites.has(row.kind))return new Response('{"message":"synthetic write failure"}',{status:400});state.rows.set(row.cache_key,row);return new Response(null,{status:201});}
- state.reads++;const keys=evidenceFilterKeys(url.searchParams.get('cache_key')??'');if(keys.some(k=>state.failReads.has(JSON.parse(k)[0])))return new Response('{"message":"synthetic read failure"}',{status:400});return new Response(JSON.stringify(keys.flatMap(k=>state.rows.has(k)?[state.rows.get(k)]:[])),{headers:{'content-type':'application/json'}});
+ state.reads++;if(state.delay)await new Promise(r=>setTimeout(r,state.delay));const keys=evidenceFilterKeys(url.searchParams.get('cache_key')??'');if(keys.some(k=>state.failReads.has(JSON.parse(k)[0])))return new Response('{"message":"synthetic read failure"}',{status:400});return new Response(JSON.stringify(keys.flatMap(k=>state.rows.has(k)?[state.rows.get(k)]:[])),{headers:{'content-type':'application/json'}});
 }}});}}));
 import { similarEvidence, communityEvidence } from '@/lib/songInformation/lastfm.server';
-afterEach(()=>{vi.unstubAllGlobals();state.rows.clear();state.failReads.clear();state.failWrites.clear();});
+afterEach(()=>{vi.useRealTimers();vi.unstubAllGlobals();state.delay=0;state.rows.clear();state.failReads.clear();state.failWrites.clear();});
 it('canonical similarity and exact community survive adapter recreation with no external work on repeat',async()=>{
  const fetcher=vi.fn(async(input:any)=>{const method=new URL(String(input)).searchParams.get('method');return new Response(JSON.stringify(method==='track.getsimilar'?{similartracks:{track:[{name:'Related',artist:{name:'TEST Neighbor'},match:'0.8'}]}}:{track:{name:'Exact (Live)',artist:{name:'TEST Full & Guest'},listeners:'6000',toptags:{tag:[{name:'dance'}]}}}));});
  const a=await similarEvidence('synthetic','TEST Full & Guest','Exact (Live)',Date.now()+1000,fetcher);
@@ -67,6 +67,20 @@ it('actual artist handler reads fresh durable artist evidence after service recr
  const a=await actualCrowd().getArtistCrowdData({artists:[artist],perArtistSimilar:10});
  const b=await actualCrowd().getArtistCrowdData({artists:[artist],perArtistSimilar:10});
  expect(a.reuse.external).toBe(2);expect(b.reuse).toMatchObject({external:0,database:1,readFailed:0});expect(f).toHaveBeenCalledTimes(2);expect(b.evidence[0].at).toBe(a.evidence[0].at);
+});
+it('actual artist handler batches a slow cold 800ms cache read, deduplicates and sends zero external requests',async()=>{
+ vi.useFakeTimers();const artists=Array.from({length:20},(_,i)=>`TEST Cold ${i}`),at=Date.now()-60000;
+ for(const name of artists){const key=schema.informationKey('artist',name,'','0');state.rows.set(key,{cache_key:key,kind:'artist',value:{name,listeners:50,playcount:100,tags:['dance'],similar:[]},fetched_at:new Date(at).toISOString()});}
+ const f=vi.fn(async()=>{throw Error('External request forbidden');});vi.stubGlobal('fetch',f);state.delay=800;
+ const before=state.reads,pending=actualCrowd().getArtistCrowdData({artists:[...artists,artists[0]],perArtistSimilar:0});
+ await vi.advanceTimersByTimeAsync(801);const result=await pending;
+ expect(result.artists).toHaveLength(20);expect(result.reuse).toMatchObject({database:20,external:0,readFailed:0});expect(result.evidence.every((e:any)=>e.at===at)).toBe(true);expect(state.reads-before).toBe(1);expect(f).not.toHaveBeenCalled();
+ const warm=actualCrowd().getArtistCrowdData({artists,perArtistSimilar:0});await vi.advanceTimersByTimeAsync(801);expect((await warm).reuse.external).toBe(0);expect(f).not.toHaveBeenCalled();
+});
+it('actual failed artist batch reports one read transport failure without per-artist retries',async()=>{
+ const artists=['TEST Failed 1','TEST Failed 2','TEST Failed 3'];state.failReads.add('artist');const before=state.reads;
+ const f=vi.fn(async(input:any)=>{const name=new URL(String(input)).searchParams.get('artist');return new Response(JSON.stringify({artist:{name,stats:{listeners:'50',playcount:'100'},tags:{tag:[]}}}));});vi.stubGlobal('fetch',f);
+ const result=await actualCrowd().getArtistCrowdData({artists,perArtistSimilar:0});expect(state.reads-before).toBe(1);expect(f).toHaveBeenCalledTimes(3);expect(result.reuse).toMatchObject({readFailed:1,readOther:1,database:0,external:3,missing:0});
 });
 it('actual details handler dispatches three HTTP checks, shares compatible durable evidence, repeat dispatches zero',async()=>{
  const artist='TEST Details',title='Exact (Live)',f=vi.fn(async(input:any)=>{
