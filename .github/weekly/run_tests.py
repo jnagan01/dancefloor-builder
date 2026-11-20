@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from categories import collect
 
 SUITES = {
-    "categories": ["bunx", "vitest", "run", "tests/coordinatedExpansion.test.ts", "tests/automaticDanceEvidence.test.ts", "tests/weeklyLookupEvidence.test.ts", "-t", "weekly structured", "--reporter=json", "--outputFile=test-results/weekly/categories-vitest.json"],
+    "categories": ["bunx", "vitest", "run", "tests/coordinatedExpansion.test.ts", "tests/automaticDanceEvidence.test.ts", "tests/weeklyLookupEvidence.test.ts", "tests/songInformationProviders.test.ts", "tests/communityHydration.test.ts", "tests/songInformation.test.ts", "tests/generationDiagnosticsRoute.test.ts", "tests/providerPressure.test.ts", "-t", "weekly structured", "--reporter=json", "--outputFile=test-results/weekly/categories-vitest.json"],
     "reporting": ["python3", "-m", "unittest", "discover", "-s", ".github/weekly", "-p", "test_*.py", "-v"],
     "vitest": ["bunx", "vitest", "run", "--reporter=default", "--reporter=json", "--outputFile=test-results/weekly/vitest.json"],
     "adversarial": ["bunx", "vitest", "run", "tests/weeklyAdversarial.test.ts", "--reporter=json", "--outputFile=test-results/weekly/adversarial.json"],

@@ -153,3 +153,24 @@ it('actual local details consumer exposes canonical similarity to generation and
   await expect(reusePublicEvidence('B','similar',artist,title,'30:exact',send,()=>true,Date.now()+1000)).rejects.toThrow();
  }finally{read.mockRestore();write.mockRestore();}
 });
+import { weeklyCheck, weeklyEvidence } from './helpers/weeklyEvidence';
+it('weekly structured cache shared work', async () => {
+  await weeklyEvidence('cache-shared', 'cache', async e => {
+    const shared = createSharedWork(); let settle: (v: number) => void = () => {}; let current = true;
+    const send = vi.fn(() => new Promise<number>(r => { settle = r; }));
+    const a = shared('exact', send, Date.now() + 1000, () => current).catch(() => null), b = shared('exact', send, Date.now() + 1000);
+    await Promise.resolve(); current = false; settle(8); const [ra, rb] = [await a, await b];
+    weeklyCheck(e, 'shared-coalesced-sends', send.mock.calls.length, 1);
+    weeklyCheck(e, 'shared-cancelled-isolated', Number(ra === null && rb === 8), 1);
+    await shared('bad', async () => { throw Error('denied'); }, Date.now() + 1000).catch(() => null);
+    weeklyCheck(e, 'shared-rejected-evicted', Number(await shared('bad', async () => 9, Date.now() + 1000) === 9), 1);
+    vi.useFakeTimers(); let reject: (err: Error) => void = () => {};
+    const hung = vi.fn(() => new Promise<number>((_, r) => { reject = r; }));
+    const x = shared('hung', hung, Date.now() + 100).catch(() => null); await vi.advanceTimersByTimeAsync(100);
+    const y = shared('hung', hung, Date.now() + 100).catch(() => null); await vi.advanceTimersByTimeAsync(100);
+    weeklyCheck(e, 'shared-hung-single-transport', Number(await x === null && await y === null && hung.mock.calls.length === 1), 1);
+    reject(Error('late')); await vi.advanceTimersByTimeAsync(0);
+    weeklyCheck(e, 'shared-hung-released', Number(await shared('hung', async () => 7, Date.now() + 100) === 7), 1);
+    vi.useRealTimers();
+  });
+});

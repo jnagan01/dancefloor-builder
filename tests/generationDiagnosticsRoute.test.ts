@@ -211,4 +211,20 @@ it.each(['timeout', 'event', 'account', 'cancelled', 'fallback'] as const)('actu
     expect(before.reuse?.database ?? 0).toBe(0); expect(before.reuse?.readDeadline ?? 0).toBe(0);
     expect(copyDiagnostics(before)).not.toMatch(/PRIVATE|transport|Neighbor/);
   } finally { f.h.unmount(); }
+});import { weeklyCheck, weeklyEvidence } from './helpers/weeklyEvidence';
+it('weekly structured cache diagnostics once', async () => {
+  await weeklyEvidence('cache-diagnostics', 'cache', async e => {
+    vi.useFakeTimers();
+    const counts = { ...extraLegacyCounts, database: 16, readFailed: 4, readDeadline: 1, readDenied: 1, readSchema: 1, readOther: 1 };
+    const f = await extraCrowdFixture(async () => extraReply(counts)), control = await extraCrowdFixture(async () => extraReply(undefined));
+    try {
+      await finishExpansion(control.h); await control.store.settled(); const baseline = control.store.get().rows[0].run.reuse;
+      await finishExpansion(f.h); await f.store.settled(); const run = f.store.get().rows[0].run;
+      weeklyCheck(e, 'diagnostics-database-once', run.reuse?.database ?? 0, 16);
+      weeklyCheck(e, 'diagnostics-causes-once', ['readDeadline', 'readDenied', 'readSchema', 'readOther'].reduce((n, k) => n + ((run.reuse as any)?.[k] ?? 0), 0), 4);
+      weeklyCheck(e, 'diagnostics-finite', Number(Object.values(run.reuse ?? {}).every(Number.isFinite)), 1);
+      weeklyCheck(e, 'diagnostics-private-safe', Number(!/PRIVATE|Neighbor|synthetic\//.test(copyDiagnostics(run))), 1);
+      weeklyCheck(e, 'diagnostics-selections-unchanged', Number(JSON.stringify(f.h.current.result) === JSON.stringify(control.h.current.result)), 1);
+    } finally { f.h.unmount(); control.h.unmount(); }
+  });
 });

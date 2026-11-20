@@ -3,7 +3,26 @@ import json
 import re
 
 CASES = {'recovery-cold': 'lookup', 'recovery-mixed': 'lookup', 'recovery-warm': 'lookup',
-         'admission': 'slow', 'constrained': 'coverage', 'partial-outage': 'lookup'}
+         'admission': 'slow', 'constrained': 'coverage', 'partial-outage': 'lookup',
+         'cache-artist': 'cache', 'cache-community': 'cache', 'cache-shared': 'cache', 'cache-diagnostics': 'cache',
+         'provider-pacing': 'pacing'}
+# Exact numeric expectations for cache/pacing regressions; each rule belongs to one case.
+EXACT = {
+    'cache-artist': {'artist-delayed-warm-database': 20, 'artist-delayed-warm-external': 0, 'artist-read-transports': 1, 'artist-original-dates': 1,
+                     'artist-recreated-external': 0, 'artist-failed-read-transports': 1, 'artist-failed-read-cause': 1},
+    'cache-community': {'community-delayed-warm-database': 40, 'community-recreated-external': 0, 'community-read-transports': 2,
+                        'community-original-dates': 1, 'community-hung-read-aborted': 1, 'community-hung-retained-rows': 2,
+                        'community-hung-read-calls': 1, 'community-late-fenced': 1, 'community-typed-causes': 4, 'community-stale-dates': 4,
+                        'community-true-error-failures': 4, 'community-confirmed-none-failures': 0},
+    'cache-shared': {'shared-coalesced-sends': 1, 'shared-cancelled-isolated': 1, 'shared-rejected-evicted': 1,
+                     'shared-hung-single-transport': 1, 'shared-hung-released': 1},
+    'cache-diagnostics': {'diagnostics-database-once': 16, 'diagnostics-causes-once': 4, 'diagnostics-finite': 1,
+                          'diagnostics-private-safe': 1, 'diagnostics-selections-unchanged': 1},
+    'provider-pacing': {'pacing-zero-floor-ms': 1000, 'pacing-past-floor-ms': 2500, 'pacing-first-recovery-start-ms': 2500,
+                        'pacing-stale-success-pressure': 2, 'pacing-fresh-success-pressure': 0},
+}
+EXACT_VALUES = {rule: value for rules in EXACT.values() for rule, value in rules.items()}
+NO_SECTIONS = {'admission', 'partial-outage', *EXACT}
 RECOVERY = {'targets-covered', 'lookup-budget', 'generation-ceiling-ms', 'ai-timeouts',
             'heuristic-ballad-admissions', 'preserved-requests', 'partial-recovery', 'identity-provenance-and-snapshot-invariants'}
 RULES = {key: RECOVERY for key in CASES if key.startswith('recovery-')}
@@ -11,6 +30,7 @@ RULES['constrained'] = {'genuine-shortage', 'honest-shortage', 'bounded-exhausti
 RULES['admission'] = {f'{s}-{r}' for s in ('warmUp', 'transition', 'peak') for r in
                       ('unsupported-admissions', 'supported-remix-and-groove', 'slow-conflict', 'optional-off')} | {
     'fresh-route-withholds', 'off-route-admits', 'explicit-request-retained', 'passive-saved-membership-and-snapshots'}
+RULES.update({case: set(rules) for case, rules in EXACT.items()})
 RULES['partial-outage'] = {'handler-deadline-ms', 'retained-provider-energy', 'retained-provider-year', 'retained-provider-provenance', 'unknown-withheld', 'late-response-fenced'}
 PROVIDERS = {'reccobeats', 'musicbrainz', 'ai'}
 CAUSES = {'rate', 'server', 'denied', 'http', 'missing', 'malformed', 'network', 'deadline', 'paused', 'truncated', 'unavailable'}
@@ -24,6 +44,8 @@ def expected_check(rule, actual, expected):
     limits = {'lookup-budget': 600, 'generation-ceiling-ms': 510000, 'bounded-exhaustion-calls': 6,
               'bounded-exhaustion-ms': 120000, 'handler-deadline-ms': 20000}
     values = {'targets-covered': 3, 'preserved-requests': 34, 'retained-provider-energy': 8, 'retained-provider-year': 2005}
+    if rule in EXACT_VALUES:
+        return expected == EXACT_VALUES[rule] and actual == expected
     if rule in limits:
         return expected == limits[rule] and (actual < expected if rule in ('generation-ceiling-ms', 'handler-deadline-ms') else actual <= expected)
     if rule in ('partial-recovery', 'genuine-shortage'):
@@ -54,7 +76,7 @@ def validate_case(item, identity, case):
     sec = item.get('sections')
     if not isinstance(sec, list) or len(sec) > 3:
         return False
-    if case not in ('admission', 'partial-outage') and item['status'] == 'passed' and len(sec) != 3:
+    if case not in NO_SECTIONS and item['status'] == 'passed' and len(sec) != 3:
         return False
     targets = {'warmUp': 5400, 'transition': 14400, 'peak': 7200}
     seen = set()

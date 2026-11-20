@@ -3,6 +3,7 @@ import {compile} from '@tailwindcss/node';
 import {Scanner} from '@tailwindcss/oxide';
 import {malformedVdjFixture} from './fixtures/malformed-vdj.mjs';
 import {checkSectionMeterFocus} from './section-meter-focus.mjs';
+import {checkSectionMeterMotion} from './section-meter-motion.mjs';
 import {generationReady} from './generation-ready.mjs';
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import {fileURLToPath} from 'node:url';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
@@ -10,7 +11,10 @@ const temp=fs.mkdtempSync(path.join(os.tmpdir(),'setarchitect-native-')),bundle=
 const stub=path.join(root,'tests/native/fixtures/services.tsx');
 const names=['generationDiagnostics/relay.functions','prep/lookup.functions','prep/community.functions','history.functions','recommend.functions','neighbors.functions','lastfm.functions','enrich.functions','spotify.functions','pageHead','appVersion','dirHandleStore','libraryStore'];
 await build({entryPoints:[path.join(root,'tests/native/fixtures/entry.tsx')],bundle:true,platform:'browser',format:'esm',outfile:path.join(bundle,'app.js'),jsx:'automatic',alias:{'@':path.join(root,'src')},plugins:[{name:'isolated-services',setup(b){b.onResolve({filter:/.*/},args=>{if(names.some(n=>args.path===`@/lib/${n}`)||['react-start','react-router'].some(n=>args.path===`@tanstack/${n}`)||['@/hooks/useAuth','@/hooks/useDebounce','@/hooks/useProfileSettings','@/integrations/supabase/client','sonner','@/components/HistoryPanel','@/components/ProfileSettingsDialog','@/components/SpotifyExportDialog','@/components/workspace/WaveformPlayer','@/components/ui/sonner','./settings'].includes(args.path))return {path:stub};});}}]});
-const css=await compile(fs.readFileSync(path.join(root,'src/styles.css'),'utf8'),{base:path.join(root,'src'),onDependency:()=>{}});fs.writeFileSync(path.join(bundle,'app.css'),css.build(new Scanner({sources:[{base:root,pattern:'src/**/*.{tsx,ts}',negated:false}]}).scan()));
+const css=await compile(fs.readFileSync(path.join(root,'src/styles.css'),'utf8'),{base:path.join(root,'src'),onDependency:()=>{}});fs.writeFileSync(path.join(bundle,'app.css'),css.build(new Scanner({sources:[{base:root,pattern:'{src,tests/native/fixtures}/**/*.{tsx,ts}',negated:false}]}).scan()));
+// Synthetic meter-only page (no route, account or services) for rendered interpolation checks.
+await build({entryPoints:[path.join(root,'tests/native/fixtures/section-meter-entry.tsx')],bundle:true,platform:'browser',format:'esm',outfile:path.join(bundle,'meter.js'),jsx:'automatic',alias:{'@':path.join(root,'src')}});
+fs.writeFileSync(path.join(bundle,'meter.html'),'<link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module" src="/meter.js"></script>');
 fs.writeFileSync(path.join(bundle,'index.html'),`<link rel="stylesheet" href="/app.css"><div id="root"></div><script type="module">window.__fixture=await window.testBackend.fixture();window.__errors=[];window.__warnings=[];window.__success=[];await import('/app.js');</script>`);
 const library=path.join(temp,'library');fs.mkdirSync(library);const song={artist:'Test Artist',song:'Test Song - Live'};const tracks=[{filePath:path.join(library,'wrong.mp3'),artist:'Unrelated Artist',title:'Wrong Song',bpm:'190',key:'1A',playCount:100},{filePath:path.join(library,'correct.mp3'),artist:song.artist,title:song.song,bpm:'120',key:'8A',playCount:1},{filePath:path.join(library,'most.mp3'),artist:song.artist,title:song.song+' Remix',bpm:'125',key:'9A',playCount:20}];tracks.forEach(t=>fs.writeFileSync(t.filePath,'synthetic bytes, never played'));
 const key='warmUp:0:test artist|test song live';
@@ -979,6 +983,10 @@ try{
    expect(fs.readFileSync(path.join(temp,'handoff'),'utf8')).toBe('staged and relaunched');
    expect(await page.locator('#update-preservation-lock').count()).toBe(0);
    delete process.env.SETARCHITECT_TEST_OLD_SHELL;
+ });
+ await check('section meters animate measured coverage smoothly: intermediate, downward, reset, shortage, light/dark, reduced motion',async()=>{
+   await page.goto(new URL('/meter.html',page.url()).href);await page.waitForFunction(()=>!!window.__meter);
+   for(const theme of ['light','dark'])await checkSectionMeterMotion(page,{theme});
  });
  console.log(`Native checks: ${count} passed. Isolated profile: ${temp}`);fs.writeFileSync(path.join(diagnostics,'results.json'),JSON.stringify({passed:count,profile:'separate synthetic temp directory',realDataAccess:false},null,2));
 }catch(e){await page?.screenshot({path:path.join(diagnostics,'failure.png')}).catch(()=>{});console.error('EXPORT DIAGNOSTICS',JSON.stringify({ui:await page?.evaluate(()=>({errors:window.__errors,warnings:window.__warnings,success:window.__success})).catch(()=>null),checked:fs.existsSync(path.join(temp,'checked-paths.json'))?JSON.parse(fs.readFileSync(path.join(temp,'checked-paths.json'),'utf8')):null,outputs:fs.existsSync(path.join(temp,'exports'))?fs.readdirSync(path.join(temp,'exports')):[],profile:temp}));throw e;}finally{await app?.close().catch(()=>{});}

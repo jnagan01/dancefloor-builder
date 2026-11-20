@@ -5,7 +5,7 @@ import urllib.request
 import report
 import run_tests
 import auth_check
-from categories import CASES, RULES, expected_check
+from categories import CASES, RULES, NO_SECTIONS, EXACT_VALUES, expected_check
 
 
 def now(value="2026-11-03T14:00:00+00:00"):
@@ -22,10 +22,10 @@ def evidence(**overrides):
             "suites": {s: {"status": "passed"} for s in report.REQUIRED}}
     base['categories'] = {case: {**{k: base[k] for k in ('commit', 'run_id', 'run_attempt', 'seed')}, 'schema': 1,
         'id': case, 'category': category, 'status': 'passed', 'checks': [{'rule': r, 'actual': 1, 'expected': 1, 'passed': True} for r in RULES[case]],
-        'sections': [] if case in ('admission', 'partial-outage') else [{'section': s, 'seconds': t, 'target': t} for s, t in [('warmUp', 5400), ('transition', 14400), ('peak', 7200)]], 'causes': {}} for case, category in CASES.items()}
+        'sections': [] if case in NO_SECTIONS else [{'section': s, 'seconds': t, 'target': t} for s, t in [('warmUp', 5400), ('transition', 14400), ('peak', 7200)]], 'causes': {}} for case, category in CASES.items()}
     for item in base['categories'].values():
         for c in item['checks']:
-            for value in (0, 1, 2, 3, 8, 34, 600, 2005, 6000, 20000, 120000, 510000, 6):
+            for value in (0, 1, 2, 3, 8, 34, 600, 2005, 6000, 20000, 120000, 510000, 6, *sorted(set(EXACT_VALUES.values()))):
                 if expected_check(c['rule'], value, value):
                     c.update(actual=value, expected=value); break
             else:

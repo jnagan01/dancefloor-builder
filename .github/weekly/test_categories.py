@@ -50,6 +50,35 @@ class Categories(unittest.TestCase):
         data['seed'] = '123'; c['seed'] = '123'
         self.assertEqual(categories.findings(data)[0][0], found[0][0])
 
+    def test_cache_and_pacing_failures_actionable_injected_outages_silent_absent_incomplete(self):
+        for case, rule, actual in [('cache-artist', 'artist-delayed-warm-external', 20), ('cache-community', 'community-confirmed-none-failures', 6),
+                                   ('cache-community', 'community-hung-retained-rows', 1), ('cache-shared', 'shared-coalesced-sends', 2),
+                                   ('cache-diagnostics', 'diagnostics-causes-once', 8), ('provider-pacing', 'pacing-zero-floor-ms', 0)]:
+            data = evidence(); c = data['categories'][case]; c['status'] = 'failed'
+            check = next(x for x in c['checks'] if x['rule'] == rule)
+            check.update(actual=actual, passed=False)
+            with self.subTest(case=case, rule=rule):
+                found = [f for f in report.problems(run(), data) if f[1] == 'failure']
+                self.assertEqual(found[0][0], f"category-{categories.CASES[case]}-{case}")
+                self.assertIn(f"{rule}: expected {check['expected']}, actual {actual}", found[0][2])
+                self.assertNotIn('incomplete', [f[1] for f in found])
+        # A forged pass with a wrong value, or an injected outage cause, is never health/finding confusion.
+        data = evidence(); c = data['categories']['provider-pacing']
+        c['causes'] = {'reccobeats': {'rate': 9, 'server': 4, 'deadline': 3}}
+        self.assertEqual(report.problems(run(), data), [])
+        next(x for x in c['checks'] if x['rule'] == 'pacing-past-floor-ms').update(actual=0, expected=0)
+        self.assertTrue(categories.findings(data)[0][0].endswith('provider-pacing-evidence'))
+        for case in [k for k in categories.CASES if k.startswith(('cache-', 'provider-'))]:
+            data = evidence(); del data['categories'][case]
+            found = report.problems(run(), data)
+            with self.subTest(absent=case):
+                self.assertEqual([f[1] for f in found], ['incomplete'])
+                self.assertEqual(found[0][0], 'category-evidence-missing')
+            data = evidence(); data['categories'][case]['status'] = 'failed'; data['categories'][case]['checks'] = []
+            self.assertEqual(categories.findings(data)[0][1], 'failure')
+            data = evidence(); data['categories'][case]['checks'].pop()
+            self.assertEqual(categories.findings(data)[0][1], 'incomplete')
+
     def test_constrained_shortage_is_not_coverage_failure(self):
         data = evidence(); data['categories']['constrained']['sections'][0]['seconds'] = 120
         self.assertEqual(report.problems(run(), data), [])

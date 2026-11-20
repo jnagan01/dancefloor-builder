@@ -1,4 +1,8 @@
 # Workspace rebuild
+## Weekly cache regressions and smooth meters
+- [x] Weekly closed contract adds cache-artist/community/shared/diagnostics and provider-pacing cases from actual handlers/route/lane; exact numeric checks, fail-closed absent/stale, actionable failures, silent injected outages. Python reporting 50/50, focused cache/pacing files 88/88.
+- [x] Meters fill smoothly by CSS transition between measured updates; rendered interpolation/down/reset/shortage/light/dark/reduced-motion checks pass in Chromium, integrated into native run; focus/upload/save sequences still pass.
+- [ ] Final-head hosted weekly, Mac native/offline/prep, production and CodeQL run externally; local Electron absent.
 ## Remaining evidence reads and provider pacing
 - [x] Hydrate community evidence once per bounded request; preserve partial/stale rows and count batch read causes once across accepting route consumers, including device-cached first songs. Focused handler/real-SDK/route/client-isolation checks 99/99 pass; automatic preview compilation passes. Final hosted typecheck/Mac/production/CodeQL remain external; no publication or data changes.
 - [x] Correct explicit community none classification: actual-route two 20-row batches with 17 found/3 none report zero refresh failures; genuine errors count once, absent/malformed remain failures, stale evidence and legacy numeric replies preserved.

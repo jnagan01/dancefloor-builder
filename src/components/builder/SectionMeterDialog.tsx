@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type HTMLAttributes } from 'react';
 import * as Primitive from '@radix-ui/react-dialog';
 import { AudioLines, Check, Clock3, Eye, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -70,12 +70,16 @@ export function SectionMeterDialog({ progress, focusFallback }: { progress: Sect
           <div className="space-y-3">
             {keys.filter(k => run.targets[k] > 0).map(k => {
               const actual = Math.max(0, run.totals[k]), target = run.targets[k], ratio = Math.min(1, actual / target);
+              // A shortage must never look complete, even when it rounds visually to the end.
+              const fill = actual >= target ? 1 : Math.min(0.985, ratio);
               const label = k === 'warmUp' && run.type !== 'dance' ? run.type === 'dinner' ? 'Dinner' : 'Cocktail Hour' : labels[k];
-              return <section key={k} className="rounded-xl border border-input bg-surface/40 px-4 py-3">
+              return <section key={`${run.id}:${k}`} className="rounded-xl border border-input bg-surface/40 px-4 py-3">
                 <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2"><h2 className="min-w-0 font-display text-lg font-semibold">{label}</h2><div className="flex shrink-0 items-center gap-2 text-sm tabular-nums"><span>{meterMinutes(actual)} / {meterMinutes(target)} min</span>{actual >= target && <Check aria-label={`${label} target reached`} className="size-5 text-success" />}</div></div>
-                <div role="progressbar" aria-label={`${label} usable preparation time`} aria-valuemin={0} aria-valuemax={Math.max(target, actual)} aria-valuenow={actual} aria-valuetext={`${meterMinutes(actual)} usable minutes of ${meterMinutes(target)} selected minutes`} className="relative mt-3 flex h-9 items-center gap-px overflow-hidden sm:gap-[3px]">
-                  {heights.map((height, i) => <span aria-hidden="true" key={i} style={{ height, opacity: i / heights.length < ratio ? 1 : 0.35 }} className={`min-w-0 flex-1 rounded-full ${i / heights.length < ratio ? 'bg-gold' : 'bg-muted-foreground'}`} />)}
-                  {ratio > 0 && ratio < 1 && !run.finished && <span aria-hidden="true" style={{ left: `${ratio * 100}%` }} className="meter-leading absolute h-7 w-1 rounded-full bg-gold-soft" />}
+                <div role="progressbar" aria-label={`${label} usable preparation time`} aria-valuemin={0} aria-valuemax={Math.max(target, actual)} aria-valuenow={actual} aria-valuetext={`${meterMinutes(actual)} usable minutes of ${meterMinutes(target)} selected minutes`} className="relative mt-3 h-9">
+                  <MeterBars bar="bg-muted-foreground opacity-35" />
+                  {/* Gold copy revealed by a CSS transition between measured updates; nothing advances it on a timer. */}
+                  <MeterBars data-meter-fill={fill} className="meter-fill" bar="bg-gold" style={{ clipPath: `inset(0 ${100 - fill * 100}% 0 0)` }} />
+                  {fill > 0 && fill < 1 && !run.finished && <span aria-hidden="true" style={{ left: `${fill * 100}%` }} className="meter-leading absolute top-1 h-7 w-1 -translate-x-1/2 rounded-full bg-gold-soft" />}
                 </div>
               </section>;
             })}
@@ -90,4 +94,9 @@ export function SectionMeterDialog({ progress, focusFallback }: { progress: Sect
       </Primitive.Portal>
     </Primitive.Root>
   </>;
+}
+function MeterBars({ bar, className = '', ...props }: HTMLAttributes<HTMLDivElement> & { bar: string; 'data-meter-fill'?: number }) {
+  return <div aria-hidden="true" {...props} className={`meter-bars absolute inset-0 flex items-center gap-px overflow-hidden sm:gap-[3px] ${className}`}>
+    {heights.map((height, i) => <span key={i} style={{ height }} className={`min-w-0 flex-1 rounded-full ${bar}`} />)}
+  </div>;
 }

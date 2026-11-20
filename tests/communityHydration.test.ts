@@ -66,4 +66,42 @@ it('authenticated handler rejects signed-out calls and oversized input before st
   await expect(communityHandler({ read, write }, fetcher, false)({ songs })).rejects.toThrow('Unauthorized');
   await expect(communityHandler({ read, write }, fetcher)({ songs: [...songs, songs[0]] })).rejects.toThrow();
   expect(read).not.toHaveBeenCalled(); expect(fetcher).not.toHaveBeenCalled();
+});import { weeklyCheck, weeklyEvidence } from './helpers/weeklyEvidence';
+it('weekly structured cache community reuse', async () => {
+  await weeklyEvidence('cache-community', 'cache', async e => {
+    vi.useFakeTimers();
+    const entries = songs.map(s => entry(s)), read = vi.fn(async () => { await new Promise(r => setTimeout(r, 800)); return entries; }), write = vi.fn(async () => {}), fetcher = provider();
+    let database = 0, preserved = true;
+    for (let run = 0; run < 2; run++) {
+      const pending = communityHandler({ read, write }, fetcher)({ songs }); await vi.advanceTimersByTimeAsync(801); const rows = await pending;
+      database += rows.reduce((n, r) => n + (r.reuse?.database ?? 0), 0); preserved &&= rows.every(r => r.status === 'found' && r.updatedAt === entries[0]!.at);
+    }
+    weeklyCheck(e, 'community-delayed-warm-database', database, 40);
+    weeklyCheck(e, 'community-recreated-external', fetcher.mock.calls.length, 0);
+    weeklyCheck(e, 'community-read-transports', read.mock.calls.length, 2);
+    weeklyCheck(e, 'community-original-dates', Number(preserved), 1);
+    let signal: AbortSignal | undefined, release = (_entries: Entry[]) => {};
+    const hungRead = vi.fn((_keys: string[], s?: AbortSignal, partial?: (entries: Entry[]) => void) => { signal = s; partial?.([entry(songs[0]!)]); return new Promise<Entry[]>(r => { release = r; }); });
+    const hungWrite = vi.fn(async () => {}), pending = communityHandler({ read: hungRead, write: hungWrite }, provider())({ songs: songs.slice(0, 2) });
+    await vi.advanceTimersByTimeAsync(2001); const hung = await pending;
+    weeklyCheck(e, 'community-hung-read-aborted', Number(signal?.aborted === true && hung[0]?.batchReuse?.readDeadline === 1), 1);
+    weeklyCheck(e, 'community-hung-retained-rows', hung.filter(r => r.status === 'found').length, 2);
+    weeklyCheck(e, 'community-hung-read-calls', hungRead.mock.calls.length, 1);
+    const before = structuredClone(hung); release([entry(songs[1]!)]); await vi.advanceTimersByTimeAsync(10000);
+    weeklyCheck(e, 'community-late-fenced', Number(JSON.stringify(hung) === JSON.stringify(before) && hungWrite.mock.calls.length === 1), 1);
+    vi.useRealTimers();
+    let typed = 0, stale = 0, errors = 0;
+    for (const cause of ['readDeadline', 'readDenied', 'readSchema', 'readOther'] as const) {
+      const failures = { ...readFailure({}), readOther: 0, [cause]: 1 }, old = entry(songs[1]!, Date.now() - 8 * 86400000);
+      const rows = await communityHandler({ read: async () => { throw new EvidenceReadError([entry(songs[0]!), old], failures); }, write: async () => {} }, async () => new Response('{}', { status: 503 }))({ songs: songs.slice(0, 2) });
+      typed += Number(rows.filter(r => r.batchReuse).length === 1 && rows[0]?.batchReuse?.[cause] === 1 && rows[0]?.batchReuse?.readFailed === 1);
+      stale += Number(rows[1]?.updatedAt === old.at && rows[1]?.stale === true);
+      errors += rows.reduce((n, r) => n + (r.reuse?.refreshFailed ?? 0), 0);
+    }
+    weeklyCheck(e, 'community-typed-causes', typed, 4);
+    weeklyCheck(e, 'community-stale-dates', stale, 4);
+    weeklyCheck(e, 'community-true-error-failures', errors, 4);
+    const none = await communityHandler({ read: async () => [], write: async () => {} }, async () => new Response('{"error":6}'))({ songs: songs.slice(0, 3) });
+    weeklyCheck(e, 'community-confirmed-none-failures', none.reduce((n, r) => n + (r.status === 'none' ? r.reuse?.refreshFailed ?? 0 : 1), 0), 0);
+  });
 });

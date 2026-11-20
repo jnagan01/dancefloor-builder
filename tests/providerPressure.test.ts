@@ -122,4 +122,22 @@ it('actual authenticated chunks carry pressure without replay, keep partial fact
   const cache: CacheRow = { artist_key: 'fixture', song_key: 'synthetic', energy: 8, danceability: 8, valence: null, popularity: 8, bpm: 120, camelot: null, genre: 'Pop', year: 2004, source: 'ReccoBeats', fetched_at: new Date().toISOString() };
   const began = Date.now(); const warm = await runEnrichment([song], { ...deps, readRows: async () => [cache] }, { pacing: { reccobeats: { pressure: 6, cooldownMs: 60_000 }, musicbrainz: { pressure: 6, cooldownMs: 60_000 } } });
   expect(Date.now()).toBe(began); expect(warm.results[0].energy).toBe(8); expect(starts).toHaveLength(2);
+});import { weeklyCheck, weeklyEvidence } from './helpers/weeklyEvidence';
+it('weekly structured provider pacing', async () => {
+  await weeklyEvidence('provider-pacing', 'pacing', async e => {
+    vi.useFakeTimers(); const origin = Date.now(), lane = createProviderLane(Date.now, origin + 90000, new AbortController().signal, 100), starts: number[] = [];
+    await lane.ready(); const oldStart = Date.now();
+    lane.response(json({}, 429, { 'retry-after': '0' }), oldStart);
+    weeklyCheck(e, 'pacing-zero-floor-ms', lane.pausedUntil - origin, 1000);
+    for (let i = 0; i < 8; i++) lane.response(json({}), oldStart);
+    const workers = Promise.all(Array.from({ length: 4 }, async () => { if (await lane.ready()) starts.push(Date.now() - origin); }));
+    await vi.advanceTimersByTimeAsync(500); lane.response(json({}, 503, { 'retry-after': new Date(origin - 60000).toUTCString() }), oldStart);
+    weeklyCheck(e, 'pacing-past-floor-ms', lane.pausedUntil - origin, 2500);
+    await vi.advanceTimersByTimeAsync(3500); await workers;
+    weeklyCheck(e, 'pacing-first-recovery-start-ms', starts[0] ?? 0, 2500);
+    for (let i = 0; i < 8; i++) lane.response(json({}), oldStart);
+    weeklyCheck(e, 'pacing-stale-success-pressure', lane.snapshot().pressure, 2);
+    for (let i = 0; i < 8; i++) lane.response(json({}), Date.now());
+    weeklyCheck(e, 'pacing-fresh-success-pressure', lane.snapshot().pressure, 0);
+  });
 });

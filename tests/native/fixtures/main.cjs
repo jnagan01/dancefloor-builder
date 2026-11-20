@@ -17,7 +17,7 @@ const atomic=data=>{fs.writeFileSync(backend+'.tmp',JSON.stringify(data));fs.ren
 // Explicit test-only latch: commit reaches disk, but its IPC reply stays held until released.
 const lateWrites=new Map();
 app.whenReady().then(()=>{
-server=http.createServer((req,res)=>{const asset=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js','app.css'].includes(asset)){res.writeHead(404).end();return;}res.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':asset.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(process.env.SETARCHITECT_TEST_BUNDLE,asset)));});
+server=http.createServer((req,res)=>{const asset=req.url==='/'?'index.html':req.url.slice(1);if(!['index.html','app.js','app.css','meter.html','meter.js'].includes(asset)){res.writeHead(404).end();return;}res.setHeader('Content-Type',asset.endsWith('.js')?'text/javascript':asset.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(process.env.SETARCHITECT_TEST_BUNDLE,asset)));});
 const portFile=path.join(profile,'port');const port=fs.existsSync(portFile)?Number(fs.readFileSync(portFile,'utf8')):0;server.listen(port,'127.0.0.1',()=>{fs.writeFileSync(portFile,String(server.address().port));
 const origin=`http://127.0.0.1:${server.address().port}`;const security=createDesktopSecurity(origin,()=>win);
 const recovery=require('../../../desktop/recovery.cjs').createRecoveryStore(profile);ipcMain.on('recovery:journal',(event,action,key,raw)=>{try{security.guard(()=>{const value=action==='get'?recovery.get(key):action==='set'?recovery.set(key,raw):recovery.remove(key);event.returnValue={ok:true,value};})(event);}catch(e){event.returnValue={ok:false,error:e.message};}});

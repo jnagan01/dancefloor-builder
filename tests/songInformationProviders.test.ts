@@ -153,3 +153,24 @@ it('overlapping actual generation/details coalesce exact similarity and keep dis
  const other=await similarEvidence('synthetic',artist,'Exact (Remix)',Date.now()+2000,f);
  expect(other.counts.external).toBe(1);expect(other.value.seed.title).toBe('Exact (Remix)');
 });
+import { weeklyCheck, weeklyEvidence } from './helpers/weeklyEvidence';
+it('weekly structured cache artist reuse',async()=>{
+ await weeklyEvidence('cache-artist','cache',async e=>{
+  vi.useFakeTimers();const artists=Array.from({length:20},(_,i)=>`TEST Weekly "${i}", \\ & Guest`),at=Date.now()-60000;
+  for(const name of artists){const key=schema.informationKey('artist',name,'','0');state.rows.set(key,{cache_key:key,kind:'artist',value:{name,listeners:50,playcount:100,tags:['dance'],similar:[]},fetched_at:new Date(at).toISOString()});}
+  const f=vi.fn(async()=>{throw Error('External request forbidden');});vi.stubGlobal('fetch',f);state.delay=800;
+  let before=state.reads;const pending=actualCrowd().getArtistCrowdData({artists:[...artists,artists[0]],perArtistSimilar:0});
+  await vi.advanceTimersByTimeAsync(801);const cold=await pending;
+  weeklyCheck(e,'artist-delayed-warm-database',cold.reuse.database,20);
+  weeklyCheck(e,'artist-delayed-warm-external',cold.reuse.external+f.mock.calls.length,0);
+  weeklyCheck(e,'artist-read-transports',state.reads-before,1);
+  weeklyCheck(e,'artist-original-dates',Number(cold.evidence.every((x:any)=>x.at===at)),1);
+  const warm=actualCrowd().getArtistCrowdData({artists,perArtistSimilar:0});await vi.advanceTimersByTimeAsync(801);
+  weeklyCheck(e,'artist-recreated-external',(await warm).reuse.external+f.mock.calls.length,0);
+  vi.useRealTimers();state.delay=0;state.failReads.add('artist');before=state.reads;
+  const g=vi.fn(async(input:any)=>{const name=new URL(String(input)).searchParams.get('artist');return new Response(JSON.stringify({artist:{name,stats:{listeners:'50',playcount:'100'},tags:{tag:[]}}}));});vi.stubGlobal('fetch',g);
+  const failed=await actualCrowd().getArtistCrowdData({artists:['TEST Weekly Fail 1','TEST Weekly Fail 2'],perArtistSimilar:0});
+  weeklyCheck(e,'artist-failed-read-transports',state.reads-before,1);
+  weeklyCheck(e,'artist-failed-read-cause',Number(failed.reuse.readFailed===1&&failed.reuse.readOther===1&&failed.reuse.missing===0),1);
+ });
+});

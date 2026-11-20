@@ -1,3 +1,4 @@
 # Generation presentation
 - Keep section-meter state in the keyed event editor's ephemeral model and observe memoized measured coverage at bounded generator boundaries; timers update elapsed display only and every dismissal/close is run-fenced, because presentation must not schedule generation or persist event data.
 - Preserve each run's meaningful focus origin and use the route's current generation action when it is replaced; fence delayed closes and restore focus when a hidden progress control disappears, because dismissal must not strand keyboard users or interrupt a newer run.
+- Animate meters only with CSS transitions of the measured ratio (a clipped gold copy over stable bars), keyed per run; shortages cap below full and reduced motion is static, because a timer-driven fill would invent progress.
