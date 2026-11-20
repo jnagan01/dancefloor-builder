@@ -34,7 +34,7 @@ async function readBody(req: http.IncomingMessage) {
 }
 const server = http.createServer(async (req, res) => {
   const id = randomUUID(), started = Date.now(), url = new URL(req.url || '/', 'http://localhost');
-  if (req.method === 'GET' && url.pathname === '/healthz') return json(res, 200, { service: 'setarchitect-prototype-backend', environment: 'prototype-test', schema: 1, sync: 1, project: PROJECT, configured: configurationReady(), providers: { gemini: !!process.env.GEMINI_API_KEY, lastfm: !!process.env.LASTFM_API_KEY, musicbrainz: true, reccobeats: true } });
+  if (req.method === 'GET' && url.pathname === '/healthz') return json(res, 200, { service: 'setarchitect-prototype-backend', environment: 'prototype-test', schema: 1, sync: 1, librarySync:2, project: PROJECT, configured: configurationReady(), providers: { gemini: !!process.env.GEMINI_API_KEY, lastfm: !!process.env.LASTFM_API_KEY, musicbrainz: true, reccobeats: true } });
   if (!configurationReady()) return json(res, 503, { error: 'Test backend is awaiting secure configuration.', requestId: id });
   let owner: string | undefined;
   let counted = false;
@@ -49,7 +49,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { accessToken: data.session.access_token, expiresAt: data.session.expires_at, userId: data.user.id, ...(body.purpose === 'native-account-sync-v1' ? { refreshToken:data.session.refresh_token, user:{id:data.user.id,email:data.user.email,app_metadata:data.user.app_metadata}, publishableKey:process.env.SUPABASE_PUBLISHABLE_KEY } : {}) });
     }
     const name = url.pathname.startsWith('/v1/rpc/') ? url.pathname.slice(8) : '';
-    const syncOperation = /^\/v1\/sync\/(pull|push)$/.exec(url.pathname)?.[1];
+    const syncOperation = /^\/v1\/sync\/(pull|push|library-pull|library-push)$/.exec(url.pathname)?.[1];
     if (req.method !== 'POST' || (!Object.hasOwn(handlers, name) && !syncOperation)) return json(res, 404, { error: 'Unknown test endpoint.' });
     const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
     if (!token) return json(res, 401, { error: 'A signed-in test session is required.' });
