@@ -79,7 +79,7 @@ export function SectionMeterDialog({ progress, focusFallback }: { progress: Sect
                   <MeterBars bar="bg-muted-foreground opacity-35" />
                   {/* Gold copy revealed by a CSS transition between measured updates; nothing advances it on a timer. */}
                   <MeterBars data-meter-fill={fill} className="meter-fill" bar="bg-gold" style={{ clipPath: `inset(0 ${100 - fill * 100}% 0 0)` }} />
-                  {!run.finished && <span aria-hidden="true" data-meter-leading style={{ left: `${fill * 100}%`, opacity: fill > 0 && fill < 1 ? undefined : 0 }} className="meter-leading absolute top-1 h-7 w-1 -translate-x-1/2 rounded-full bg-gold-soft" />}
+                  {!run.finished && <span aria-hidden="true" data-meter-leading style={{ left: `${fill * 100}%`, opacity: fill > 0 && fill < 1 ? 1 : 0 }} className="meter-edge absolute top-1 h-7 w-1 -translate-x-1/2"><span className="meter-leading block h-full w-full rounded-full bg-gold-soft" /></span>}
                 </div>
               </section>;
             })}

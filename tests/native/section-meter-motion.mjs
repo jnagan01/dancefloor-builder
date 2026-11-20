@@ -31,6 +31,18 @@ const updateAndSample = (page, id, totals, label) => page.evaluate(async ([id, t
   }
   return { mid: mid ?? last, gap, leadSamples };
 }, [id, totals, label]);
+// Sample a full glow pulse (>1.6s) per real frame; effective opacity multiplies the edge wrapper and pulsing glow.
+const pulse = (page, label) => page.evaluate(async label => {
+  const lead = document.querySelector(`[role=progressbar][aria-label="${label} usable preparation time"] [data-meter-leading]`);
+  if (!lead) return { min: 0, max: 0, frames: 0, mounted: 0 };
+  let min = Infinity, max = 0, frames = 0; const t0 = performance.now();
+  while (performance.now() - t0 < 1800) {
+    await new Promise(r => requestAnimationFrame(r)); frames++;
+    const v = Number(getComputedStyle(lead).opacity) * Number(getComputedStyle(lead.firstElementChild).opacity);
+    min = Math.min(min, v); max = Math.max(max, v);
+  }
+  return { min, max, frames, mounted: 1 };
+}, label);
 const zero = { warmUp: 0, transition: 0, peak: 0 };
 
 export async function checkSectionMeterMotion(page, { theme, shots, frames } = {}) {
@@ -41,6 +53,9 @@ export async function checkSectionMeterMotion(page, { theme, shots, frames } = {
   await begin(page, base);
   const dialog = page.getByRole('dialog', { name: 'Building your lists' }); await expect(dialog).toBeVisible();
   expect(await visual(page, 'Warm Up')).toBe(0);
+  const atZero = await pulse(page, 'Warm Up');
+  expect(atZero.mounted, 'edge stays mounted for continuous interpolation').toBe(1); expect(atZero.frames).toBeGreaterThan(1);
+  expect(atZero.max, 'zero-fill edge invisible through a whole pulse').toBe(0);
   // 1. Upward measured update interpolates visually; values are immediate and truthful.
   const first = await updateAndSample(page, base, { ...zero, warmUp: 2700, transition: 3600 }, 'Warm Up'), mid = first.mid;
   expect(first.leadSamples, 'leading edge rendered during first transition').toBeGreaterThan(0);
@@ -55,6 +70,8 @@ export async function checkSectionMeterMotion(page, { theme, shots, frames } = {
   // 2. Ongoing work stays lively (leading glow) but coverage never advances on a timer.
   await expect(bar(page, 'Warm Up').locator('.meter-leading')).toHaveCount(1);
   expect(await bar(page, 'Warm Up').locator('.meter-leading').evaluate(el => getComputedStyle(el).animationName)).toBe('meter-glow');
+  const partial = await pulse(page, 'Warm Up');
+  expect(partial.max, 'partial edge visible').toBeGreaterThan(0.3); expect(partial.min).toBeGreaterThan(0);
   const idle = await visual(page, 'Warm Up'); await page.waitForTimeout(1500);
   expect(await visual(page, 'Warm Up')).toBe(idle); await expect(bar(page, 'Warm Up')).toHaveAttribute('aria-valuenow', '2700');
   // 3. Downward revision remains visible.
@@ -63,6 +80,10 @@ export async function checkSectionMeterMotion(page, { theme, shots, frames } = {
   await expect(bar(page, 'Warm Up')).toHaveAttribute('aria-valuenow', '1800');
   expect(down).toBeLessThan(0.499); expect(down).toBeGreaterThan(1 / 3 + 0.005);
   expect(Math.abs(await visual(page, 'Warm Up') - 1 / 3)).toBeLessThan(0.01);
+  await update(page, base, { ...zero, warmUp: 1800, transition: 3600, peak: 7200 }); await page.waitForTimeout(1300);
+  expect(await visual(page, 'Peak')).toBeGreaterThan(0.99);
+  const atFull = await pulse(page, 'Peak');
+  expect(atFull.max, 'full edge invisible through a whole pulse').toBe(0);
   // 4. A new run resets immediately without carrying or animating out the old fill.
   await begin(page, base + 1);
   expect(await visual(page, 'Warm Up')).toBe(0); expect(await visual(page, 'Transition')).toBe(0);

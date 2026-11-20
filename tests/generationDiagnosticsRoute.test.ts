@@ -174,7 +174,7 @@ it.each(['legacy', 'partial'] as const)('actual top-neighbor batch persists %s r
   const f = await extraCrowdFixture(async () => extraReply(counts));
   const control = await extraCrowdFixture(async () => extraReply(undefined));
   try {
-    await finishExpansion(control.h); await control.store.settled(); const before = (control.store.get().rows[0].run.reuse ?? {}) as Record<string, number | undefined>;
+    await finishExpansion(control.h); await control.store.settled();
     const baseline = control.store.get().rows[0].run.reuse;
     await finishExpansion(f.h); await f.store.settled();
     expect(f.calls.filter(c => c.perArtistSimilar === 0)).toEqual([{ artists: Array.from({ length: 20 }, (_, i) => `PRIVATE Neighbor ${i}`), perArtistSimilar: 0 }]);
