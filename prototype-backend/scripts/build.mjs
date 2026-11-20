@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isBuiltin } from 'node:module';
+import { adaptSource } from './adapt-source.mjs';
 const base = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const upstream = fs.existsSync(path.join(base, '../source/src')) ? path.resolve(base, '../source') : path.resolve(base, '..');
 const serverFiles = ['boundary.ts', 'db.ts', 'provider.ts'].map(p => path.join(base, 'src', p));
@@ -15,7 +16,7 @@ const result = await build({ entryPoints: [path.join(base, 'src/server.ts')], bu
   });
   b.onLoad({ filter: /\.(ts|tsx)$/ }, async args => {
     if (!args.path.startsWith(path.join(upstream, 'src'))) return;
-    const contents = (await fs.promises.readFile(args.path, 'utf8')).replaceAll('LOVABLE_API_KEY', 'GEMINI_API_KEY').replaceAll('https://dancefloor-builder.lovable.app', 'https://github.com/jnagan01/dancefloor-builder');
+    const contents = adaptSource(await fs.promises.readFile(args.path, 'utf8'), args.path, base);
     return { contents, loader: args.path.endsWith('.tsx') ? 'tsx' : 'ts', resolveDir: path.dirname(args.path) };
   });
 } }] });
