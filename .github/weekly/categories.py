@@ -16,7 +16,8 @@ EXACT = {
                         'community-true-error-failures': 4, 'community-confirmed-none-failures': 0},
     'cache-shared': {'shared-coalesced-sends': 1, 'shared-cancelled-isolated': 1, 'shared-rejected-evicted': 1,
                      'shared-hung-single-transport': 1, 'shared-hung-released': 1},
-    'cache-diagnostics': {'diagnostics-database-once': 16, 'diagnostics-causes-once': 4, 'diagnostics-finite': 1,
+    'cache-diagnostics': {'diagnostics-database-once': 16, 'diagnostics-read-failed': 4, 'diagnostics-read-deadline': 1, 'diagnostics-read-denied': 1,
+                          'diagnostics-read-schema': 1, 'diagnostics-read-other': 1, 'diagnostics-finite': 1,
                           'diagnostics-private-safe': 1, 'diagnostics-selections-unchanged': 1},
     'provider-pacing': {'pacing-zero-floor-ms': 1000, 'pacing-past-floor-ms': 2500, 'pacing-first-recovery-start-ms': 2500,
                         'pacing-stale-success-pressure': 2, 'pacing-fresh-success-pressure': 0},
@@ -120,7 +121,10 @@ def findings(evidence):
             out.append((f'category-{category}-{case}-evidence', 'incomplete', f'{case}: missing, malformed or stale synthetic category evidence'))
         elif item['status'] != 'passed':
             failed = [c for c in item['checks'] if not c['passed']]
-            details = '; '.join(f"{c['rule']}: expected {c['expected']}, actual {c['actual']}" for c in failed) or 'test did not complete its assertions'
+            if not failed:  # interrupted before proving any failed assertion: incomplete testing, never an app defect
+                out.append((f'category-{category}-{case}-evidence', 'incomplete', f'{case}: interrupted before any failed assertion was recorded'))
+                continue
+            details = '; '.join(f"{c['rule']}: expected {c['expected']}, actual {c['actual']}" for c in failed)
             sec = '; '.join(f"{s['section']} {s['seconds']}/{s['target']} approved seconds" for s in item['sections'])
             out.append((f'category-{category}-{case}', 'failure', f'{case}: {details}; {sec}; safe simulated cause counts {json.dumps(item["causes"], sort_keys=True)}'))
     return out

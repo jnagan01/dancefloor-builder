@@ -174,7 +174,7 @@ it.each(['legacy', 'partial'] as const)('actual top-neighbor batch persists %s r
   const f = await extraCrowdFixture(async () => extraReply(counts));
   const control = await extraCrowdFixture(async () => extraReply(undefined));
   try {
-    await finishExpansion(control.h); await control.store.settled();
+    await finishExpansion(control.h); await control.store.settled(); const before = (control.store.get().rows[0].run.reuse ?? {}) as Record<string, number | undefined>;
     const baseline = control.store.get().rows[0].run.reuse;
     await finishExpansion(f.h); await f.store.settled();
     expect(f.calls.filter(c => c.perArtistSimilar === 0)).toEqual([{ artists: Array.from({ length: 20 }, (_, i) => `PRIVATE Neighbor ${i}`), perArtistSimilar: 0 }]);
@@ -218,10 +218,15 @@ it('weekly structured cache diagnostics once', async () => {
     const counts = { ...extraLegacyCounts, database: 16, readFailed: 4, readDeadline: 1, readDenied: 1, readSchema: 1, readOther: 1 };
     const f = await extraCrowdFixture(async () => extraReply(counts)), control = await extraCrowdFixture(async () => extraReply(undefined));
     try {
-      await finishExpansion(control.h); await control.store.settled(); const baseline = control.store.get().rows[0].run.reuse;
+      await finishExpansion(control.h); await control.store.settled(); const before = (control.store.get().rows[0].run.reuse ?? {}) as Record<string, number | undefined>;
       await finishExpansion(f.h); await f.store.settled(); const run = f.store.get().rows[0].run;
       weeklyCheck(e, 'diagnostics-database-once', run.reuse?.database ?? 0, 16);
-      weeklyCheck(e, 'diagnostics-causes-once', ['readDeadline', 'readDenied', 'readSchema', 'readOther'].reduce((n, k) => n + ((run.reuse as any)?.[k] ?? 0), 0), 4);
+      const reuse = (run.reuse ?? {}) as Record<string, number | undefined>;
+      // Accepted top-neighbor causes relative to the identical no-count control run (other synthetic lanes contribute their own).
+      const added = (key: string) => (reuse[key] ?? 0) - (before[key] ?? 0);
+      weeklyCheck(e, 'diagnostics-read-failed', added('readFailed'), 4);
+      for (const [rule, key] of [['deadline', 'readDeadline'], ['denied', 'readDenied'], ['schema', 'readSchema'], ['other', 'readOther']] as const)
+        weeklyCheck(e, `diagnostics-read-${rule}`, added(key), 1);
       weeklyCheck(e, 'diagnostics-finite', Number(Object.values(run.reuse ?? {}).every(Number.isFinite)), 1);
       weeklyCheck(e, 'diagnostics-private-safe', Number(!/PRIVATE|Neighbor|synthetic\//.test(copyDiagnostics(run))), 1);
       weeklyCheck(e, 'diagnostics-selections-unchanged', Number(JSON.stringify(f.h.current.result) === JSON.stringify(control.h.current.result)), 1);

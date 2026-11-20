@@ -53,7 +53,7 @@ class Categories(unittest.TestCase):
     def test_cache_and_pacing_failures_actionable_injected_outages_silent_absent_incomplete(self):
         for case, rule, actual in [('cache-artist', 'artist-delayed-warm-external', 20), ('cache-community', 'community-confirmed-none-failures', 6),
                                    ('cache-community', 'community-hung-retained-rows', 1), ('cache-shared', 'shared-coalesced-sends', 2),
-                                   ('cache-diagnostics', 'diagnostics-causes-once', 8), ('provider-pacing', 'pacing-zero-floor-ms', 0)]:
+                                   ('cache-diagnostics', 'diagnostics-read-schema', 0), ('cache-diagnostics', 'diagnostics-read-deadline', 2), ('provider-pacing', 'pacing-zero-floor-ms', 0)]:
             data = evidence(); c = data['categories'][case]; c['status'] = 'failed'
             check = next(x for x in c['checks'] if x['rule'] == rule)
             check.update(actual=actual, passed=False)
@@ -75,7 +75,20 @@ class Categories(unittest.TestCase):
                 self.assertEqual([f[1] for f in found], ['incomplete'])
                 self.assertEqual(found[0][0], 'category-evidence-missing')
             data = evidence(); data['categories'][case]['status'] = 'failed'; data['categories'][case]['checks'] = []
-            self.assertEqual(categories.findings(data)[0][1], 'failure')
+            with self.subTest(interrupted_empty=case):
+                self.assertEqual([f[1] for f in categories.findings(data)], ['incomplete'])
+                self.assertEqual([f[1] for f in report.problems(run(), data)], ['incomplete'])
+            data = evidence(); item = data['categories'][case]; item['status'] = 'failed'; del item['checks'][1:]
+            with self.subTest(interrupted_passing=case):
+                self.assertEqual([f[1] for f in categories.findings(data)], ['incomplete'])
+                self.assertNotIn('failure', [f[1] for f in report.problems(run(), data)])
+            data = evidence(); item = data['categories'][case]; item['status'] = 'failed'; del item['checks'][2:]
+            item['checks'][1]['actual'] = item['checks'][1]['expected'] + 1; item['checks'][1]['passed'] = False
+            with self.subTest(failed_then_interrupted=case):
+                found = categories.findings(data)
+                self.assertEqual([f[1] for f in found], ['failure'])
+                self.assertIn(item['checks'][1]['rule'], found[0][2])
+            self.assertEqual(categories.findings(evidence()), [])
             data = evidence(); data['categories'][case]['checks'].pop()
             self.assertEqual(categories.findings(data)[0][1], 'incomplete')
 

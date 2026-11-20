@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @keyframes meter-glow { 50% { opacity: 0.45; transform: scaleY(0.8); } }
-.meter-leading { animation: meter-glow 1.6s ease-in-out infinite; transition: left 900ms cubic-bezier(0.22, 1, 0.36, 1); }
+.meter-leading { animation: meter-glow 1.6s ease-in-out infinite; transition: left 900ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease; }
 .meter-bars.meter-fill { transition: clip-path 900ms cubic-bezier(0.22, 1, 0.36, 1); }
 @media (prefers-reduced-motion: reduce) {
   .section-meter-dialog *, .meter-leading { animation: none !important; transition: none !important; }

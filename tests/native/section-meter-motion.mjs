@@ -12,19 +12,24 @@ async function visual(page, label) {
 }
 const begin = (page, id) => page.evaluate(([id, targets]) => window.__meter.begin({ id, owner: 'synthetic', event: 'A', type: 'dance', expand: true, targets }), [id, targets]);
 const update = (page, id, totals) => page.evaluate(([id, totals]) => window.__meter.update(id, 'Checking synthetic tracks', totals, true), [id, totals]);
-// Apply a measured update, then record rendered fill per real frame for up to 700ms in-page.
-// Returns the first strictly intermediate sample (or the last sample if none was rendered).
+// Apply a measured update, then sample every real rendered frame for ~1s in-page.
+// mid: first strictly intermediate fill; gap: largest distance between the visible leading edge and the clipped fill.
 const updateAndSample = (page, id, totals, label) => page.evaluate(async ([id, totals, label]) => {
-  const el = document.querySelector(`[role=progressbar][aria-label="${label} usable preparation time"] [data-meter-fill]`);
+  const meter = document.querySelector(`[role=progressbar][aria-label="${label} usable preparation time"]`);
+  const el = meter.querySelector('[data-meter-fill]'), lead = meter.querySelector('[data-meter-leading]');
   const read = () => { const args = (getComputedStyle(el).clipPath.match(/inset\(([^)]*)\)/)?.[1] ?? '').trim().split(/\s+/); return 1 - parseFloat(args[1] ?? args[0]) / 100; };
   const from = read(); window.__meter.update(id, 'Checking synthetic tracks', totals, true);
   const key = { 'Warm Up': 'warmUp', Transition: 'transition', Peak: 'peak' }[label], to = Math.min(1, totals[key] / window.__meter.get().targets[key]);
-  const start = performance.now(); let last = from;
-  while (performance.now() - start < 700) {
+  const start = performance.now(); let mid = null, gap = 0, leadSamples = 0, last = from;
+  while (performance.now() - start < 1000) {
     await new Promise(r => requestAnimationFrame(r)); last = read();
-    if (Math.abs(last - from) > 0.01 && Math.abs(last - to) > 0.01) return last;
+    if (mid === null && Math.abs(last - from) > 0.01 && Math.abs(last - to) > 0.01) mid = last;
+    if (lead && Number(getComputedStyle(lead).opacity) > 0.05) {
+      const f = el.getBoundingClientRect(), l = lead.getBoundingClientRect();
+      gap = Math.max(gap, Math.abs((l.left + l.width / 2 - f.left) / f.width - last)); leadSamples++;
+    }
   }
-  return last;
+  return { mid: mid ?? last, gap, leadSamples };
 }, [id, totals, label]);
 const zero = { warmUp: 0, transition: 0, peak: 0 };
 
@@ -37,13 +42,14 @@ export async function checkSectionMeterMotion(page, { theme, shots, frames } = {
   const dialog = page.getByRole('dialog', { name: 'Building your lists' }); await expect(dialog).toBeVisible();
   expect(await visual(page, 'Warm Up')).toBe(0);
   // 1. Upward measured update interpolates visually; values are immediate and truthful.
-  const mid = await updateAndSample(page, base, { ...zero, warmUp: 2700, transition: 3600 }, 'Warm Up');
+  const first = await updateAndSample(page, base, { ...zero, warmUp: 2700, transition: 3600 }, 'Warm Up'), mid = first.mid;
+  expect(first.leadSamples, 'leading edge rendered during first transition').toBeGreaterThan(0);
+  expect(first.gap, 'leading edge stays on the fill during zero-to-positive transition').toBeLessThan(0.03);
   await expect(bar(page, 'Warm Up')).toHaveAttribute('aria-valuenow', '2700');
   await expect(dialog).toContainText('45:00 / 90:00 min');
   expect(mid, 'intermediate fill before measured target').toBeGreaterThan(0.01); expect(mid).toBeLessThan(0.49);
   if (frames) await frames(dialog);
   if (shots) await dialog.screenshot({ path: `${shots}/motion-${theme}-mid.png` });
-  await page.waitForTimeout(1100);
   expect(Math.abs(await visual(page, 'Warm Up') - 0.5)).toBeLessThan(0.01);
   expect(Math.abs(await visual(page, 'Transition') - 0.25)).toBeLessThan(0.01);
   // 2. Ongoing work stays lively (leading glow) but coverage never advances on a timer.
@@ -52,10 +58,11 @@ export async function checkSectionMeterMotion(page, { theme, shots, frames } = {
   const idle = await visual(page, 'Warm Up'); await page.waitForTimeout(1500);
   expect(await visual(page, 'Warm Up')).toBe(idle); await expect(bar(page, 'Warm Up')).toHaveAttribute('aria-valuenow', '2700');
   // 3. Downward revision remains visible.
-  const down = await updateAndSample(page, base, { ...zero, warmUp: 1800, transition: 3600 }, 'Warm Up');
+  const lower = await updateAndSample(page, base, { ...zero, warmUp: 1800, transition: 3600 }, 'Warm Up'), down = lower.mid;
+  expect(lower.leadSamples).toBeGreaterThan(0); expect(lower.gap, 'leading edge follows downward fill').toBeLessThan(0.03);
   await expect(bar(page, 'Warm Up')).toHaveAttribute('aria-valuenow', '1800');
   expect(down).toBeLessThan(0.499); expect(down).toBeGreaterThan(1 / 3 + 0.005);
-  await page.waitForTimeout(1100); expect(Math.abs(await visual(page, 'Warm Up') - 1 / 3)).toBeLessThan(0.01);
+  expect(Math.abs(await visual(page, 'Warm Up') - 1 / 3)).toBeLessThan(0.01);
   // 4. A new run resets immediately without carrying or animating out the old fill.
   await begin(page, base + 1);
   expect(await visual(page, 'Warm Up')).toBe(0); expect(await visual(page, 'Transition')).toBe(0);

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from 'vitest';
 
-export type WeeklyCategory = 'lookup' | 'slow' | 'coverage';
+export type WeeklyCategory = 'lookup' | 'slow' | 'coverage' | 'cache' | 'pacing';
 type Evidence = {
   checks: Array<{ rule: string; expected: number; actual: number; passed: boolean }>;
   sections: Array<{ section: string; seconds: number; target: number }>;
