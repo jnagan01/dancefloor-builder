@@ -2,6 +2,7 @@ import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isBuiltin } from 'node:module';
 const base = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const upstream = fs.existsSync(path.join(base, '../source/src')) ? path.resolve(base, '../source') : path.resolve(base, '..');
 const serverFiles = ['boundary.ts', 'db.ts', 'provider.ts'].map(p => path.join(base, 'src', p));
@@ -19,4 +20,8 @@ const result = await build({ entryPoints: [path.join(base, 'src/server.ts')], bu
   });
 } }] });
 fs.writeFileSync(path.join(base, 'dist/input-modules.json'), JSON.stringify(Object.keys(result.metafile.inputs), null, 2));
+const manifest = JSON.parse(fs.readFileSync(path.join(base, 'package.json'), 'utf8'));
+for (const entry of Object.values(result.metafile.outputs).flatMap(o => o.imports)) {
+  if (entry.external && !isBuiltin(entry.path) && !Object.hasOwn(manifest.dependencies, entry.path)) throw Error('Undeclared server runtime dependency: ' + entry.path);
+}
 console.log('Built independent test API from current shared generation code.');
