@@ -66,7 +66,8 @@ const server = http.createServer(async (req, res) => {
     return json(res, 200, { result });
   } catch (error) {
     const invalid = error instanceof SyntaxError || (error as any)?.name === 'ZodError';
-    json(res, invalid ? 400 : 422, { error: invalid ? 'Test request validation failed.' : 'Test operation could not complete. Local work is preserved.', requestId: id });
+    const timeout = (error as any)?.code === 'SUGGESTION_DEADLINE';
+    json(res, invalid ? 400 : timeout ? 504 : 422, { error: invalid ? 'Test request validation failed.' : timeout ? 'Suggestion request reached its deadline (SUGGESTION_DEADLINE).' : 'Test operation could not complete. Local work is preserved.', ...(timeout ? { code: 'SUGGESTION_DEADLINE' } : {}), requestId: id });
   } finally {
     if (owner && counted) inflight.set(owner, Math.max(0, (inflight.get(owner) ?? 0) - 1));
     console.info(JSON.stringify({ requestId: id, status: res.statusCode, elapsedMs: Date.now() - started }));
